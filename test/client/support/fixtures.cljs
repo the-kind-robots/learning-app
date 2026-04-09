@@ -42,14 +42,14 @@
 
 
 (def lesson-words
-  "Word rows as returned by vocabulary/list (raw docs with :retention-level)."
-  [{:_id         "word-1"
-    :value       "der Hund"
-    :translation [{:lang "ru" :value "пёс"}]
+  "Word rows as denormalized into lesson state before trial generation."
+  [{:id              "word-1"
+    :value           "der Hund"
+    :translation     [{:lang "ru" :value "пёс"}]
     :retention-level 20}
-   {:_id         "word-2"
-    :value       "die Katze"
-    :translation [{:lang "ru" :value "кошка"}]
+   {:id              "word-2"
+    :value           "die Katze"
+    :translation     [{:lang "ru" :value "кошка"}]
     :retention-level 50}])
 
 

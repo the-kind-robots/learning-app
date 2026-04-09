@@ -107,42 +107,40 @@
 
 
 ;; =============================================================================
-;; ensure!
+;; restart!
 ;; =============================================================================
 
 
-(deftest ensure-returns-existing-lesson
-  (async-testing "`ensure!` returns existing lesson"
+(deftest restart-replaces-existing-lesson-with-fresh-session
+  (async-testing "`restart!` discards persisted lesson state and starts fresh"
     (with-test-dbs
      (fn [dbs]
        (p/do
-         (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}])
-         (p/let [start-result  (sut/start! dbs {:trial-selector :first})
-                 ensure-result (sut/ensure! dbs {:trial-selector :first})]
-           ;; Should return the same lesson, not create a new one
-           (is (some? (:lesson-state ensure-result)))
-           (is (= (:_id (:lesson-state start-result))
-                  (:_id (:lesson-state ensure-result))))))))))
+         (db-seed/seed-vocabulary!
+          (:user/db dbs)
+          [{:_id "word-1" :value "der Hund" :translation "пёс"}
+           {:_id "word-2" :value "die Katze" :translation "кошка"}])
+         (p/let [start-result (sut/start! dbs {:trial-selector :first})
+                 first-trial  (domain/current-trial (:lesson-state start-result))
+                 _            (sut/check-answer! dbs (:answer first-trial))
+                 restarted    (sut/restart! dbs {:trial-selector :first})
+                 lessons      (db-queries/fetch-by-type (:device/db dbs) "lesson")
+                 lesson-state (:lesson-state restarted)]
+           (is (some? lesson-state))
+           (is (nil? (:error restarted)))
+           (is (= 1 (count lessons)))
+           (is (= (count (:trials lesson-state))
+                  (count (:remaining-trials lesson-state))))
+           (is (nil? (domain/last-result lesson-state)))))))))
 
 
-(deftest ensure-starts-new-lesson-when-none-exists
-  (async-testing "`ensure!` creates lesson when none exists"
+(deftest restart-returns-error-when-no-words
+  (async-testing "`restart!` propagates start errors"
     (with-test-dbs
      (fn [dbs]
-       (p/do
-         (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}])
-         (p/let [result (sut/ensure! dbs {:trial-selector :first})]
-           (is (some? (:lesson-state result)))
-           (is (nil? (:error result)))))))))
-
-
-(deftest ensure-returns-error-when-start-fails
-  (async-testing "`ensure!` propagates start errors"
-    (with-test-dbs
-     (fn [dbs]
-       ;; No words seeded, so start! should fail
-       (p/let [result (sut/ensure! dbs)]
-         (is (= :no-words-available (:error result))))))))
+       (p/let [result (sut/restart! dbs)]
+         (is (= :no-words-available (:error result)))
+         (is (nil? (:lesson-state result))))))))
 
 
 ;; =============================================================================
@@ -165,7 +163,13 @@
              (is (= "der Hund" (:answer last-result)))))
          ;; Verify a review was created for the word trial
          (p/let [reviews (db-queries/fetch-by-type (:user/db dbs) "review")]
-           (is (= 2 (count reviews)))))))))
+           (is (= 2 (count reviews)))
+           (is (= ["word-1"]
+                  (->> reviews
+                       (map :word-id)
+                       (remove nil?)
+                       distinct
+                       vec)))))))))
 
 
 (deftest check-answer-wrong-word-trial

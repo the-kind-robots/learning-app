@@ -56,16 +56,22 @@
        {:error :lesson-start-failed}))))
 
 
-(defn ensure!
-  "Returns existing lesson or starts a new one.
+(defn finish!
+  [dbs]
+  (p/let [existing (state dbs)]
+    (when existing
+      (dbs/remove dbs existing))))
+
+
+(defn restart!
+  "Always starts a fresh lesson session by removing any persisted lesson first.
    Returns {:lesson-state ...} or {:error ...}."
   ([dbs]
-   (ensure! dbs {}))
+   (restart! dbs {}))
   ([dbs opts]
-   (p/let [existing (state dbs)]
-     (if existing
-       {:lesson-state existing}
-       (start! dbs opts)))))
+   (p/do
+     (finish! dbs)
+     (start! dbs opts))))
 
 
 (defn check-answer!
@@ -114,9 +120,3 @@
             (log/error :advance-lesson/save-failed {:error (ex-message err)})
             {:error :lesson-save-failed}))))))
 
-
-(defn finish!
-  [dbs]
-  (p/let [existing (state dbs)]
-    (when existing
-      (dbs/remove dbs existing))))

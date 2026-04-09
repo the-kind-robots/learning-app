@@ -37,7 +37,7 @@
    Word summary has :id, :value, :translation, :retention-level."
   [word]
   {:type    trial-type-word
-   :word-id (:_id word)
+   :word-id (:id word)
    :prompt  (->> (:translation word)
                  (filter #(= "ru" (:lang %)))
                  (map :value)
