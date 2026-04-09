@@ -9,6 +9,10 @@
    [utils :as utils]))
 
 
+(def invalid-response-message
+  "Invalid example response from backend")
+
+
 (defn fetch-one
   "Fetches an example sentence for the given German word from the backend.
    Returns a promise that resolves to the example map.
@@ -17,10 +21,35 @@
   (let [url (str "/api/examples?word=" (js/encodeURIComponent word))]
     (p/let [response (js/fetch url)]
       (if (.-ok response)
-        (p/let [json (.json response)]
-          (js->clj json :keywordize-keys true))
-        (p/rejected (ex-info "Server error fetching example"
-                             {:word word :status (.-status response)}))))))
+        ;; Successful HTTP still needs validation: the body may be invalid JSON
+        ;; or a malformed example payload.
+        (p/let [json (-> (.json response)
+                         (p/catch (fn [_error] ::invalid-json)))]
+          (if (= ::invalid-json json)
+            (p/rejected
+             (ex-info invalid-response-message
+                      {:word word
+                       :status 502
+                       :error-kind :invalid-json}))
+            (let [example (js->clj json :keywordize-keys true)]
+              (if (and (:value example) (:translation example))
+                example
+                (p/rejected
+                 (ex-info invalid-response-message
+                          {:word word
+                           :status 502
+                           :error-kind :invalid-response
+                           :example example}))))))
+        ;; On non-OK responses, prefer the backend-provided error message when available.
+        (p/let [error-body (-> (.json response)
+                               (p/catch (constantly nil)))
+                error-body (some-> error-body (js->clj :keywordize-keys true))
+                status     (.-status response)
+                message    (or (:error error-body) "Server error fetching example")]
+          (p/rejected (ex-info message
+                               {:word word
+                                :status status
+                                :error-body error-body})))))))
 
 
 (defn save-example!

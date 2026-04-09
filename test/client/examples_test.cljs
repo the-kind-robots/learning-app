@@ -62,14 +62,52 @@
 (deftest fetch-one-rejects-on-server-error
   (async-testing "`fetch-one` rejects on server error"
     (let [original-fetch js/fetch]
-      (set! js/fetch (fetch-mocks/mock-fetch-error 500))
+      (set! js/fetch
+            (fetch-mocks/mock-fetch-error-with-body
+             500
+             {:error "Examples are temporarily unavailable"}))
       (p/finally
         (p/catch
           (p/do
             (sut/fetch-one "Hund")
             (is false "Should have rejected"))
           (fn [error]
+            (is (= "Examples are temporarily unavailable" (ex-message error)))
             (is (= 500 (:status (ex-data error))))))
+        (fn []
+          (set! js/fetch original-fetch))))))
+
+
+(deftest fetch-one-rejects-on-invalid-example-payload
+  (async-testing "`fetch-one` rejects on invalid example payload"
+    (let [original-fetch js/fetch]
+      (set! js/fetch (fetch-mocks/mock-fetch-success {:value "Der Hund läuft"}))
+      (p/finally
+        (p/catch
+          (p/do
+            (sut/fetch-one "Hund")
+            (is false "Should have rejected"))
+          (fn [error]
+            (is (= sut/invalid-response-message (ex-message error)))
+            (is (= "Hund" (:word (ex-data error))))
+            (is (= :invalid-response (:error-kind (ex-data error))))))
+        (fn []
+          (set! js/fetch original-fetch))))))
+
+
+(deftest fetch-one-rejects-on-invalid-json-success-response
+  (async-testing "`fetch-one` rejects on invalid JSON in a success response"
+    (let [original-fetch js/fetch]
+      (set! js/fetch (fetch-mocks/mock-fetch-success-invalid-json))
+      (p/finally
+        (p/catch
+          (p/do
+            (sut/fetch-one "Hund")
+            (is false "Should have rejected"))
+          (fn [error]
+            (is (= sut/invalid-response-message (ex-message error)))
+            (is (= 502 (:status (ex-data error))))
+            (is (= :invalid-json (:error-kind (ex-data error))))))
         (fn []
           (set! js/fetch original-fetch))))))
 
@@ -227,5 +265,25 @@
                               :data      {:word-id "word-123"}}
                              dbs)]
                (is (false? result))))))
+        (fn []
+          (set! js/fetch original-fetch))))))
+
+
+(deftest task-handler-returns-false-on-invalid-example-payload
+  (async-testing "task handler returns false on invalid example payload"
+    (let [original-fetch js/fetch]
+      (set! js/fetch (fetch-mocks/mock-fetch-success {:translation "Собака бежит"}))
+      (p/finally
+        (with-test-dbs
+         (fn [dbs]
+           (p/do
+             (db/insert (:user/db dbs) {:_id "word-123" :type "vocab" :value "Hund"})
+             (p/let [result (tasks/execute-task
+                             {:task-type "example-fetch"
+                              :data      {:word-id "word-123"}}
+                             dbs)]
+               (is (false? result))
+               (p/let [examples (db-queries/fetch-examples (:device/db dbs))]
+                 (is (empty? examples)))))))
         (fn []
           (set! js/fetch original-fetch))))))

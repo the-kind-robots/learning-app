@@ -239,18 +239,26 @@
        (fn [{:keys [session] :as _request}]
          (auth-proxy-response session))}]
 
-     ["/api/examples"
-      {:get
-       (fn [request]
-         (let [word (-> request :params :word)]
-           (if (utils/non-blank word)
-             (let [example (examples/generate-one! word)]
-               {:status 200
-                :headers {"Content-Type" "application/json"}
-                :body (cheshire/generate-string example)})
-             {:status 400
-              :headers {"Content-Type" "application/json"}
-              :body (cheshire/generate-string {:error "Missing 'word' parameter"})})))}]]
+    ["/api/examples"
+     {:get
+      (fn [request]
+        (let [word (-> request :params :word)]
+          (cond
+            (not (utils/non-blank word))
+            {:status 400
+             :headers {"Content-Type" "application/json"}
+             :body (cheshire/generate-string {:error "Missing 'word' parameter"})}
+
+            :else
+            (let [example (examples/generate-one! word)]
+              (if (examples/valid-example? example)
+                {:status 200
+                 :headers {"Content-Type" "application/json"}
+                 :body (cheshire/generate-string example)}
+                {:status 502
+                 :headers {"Content-Type" "application/json"}
+                 :body (cheshire/generate-string
+                        {:error "Examples are temporarily unavailable"})})))))}]]
 
     {:data {:interceptors [session-interceptor
                            (parameters/parameters-interceptor)
