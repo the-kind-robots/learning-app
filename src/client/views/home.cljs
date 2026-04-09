@@ -10,6 +10,18 @@
   "home-add-form")
 
 
+(def home-add-panel-after-settle-script
+  (str
+   "if (event.target && event.target.id === 'home-add-form' && "
+   "matchMedia('(pointer:fine)').matches) { "
+   "var panel = this; "
+   "setTimeout(function() { "
+   "var input = htmx.find(panel, '#new-word-value'); "
+   "if (input) input.focus(); "
+   "}, 0); "
+   "}"))
+
+
 (defn- add-form
   [{:keys [oob?]}]
   [:form.home__add-form
@@ -111,6 +123,8 @@
 
    [:main.home__content
     [:section#home-add-panel.home__add
+     {"hx-on:htmx:after-settle"
+      home-add-panel-after-settle-script}
      [:header.home__add-header
       [:h2.home__panel-title
        "Быстрое добавление"]
