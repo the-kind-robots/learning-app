@@ -58,7 +58,8 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 
 **Expected values:**
 - `LEARNING_APP_DB_PATH` absolute path
-- OpenAI API key via systemd creds (`/etc/credstore.encrypted/openai_api_key`) or `OPENAI_API_KEY`
+- OpenRouter API key via systemd creds (`/etc/credstore.encrypted/openai_api_key`) or `OPENROUTER_API_KEY`
+  Legacy fallback during rollout: `OPENAI_API_KEY`
 - `BORG_REPO` for backups
 
 ## CouchDB

@@ -10,13 +10,13 @@ LogsDirectory=learning-app
 StateDirectory=learning-app
 Restart=always
 RestartSec=10
-ExecStart=sh -c "OPENAI_API_KEY=${OPENAI_API_KEY:-$(cat ${OPENAI_API_KEY_PATH})} java -jar /opt/learning-app/learning-app.jar"
+ExecStart=sh -c "OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-${OPENAI_API_KEY:-$(cat ${OPENROUTER_API_KEY_PATH})}} java -jar /opt/learning-app/learning-app.jar"
 
 # Environment
 EnvironmentFile=-/etc/learning-app/environment
 EnvironmentFile=-/etc/environment.d/learning-app.conf
-LoadCredentialEncrypted=openai_api_key:/etc/credstore.encrypted/openai_api_key
-Environment=OPENAI_API_KEY_PATH=%d/openai_api_key
+LoadCredentialEncrypted=openrouter_api_key:/etc/credstore.encrypted/openai_api_key
+Environment=OPENROUTER_API_KEY_PATH=%d/openrouter_api_key
 
 # Security settings
 NoNewPrivileges=yes

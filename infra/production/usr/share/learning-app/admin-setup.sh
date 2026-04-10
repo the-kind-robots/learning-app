@@ -175,7 +175,7 @@ store_credential() {
   esac
 }
 
-write_credential "openai_api_key" "Enter API key for OpenAI" "${rotate_openai}"
+write_credential "openai_api_key" "Enter API key for OpenRouter example generation" "${rotate_openai}"
 if [ "${rotate_couchdb}" = true ]; then
   if [ -f "${CRED_DIR}/couchdb_admin_password" ]; then
     couchdb_old_password=$(systemd-creds --name=couchdb_admin_password decrypt "${CRED_DIR}/couchdb_admin_password" -)
@@ -318,15 +318,16 @@ systemctl enable --now nginx
 systemctl enable --now learning-app-restart.path
 systemctl enable --now learning-app-certbot.timer
 
-has_openai_env=false
-if grep -qs '^OPENAI_API_KEY=' /etc/learning-app/environment /etc/environment.d/learning-app.conf; then
-  has_openai_env=true
+has_example_provider_env=false
+if grep -qs '^OPENROUTER_API_KEY=' /etc/learning-app/environment /etc/environment.d/learning-app.conf \
+   || grep -qs '^OPENAI_API_KEY=' /etc/learning-app/environment /etc/environment.d/learning-app.conf; then
+  has_example_provider_env=true
 fi
 
-if [ -f "${CRED_DIR}/openai_api_key" ] || [ "${has_openai_env}" = true ]; then
+if [ -f "${CRED_DIR}/openai_api_key" ] || [ "${has_example_provider_env}" = true ]; then
   systemctl enable --now learning-app-run.service
 else
-  warn "Missing OpenAI credential; not starting learning-app-run.service"
+  warn "Missing example-generation credential; not starting learning-app-run.service"
 fi
 
 has_borg_repo=false
