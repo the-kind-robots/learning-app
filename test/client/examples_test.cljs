@@ -78,6 +78,26 @@
           (set! js/fetch original-fetch))))))
 
 
+(deftest fetch-one-includes-retry-after-ms-on-server-error
+  (async-testing "`fetch-one` includes retry-after-ms when the server suggests a retry delay"
+    (let [original-fetch js/fetch]
+      (set! js/fetch
+            (fetch-mocks/mock-fetch-error-with-body
+             429
+             {:error "Examples are temporarily unavailable"}
+             {"Retry-After" "2"}))
+      (p/finally
+        (p/catch
+          (p/do
+            (sut/fetch-one "Hund")
+            (is false "Should have rejected"))
+          (fn [error]
+            (is (= 429 (:status (ex-data error))))
+            (is (= 2000 (:retry-after-ms (ex-data error))))))
+        (fn []
+          (set! js/fetch original-fetch))))))
+
+
 (deftest fetch-one-rejects-on-invalid-example-payload
   (async-testing "`fetch-one` rejects on invalid example payload"
     (let [original-fetch js/fetch]
@@ -232,18 +252,27 @@
 (deftest task-handler-fetches-and-saves-on-success
   (async-testing "task handler fetches and saves example"
     (let [example        {:value "Der Hund läuft" :translation "The dog runs"}
+          requested-url  (atom nil)
           original-fetch js/fetch]
-      (set! js/fetch (fetch-mocks/mock-fetch-success example))
+      (set! js/fetch
+            (fn [url]
+              (reset! requested-url url)
+              ((fetch-mocks/mock-fetch-success example) url)))
       (p/finally
         (with-test-dbs
          (fn [dbs]
            (p/do
-             (db/insert (:user/db dbs) {:_id "word-123" :type "vocab" :value "Hund"})
+             (db/insert (:user/db dbs) {:_id "word-123"
+                                        :type "vocab"
+                                        :value "Hund"
+                                        :translation [{:lang "ru" :value "собака"}]})
              (p/let [result (tasks/execute-task
                              {:task-type "example-fetch"
                               :data      {:word-id "word-123"}}
                              dbs)]
                (is (true? result))
+               (is (= "/api/examples?word=Hund&translation=%D1%81%D0%BE%D0%B1%D0%B0%D0%BA%D0%B0"
+                      @requested-url))
                (p/let [examples (db-queries/fetch-examples (:device/db dbs))]
                  (is (= 1 (count examples)))
                  (is (= "Der Hund läuft" (:value (first examples)))))))))
@@ -265,6 +294,28 @@
                               :data      {:word-id "word-123"}}
                              dbs)]
                (is (false? result))))))
+        (fn []
+          (set! js/fetch original-fetch))))))
+
+
+(deftest task-handler-returns-retry-hint-when-server-provides-it
+  (async-testing "task handler returns retry-after hint when fetch failure includes Retry-After"
+    (let [original-fetch js/fetch]
+      (set! js/fetch
+            (fetch-mocks/mock-fetch-error-with-body
+             429
+             {:error "Examples are temporarily unavailable"}
+             {"Retry-After" "3"}))
+      (p/finally
+        (with-test-dbs
+         (fn [dbs]
+           (p/do
+             (db/insert (:user/db dbs) {:_id "word-123" :type "vocab" :value "Hund"})
+             (p/let [result (tasks/execute-task
+                             {:task-type "example-fetch"
+                              :data      {:word-id "word-123"}}
+                             dbs)]
+               (is (= {:retry-after-ms 3000} result))))))
         (fn []
           (set! js/fetch original-fetch))))))
 

@@ -20,6 +20,7 @@
    [ring.middleware.session :as session]
    [ring.middleware.session.store :as store]
    [ring.util.response :as response]
+   [taoensso.telemere :as t]
    [utils :as utils])
   (:import
    [java.sql PreparedStatement ResultSetMetaData]
@@ -32,6 +33,15 @@
 
 
 (def port 8083)
+
+
+(def ^:private console-log-handler-id :learning-app/console)
+
+
+(defn- ensure-log-handler!
+  []
+  (when-not (seq (t/get-handlers))
+    (t/add-handler! console-log-handler-id (t/handler:console) {:async nil})))
 
 
 (def dev-mode? (or (System/getenv "LEARNING_APP__ENVIRONMENT") true))
@@ -239,26 +249,29 @@
        (fn [{:keys [session] :as _request}]
          (auth-proxy-response session))}]
 
-    ["/api/examples"
-     {:get
-      (fn [request]
-        (let [word (-> request :params :word)]
-          (cond
-            (not (utils/non-blank word))
-            {:status 400
-             :headers {"Content-Type" "application/json"}
-             :body (cheshire/generate-string {:error "Missing 'word' parameter"})}
+     ["/api/examples"
+      {:get
+       (fn [request]
+         (let [word (-> request :params (select-keys [:word :translation]))]
+           (cond
+             (not (utils/non-blank (:word word)))
+             {:status 400
+              :headers {"Content-Type" "application/json"}
+              :body (cheshire/generate-string {:error "Missing 'word' parameter"})}
 
-            :else
-            (let [example (examples/generate-one! word)]
-              (if (examples/valid-example? example)
-                {:status 200
-                 :headers {"Content-Type" "application/json"}
-                 :body (cheshire/generate-string example)}
-                {:status 502
-                 :headers {"Content-Type" "application/json"}
-                 :body (cheshire/generate-string
-                        {:error "Examples are temporarily unavailable"})})))))}]]
+             :else
+             (let [result (examples/generate-one! word)]
+               (if (examples/valid-example? result)
+                 {:status 200
+                  :headers {"Content-Type" "application/json"}
+                  :body (cheshire/generate-string result)}
+                 {:status (or (:status result) 502)
+                  :headers (cond-> {"Content-Type" "application/json"}
+                             (:retry-after-ms result)
+                             (assoc "Retry-After"
+                                    (str (max 1 (long (Math/ceil (/ (:retry-after-ms result) 1000.0)))))))
+                  :body (cheshire/generate-string
+                         {:error "Examples are temporarily unavailable"})})))))}]]
 
     {:data {:interceptors [session-interceptor
                            (parameters/parameters-interceptor)
@@ -328,6 +341,7 @@
 
 (defn start-server!
   [app port]
+  (ensure-log-handler!)
   (reset! server (server/run-server app {:port port, :legacy-return-value? false})))
 
 

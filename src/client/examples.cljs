@@ -13,43 +13,70 @@
   "Invalid example response from backend")
 
 
+(defn- primary-translation
+  [word-doc]
+  (or (->> (:translation word-doc)
+           (filter #(= "ru" (:lang %)))
+           first
+           :value)
+      (some-> (:translation word-doc) first :value)))
+
+
+(defn- retry-after-ms
+  [response]
+  (some-> response
+          (.-headers)
+          (.get "Retry-After")
+          (js/parseFloat)
+          (* 1000)
+          (js/Math.ceil)
+          (long)))
+
+
 (defn fetch-one
   "Fetches an example sentence for the given German word from the backend.
    Returns a promise that resolves to the example map.
    Rejects on network or server errors."
-  [word]
-  (let [url (str "/api/examples?word=" (js/encodeURIComponent word))]
-    (p/let [response (js/fetch url)]
-      (if (.-ok response)
-        ;; Successful HTTP still needs validation: the body may be invalid JSON
-        ;; or a malformed example payload.
-        (p/let [json (-> (.json response)
-                         (p/catch (fn [_error] ::invalid-json)))]
-          (if (= ::invalid-json json)
-            (p/rejected
-             (ex-info invalid-response-message
-                      {:word word
-                       :status 502
-                       :error-kind :invalid-json}))
-            (let [example (js->clj json :keywordize-keys true)]
-              (if (and (:value example) (:translation example))
-                example
-                (p/rejected
-                 (ex-info invalid-response-message
-                          {:word word
-                           :status 502
-                           :error-kind :invalid-response
-                           :example example}))))))
-        ;; On non-OK responses, prefer the backend-provided error message when available.
-        (p/let [error-body (-> (.json response)
-                               (p/catch (constantly nil)))
-                error-body (some-> error-body (js->clj :keywordize-keys true))
-                status     (.-status response)
-                message    (or (:error error-body) "Server error fetching example")]
-          (p/rejected (ex-info message
-                               {:word word
-                                :status status
-                                :error-body error-body})))))))
+  ([word]
+   (fetch-one word nil))
+  ([word translation]
+   (let [url (str "/api/examples?word=" (js/encodeURIComponent word)
+                  (when (utils/non-blank translation)
+                    (str "&translation=" (js/encodeURIComponent translation))))]
+     (p/let [response (js/fetch url)]
+       (if (.-ok response)
+         ;; Successful HTTP still needs validation: the body may be invalid JSON
+         ;; or a malformed example payload.
+         (p/let [json (-> (.json response)
+                          (p/catch (fn [_error] ::invalid-json)))]
+           (if (= ::invalid-json json)
+             (p/rejected
+              (ex-info invalid-response-message
+                       {:word word
+                        :status 502
+                        :error-kind :invalid-json}))
+             (let [example (js->clj json :keywordize-keys true)]
+               (if (and (:value example) (:translation example))
+                 example
+                 (p/rejected
+                  (ex-info invalid-response-message
+                           {:word word
+                            :status 502
+                            :error-kind :invalid-response
+                            :example example}))))))
+         ;; On non-OK responses, prefer the backend-provided error message when available.
+         (p/let [error-body (-> (.json response)
+                                (p/catch (constantly nil)))
+                 error-body (some-> error-body (js->clj :keywordize-keys true))
+                 status     (.-status response)
+                 retry-after-ms (retry-after-ms response)
+                 message    (or (:error error-body) "Server error fetching example")]
+           (p/rejected
+            (ex-info message
+                     {:word word
+                      :status status
+                      :retry-after-ms retry-after-ms
+                      :error-body error-body}))))))))
 
 
 (defn save-example!
@@ -64,13 +91,14 @@
   (when-not (and (:value example) (:translation example))
     (throw (ex-info "Invalid example: missing required fields"
                     {:word-id word-id :example example})))
-  (let [example-doc {:type        "example"
-                     :word-id     word-id
-                     :word        word
-                     :value       (:value example)
-                     :translation (:translation example)
-                     :structure   (:structure example)
-                     :created-at  (utils/now-iso)}]
+  (let [example-doc {:type          "example"
+                     :word-id       word-id
+                     :word          word
+                     :value         (:value example)
+                     :translation   (:translation example)
+                     :structure     (:structure example)
+                     :gloss-mismatch (:glossMismatch example)
+                     :created-at    (utils/now-iso)}]
     (dbs/insert dbs example-doc)))
 
 
@@ -113,11 +141,13 @@
           true)
 
         (p/catch
-          (p/let [example (fetch-one (:value word-doc))]
+          (p/let [example (fetch-one (:value word-doc)
+                                     (primary-translation word-doc))]
             (save-example! dbs word-id (:value word-doc) example)
             true)
 
           (fn [err]
             (log/warn :example-fetch/failed {:word-id word-id :error (ex-message err)})
-            ;; Return false to trigger retry
-            false))))))
+            (if-let [retry-after-ms (:retry-after-ms (ex-data err))]
+              {:retry-after-ms retry-after-ms}
+              false)))))))

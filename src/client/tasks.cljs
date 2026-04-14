@@ -49,6 +49,7 @@
    Returns a promise that resolves to:
      - truthy  -> task succeeded, will be removed
      - falsy   -> task failed, will be retried with exponential backoff
+     - {:retry-after-ms n} -> task failed, will be retried after the suggested delay
      - ::unknown-task -> unknown task type, will be dead-lettered"
   (fn [task _dbs] (:task-type task)))
 
@@ -110,11 +111,15 @@
 
 
 (defn- mark-failed!
-  [dbs task]
+  ([dbs task]
+   (mark-failed! dbs task nil))
+  ([dbs task retry-after-ms]
   (let [attempts    (inc (or (:attempts task) 0))
-        next-run-ms (+ (utils/now-ms) (backoff-ms attempts))
+        delay-ms    (or retry-after-ms
+                        (backoff-ms attempts))
+        next-run-ms (+ (utils/now-ms) delay-ms)
         next-run    (utils/ms->iso next-run-ms)]
-    (dbs/insert dbs (assoc task :attempts attempts :run-at next-run))))
+    (dbs/insert dbs (assoc task :attempts attempts :run-at next-run)))))
 
 
 (defn- dead-letter!
@@ -152,6 +157,12 @@
         (do
           (log/warn :tasks/dead-letter {:id (:_id task) :reason :unknown-task})
           (dead-letter! dbs task "unknown-task-type"))
+
+        (:retry-after-ms result)
+        (do
+          (log/debug :tasks/retrying-with-hint {:id (:_id task)
+                                                :retry-after-ms (:retry-after-ms result)})
+          (mark-failed! dbs task (:retry-after-ms result)))
 
         result
         (do

@@ -80,6 +80,13 @@
     string))
 
 
+(defn distinct-by
+  [f coll]
+  (->> coll
+       (reduce (fn [m x] (if (contains? m (f x)) m (assoc m (f x) x))) {})
+       vals))
+
+
 (defn kebab->snake
   "Convert a keyword name from kebab-case to snake_case string."
   [k]
