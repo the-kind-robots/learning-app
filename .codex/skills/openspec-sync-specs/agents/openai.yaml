@@ -1,0 +1,6 @@
+interface:
+  display_name: "OpenSpec Sync Specs"
+  short_description: "Merge delta specs from an active change into the main OpenSpec specs."
+  default_prompt: "Sync the delta specs from an active OpenSpec change in this repo into the main specs while keeping the change active."
+policy:
+  allow_implicit_invocation: false

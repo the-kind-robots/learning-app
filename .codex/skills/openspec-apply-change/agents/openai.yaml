@@ -1,0 +1,6 @@
+interface:
+  display_name: "OpenSpec Apply"
+  short_description: "Implement an existing OpenSpec change and update its task progress."
+  default_prompt: "Use an existing OpenSpec change in this repo, read its apply instructions, implement pending tasks, and update the task checklist."
+policy:
+  allow_implicit_invocation: false

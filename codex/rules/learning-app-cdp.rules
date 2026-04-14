@@ -1,0 +1,34 @@
+# Allow the project-specific learning-app CDP wrappers to run outside the sandbox
+# without prompting. These scripts are intentionally narrow wrappers around
+# Windows Chrome CDP workflows for this repository.
+
+prefix_rule(
+    pattern = ["bash", ".codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh"],
+    decision = "allow",
+    justification = "Allow the repo-scoped learning app CDP wrapper for local and production browser diagnostics.",
+    match = [
+        "bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local",
+        "bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh start-prod --path /lesson",
+        "bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh monitor-local --session app-local",
+        "bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh read --session app-local --tail 80",
+    ],
+    not_match = [
+        "bash /home/u473t8/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh start --port 9333",
+        "bash .codex/skills/gh-project-workflow/scripts/start_issue_flow.sh --title test",
+    ],
+)
+
+prefix_rule(
+    pattern = ["bash", "/home/u473t8/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh"],
+    decision = "allow",
+    justification = "Allow the shared low-level Chrome CDP helper used by the learning-app CDP skill.",
+    match = [
+        "bash /home/u473t8/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh start --port 9333 --url https://sprecha.local",
+        "bash /home/u473t8/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh monitor-start --port 9333 --url-substring sprecha.de --session prod-watch",
+        "bash /home/u473t8/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh send --port 9333 --page --method Runtime.evaluate --params {}",
+    ],
+    not_match = [
+        "bash .codex/skills/learning-app-cdp/scripts/chrome_cdp.sh start --port 9333",
+        "bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local",
+    ],
+)

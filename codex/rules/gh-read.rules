@@ -1,0 +1,80 @@
+# Allow safe read-only GitHub CLI inspection commands for this repository
+# without repeated approval prompts.
+
+prefix_rule(
+    pattern = ["gh", "auth", "status"],
+    decision = "allow",
+    justification = "Allow checking GitHub authentication status.",
+    match = [
+        "gh auth status",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "repo", "view"],
+    decision = "allow",
+    justification = "Allow reading repository metadata through gh.",
+    match = [
+        "gh repo view u473t8/learning-app",
+        "gh repo view u473t8/learning-app --json id,name,defaultBranchRef",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "project", "view"],
+    decision = "allow",
+    justification = "Allow reading GitHub Project metadata through gh.",
+    match = [
+        "gh project view 1 --owner @me",
+        "gh project view 1 --owner @me --format json",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "project", "field-list"],
+    decision = "allow",
+    justification = "Allow reading GitHub Project field definitions through gh.",
+    match = [
+        "gh project field-list 1 --owner @me --format json",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "issue", "list"],
+    decision = "allow",
+    justification = "Allow listing GitHub issues through gh.",
+    match = [
+        "gh issue list -R u473t8/learning-app",
+        "gh issue list -R u473t8/learning-app --limit 20",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "issue", "view"],
+    decision = "allow",
+    justification = "Allow reading GitHub issue details through gh.",
+    match = [
+        "gh issue view 90 -R u473t8/learning-app",
+        "gh issue view 90 -R u473t8/learning-app --json title,body,state",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "list"],
+    decision = "allow",
+    justification = "Allow listing pull requests through gh.",
+    match = [
+        "gh pr list -R u473t8/learning-app",
+        "gh pr list -R u473t8/learning-app --limit 20",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "view"],
+    decision = "allow",
+    justification = "Allow reading pull request details through gh.",
+    match = [
+        "gh pr view 91 -R u473t8/learning-app",
+        "gh pr view 91 -R u473t8/learning-app --json title,body,state",
+    ],
+)

@@ -37,3 +37,9 @@ app.db
 
 # Dictionary build data
 /data/
+/resources/dictionary/import-metrics.json
+
+# Local agent/tool artifacts
+/.claude/
+/.opencode/
+/.tmp/

@@ -1,0 +1,98 @@
+# Allow the repo's day-to-day OpenSpec workflow and narrow GitHub workflow
+# wrappers without repeated approval prompts.
+
+prefix_rule(
+    pattern = ["openspec", "list"],
+    decision = "allow",
+    justification = "Allow listing OpenSpec changes and specs for the repo workflow.",
+    match = [
+        "openspec list --json",
+        "openspec list",
+    ],
+)
+
+prefix_rule(
+    pattern = ["openspec", "status"],
+    decision = "allow",
+    justification = "Allow checking OpenSpec change status during the repo workflow.",
+    match = [
+        "openspec status --json",
+        "openspec status --change fix-lesson-session --json",
+    ],
+)
+
+prefix_rule(
+    pattern = ["openspec", "instructions"],
+    decision = "allow",
+    justification = "Allow loading OpenSpec artifact and apply instructions during the repo workflow.",
+    match = [
+        "openspec instructions proposal --change fix-lesson-session --json",
+        "openspec instructions apply --change fix-lesson-session --json",
+    ],
+)
+
+prefix_rule(
+    pattern = ["openspec", "new", "change"],
+    decision = "allow",
+    justification = "Allow creating a new OpenSpec change in this repository.",
+    match = [
+        "openspec new change fix-lesson-session",
+    ],
+)
+
+prefix_rule(
+    pattern = ["openspec", "archive"],
+    decision = "allow",
+    justification = "Allow archiving a completed OpenSpec change in this repository.",
+    match = [
+        "openspec archive fix-lesson-session",
+        "openspec archive fix-lesson-session -y",
+        "openspec archive fix-lesson-session --skip-specs",
+    ],
+)
+
+prefix_rule(
+    pattern = ["openspec", "validate"],
+    decision = "allow",
+    justification = "Allow validating an OpenSpec change before archive.",
+    match = [
+        "openspec validate fix-lesson-session --type change --json",
+    ],
+)
+
+prefix_rule(
+    pattern = ["openspec", "show"],
+    decision = "allow",
+    justification = "Allow inspecting OpenSpec changes and specs during review or sync work.",
+    match = [
+        "openspec show fix-lesson-session --type change --json",
+    ],
+)
+
+prefix_rule(
+    pattern = [".codex/skills/gh-project-workflow/scripts/start_issue_flow.sh"],
+    decision = "allow",
+    justification = "Allow the repo-local GitHub project start workflow wrapper.",
+    match = [
+        ".codex/skills/gh-project-workflow/scripts/start_issue_flow.sh --title \"Fix lesson session\" --status Todo",
+    ],
+)
+
+prefix_rule(
+    pattern = [".codex/skills/gh-project-workflow/scripts/finish_issue_flow.sh"],
+    decision = "allow",
+    justification = "Allow the repo-local GitHub project finish workflow wrapper.",
+    match = [
+        ".codex/skills/gh-project-workflow/scripts/finish_issue_flow.sh --issue 90 --base master",
+    ],
+)
+
+prefix_rule(
+    pattern = [".codex/skills/gh-project-workflow/scripts/deploy.sh"],
+    decision = "allow",
+    justification = "Allow the repo-local deployment wrapper when the user explicitly asks to deploy.",
+    match = [
+        ".codex/skills/gh-project-workflow/scripts/deploy.sh",
+        ".codex/skills/gh-project-workflow/scripts/deploy.sh --cmd ./infra/deploy.sh",
+    ],
+)

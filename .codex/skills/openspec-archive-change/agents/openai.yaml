@@ -1,0 +1,6 @@
+interface:
+  display_name: "OpenSpec Archive"
+  short_description: "Archive a completed OpenSpec change and update main specs when appropriate."
+  default_prompt: "Archive a completed OpenSpec change in this repo, warn about incomplete tasks if needed, and summarize the result."
+policy:
+  allow_implicit_invocation: false
