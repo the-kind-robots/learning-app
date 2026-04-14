@@ -78,6 +78,26 @@
           (set! js/fetch original-fetch))))))
 
 
+(deftest fetch-one-includes-retry-after-ms-on-server-error
+  (async-testing "`fetch-one` includes retry-after-ms when the server suggests a retry delay"
+    (let [original-fetch js/fetch]
+      (set! js/fetch
+            (fetch-mocks/mock-fetch-error-with-body
+             429
+             {:error "Examples are temporarily unavailable"}
+             {"Retry-After" "2"}))
+      (p/finally
+        (p/catch
+          (p/do
+            (sut/fetch-one "Hund")
+            (is false "Should have rejected"))
+          (fn [error]
+            (is (= 429 (:status (ex-data error))))
+            (is (= 2000 (:retry-after-ms (ex-data error))))))
+        (fn []
+          (set! js/fetch original-fetch))))))
+
+
 (deftest fetch-one-rejects-on-invalid-example-payload
   (async-testing "`fetch-one` rejects on invalid example payload"
     (let [original-fetch js/fetch]
@@ -274,6 +294,28 @@
                               :data      {:word-id "word-123"}}
                              dbs)]
                (is (false? result))))))
+        (fn []
+          (set! js/fetch original-fetch))))))
+
+
+(deftest task-handler-returns-retry-hint-when-server-provides-it
+  (async-testing "task handler returns retry-after hint when fetch failure includes Retry-After"
+    (let [original-fetch js/fetch]
+      (set! js/fetch
+            (fetch-mocks/mock-fetch-error-with-body
+             429
+             {:error "Examples are temporarily unavailable"}
+             {"Retry-After" "3"}))
+      (p/finally
+        (with-test-dbs
+         (fn [dbs]
+           (p/do
+             (db/insert (:user/db dbs) {:_id "word-123" :type "vocab" :value "Hund"})
+             (p/let [result (tasks/execute-task
+                             {:task-type "example-fetch"
+                              :data      {:word-id "word-123"}}
+                             dbs)]
+               (is (= {:retry-after-ms 3000} result))))))
         (fn []
           (set! js/fetch original-fetch))))))
 

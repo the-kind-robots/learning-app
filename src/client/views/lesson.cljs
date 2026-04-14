@@ -23,12 +23,14 @@
 (defn challenge
   "Renders a challenge - prompt text and instruction."
   [state & {:as attrs}]
-  (let [{:keys [prompt is-example?]} (presenter.lesson/challenge-props state)]
+  (let [{:keys [prompt is-example? gloss-mismatch?]} (presenter.lesson/challenge-props state)]
     [:div#lesson-challenge.lesson__challenge
      attrs
      [:h2.lesson__prompt
       {:lang "ru"}
       prompt]
+     (when gloss-mismatch?
+       [:p.lesson__gloss-warning "Перевод слова может быть неточным"])
      [:p.lesson__instruction
       (if is-example?
         "Переведите предложение на немецкий"

@@ -82,7 +82,8 @@
   [{:type    "example"
     :word-id "word-1"
     :prompt  "Пёс спит"
-    :answer  "Der Hund schlaeft."}])
+    :answer  "Der Hund schlaeft."
+    :gloss-mismatch nil}])
 
 
 (def all-expected-trials

@@ -3,6 +3,12 @@
    [promesa.core :as p]))
 
 
+(defn- mock-headers
+  [headers]
+  #js {:get (fn [name]
+              (get headers name))})
+
+
 (defn mock-fetch-success
   "Returns a mock fetch that resolves with given data."
   [data]
@@ -30,12 +36,15 @@
 
 (defn mock-fetch-error-with-body
   "Returns a mock fetch that resolves with error status and JSON body."
-  [status data]
-  (fn [_url]
-    (p/resolved
-     #js {:ok   false
-          :status status
-          :json (fn [] (p/resolved (clj->js data)))})))
+  ([status data]
+   (mock-fetch-error-with-body status data nil))
+  ([status data headers]
+   (fn [_url]
+     (p/resolved
+      #js {:ok      false
+           :status  status
+           :headers (mock-headers headers)
+           :json    (fn [] (p/resolved (clj->js data)))}))))
 
 
 (defn mock-fetch-network-error

@@ -93,6 +93,11 @@
   (p/resolved false))
 
 
+(defmethod sut/execute-task "hinted-fail-task"
+  [_task _dbs]
+  (p/resolved {:retry-after-ms 2500}))
+
+
 (defmethod sut/execute-task "error-task"
   [_task _dbs]
   (p/rejected (ex-info "Boom!" {})))
@@ -199,6 +204,22 @@
             (is (= 1 (count tasks)))
             (is (= 1 (:attempts task)))
             (is (> (utils/iso->ms (:run-at task)) 1000))))))))
+
+
+(deftest run-cycle-uses-retry-hint-when-provided
+  (async-testing "`run-cycle!` uses retry-after hints from task handlers"
+    (with-mocked-env {:now-ms 1000}
+      (fn [{device-db :device/db :as dbs}]
+        (p/do
+          (sut/create-task! "hinted-fail-task" {:word-id "word-1"})
+
+          (#'sut/run-cycle! dbs)
+
+          (p/let [tasks (get-tasks-by-type device-db "hinted-fail-task")
+                  task  (first tasks)]
+            (is (= 1 (count tasks)))
+            (is (= 1 (:attempts task)))
+            (is (= 3500 (utils/iso->ms (:run-at task))))))))))
 
 
 (deftest run-cycle-handles-task-exceptions

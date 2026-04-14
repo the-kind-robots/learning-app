@@ -22,6 +22,17 @@
       (some-> (:translation word-doc) first :value)))
 
 
+(defn- retry-after-ms
+  [response]
+  (some-> response
+          (.-headers)
+          (.get "Retry-After")
+          (js/parseFloat)
+          (* 1000)
+          (js/Math.ceil)
+          (long)))
+
+
 (defn fetch-one
   "Fetches an example sentence for the given German word from the backend.
    Returns a promise that resolves to the example map.
@@ -58,11 +69,13 @@
                                 (p/catch (constantly nil)))
                  error-body (some-> error-body (js->clj :keywordize-keys true))
                  status     (.-status response)
+                 retry-after-ms (retry-after-ms response)
                  message    (or (:error error-body) "Server error fetching example")]
            (p/rejected
             (ex-info message
                      {:word word
                       :status status
+                      :retry-after-ms retry-after-ms
                       :error-body error-body}))))))))
 
 
@@ -78,13 +91,14 @@
   (when-not (and (:value example) (:translation example))
     (throw (ex-info "Invalid example: missing required fields"
                     {:word-id word-id :example example})))
-  (let [example-doc {:type        "example"
-                     :word-id     word-id
-                     :word        word
-                     :value       (:value example)
-                     :translation (:translation example)
-                     :structure   (:structure example)
-                     :created-at  (utils/now-iso)}]
+  (let [example-doc {:type          "example"
+                     :word-id       word-id
+                     :word          word
+                     :value         (:value example)
+                     :translation   (:translation example)
+                     :structure     (:structure example)
+                     :gloss-mismatch (:glossMismatch example)
+                     :created-at    (utils/now-iso)}]
     (dbs/insert dbs example-doc)))
 
 
@@ -134,5 +148,6 @@
 
           (fn [err]
             (log/warn :example-fetch/failed {:word-id word-id :error (ex-message err)})
-            ;; Return false to trigger retry
-            false))))))
+            (if-let [retry-after-ms (:retry-after-ms (ex-data err))]
+              {:retry-after-ms retry-after-ms}
+              false)))))))
