@@ -16,8 +16,8 @@ We need to change all three, but in a way that still lets us diagnose failures c
 ## Goals / Non-Goals
 
 **Goals**
-- Use OpenRouter as the backend transport for example generation.
-- Start on a free model path suitable for development and low-volume usage.
+- Use a configurable provider path for backend example generation, with Groq as the default transport.
+- Start on a low-friction model path suitable for development and low-volume usage.
 - Make prompt behavior easier to tune against the chosen model path.
 - Add deterministic quality gates and retries so obviously bad outputs are rejected without relying on a second LLM pass.
 - Preserve the current example JSON contract unless we explicitly decide to evolve it.
@@ -29,34 +29,34 @@ We need to change all three, but in a way that still lets us diagnose failures c
 
 ## Decisions
 
-### 1) Switch provider transport to OpenRouter-compatible chat completions
+### 1) Switch provider transport to Groq-compatible chat completions
 
-The request shape stays OpenAI-compatible, but the backend target becomes OpenRouter. This keeps the migration small because the current payload already matches the chat-completions style.
+The request shape stays OpenAI-compatible, but the backend target becomes Groq. This keeps the migration small because the current payload already matches the chat-completions style.
 
 Likely backend changes:
-- use an OpenRouter base URL
-- send the OpenRouter API key from env
+- use a Groq base URL
+- send the Groq API key from env
 - isolate model ID/base URL/header construction so we are not hard-coded to one provider
 
-### 2) Treat free model selection as configuration, not as prompt text
+### 2) Treat model selection as configuration, not as prompt text
 
 Prompt tuning should not be blocked on transport details. The selected model should come from config, with an initial default aligned to free inference. That gives us room to compare:
 
-- `openrouter/free` as the simplest router path
-- one or more pinned `:free` model IDs for reproducibility
+- `openai/gpt-oss-20b` on Groq as the first default
+- one or more alternative model IDs for future comparison if quality or quotas require it
 
 Initial implementation choice:
-- default to `nvidia/nemotron-3-super-120b-a12b:free`
-- keep `EXAMPLE_GENERATION_MODEL` as an override so we can switch back to `openrouter/free` or test other pinned free models without code changes
+- default to `openai/gpt-oss-20b`
+- keep `EXAMPLE_GENERATION_MODEL` as an override so we can test stronger Groq models or move providers again without code changes
 
 Comparison used for the initial choice:
-- `openrouter/free`: simplest setup, free router path, and OpenRouter documents that it filters free models for features needed by the request, including structured outputs
-- `google/gemma-3-27b-it:free`: a reasonable pinned fallback because OpenRouter documents it as free and structured-output capable
+- Groq keeps an OpenAI-compatible API surface and publishes clearer model/rate-limit information than OpenRouter free routing
+- `openai/gpt-oss-20b` is the smallest Groq model in this family that still supports JSON object / schema style structured outputs
 
 Decision:
-- ship with `nvidia/nemotron-3-super-120b-a12b:free` as the default because live checks were materially more stable than the router default on the same tricky words
-- keep `openrouter/free` as an opt-in override for future comparison when we want broader routing instead of reproducibility
-- drop `google/gemma-3-27b-it:free` as the first pinned candidate because current live checks returned `429`
+- ship with `openai/gpt-oss-20b` on Groq as the default
+- keep provider/model overrides in config so we can compare with stronger Groq models or another provider later
+- treat `429` as non-retryable so provider-side quota limits fail fast instead of stretching into route-level `504`s
 
 ### 3) Separate prompt structure from transport plumbing
 
@@ -95,15 +95,15 @@ This keeps the rest of the app stable while we change provider/model/prompt inte
 
 ## Risks / Trade-offs
 
-- `openrouter/free` is convenient but may route across different free providers, which can make prompt tuning less reproducible.
-- Pinning a specific `:free` model is more reproducible but may be less resilient when a specific free provider becomes unavailable.
+- Groq free quotas may still be tight enough to require a stronger paid/default plan later.
+- A smaller Groq default improves latency and predictability, but it may need a stronger fallback model for harder words.
 - Prompt quality improvements may still be model-specific, so we likely need a short bakeoff rather than assuming one prompt will work equally well everywhere.
 - Deterministic validation improves reliability, but even with a dictionary-backed target check it still cannot catch every morphology error or sentence-level grammar issue.
 - Retry/best-of-N improves acceptance odds, but it increases latency and request volume.
 
 ## Recommended Implementation Direction
 
-1. Add OpenRouter transport/config support.
+1. Add Groq transport/config support.
 2. Start with a configurable default free model strategy.
 3. Rewrite the prompt into a more structured and maintainable form.
 4. Add deterministic validation and a small retry budget instead of a critique stage.
@@ -111,5 +111,5 @@ This keeps the rest of the app stable while we change provider/model/prompt inte
 
 ## Open Questions
 
-- Should the first default be `openrouter/free` or a pinned free model ID?
+- Should the first default stay on `openai/gpt-oss-20b`, or should we bump straight to `openai/gpt-oss-120b` if quality is not good enough?
 - Do we want a separate prompt-evaluation fixture set for representative nouns/verbs/adjectives?

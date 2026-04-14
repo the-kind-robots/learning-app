@@ -2,10 +2,10 @@
 
 - [x] 1.1 Document the provider switch and prompt-improvement goals for example generation.
 
-## 2. Move Example Generation to OpenRouter
+## 2. Move Example Generation to a Configurable Provider
 
-- [x] 2.1 Replace direct OpenAI transport details with OpenRouter-compatible configuration.
-- [x] 2.2 Introduce a configurable free-model path for example generation.
+- [x] 2.1 Replace direct OpenAI transport details with provider-compatible configuration.
+- [x] 2.2 Introduce a configurable model path for example generation.
 - [x] 2.3 Keep the backend response contract stable for existing client flows.
 
 ## 3. Improve Prompt Quality
