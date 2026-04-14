@@ -101,16 +101,16 @@ systemctl daemon-reload
 systemctl enable --now learning-app-restart.path
 systemctl enable --now learning-app-certbot.timer
 
-has_example_provider_env=false
+has_openrouter_key=false
 if grep -qs '^OPENROUTER_API_KEY=' /etc/learning-app/environment /etc/environment.d/learning-app.conf \
-   || grep -qs '^OPENAI_API_KEY=' /etc/learning-app/environment /etc/environment.d/learning-app.conf; then
-    has_example_provider_env=true
+   || [ -f "${CRED_DIR}/openrouter_api_key" ]; then
+    has_openrouter_key=true
 fi
 
-if [ -f "${CRED_DIR}/openai_api_key" ] || [ "${has_example_provider_env}" = true ]; then
+if [ "${has_openrouter_key}" = true ]; then
     systemctl enable --now learning-app-run.service
 else
-    warn "Missing example-generation credential; not starting learning-app-run.service"
+    warn "Missing OPENROUTER_API_KEY credential; not starting learning-app-run.service"
 fi
 
 has_borg_repo=false

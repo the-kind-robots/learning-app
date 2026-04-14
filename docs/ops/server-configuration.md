@@ -58,8 +58,12 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 
 **Expected values:**
 - `LEARNING_APP_DB_PATH` absolute path
-- OpenRouter API key via systemd creds (`/etc/credstore.encrypted/openai_api_key`) or `OPENROUTER_API_KEY`
-  Legacy fallback during rollout: `OPENAI_API_KEY`
+- Example generation uses OpenRouter. Required key via systemd cred or env var:
+  - `/etc/credstore.encrypted/openrouter_api_key` or `OPENROUTER_API_KEY`
+- Optional OpenRouter env vars:
+  - `OPENROUTER_API_URL` — endpoint override
+  - `OPENROUTER_MODEL` — primary model id (default: `google/gemini-2.5-flash-lite`)
+  - `OPENROUTER_MODELS` — CSV fallback list, e.g. `google/gemini-2.5-flash-lite,deepseek/deepseek-chat-v3.1,openai/gpt-4o-mini`
 - `BORG_REPO` for backups
 
 ## CouchDB
