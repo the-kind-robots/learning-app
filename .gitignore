@@ -37,3 +37,7 @@ app.db
 
 # Dictionary build data
 /data/
+
+# Local agent/tool artifacts
+/.claude/
+/.opencode/

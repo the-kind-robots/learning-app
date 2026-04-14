@@ -1,0 +1,4 @@
+interface:
+  display_name: "GH Project Workflow"
+  short_description: "Automate issue -> branch -> PR -> merge"
+  default_prompt: "Run the GitHub project workflow for this repo: create/classify work, branch, and complete PR lifecycle."

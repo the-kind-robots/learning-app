@@ -1,0 +1,6 @@
+interface:
+  display_name: "OpenSpec Verify"
+  short_description: "Review implementation against an OpenSpec change before archive."
+  default_prompt: "Verify that an implemented OpenSpec change in this repo matches its tasks, specs, and design, and report findings by severity."
+policy:
+  allow_implicit_invocation: false

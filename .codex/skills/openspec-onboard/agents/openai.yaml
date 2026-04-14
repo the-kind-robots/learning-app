@@ -1,0 +1,6 @@
+interface:
+  display_name: "OpenSpec Onboard"
+  short_description: "Teach this repo's OpenSpec workflow through one small real task."
+  default_prompt: "Guide me through this repo's OpenSpec workflow end to end on a small real task, using the local Codex skills."
+policy:
+  allow_implicit_invocation: false
