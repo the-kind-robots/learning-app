@@ -2,48 +2,27 @@
   (:require
    [cheshire.core :as cheshire]
    [clojure.string :as str]
-   [db]
-   [org.httpkit.client :as client]
+   [examples.dictionary :as dictionary]
+   [examples.provider :as provider]
+   [malli.core :as m]
+   [malli.error :as me]
+   [malli.json-schema :as mjs]
+   [malli.util :as mu]
    [taoensso.telemere :as t]
    [utils :as utils]))
 
 
-(defn- env
-  [name]
-  (System/getenv name))
-
-
-(defn example-generation-api-key
-  []
-  ;; Prefer the new OpenRouter-specific variable, but keep the old one as
-  ;; a rollout fallback so local/prod envs do not break mid-migration.
-  (or (env "OPENROUTER_API_KEY")
-      (env "OPENAI_API_KEY")))
-
-
-(defn example-generation-api-url
-  []
-  (or (env "EXAMPLE_GENERATION_API_URL")
-      "https://openrouter.ai/api/v1/chat/completions"))
-
-
-(defn example-generation-model
-  []
-  (or (env "EXAMPLE_GENERATION_MODEL")
-      "nvidia/nemotron-3-super-120b-a12b:free"))
-
-
 (defn- example-generation-timeout-ms
   []
-  (some-> (or (env "EXAMPLE_GENERATION_TIMEOUT_MS") "30000")
+  (some-> (or (System/getenv "EXAMPLE_GENERATION_TIMEOUT_MS") "30000")
           parse-long))
 
 
 (defn valid-example?
   [example]
   (and (map? example)
-       (not (str/blank? (some-> example (get "value"))))
-       (not (str/blank? (some-> example (get "translation"))))))
+       (not (str/blank? (:value example)))
+       (not (str/blank? (:translation example)))))
 
 
 (defn- cyrillic-text?
@@ -51,38 +30,102 @@
   (boolean (re-find #"[А-Яа-яЁё]" (or text ""))))
 
 
-(defn- suspicious-meta-text?
+(defn- latin-text?
+  [text]
+  (boolean (re-find #"[A-Za-zÄÖÜẞäöüß]" (or text ""))))
+
+
+(defn- single-sentence-text?
   [text]
   (boolean
-   (re-find
-    #"(?i)(the example for|requested json|dictionary form|json structure|translation is straightforward|i[' ]?ll directly provide|without extra text)"
-    (or text ""))))
+   (re-matches #"(?su)^[^.!?]+[.!?]$"
+               (str/trim (or text "")))))
 
 
-(defn- valid-structure-item?
-  [item]
-  (and (map? item)
-       (not (str/blank? (some-> item (get "usedForm"))))
-       (not (str/blank? (some-> item (get "dictionaryForm"))))
-       (not (str/blank? (some-> item (get "translation"))))
-       (cyrillic-text? (get item "translation"))))
+(defn- plain-sentence?
+  [text]
+  (not (re-find #"(?s)[\r\n`#\[\]{}*_:]" (or text ""))))
 
 
-(defn- valid-example-structure?
-  [structure]
-  (and (sequential? structure)
-       (seq structure)
-       (every? valid-structure-item? structure)))
+(defn- german-sentence-text?
+  [text]
+  (and (single-sentence-text? text)
+       (plain-sentence? text)
+       ;; German sentences start with a capital letter, optionally preceded by an opening quote/bracket
+       (boolean (re-find #"(?u)^[\"'«„(]*[A-ZÄÖÜ]" (str/trim (or text ""))))
+       (not (cyrillic-text? text))))
 
 
-(defn- valid-generated-example?
-  [example]
-  (and (valid-example? example)
-       (instance? Boolean (get example "glossMismatch"))
-       (not (suspicious-meta-text? (get example "value")))
-       (not (suspicious-meta-text? (get example "translation")))
-       (cyrillic-text? (get example "translation"))
-       (valid-example-structure? (get example "structure"))))
+(defn- russian-sentence-text?
+  [text]
+  (and (single-sentence-text? text)
+       (plain-sentence? text)
+       ;; Russian sentences start with a capital Cyrillic letter, optionally preceded by an opening quote/bracket
+       (boolean (re-find #"(?u)^[\"'«„(]*[А-ЯЁ]" (str/trim (or text ""))))
+       (cyrillic-text? text)
+       (not (latin-text? text))))
+
+
+(defn- russian-text?
+  [text]
+  (and (cyrillic-text? text) (not (latin-text? text))))
+
+
+(defn- with-constraint
+  [schema pred message]
+  [:and schema [:fn {:error/message message} pred]])
+
+
+(def ^:private example-structure-schema
+  [:map {:closed true}
+   [:value
+    {:description "A natural German sentence using the requested word."}
+    [:string {:min 1}]]
+   [:translation
+    {:description "Russian translation of the sentence."}
+    [:string {:min 1}]]
+   [:glossMismatch
+    {:description "Whether the supplied Russian gloss appears mismatched to the German word."}
+    :boolean]
+   [:structure
+    {:description "A list of JSON objects containing the used word form, its dictionary form and its translation."}
+    [:vector {:min 1}
+     [:map {:closed true}
+      [:usedForm
+       {:description "The word in its used form."}
+       [:string {:min 1}]]
+      [:dictionaryForm
+       {:description "The dictionary form of the word."}
+       [:string {:min 1}]]
+      [:translation
+       {:description "Russian translation of the word as used in the sentence."}
+       [:string {:min 1}]]]]]])
+
+
+(def ^:private generated-example-schema
+  (-> example-structure-schema
+      (mu/update :value       with-constraint german-sentence-text?  "German sentence required")
+      (mu/update :translation with-constraint russian-sentence-text? "Russian translation required")
+      (mu/update-in [:structure 0 :translation] with-constraint russian-text? "Structure translation must be Cyrillic")))
+
+
+(defn- normalize-text
+  [text]
+  (some-> text utils/sanitize-text str/lower-case))
+
+
+(defn- sentence-contains-word?
+  [sentence word]
+  (let [sentence (normalize-text sentence)
+        word     (normalize-text word)]
+    (when (and sentence word)
+      (boolean
+       (re-find
+        (re-pattern
+         (str "(?iu)(^|\\P{L})"
+              (java.util.regex.Pattern/quote word)
+              "($|\\P{L})"))
+        sentence)))))
 
 
 (defn- sentence-word-count
@@ -90,171 +133,14 @@
   (count (re-seq #"\p{L}+" (or sentence ""))))
 
 
-(defn- target-has-article?
-  [word]
-  (boolean (re-matches #"(?iu)(der|die|das)\s+.+"
-                       (or word ""))))
+(defn- sentence-length-ok?
+  [sentence]
+  (<= 3 (sentence-word-count sentence) 12))
 
 
-(defn- normalize-dictionary-form
-  [text]
-  (some-> text str/trim str/lower-case))
-
-
-(defn- normalize-russian-text
-  [text]
-  (some-> text
-          utils/sanitize-text
-          str/lower-case
-          utils/non-blank))
-
-
-(defn- strip-article
-  [text]
-  (some-> text
-          str/trim
-          (str/replace #"(?iu)^(der|die|das)\s+" "")))
-
-
-(defn- target-dictionary-form?
-  [word dictionary-form]
-  (let [target          (normalize-dictionary-form word)
-        dictionary-form (normalize-dictionary-form dictionary-form)]
-    (when (and target dictionary-form)
-      (if (target-has-article? word)
-        (= dictionary-form target)
-        (= (strip-article dictionary-form)
-           (strip-article target))))))
-
-
-(defn- target-dictionary-form-present?
-  [word structure]
-  (boolean
-   (some #(target-dictionary-form? word (get % "dictionaryForm"))
-         structure)))
-
-
-(defn- target-dictionary-forms
-  [word structure]
-  (->> structure
-       (keep #(get % "dictionaryForm"))
-       (filter #(target-dictionary-form? word %))
-       distinct))
-
-
-(defn- normalize-translation-variant
-  [text]
-  (some-> text str/trim normalize-russian-text))
-
-
-(defn- translation-variants
-  [text]
-  (->> (str/split (or text "") #"[;,/]")
-       (map normalize-translation-variant)
-       (remove nil?)
-       distinct))
-
-
-(defn- translation-match?
-  [expected actual]
-  (let [expected* (normalize-russian-text expected)
-        actual*   (normalize-russian-text actual)
-        actuals   (set (translation-variants actual))]
-    (boolean
-     (or (= expected* actual*)
-         (contains? actuals expected*)))))
-
-
-(def ^:private dictionary-db-name
-  "dictionary-db")
-
-
-(defn- log-dictionary-validation-failure!
-  [data]
-  (t/log!
-   {:level :warn
-    :id    ::dictionary-validation-failed
-    :data  data}
-   "Examples dictionary validation failed"))
-
-
-(defn- lookup-dictionary-entries
-  [dictionary-form]
-  (try
-    (let [response (db/request-sync
-                    {:method :get
-                     :url    (str dictionary-db-name "/_find")
-                     :body   {:selector {:type  "dictionary-entry"
-                                         :value dictionary-form}
-                              :fields   [:_id :value :pos :translation]
-                              :limit    10}})]
-      (if (< (:status response 500) 400)
-        (get-in response [:body :docs] [])
-        (do
-          (log-dictionary-validation-failure!
-           {:dictionary-form dictionary-form
-            :status          (:status response)
-            :body            (:body response)})
-          nil)))
-    (catch Exception error
-      (log-dictionary-validation-failure!
-       {:dictionary-form dictionary-form
-        :error           (.getMessage error)})
-      nil)))
-
-
-(defn- dictionary-entry-matches-gloss?
-  [entry translation]
-  (some #(and (= "ru" (:lang %))
-              (translation-match? translation (:value %)))
-        (:translation entry)))
-
-
-(defn- dictionary-form-matches-target-gloss?
-  [dictionary-form translation]
-  (let [entries (lookup-dictionary-entries dictionary-form)]
-    ;; If dictionary lookup itself is unavailable, do not turn that outage into a
-    ;; hard example-generation failure. Only reject when the lookup succeeds and
-    ;; the returned entries disagree with the intended gloss.
-    (or (nil? entries)
-        (some #(dictionary-entry-matches-gloss? % translation)
-              entries))))
-
-
-(defn- target-dictionary-entry-valid?
-  [word translation structure]
-  (or (str/blank? translation)
-      (some (fn [dictionary-form]
-              (dictionary-form-matches-target-gloss? dictionary-form translation))
-            (target-dictionary-forms word structure))))
-
-
-(defn- deterministic-example-issues
-  [word translation example]
-  (cond-> []
-    (not (valid-generated-example? example))
-    (conj :invalid-generated-example)
-
-    (true? (get example "glossMismatch"))
-    (conj :gloss-mismatch)
-
-    (not (<= 5 (sentence-word-count (get example "value")) 12))
-    (conj :sentence-length-out-of-range)
-
-    (not (target-dictionary-form-present? word (get example "structure")))
-    (conj :target-dictionary-form-missing)
-
-    (and (target-dictionary-form-present? word (get example "structure"))
-         (not (target-dictionary-entry-valid? word
-                                              translation
-                                              (get example "structure"))))
-    (conj :target-dictionary-form-gloss-mismatch)))
-
-
-
-
-
-
+(defn- structure-matches-sentence?
+  [sentence structure]
+  (every? #(sentence-contains-word? sentence (:usedForm %)) structure))
 
 
 (defn- log-generation-failure!
@@ -266,286 +152,202 @@
    "Examples generation failed"))
 
 
+(defn- example-issue
+  [word translation example]
+  (if-not (m/validate generated-example-schema example)
+    (do
+      (log-generation-failure!
+       {:word    word
+        :error   "Invalid generated example shape"
+        :explain (me/humanize (m/explain generated-example-schema example))})
+      :invalid-generated-example)
+    (let [{:keys [value structure]} example]
+      (cond
+        (not (structure-matches-sentence? value structure))
+        :structure-value-mismatch
+
+        (not (sentence-length-ok? value))
+        :sentence-length-out-of-range
+
+        (not (dictionary/lemma-in-structure? word structure))
+        :target-dictionary-form-missing
+
+        (not (dictionary/word-gloss-valid? word translation structure))
+        :target-dictionary-form-gloss-mismatch))))
+
+
+
+(defn- retry-after-ms
+  [response]
+  (when-let [f (:retry-after-ms (provider/config))]
+    (f response)))
+
+
+(defn generation-failure?
+  [result]
+  (= ::generation-failure (::type result)))
+
+
 (def system-prompt
   (str/join
    "\n"
    ["You generate learner-facing German example sentences for a vocabulary app."
     "Return only JSON that matches the supplied schema."
-    ""
-    "For each requested item you receive a German word, its part of speech, and its intended Russian meaning."
-    ""
-    "## Core rules"
-    "- The generated example must match the intended Russian meaning exactly."
-    "- Do not switch to another sense of the word, even if the German word is polysemous."
-    "- Produce exactly one natural German sentence that uses the target word or a correctly inflected form of it."
-    "- Keep sentences between 5 and 12 words."
-    "- Prefer clear, standard, pedagogically useful German. Avoid literary, archaic, or overly colloquial phrasing."
-    "- The sentence must be plain German only — no explanations, notes, or meta commentary."
-    ""
-    "## Difficulty"
-    "- If a target CEFR level is provided, match vocabulary and grammar to that level."
-    "- A1–A2: simple main clauses, common vocabulary, Präsens or Perfekt."
-    "- B1–B2: subordinate clauses allowed, wider vocabulary, all common tenses."
-    "- C1: complex structures allowed, precise or specialized vocabulary."
-    "- If no level is provided, default to B1."
-    ""
-    "## Part-of-speech guidance"
-    ""
-    "Nouns:"
-    "- Use a natural case and number form that fits the sentence."
-    ""
-    "Verbs:"
-    "- Use a natural finite, infinitive, imperative, or participial form."
-    "- Separable-prefix verbs: preserve the correct lemma. The prefix may be detached or attached depending on clause type."
-    "- Inseparable-prefix verbs (`ver-`, `be-`, `er-`, `ent-`, `emp-`, `zer-`, `miss-`, `ge-` when inseparable): never detach the prefix."
-    "- Some prefixes (`um-`, `über-`, `unter-`, `durch-`, `wieder-`) can be separable or inseparable depending on meaning. Use the supplied Russian gloss to determine which variant is intended."
-    "- Reflexive verbs (`sich ...`): always include the reflexive pronoun in the sentence."
-    "- Do not invent a separable prefix that does not belong to the target lemma."
-    ""
-    "Adjectives:"
-    "- Use correct agreement and declension (strong / weak / mixed) matching the determiner context."
-    ""
-    "## Translation rules"
-    "- `translation` is a natural Russian translation of the whole German sentence."
-    "- It must sound like normal Russian, not a word-for-word calque."
-    ""
-    "## Structure rules"
+    "Input fields: word, translation, part of speech, cefrLevel, previousAttempt, previousIssues."
+    "Missing cefrLevel => B1."
+    "- Match the intended Russian gloss exactly. Do not switch senses."
+    "- Produce one natural standard German sentence, 3-12 words, using the target lemma or a correct inflected form."
+    "- German sentence only: no labels, notes, markdown, or meta commentary."
+    "- `translation` must be one natural Russian sentence, not a calque."
+    "- Set `glossMismatch` to true only if the supplied gloss clearly mismatches the target lemma; otherwise false."
     "- `structure` must include every noun, verb (including auxiliaries and modals), adjective, and adverb in the sentence."
-    "- Exclude: articles, pronouns, prepositions, conjunctions, and pure grammatical particles (e.g. `zu` before infinitives, `nicht`)."
-    "- Exception: detached prefixes of separable verbs are NOT particles — always include them."
-    "- For nouns, `dictionaryForm` must include the article: `der Hund`, `die Katze`, `das Buch`."
-    "- For a separable verb whose prefix is detached, include two entries: one for the finite verb part and one for the detached prefix. Both must share the same `dictionaryForm` (the full infinitive) and the same Russian meaning."
-    ""
-    "## Gloss mismatch"
-    "- If you believe the supplied Russian meaning is incorrect or does not match any attested sense of the German word, set `glossMismatch` to true and generate the sentence to the best of your ability anyway."
-    "- Otherwise set `glossMismatch` to false."
-    ""
-    "## Few-shot examples"
-    ""
-    "Target: `aufstehen`, meaning `вставать`."
-    "Sentence: `Ich stehe jeden Morgen um sieben Uhr auf.`"
-    "Structure:"
-    "  * `stehe` → dictionaryForm `aufstehen` → `вставать`"
-    "  * `Morgen` → dictionaryForm `der Morgen` → `утро`"
-    "  * `auf` → dictionaryForm `aufstehen` → `вставать`"
-    ""
-    "Target: `verstehen`, meaning `понимать`."
-    "Sentence: `Ich verstehe diese Aufgabe nicht.`"
-    "Structure:"
-    "  * `verstehe` → dictionaryForm `verstehen` → `понимать`"
-    "  * `Aufgabe` → dictionaryForm `die Aufgabe` → `задача`"
-    "(Note: `nicht` is excluded as a function word.)"
-    ""
-    "Target: `das Verstehen`, meaning `понимание`."
-    "Sentence: `Das Verstehen dieser Regel dauert lange.`"
-    "Structure:"
-    "  * `Verstehen` → dictionaryForm `das Verstehen` → `понимание`"
-    "  * `Regel` → dictionaryForm `die Regel` → `правило`"
-    "  * `dauert` → dictionaryForm `dauern` → `длиться`"
-    ""
-    "Target: `die Bank`, meaning `скамейка` (not `банк`)."
-    "Sentence: `Wir sitzen auf einer Bank im Park.`"
-    "Structure:"
-    "  * `sitzen` → dictionaryForm `sitzen` → `сидеть`"
-    "  * `Bank` → dictionaryForm `die Bank` → `скамейка`"
-    "  * `Park` → dictionaryForm `der Park` → `парк`"
-    ""
-    "Target: `sich vorstellen`, meaning `представляться`."
-    "Sentence: `Er stellt sich bei den neuen Kollegen vor.`"
-    "Structure:"
-    "  * `stellt` → dictionaryForm `sich vorstellen` → `представляться`"
-    "  * `neu` → dictionaryForm `neu` → `новый`"
-    "  * `Kollegen` → dictionaryForm `der Kollege` → `коллега`"
-    "  * `vor` → dictionaryForm `sich vorstellen` → `представляться`"
-    ""
-    "## Quality bar"
-    "- No markdown, no text outside the JSON object."
-    "- If several valid sentences exist, prefer the simplest one that still feels natural."
-    "- Never include meta commentary like `The example for...` or `dictionary form`."]))
+    "- Each item in `structure` must be a JSON object with keys `usedForm`, `dictionaryForm`, and `translation`."
+    "- Never use arrays like `[\"Fenster\", \"das Fenster\", \"окно\"]` inside `structure`."
+    "- Exclude articles, pronouns, prepositions, conjunctions, and pure particles like `zu` or `nicht`."
+    "- Detached prefixes of separable verbs are not particles: include them."
+    "- For nouns, `dictionaryForm` includes the article."
+    "- For separable verbs with detached prefixes, include one item for the verb part and one for the prefix; both use the full infinitive as `dictionaryForm` and the same Russian gloss."
+    "- Reflexive verb `dictionaryForm` keeps `sich`."
+    "- Ambiguous noun articles and ambiguous prefixes (`um-`, `über-`, `unter-`, `durch-`, `wieder-`) must follow the supplied Russian gloss."
+    "- Example structure item: `{\"usedForm\":\"Fenster\",\"dictionaryForm\":\"das Fenster\",\"translation\":\"окно\"}`."
+    "Example word=aufstehen gloss=вставать:"
+    "{\"value\":\"Ich stehe jeden Morgen um sieben Uhr auf.\",\"translation\":\"Я встаю каждое утро в семь часов.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"stehe\",\"dictionaryForm\":\"aufstehen\",\"translation\":\"вставать\"},{\"usedForm\":\"Morgen\",\"dictionaryForm\":\"der Morgen\",\"translation\":\"утро\"},{\"usedForm\":\"auf\",\"dictionaryForm\":\"aufstehen\",\"translation\":\"вставать\"}]}"
+    "Example word=das Verstehen gloss=понимание:"
+    "{\"value\":\"Das Verstehen dieser Regel dauert lange.\",\"translation\":\"Понимание этого правила требует времени.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"Verstehen\",\"dictionaryForm\":\"das Verstehen\",\"translation\":\"понимание\"},{\"usedForm\":\"Regel\",\"dictionaryForm\":\"die Regel\",\"translation\":\"правило\"},{\"usedForm\":\"dauert\",\"dictionaryForm\":\"dauern\",\"translation\":\"длиться\"}]}"
+    "Example word=die Bank gloss=скамейка:"
+    "{\"value\":\"Wir sitzen auf einer Bank im Park.\",\"translation\":\"Мы сидим на скамейке в парке.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"sitzen\",\"dictionaryForm\":\"sitzen\",\"translation\":\"сидеть\"},{\"usedForm\":\"Bank\",\"dictionaryForm\":\"die Bank\",\"translation\":\"скамейка\"},{\"usedForm\":\"Park\",\"dictionaryForm\":\"der Park\",\"translation\":\"парк\"}]}"
+    "Example word=Leiter gloss=лестница:"
+    "{\"value\":\"Die Leiter steht neben der Wand.\",\"translation\":\"Лестница стоит у стены.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"Leiter\",\"dictionaryForm\":\"die Leiter\",\"translation\":\"лестница\"},{\"usedForm\":\"steht\",\"dictionaryForm\":\"stehen\",\"translation\":\"стоять\"},{\"usedForm\":\"Wand\",\"dictionaryForm\":\"die Wand\",\"translation\":\"стена\"}]}"
+    "Do not use `der Leiter` for this meaning."
+    "Example word=sich vorstellen gloss=представляться:"
+    "{\"value\":\"Er stellt sich bei den neuen Kollegen vor.\",\"translation\":\"Он представляется новым коллегам.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"stellt\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"neu\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"]))
 
-
-(defn- example-structure-schema
-  []
-  {:type "array"
-   :description
-   "A list of triplets containing the used word form, its dictionary form and its translation."
-   :items
-   {:type "object"
-    :properties
-    {:usedForm
-     {:type        "string"
-      :description "The word in its used form."}
-
-     :dictionaryForm
-     {:type        "string"
-      :description "The dictionary form of the word."}
-
-     :translation
-     {:type        "string"
-      :description "Russian translation of the word as used in the sentence."}}
-
-    :additionalProperties false
-    :required ["usedForm" "dictionaryForm" "translation"]}})
-
-
-(defn- example-schema
-  [_word]
-  {:type "object"
-   :properties
-   {"value"
-    {:type        "string"
-     :description "A natural German sentence using the requested word."}
-
-    "translation"
-    {:type        "string"
-     :description "Russian translation of the sentence."}
-
-    "glossMismatch"
-    {:type        "boolean"
-     :description "Whether the supplied Russian gloss appears mismatched to the German word."}
-
-    "structure" (example-structure-schema)}
-
-   :additionalProperties false
-   :required ["value" "translation" "glossMismatch" "structure"]})
-
-
-(defn- retry-feedback
-  [retry-context]
-  (when retry-context
-    {:previousAttempt (:example retry-context)
-     :previousIssues  (mapv name (:issues retry-context))}))
-
-
-(defn- request-item
-  [word translation retry-context]
-  (cond-> {:word         word
-           :partOfSpeech nil
-           :cefrLevel    nil
-           :translation  translation}
-    true
-    (merge (retry-feedback retry-context))))
 
 
 (defn- user-prompt
-  [word translation retry-context]
+  [word translation word-meta retry-context]
   (str/join
    "\n"
-   ["Generate one example for this request item."
-    "The request item contains the German word and the intended Russian meaning."
-    "If the request item also includes `previousAttempt` and `previousIssues`, treat them as feedback about the last rejected candidate."
-    "Keep the intended meaning, fix the listed problems, and do not repeat them."
-    "The response must be a single JSON object matching the supplied schema."
-    (cheshire/generate-string (request-item word translation retry-context))]))
+   ["Generate one example."
+    "Return one JSON object matching the supplied schema."
+    "If `previousAttempt` and `previousIssues` are present, fix those problems without changing the intended sense."
+    (cheshire/generate-string
+     (merge
+      {:word         word
+       :partOfSpeech (:partOfSpeech word-meta)
+       :cefrLevel    (:cefrLevel word-meta)
+       :translation  translation}
+      (when retry-context
+        {:previousAttempt (:example retry-context)
+         :previousIssues  [(name (:issue retry-context))]})))]))
 
 
 (defn- request-body
-  [word translation retry-context]
-  {:model    (example-generation-model)
-   :messages [{:role    "system"
-               :content system-prompt}
-              {:role    "user"
-               :content (user-prompt word translation retry-context)}]
-   :response_format
-   {:type "json_schema"
-
-    :json_schema
-    {:name "sentence_example"
-     :schema (example-schema word)
-     :strict true}}
-   :top_p    1})
+  [word translation word-meta retry-context]
+  {:messages        [{:role    "system"
+                      :content system-prompt}
+                     {:role    "user"
+                      :content (user-prompt word translation word-meta retry-context)}]
+   :response_format {:type        "json_schema"
+                     :json_schema {:name   "sentence_example"
+                                   :schema (mjs/transform example-structure-schema)
+                                   :strict true}}})
 
 
 
-(defn gen-words-api-request
-  [word translation retry-context]
-  (client/request
-   {:url     (example-generation-api-url)
-    :method  :post
-    :headers {"Authorization" (str "Bearer " (example-generation-api-key))
-              "Content-Type"  "application/json"}
-    :timeout (example-generation-timeout-ms)
-    :body    (cheshire/generate-string
-              (request-body word translation retry-context))}))
+(defn example-api-request
+  [word translation word-meta retry-context]
+  (provider/request
+   (request-body word translation word-meta retry-context)
+   (example-generation-timeout-ms)))
 
 
-(defn- parse-generated-examples
+(defn- parse-generated-example
   [response word]
   (if (= 200 (:status response))
     (try
-      (-> response :body (cheshire/parse-string true) :choices first :message :content cheshire/parse-string)
+      (-> response :body (cheshire/parse-string true) :choices first :message :content (cheshire/parse-string true))
       (catch Exception error
-        (log-generation-failure!
-         {:word word
-          :status (:status response)
-          :error (.getMessage error)
-          :body (:body response)})
-        nil))
-    (do
-      (log-generation-failure!
-       {:word word
-        :status (:status response)
-        :error (:error response)
-        :body (:body response)})
-      nil)))
+        (let [failure {::type      ::generation-failure
+                       :retryable? true
+                       :word       word
+                       :error      (.getMessage error)
+                       :body       (:body response)}]
+          (log-generation-failure! failure)
+          failure)))
+    (let [hard?   (contains? #{401 403 429} (:status response))
+          failure (merge
+                   (select-keys response [:status :error :body])
+                   {::type          ::generation-failure
+                    :retryable?     (not hard?)
+                    :word           word
+                    :retry-after-ms (retry-after-ms response)})]
+      (log-generation-failure! failure)
+      failure)))
 
 
-(defn- raw-generate-one!
-  [word translation retry-context]
+(defn- generate-attempt!
+  [word translation word-meta retry-context]
   (try
-    (some-> @(gen-words-api-request word translation retry-context)
-            (parse-generated-examples word))
+    (-> @(example-api-request word translation word-meta retry-context)
+        (parse-generated-example word))
     (catch Exception error
-      (log-generation-failure!
-       {:word    word
-        :error   (.getMessage error)
-        :context :transport
-        :cause   (some-> error ex-data)})
-      nil)))
+      (let [failure {::type      ::generation-failure
+                     :retryable? true
+                     :word       word
+                     :error      (.getMessage error)
+                     :context    :transport
+                     :cause      (some-> error ex-data)}]
+        (log-generation-failure! failure)
+        failure))))
 
 
 (defn generate-one!
-  "Returns a hash map with the following keys:
-  * `:value` — German text;
-  * `:translation` — Russian translation;
-  * `:structure` — a list of pairs, where each pair has:
-    * `:dictionaryForm` — the dictionary form of the word;
-    * `:usedForm` — the form of the word used in the sentence;
-    * `:translation`— russian translation of the word used in the sentence."
+  "Generates a German example sentence for word/translation.
+  Returns a map with keyword keys:
+  * :value — German text;
+  * :translation — Russian translation;
+  * :glossMismatch — true if the supplied gloss appears mismatched to the word;
+  * :structure — list of maps with keyword keys :usedForm, :dictionaryForm, :translation.
+  Returns a generation-failure map on a hard error (e.g. 429), nil when all attempts are exhausted."
   ([input]
    (generate-one! input 3))
   ([{:keys [word translation]} max-attempts]
-   (loop [attempt 1 retry-context nil]
-     (let [example (raw-generate-one! word translation retry-context)
-           issues  (when example
-                     (deterministic-example-issues word translation example))]
-       (cond
-         (and example (empty? issues))
-         example
+   (let [word-meta (dictionary/lookup-word-meta word translation)]
+     (loop [attempt 1 retry-context nil]
+       (let [example  (generate-attempt! word translation word-meta retry-context)
+             failure? (generation-failure? example)
+             issue    (when-not failure?
+                        (example-issue word translation example))]
+         (cond
+           (and failure? (not (:retryable? example)))
+           example
 
-         (< attempt max-attempts)
-         (do
-           (when example
-             (log-generation-failure!
-              {:words [word]
-               :attempt attempt
-               :error "Rejected generated example candidate"
-               :issues issues
-               :example example}))
-           (recur (inc attempt)
-                  {:example example
-                   :issues  issues}))
+           (and (not failure?) (nil? issue))
+           example
 
-         :else
-         (do
-           (log-generation-failure!
-            {:words [word]
-             :attempt attempt
-             :error "Exhausted example generation attempts"
-             :issues issues
-             :example example})
-           nil))))))
+           (< attempt max-attempts)
+           (let [retry-ctx (when-not failure? {:example example :issue issue})]
+             (when retry-ctx
+               (log-generation-failure!
+                {:words   [word]
+                 :attempt attempt
+                 :error   "Rejected generated example candidate"
+                 :issue   issue
+                 :example example}))
+             (recur (inc attempt) retry-ctx))
+
+           :else
+           (do
+             (when-not failure?
+               (log-generation-failure!
+                {:words   [word]
+                 :attempt attempt
+                 :error   "Exhausted example generation attempts"
+                 :issue   issue
+                 :example example}))
+             nil)))))))
 
 
 (comment
-  (generate-one! "das Entsetzen"))
+  (generate-one! {:word "das Entsetzen"}))

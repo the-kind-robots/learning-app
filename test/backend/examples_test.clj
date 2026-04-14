@@ -2,31 +2,39 @@
   (:require
    [cheshire.core :as cheshire]
    [clojure.test :refer [deftest is testing]]
+   [db :as db]
    [examples :as sut]
+   [examples.dictionary :as dictionary]
+   [examples.provider :as provider]
    [org.httpkit.client :as client]))
 
 
-(deftest gen-words-api-request-uses-openrouter-defaults
+(deftest example-api-request-uses-openrouter-defaults
   (testing "OpenRouter is the default transport and model path"
     (let [captured (atom nil)]
       (with-redefs [client/request (fn [request]
                                      (reset! captured request)
                                      ::request)
-                    sut/env        (fn [name]
-                                     (case name
-                                       "OPENROUTER_API_KEY" "or-test-key"
-                                       nil))]
-        (is (= ::request (sut/gen-words-api-request "Hund" nil nil)))
+                    provider/config (constantly {:api-url "https://api.groq.com/openai/v1/chat/completions"
+                                                          :api-key "groq-test-key"
+                                                          :model "openai/gpt-oss-20b"})]
+        (is (= ::request (sut/example-api-request "Hund" nil nil nil)))
         (let [{:keys [url method headers body]} @captured
               payload (cheshire/parse-string body true)]
-          (is (= "https://openrouter.ai/api/v1/chat/completions" url))
+          (is (= "https://api.groq.com/openai/v1/chat/completions" url))
           (is (= :post method))
-          (is (= "Bearer or-test-key" (get headers "Authorization")))
+          (is (= "Bearer groq-test-key" (get headers "Authorization")))
           (is (= "application/json" (get headers "Content-Type")))
-          (is (= "nvidia/nemotron-3-super-120b-a12b:free" (:model payload)))
+          (is (= "openai/gpt-oss-20b" (:model payload)))
           (is (= "json_schema" (get-in payload [:response_format :type])))
           (is (= ["value" "translation" "glossMismatch" "structure"]
                  (get-in payload [:response_format :json_schema :schema :required])))
+          (is (= "array"
+                 (get-in payload [:response_format :json_schema :schema :properties :structure :type])))
+          (is (= "object"
+                 (get-in payload [:response_format :json_schema :schema :properties :structure :items :type])))
+          (is (= ["usedForm" "dictionaryForm" "translation"]
+                 (get-in payload [:response_format :json_schema :schema :properties :structure :items :required])))
           (is (= "sentence_example" (get-in payload [:response_format :json_schema :name])))
           (is (string? (get-in payload [:messages 0 :content])))
           (is (re-find #"learner-facing German example sentences"
@@ -39,57 +47,61 @@
                        (get-in payload [:messages 0 :content])))
           (is (re-find #"das Verstehen"
                        (get-in payload [:messages 0 :content])))
+          (is (re-find #"Leiter"
+                       (get-in payload [:messages 0 :content])))
+          (is (re-find #"die Leiter"
+                       (get-in payload [:messages 0 :content])))
+          (is (re-find #"Each item in `structure` must be a JSON object"
+                       (get-in payload [:messages 0 :content])))
+          (is (re-find #"Never use arrays like"
+                       (get-in payload [:messages 0 :content])))
           (is (re-find #"Hund" (get-in payload [:messages 1 :content]))))))))
 
 
-(deftest gen-words-api-request-allows-env-overrides
-  (testing "model, url and legacy api key can be overridden from env"
+(deftest example-api-request-allows-env-overrides
+  (testing "model, url and provider api key can be overridden from env"
     (let [captured (atom nil)]
       (with-redefs [client/request (fn [request]
                                      (reset! captured request)
                                      ::request)
-                    sut/env        (fn [name]
-                                     (case name
-                                       "OPENROUTER_API_KEY" nil
-                                       "OPENAI_API_KEY" "legacy-test-key"
-                                       "EXAMPLE_GENERATION_API_URL" "https://example.test/v1/chat/completions"
-                                       "EXAMPLE_GENERATION_MODEL" "google/gemma-3-27b-it:free"
-                                       nil))]
-        (is (= ::request (sut/gen-words-api-request "Hund" "собака" nil)))
+                    provider/config (constantly {:api-url "https://example.test/openai/v1/chat/completions"
+                                                          :api-key "openai-override-key"
+                                                          :model "openai/gpt-oss-120b"})]
+        (is (= ::request (sut/example-api-request "Hund" "собака" nil nil)))
         (let [{:keys [url headers body]} @captured
               payload (cheshire/parse-string body true)]
-          (is (= "https://example.test/v1/chat/completions" url))
-          (is (= "Bearer legacy-test-key" (get headers "Authorization")))
-          (is (= "google/gemma-3-27b-it:free" (:model payload)))
+          (is (= "https://example.test/openai/v1/chat/completions" url))
+          (is (= "Bearer openai-override-key" (get headers "Authorization")))
+          (is (= "openai/gpt-oss-120b" (:model payload)))
           (is (= ["value" "translation" "glossMismatch" "structure"]
                  (get-in payload [:response_format :json_schema :schema :required])))
           (is (re-find #"собака"
                        (get-in payload [:messages 1 :content]))))))))
 
 
-(deftest gen-words-api-request-includes-retry-feedback
+(deftest example-api-request-includes-retry-feedback
   (testing "retry attempts include the rejected example and issue list in the user prompt"
     (let [captured (atom nil)
-          rejected-example {"value" "Der Leiter steht neben der Wand."
-                            "translation" "Лестница стоит рядом со стеной."
-                            "glossMismatch" false
-                            "structure"
-                            [{"usedForm" "Leiter"
-                              "dictionaryForm" "der Leiter"
-                              "translation" "лестница"}]}]
+          rejected-example {:value "Der Leiter steht neben der Wand."
+                            :translation "Лестница стоит рядом со стеной."
+                            :glossMismatch false
+                            :structure
+                            [{:usedForm "Leiter"
+                              :dictionaryForm "der Leiter"
+                              :translation "лестница"}]}]
       (with-redefs [client/request (fn [request]
                                      (reset! captured request)
                                      ::request)
-                    sut/env        (fn [name]
-                                     (case name
-                                       "OPENROUTER_API_KEY" "or-test-key"
-                                       nil))]
+                    provider/config (constantly {:api-url "https://api.groq.com/openai/v1/chat/completions"
+                                                          :api-key "groq-test-key"
+                                                          :model "openai/gpt-oss-20b"})]
         (is (= ::request
-               (sut/gen-words-api-request
+               (sut/example-api-request
                 "Leiter"
                 "лестница"
+                nil
                 {:example rejected-example
-                 :issues  [:target-dictionary-form-gloss-mismatch]})))
+                 :issue   :target-dictionary-form-gloss-mismatch})))
         (let [payload      (cheshire/parse-string (:body @captured) true)
               user-message (get-in payload [:messages 1 :content])]
           (is (re-find #"previousAttempt" user-message))
@@ -105,107 +117,341 @@
                  [{:message
                    {:content
                     (cheshire/generate-string
-                     {"value" "The example for 'aufstehen' is ..."
-                      "translation" "to stand up"
-                      "glossMismatch" true
-                      "structure"
-                      [{"usedForm" "aufstehen"
-                        "dictionaryForm" "aufstehen"
-                        "translation" "to stand up"}]})}}]})]
-      (with-redefs [sut/gen-words-api-request (fn [_word _translation _retry-context]
+                     {:value "The example for 'aufstehen' is ..."
+                      :translation "to stand up"
+                      :glossMismatch true
+                      :structure
+                      [{:usedForm "aufstehen"
+                        :dictionaryForm "aufstehen"
+                        :translation "to stand up"}]})}}]})]
+      (with-redefs [sut/example-api-request (fn [_word _translation _word-meta _retry-context]
                                                 (delay {:status 200 :body body}))
-                    sut/lookup-dictionary-entries (constantly nil)]
+                    dictionary/lookup-dictionary-entries (constantly nil)]
         (is (nil? (sut/generate-one! {:word "aufstehen" :translation "вставать"})))))))
+
+
+(deftest deterministic-example-issues-stop-at-structural-invalidity
+  (testing "structurally invalid examples return only the structural issue"
+    (let [example {:value "The example for 'aufstehen' is ..."
+                   :translation "to stand up"
+                   :glossMismatch true
+                   :structure
+                   [{:usedForm "aufstehen"
+                     :dictionaryForm "aufstehen"
+                     :translation "to stand up"}]}]
+      (is (= :invalid-generated-example
+             (#'sut/example-issue
+              "aufstehen"
+              "вставать"
+              example))))))
+
+
+(deftest deterministic-example-issues-reject-target-present-only-in-structure
+  (testing "target forms mentioned only in structure do not count as present in the sentence"
+    (let [example {:value "Der Hund läuft schnell im Park."
+                   :translation "Собака быстро бежит по парку."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Leiter"
+                     :dictionaryForm "die Leiter"
+                     :translation "лестница"}
+                    {:usedForm "läuft"
+                     :dictionaryForm "laufen"
+                     :translation "бежит"}
+                    {:usedForm "schnell"
+                     :dictionaryForm "schnell"
+                     :translation "быстро"}
+                    {:usedForm "Park"
+                     :dictionaryForm "der Park"
+                     :translation "парк"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (= :structure-value-mismatch
+               (#'sut/example-issue
+                "Leiter"
+                "лестница"
+                example)))))))
+
+
+(deftest valid-generated-example-rejects-mixed-language-translation
+  (testing "translation must be predominantly Cyrillic, not mixed with English"
+    (let [example {:value "Der Hund läuft schnell im Park."
+                   :translation "The dog runs quickly in the park, собака."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Hund"
+                     :dictionaryForm "der Hund"
+                     :translation "собака"}
+                    {:usedForm "läuft"
+                     :dictionaryForm "laufen"
+                     :translation "бежит"}
+                    {:usedForm "schnell"
+                     :dictionaryForm "schnell"
+                     :translation "быстро"}
+                    {:usedForm "Park"
+                     :dictionaryForm "der Park"
+                     :translation "парк"}]}]
+      (is (= :invalid-generated-example
+             (#'sut/example-issue "Hund" "собака" example))))))
+
+
+(deftest valid-generated-example-rejects-small-latin-tail-in-translation
+  (testing "translation must not keep even a small Latin fragment"
+    (let [example {:value "Der Hund läuft schnell im Park."
+                   :translation "Собака бежит fast."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Hund"
+                     :dictionaryForm "der Hund"
+                     :translation "собака"}
+                    {:usedForm "läuft"
+                     :dictionaryForm "laufen"
+                     :translation "бежит"}
+                    {:usedForm "schnell"
+                     :dictionaryForm "schnell"
+                     :translation "быстро"}
+                    {:usedForm "Park"
+                     :dictionaryForm "der Park"
+                     :translation "парк"}]}]
+      (is (= :invalid-generated-example
+             (#'sut/example-issue "Hund" "собака" example))))))
+
+
+(deftest valid-generated-example-rejects-latin-in-structure-translation
+  (testing "structure item translation must not keep Latin fragments either"
+    (let [example {:value "Der Hund läuft schnell im Park."
+                   :translation "Собака быстро бежит по парку."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Hund"
+                     :dictionaryForm "der Hund"
+                     :translation "собака"}
+                    {:usedForm "läuft"
+                     :dictionaryForm "laufen"
+                     :translation "бежит"}
+                    {:usedForm "schnell"
+                     :dictionaryForm "schnell"
+                     :translation "быстро fast"}
+                    {:usedForm "Park"
+                     :dictionaryForm "der Park"
+                     :translation "парк"}]}]
+      (is (= :invalid-generated-example
+             (#'sut/example-issue "Hund" "собака" example))))))
+
+
+(deftest valid-generated-example-rejects-cyrillic-in-german-sentence
+  (testing "german sentence should not contain Cyrillic text"
+    (let [example {:value "Der Hund бежит по парку."
+                   :translation "Собака бежит по парку."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Hund"
+                     :dictionaryForm "der Hund"
+                     :translation "собака"}
+                    {:usedForm "Park"
+                     :dictionaryForm "der Park"
+                     :translation "парк"}]}]
+      (is (= :invalid-generated-example
+             (#'sut/example-issue "Hund" "собака" example))))))
+
+
+(deftest valid-generated-example-rejects-multiple-sentences
+  (testing "german example must contain exactly one sentence"
+    (let [example {:value "Der Hund läuft. Er ist schnell."
+                   :translation "Собака бежит. Она быстрая."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Hund"
+                     :dictionaryForm "der Hund"
+                     :translation "собака"}
+                    {:usedForm "läuft"
+                     :dictionaryForm "laufen"
+                     :translation "бежит"}
+                    {:usedForm "schnell"
+                     :dictionaryForm "schnell"
+                     :translation "быстрый"}]}]
+      (is (= :invalid-generated-example
+             (#'sut/example-issue "Hund" "собака" example))))))
+
+
+(deftest valid-generated-example-rejects-colon-prefixed-german-meta
+  (testing "german value should look like a plain sentence, not a prefixed explanation"
+    (let [example {:value "Sentence: Der Hund läuft im Park."
+                   :translation "Собака бежит в парке."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Hund"
+                     :dictionaryForm "der Hund"
+                     :translation "собака"}
+                    {:usedForm "läuft"
+                     :dictionaryForm "laufen"
+                     :translation "бежит"}
+                    {:usedForm "Park"
+                     :dictionaryForm "der Park"
+                     :translation "парк"}]}]
+      (is (= :invalid-generated-example
+             (#'sut/example-issue "Hund" "собака" example))))))
+
+
+(deftest valid-generated-example-rejects-colon-prefixed-russian-meta
+  (testing "russian translation should look like a plain sentence, not a prefixed explanation"
+    (let [example {:value "Der Hund läuft im Park."
+                   :translation "Перевод: Собака бежит в парке."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Hund"
+                     :dictionaryForm "der Hund"
+                     :translation "собака"}
+                    {:usedForm "läuft"
+                     :dictionaryForm "laufen"
+                     :translation "бежит"}
+                    {:usedForm "Park"
+                     :dictionaryForm "der Park"
+                     :translation "парк"}]}]
+      (is (= :invalid-generated-example
+             (#'sut/example-issue "Hund" "собака" example))))))
+
+
+(deftest deterministic-example-issues-allow-three-word-sentence
+  (testing "simple three-word sentence is acceptable"
+    (let [example {:value "Der Hund schläft."
+                   :translation "Собака спит."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Hund"
+                     :dictionaryForm "der Hund"
+                     :translation "собака"}
+                    {:usedForm "schläft"
+                     :dictionaryForm "schlafen"
+                     :translation "спит"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (= nil
+               (#'sut/example-issue
+                "Hund"
+                "собака"
+                example)))))))
+
+
+(deftest deterministic-example-issues-ignore-gloss-mismatch-flag
+  (testing "glossMismatch alone does not reject an otherwise valid example"
+    (let [example {:value "Die Leiter steht neben der Wand."
+                   :translation "Лестница стоит рядом со стеной."
+                   :glossMismatch true
+                   :structure
+                   [{:usedForm "Leiter"
+                     :dictionaryForm "die Leiter"
+                     :translation "лестница"}
+                    {:usedForm "steht"
+                     :dictionaryForm "stehen"
+                     :translation "стоять"}
+                    {:usedForm "Wand"
+                     :dictionaryForm "die Wand"
+                     :translation "стена"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (= nil
+               (#'sut/example-issue
+                "Leiter"
+                "лестница"
+                example)))))))
+
+
+(deftest target-dictionary-form-allows-reflexive-lemma-match
+  (testing "non-article target can match reflexive dictionary form"
+    (let [example {:value "Er stellt sich heute freundlich vor."
+                   :translation "Он сегодня дружелюбно представляется."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "stellt"
+                     :dictionaryForm "sich vorstellen"
+                     :translation "представляться"}
+                    {:usedForm "heute"
+                     :dictionaryForm "heute"
+                     :translation "сегодня"}
+                    {:usedForm "freundlich"
+                     :dictionaryForm "freundlich"
+                     :translation "дружелюбно"}
+                    {:usedForm "vor"
+                     :dictionaryForm "sich vorstellen"
+                     :translation "представляться"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (= nil
+               (#'sut/example-issue
+                "vorstellen"
+                "представляться"
+                example)))))))
 
 
 (deftest generate-one-retries-until-deterministic-checks-pass
   (testing "best-of-N style retries can skip a bad candidate and keep a later valid one"
-    (let [bad-example {"value" "Der Leiter steht neben der Wand."
-                       "translation" "Лестница стоит рядом со стеной."
-                       "glossMismatch" true
-                       "structure"
-                       [{"usedForm" "Leiter"
-                         "dictionaryForm" "die Leiter"
-                         "translation" "лестница"}
-                        {"usedForm" "steht"
-                         "dictionaryForm" "stehen"
-                         "translation" "стоять"}
-                        {"usedForm" "Wand"
-                         "dictionaryForm" "die Wand"
-                         "translation" "стена"}]}
-          good-example {"value" "Die Leiter steht neben der Wand."
-                        "translation" "Лестница стоит рядом со стеной."
-                        "glossMismatch" false
-                        "structure"
-                        [{"usedForm" "Leiter"
-                          "dictionaryForm" "die Leiter"
-                          "translation" "лестница"}
-                         {"usedForm" "steht"
-                          "dictionaryForm" "stehen"
-                          "translation" "стоять"}
-                         {"usedForm" "Wand"
-                          "dictionaryForm" "die Wand"
-                          "translation" "стена"}]}
+    (let [bad-example {:value "Die Leiter."
+                       :translation "Лестница стоит рядом со стеной."
+                       :glossMismatch false
+                       :structure
+                       [{:usedForm "Leiter"
+                         :dictionaryForm "die Leiter"
+                         :translation "лестница"}]}
+          good-example {:value "Die Leiter steht neben der Wand."
+                        :translation "Лестница стоит рядом со стеной."
+                        :glossMismatch false
+                        :structure
+                        [{:usedForm "Leiter"
+                          :dictionaryForm "die Leiter"
+                          :translation "лестница"}
+                         {:usedForm "steht"
+                          :dictionaryForm "stehen"
+                          :translation "стоять"}
+                         {:usedForm "Wand"
+                          :dictionaryForm "die Wand"
+                          :translation "стена"}]}
           responses (atom [bad-example good-example])
           retry-contexts (atom [])]
-      (with-redefs [sut/raw-generate-one!      (fn
-                                                 ([_word _translation]
-                                                  (let [next-example (first @responses)]
-                                                    (swap! responses subvec 1)
-                                                    next-example))
-                                                 ([_word _translation retry-context]
-                                                  (swap! retry-contexts conj retry-context)
-                                                  (let [next-example (first @responses)]
-                                                    (swap! responses subvec 1)
-                                                    next-example)))
-                    sut/lookup-dictionary-entries (constantly nil)]
+      (with-redefs [sut/generate-attempt!      (fn [_word _translation _word-meta retry-context]
+                                                 (swap! retry-contexts conj retry-context)
+                                                 (let [next-example (first @responses)]
+                                                   (swap! responses subvec 1)
+                                                   next-example))
+                    dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= good-example
                (sut/generate-one! {:word "Leiter" :translation "лестница"} 2)))
         (is (= [nil
                 {:example bad-example
-                 :issues  [:gloss-mismatch]}]
+                 :issue   :sentence-length-out-of-range}]
                @retry-contexts))))))
 
 
 (deftest generate-one-retries-when-dictionary-gloss-disagrees
   (testing "backend dictionary validation rejects a wrong noun article for the intended gloss"
-    (let [bad-example {"value" "Der Leiter steht neben der Wand."
-                       "translation" "Лестница стоит рядом со стеной."
-                       "glossMismatch" false
-                       "structure"
-                       [{"usedForm" "Leiter"
-                         "dictionaryForm" "der Leiter"
-                         "translation" "лестница"}
-                        {"usedForm" "steht"
-                         "dictionaryForm" "stehen"
-                         "translation" "стоять"}
-                        {"usedForm" "Wand"
-                          "dictionaryForm" "die Wand"
-                          "translation" "стена"}]}
-          good-example {"value" "Die Leiter steht neben der Wand."
-                        "translation" "Лестница стоит рядом со стеной."
-                        "glossMismatch" false
-                        "structure"
-                        [{"usedForm" "Leiter"
-                          "dictionaryForm" "die Leiter"
-                          "translation" "лестница"}
-                         {"usedForm" "steht"
-                          "dictionaryForm" "stehen"
-                          "translation" "стоять"}
-                         {"usedForm" "Wand"
-                          "dictionaryForm" "die Wand"
-                          "translation" "стена"}]}
+    (let [bad-example {:value "Der Leiter steht neben der Wand."
+                       :translation "Лестница стоит рядом со стеной."
+                       :glossMismatch false
+                       :structure
+                       [{:usedForm "Leiter"
+                         :dictionaryForm "der Leiter"
+                         :translation "лестница"}
+                        {:usedForm "steht"
+                         :dictionaryForm "stehen"
+                         :translation "стоять"}
+                        {:usedForm "Wand"
+                          :dictionaryForm "die Wand"
+                          :translation "стена"}]}
+          good-example {:value "Die Leiter steht neben der Wand."
+                        :translation "Лестница стоит рядом со стеной."
+                        :glossMismatch false
+                        :structure
+                        [{:usedForm "Leiter"
+                          :dictionaryForm "die Leiter"
+                          :translation "лестница"}
+                         {:usedForm "steht"
+                          :dictionaryForm "stehen"
+                          :translation "стоять"}
+                         {:usedForm "Wand"
+                          :dictionaryForm "die Wand"
+                          :translation "стена"}]}
           responses (atom [bad-example good-example])]
-      (with-redefs [sut/raw-generate-one!      (fn
-                                                 ([_word _translation]
-                                                  (let [next-example (first @responses)]
-                                                    (swap! responses subvec 1)
-                                                    next-example))
-                                                 ([_word _translation _retry-context]
-                                                  (let [next-example (first @responses)]
-                                                    (swap! responses subvec 1)
-                                                    next-example)))
-                    sut/lookup-dictionary-entries
+      (with-redefs [sut/generate-attempt!      (fn [_word _translation _word-meta _retry-context]
+                                                 (let [next-example (first @responses)]
+                                                   (swap! responses subvec 1)
+                                                   next-example))
+                    dictionary/lookup-dictionary-entries
                     (fn [dictionary-form]
                       (case dictionary-form
                         "der Leiter" [{:_id "lemma:der leiter:noun"
@@ -219,29 +465,96 @@
                (sut/generate-one! {:word "Leiter" :translation "лестница"} 2)))))))
 
 
+(deftest dictionary-gloss-validation-allows-overlapping-translation-variants
+  (testing "expected and dictionary glosses may match through shared translation variants"
+    (with-redefs [dictionary/lookup-dictionary-entries
+                  (fn [_dictionary-form]
+                    [{:_id "lemma:die leiter:noun"
+                      :value "die Leiter"
+                      :translation [{:lang "ru" :value "лестница"}]}])]
+      (is (true? (dictionary/word-gloss-valid?
+                  "Leiter"
+                  "лестница, стремянка"
+                  [{:usedForm "Leiter"
+                    :dictionaryForm "die Leiter"
+                    :translation "лестница"}]))))))
+
+
 (deftest generate-one-accepts-map-input
   (testing "single-item API accepts {:word :translation} input"
-    (let [example {"value" "Die Leiter steht neben der Wand."
-                   "translation" "Лестница стоит рядом со стеной."
-                   "glossMismatch" false
-                   "structure"
-                   [{"usedForm" "Leiter"
-                     "dictionaryForm" "die Leiter"
-                     "translation" "лестница"}]}]
-      (with-redefs [sut/raw-generate-one! (fn
-                                            ([_word _translation]
-                                             example)
-                                            ([_word _translation _retry-context]
-                                             example))
-                    sut/lookup-dictionary-entries (constantly nil)]
+    (let [example {:value "Die Leiter steht neben der Wand."
+                   :translation "Лестница стоит рядом со стеной."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Leiter"
+                     :dictionaryForm "die Leiter"
+                     :translation "лестница"}]}]
+      (with-redefs [sut/generate-attempt! (fn [_word _translation _word-meta _retry-context]
+                                            example)
+                    dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= example
                (sut/generate-one! {:word "Leiter" :translation "лестница"} 1)))))))
+
+
+(deftest lookup-dictionary-entries-uses-live-dictionary-db
+  (testing "target validation reads dictionary entries from dictionary-db"
+    (let [captured (atom nil)]
+      (with-redefs [db/request-sync (fn [request]
+                                      (reset! captured request)
+                                      {:status 200
+                                       :body   {:docs [{:value "der Schrank"
+                                                        :translation [{:lang "ru"
+                                                                       :value "шкаф"}]}]}})]
+        (let [entries (#'dictionary/lookup-dictionary-entries "der Schrank")]
+          (is (= "dictionary-db/_find" (:url @captured)))
+          (is (= "dictionary-entry"
+                 (get-in @captured [:body :selector "type"])))
+          (is (= "der schrank"
+                 (get-in @captured [:body :selector "meta.normalized_value"])))
+          (is (seq entries))
+          (is (= "der Schrank" (:value (first entries)))))))))
+
+
+(deftest lookup-dictionary-entries-falls-back-to-surface-form-lemma-docs
+  (testing "bare words can resolve through surface-form docs to article-bearing lemma docs"
+    (let [captured (atom [])]
+      (with-redefs [db/request-sync (fn [request]
+                                      (swap! captured conj request)
+                                      (case (:url request)
+                                        "dictionary-db/_find"
+                                        {:status 200
+                                         :body   {:docs []}}
+
+                                        "dictionary-db/sf:fenster"
+                                        {:status 200
+                                         :body   {:entries [{:lemma-id "lemma:das fenster:noun"
+                                                             :lemma    "das Fenster"}]}}
+
+                                        "dictionary-db/_all_docs"
+                                        {:status 200
+                                         :body   {:rows [{:id  "lemma:das fenster:noun"
+                                                          :doc {:_id         "lemma:das fenster:noun"
+                                                                :type        "dictionary-entry"
+                                                                :value       "das Fenster"
+                                                                :translation [{:lang "ru"
+                                                                               :value "окно"}]}}]}}
+
+                                        (throw (ex-info "unexpected request" request))))]
+        (let [entries (#'dictionary/lookup-dictionary-entries "Fenster")]
+          (is (= ["dictionary-db/_find"
+                  "dictionary-db/sf:fenster"
+                  "dictionary-db/_all_docs"]
+                 (mapv :url @captured)))
+          (is (= ["lemma:das fenster:noun"]
+                 (get-in (last @captured) [:body :keys])))
+          (is (= ["das Fenster"]
+                 (mapv :value entries))))))))
 
 
 (deftest generate-one-logs-transport-errors
   (testing "transport exceptions are logged and returned as nil"
     (let [logged (atom nil)]
-      (with-redefs [sut/gen-words-api-request (fn [_word _translation _retry-context]
+      (with-redefs [sut/example-api-request (fn [_word _translation _word-meta _retry-context]
                                                 (delay (throw (ex-info "network down" {:status 0}))))
                     sut/log-generation-failure! (fn [data]
                                                   (swap! logged conj data))]
@@ -249,3 +562,24 @@
         (is (some #(= "Hund" (:word %)) @logged))
         (is (some #(= :transport (:context %)) @logged))
         (is (some #(= "network down" (:error %)) @logged))))))
+
+
+(deftest generate-one-does-not-retry-on-rate-limit
+  (testing "rate-limited upstream responses stop immediately instead of stretching into route timeouts"
+    (let [calls (atom 0)
+          logged (atom [])]
+      (with-redefs [sut/example-api-request (fn [_word _translation _word-meta _retry-context]
+                                                (swap! calls inc)
+                                                (delay {:status 429
+                                                        :body "{\"error\":{\"message\":\"Rate limit exceeded\",\"type\":\"tokens\",\"code\":\"rate_limit_exceeded\"}}"}))
+                    sut/log-generation-failure! (fn [data]
+                                                  (swap! logged conj data))]
+        (is (sut/generation-failure? (sut/generate-one! {:word "Leiter" :translation "лестница"} 3)))
+        (is (= 1 @calls))
+        (is (= 1 (count @logged)))
+        (let [entry (first @logged)]
+          (is (map? entry))
+          (is (= "Leiter" (:word entry)))
+          (is (= 429 (:status entry)))
+          (is (contains? entry :body))
+          (is (string? (:body entry))))))))
