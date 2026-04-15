@@ -106,7 +106,6 @@ body:has(.vocabulary) #app {
 .vocabulary__footer {
   background: rgb(var(--color-polar));
   bottom: 0;
-  box-shadow: 0 -2px 12px rgb(0 0 0 / 0.08);
   display: flex;
   justify-content: center;
   left: 0;
