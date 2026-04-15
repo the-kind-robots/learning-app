@@ -57,20 +57,21 @@
 
 .word-item--editing {
   background: rgb(var(--color-polar));
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
-  margin: 8px 0;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
 }
 
 .word-item__form {
-  padding: 16px;
+  padding: 12px 16px;
 }
 
 .word-item__inputs {
   align-items: center;
   display: flex;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  min-height: 56px;
 }
 
 .word-item__input {
@@ -97,6 +98,7 @@
 .word-item__actions {
   display: flex;
   gap: 10px;
+  min-height: 44px;
 }
 
 .word-item__save {
