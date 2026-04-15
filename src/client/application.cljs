@@ -124,7 +124,7 @@
                  :headers {"X-Total-Count" (str total)}}))
 
       :get  (fn [{:keys [dbs params headers]}]
-              (let [{:keys [offset limit search fragment]} params
+              (let [{:keys [edit offset limit search fragment]} params
                     htmx-target (get headers "hx-target")
                     offset      (utils/parse-int offset 0)
                     limit       (utils/parse-int limit 10)
@@ -137,7 +137,9 @@
 
                   (let [words      (presenter.vocabulary/word-list-props words)
                         show-more? (> total (+ offset limit))
+                        editing-id edit
                         list-opts  {:words-query words-query
+                                    :editing-id editing-id
                                     :show-more?  show-more?
                                     :words       words}]
                     {:status    200

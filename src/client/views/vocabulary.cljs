@@ -36,8 +36,9 @@
          [:button.word-item__save {:type "submit"} "Сохранить"]
          [:button.word-item__cancel
           {:type      "button"
-           :hx-get    (str "/words/" id)
-           :hx-target (str "#" item-id)
+           :hx-get    "/words"
+           :hx-include "closest .vocabulary"
+           :hx-target "#word-list"
            :hx-swap   "outerHTML"}
           "Отмена"]
          [:button.word-item__delete
@@ -50,7 +51,10 @@
           "Удалить"]]]
        ;; Display mode - show text, tap to edit
        [:div.word-item__display
-        {:hx-get (str "/words/" id "?edit=true") :hx-target (str "#" item-id) :hx-swap "outerHTML"}
+        {:hx-get      (str "/words?edit=" id)
+         :hx-include  "closest .vocabulary"
+         :hx-target   "#word-list"
+         :hx-swap     "outerHTML"}
         [:div.word-item__retention
          {:style {:background-color (utils/prozent->color retention-level)}
           :title (str (retention-text retention-level) " (" (int retention-level) "%)")}]
@@ -61,11 +65,11 @@
 
 (defn- word-items+sentinel
   "Builds word items and optional infinite-scroll sentinel."
-  [{:keys [words-query show-more? words] :or { show-more? true}}]
+  [{:keys [editing-id words-query show-more? words] :or { show-more? true}}]
   (when (seq words)
     (list
      (for [word words]
-       (word-list-item word))
+       (word-list-item word {:editing? (= (:id word) editing-id)}))
      (when show-more?
        [:li.word-list__sentinel
         {:aria-hidden "true"
