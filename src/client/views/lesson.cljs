@@ -4,6 +4,10 @@
    [presenter.lesson :as presenter.lesson]))
 
 
+(def result-action-keydown
+  "if(event.key==='Enter' || event.key===' ' || event.key==='Spacebar'){event.preventDefault(); this.form.requestSubmit();}")
+
+
 (defn progress
   [state attrs]
   (let [value (presenter.lesson/progress-props state)]
@@ -78,7 +82,8 @@
       [:button.big-button
        {:id        (if finished? "lesson-finish" "lesson-next")
         :type      "submit"
-        :autofocus true}
+        :autofocus true
+        :hx-on:keydown result-action-keydown}
        (if finished? "ЗАКОНЧИТЬ" "ДАЛЕЕ")]]]]])
 
 
@@ -96,7 +101,10 @@
     [:form {:hx-post "/lesson/next" :hx-target "#lesson-footer" :hx-swap "outerHTML"}
      [:div.lesson__action.page-footer__action
       [:button.big-button
-       {:id "lesson-next" :type "submit" :autofocus true}
+       {:id "lesson-next"
+        :type "submit"
+        :autofocus true
+        :hx-on:keydown result-action-keydown}
        "ДАЛЕЕ"]]]]])
 
 
