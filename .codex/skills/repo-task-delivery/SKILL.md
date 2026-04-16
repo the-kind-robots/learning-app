@@ -102,6 +102,9 @@ When finishing a task:
 - If the user says "just patch it locally" or "no GitHub/OpenSpec", skip this workflow.
 - If the previous task has already been merged/closed, treat the next non-trivial repo scope as a new tracked task unless it is clearly just the closeout tail of the finished task.
 - Phrases like "next", "now let's do X", "let's work on Y", or "new scope" after task closeout should be treated as a new tracked-task trigger by default.
+- If the user adds new follow-up glitches inside an active issue/change, first add them to the current OpenSpec change/tasks so the session can resume cleanly after interruption.
+- After adding those follow-up glitches to spec/tasks, handle them one at a time by default in this order: implement one fix, verify that exact fix, then commit it before starting the next.
+- Do not batch separate follow-up fixes from the same active issue into one shared patch unless the user explicitly asks for batching.
 
 ## Anti-Patterns
 
