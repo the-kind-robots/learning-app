@@ -28,3 +28,10 @@ The GitHub Project start-work workflow SHALL continue when an optional configure
 - **THEN** the issue and project item are still created successfully
 - **AND** missing optional fields are skipped with a warning instead of failing the workflow
 
+### Requirement: Visual UI work favors perceptual stability
+The repository workflow SHALL treat unnecessary visible UI jumps, jerks, or geometry shifts as quality regressions during visual interaction work.
+
+#### Scenario: Verifying a UI change that affects layout or transitions
+- **WHEN** a task changes interactive UI layout, swapping, focus flow, keyboard flow, or footer/panel geometry
+- **THEN** the expected quality bar includes that the screen remains perceptually stable instead of visibly jumping or jerking
+- **AND** verification uses real browser evidence such as measured geometry, traces, or equivalent browser-level checks rather than DOM shape alone

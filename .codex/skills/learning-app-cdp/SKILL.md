@@ -60,6 +60,9 @@ When running scripts from this skill, prefer `exec_command` with:
 - `scripts/learning_app_cdp.sh` - repo-specific wrapper for local and production app targets
 - `scripts/layout_probe.js` - reusable HTMX/layout geometry probe for swap transitions
 - `scripts/setup_single_word.js` - reset vocab and create one-word scenario for delete-layout checks
+- `scripts/run_lesson_next_enter_check.js` - prove `Enter` advances from `ДАЛЕЕ` without mouse
+- `scripts/run_lesson_finish_enter_check.js` - prove `Enter` activates `ЗАКОНЧИТЬ` without mouse
+- `scripts/run_lesson_finish_space_check.js` - prove `Space` activates `ЗАКОНЧИТЬ` without mouse
 - `scripts/run_delete_last_word.js` - open edit mode and delete the only visible word
 - `scripts/setup_filter_delete_scenario.js` - reset vocab and create two-word scenario for filter/delete bugs
 - `scripts/run_filtered_delete_check.js` - apply a filter, delete the remaining visible word, and report the resulting empty state
@@ -165,6 +168,21 @@ bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
 ```bash
 bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --file .codex/skills/learning-app-cdp/scripts/run_delete_last_word.js
+```
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .codex/skills/learning-app-cdp/scripts/run_lesson_next_enter_check.js
+```
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .codex/skills/learning-app-cdp/scripts/run_lesson_finish_enter_check.js
+```
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .codex/skills/learning-app-cdp/scripts/run_lesson_finish_space_check.js
 ```
 
 ```bash
