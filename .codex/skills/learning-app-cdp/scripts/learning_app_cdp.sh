@@ -159,6 +159,37 @@ parse_refresh_args() {
   done
 }
 
+parse_wait_args() {
+  PORT="$DEFAULT_PORT"
+  WAIT_PATH=""
+  WAIT_SELECTOR=""
+  TIMEOUT_SEC="10"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --port)
+        PORT="${2:?missing port}"
+        shift 2
+        ;;
+      --path)
+        WAIT_PATH="${2:?missing path}"
+        shift 2
+        ;;
+      --selector)
+        WAIT_SELECTOR="${2:?missing selector}"
+        shift 2
+        ;;
+      --timeout-sec)
+        TIMEOUT_SEC="${2:?missing timeout}"
+        shift 2
+        ;;
+      *)
+        die "Unknown option: $1"
+        ;;
+    esac
+  done
+}
+
 parse_eval_args() {
   PORT="$DEFAULT_PORT"
   EXPRESSION=""
@@ -299,6 +330,51 @@ refresh_env() {
   bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method Page.reload --params '{"ignoreCache":true}'
 }
 
+wait_env() {
+  local url_substring="$1"
+  shift
+  parse_wait_args "$@"
+
+  local ws_url expression params_json
+  ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
+  [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+
+  expression="$(jq -rn --arg path "$WAIT_PATH" --arg selector "$WAIT_SELECTOR" '
+    "(() => { " +
+    "const expectedPath = " + ($path | @json) + "; " +
+    "const selector = " + ($selector | @json) + "; " +
+    "const pathOk = !expectedPath || location.pathname === expectedPath; " +
+    "const selectorOk = !selector || !!document.querySelector(selector); " +
+    "return {path: location.pathname, pathOk, selectorOk}; " +
+    "})()"
+  ')"
+
+  params_json="$(jq -Rn --arg expr "$expression" \
+    '{expression:$expr, returnByValue:true, awaitPromise:true, userGesture:true}')"
+
+  local deadline now response path_ok selector_ok
+  deadline=$((SECONDS + TIMEOUT_SEC))
+
+  while :; do
+    response="$(bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method Runtime.evaluate --params "$params_json")"
+    path_ok="$(printf '%s\n' "$response" | jq -r '.result.result.value.pathOk // false')"
+    selector_ok="$(printf '%s\n' "$response" | jq -r '.result.result.value.selectorOk // false')"
+    if [[ "$path_ok" == "true" && "$selector_ok" == "true" ]]; then
+      printf '%s\n' "$response"
+      return 0
+    fi
+
+    now=$SECONDS
+    if (( now >= deadline )); then
+      die "Timed out waiting for page state"
+    fi
+
+    sleep 0.25
+    ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
+    [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+  done
+}
+
 read_monitor() {
   local session=""
   local tail_lines=""
@@ -348,6 +424,8 @@ Usage:
   learning_app_cdp.sh console-prod [--port PORT] [--seconds SEC]
   learning_app_cdp.sh refresh-local [--port PORT]
   learning_app_cdp.sh refresh-prod [--port PORT]
+  learning_app_cdp.sh wait-local [--port PORT] [--path /route] [--selector CSS] [--timeout-sec N]
+  learning_app_cdp.sh wait-prod [--port PORT] [--path /route] [--selector CSS] [--timeout-sec N]
   learning_app_cdp.sh eval-local [--port PORT] (--expression JS | --file FILE)
   learning_app_cdp.sh eval-prod [--port PORT] (--expression JS | --file FILE)
   learning_app_cdp.sh read --session NAME [--tail N]
@@ -389,6 +467,12 @@ main() {
       ;;
     refresh-prod)
       refresh_env "$PROD_SUBSTRING" "$@"
+      ;;
+    wait-local)
+      wait_env "$LOCAL_SUBSTRING" "$@"
+      ;;
+    wait-prod)
+      wait_env "$PROD_SUBSTRING" "$@"
       ;;
     eval-local)
       runtime_eval_env "$LOCAL_SUBSTRING" "$@"

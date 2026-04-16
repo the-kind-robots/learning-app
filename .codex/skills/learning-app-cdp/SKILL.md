@@ -119,6 +119,14 @@ Refresh local with service-worker update-on-reload:
 bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh refresh-local
 ```
 
+Wait until the local page reaches a known route or selector after navigation/setup:
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh wait-local \
+  --path /lesson \
+  --selector '#lesson-answer'
+```
+
 Refresh production with service-worker update-on-reload:
 
 ```bash
@@ -131,6 +139,9 @@ Evaluate JavaScript in the local app page context:
 bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --expression '({url: location.href, title: document.title})'
 ```
+
+For dependent browser steps, do not run `setup`/`navigation` and the next `eval` in parallel.
+After a setup script or route-changing action, prefer `wait-local` / `wait-prod` before the next `eval-*` call.
 
 Evaluate a multiline script from a file:
 
