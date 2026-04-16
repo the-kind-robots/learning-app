@@ -7,6 +7,9 @@
 (def result-action-keydown
   "if(event.key==='Enter' || event.key===' ' || event.key==='Spacebar'){event.preventDefault(); this.form.requestSubmit();}")
 
+(def input-focus-after-settle
+  "if(matchMedia('(pointer:fine)').matches){var input=this.querySelector('#lesson-answer'); if(input){input.focus();}}")
+
 
 (defn progress
   [state attrs]
@@ -44,9 +47,12 @@
 (defn input
   []
   [:footer#lesson-footer
+   {:hx-on:htmx:load input-focus-after-settle}
    ;; User focuses input manually (avoids auto keyboard open/layout jumps).
    [:form.lesson__footer.lesson__footer--input.page-footer
-    {:hx-post "/lesson/answer" :hx-target "#lesson-footer" :hx-swap "outerHTML"}
+    {:hx-post   "/lesson/answer"
+     :hx-target "#lesson-footer"
+     :hx-swap   "outerHTML"}
     [:label.lesson__input-label
      {:for "lesson-answer"}
      "Ответ на немецком"]
