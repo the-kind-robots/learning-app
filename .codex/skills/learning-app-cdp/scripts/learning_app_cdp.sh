@@ -61,6 +61,25 @@ resolve_page_ws_url() {
   printf 'ws://127.0.0.1:%s/devtools/page/%s\n' "$port" "$target_id"
 }
 
+wait_for_page_ws_url() {
+  local port="$1"
+  local url_substring="$2"
+  local attempts="${3:-40}"
+  local delay_sec="${4:-0.25}"
+  local ws_url=""
+
+  for _ in $(seq 1 "$attempts"); do
+    ws_url="$(resolve_page_ws_url "$port" "$url_substring" 2>/dev/null || true)"
+    if [[ -n "$ws_url" ]]; then
+      printf '%s\n' "$ws_url"
+      return 0
+    fi
+    sleep "$delay_sec"
+  done
+
+  return 1
+}
+
 parse_port_and_path() {
   PORT="$DEFAULT_PORT"
   PATH_SUFFIX=""
@@ -178,7 +197,7 @@ runtime_eval_env() {
   shift
   parse_eval_args "$@"
   local ws_url params_json
-  ws_url="$(resolve_page_ws_url "$PORT" "$url_substring")"
+  ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
   params_json="$(jq -Rn --arg expr "$EXPRESSION" \
     '{expression:$expr, returnByValue:true, awaitPromise:true, userGesture:true}')"
@@ -206,13 +225,7 @@ start_env() {
   fi
 
   bash "$LOW_LEVEL_SCRIPT" start --port "$PORT" --url "$full_url"
-
-  for _ in $(seq 1 40); do
-    if resolve_page_ws_url "$PORT" "$url_substring" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 0.25
-  done
+  wait_for_page_ws_url "$PORT" "$url_substring" >/dev/null
 }
 
 monitor_env() {
@@ -223,7 +236,7 @@ monitor_env() {
     SESSION="${url_substring}-${PORT}"
   fi
   local ws_url
-  ws_url="$(resolve_page_ws_url "$PORT" "$url_substring")"
+  ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
 
   mkdir -p "$MONITOR_BASE_DIR"
@@ -263,7 +276,7 @@ console_env() {
   shift
   parse_console_args "$@"
   local ws_url
-  ws_url="$(resolve_page_ws_url "$PORT" "$url_substring")"
+  ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
   (
     cd /mnt/c
@@ -278,7 +291,7 @@ refresh_env() {
   shift
   parse_refresh_args "$@"
   local ws_url
-  ws_url="$(resolve_page_ws_url "$PORT" "$url_substring")"
+  ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
 
   bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method ServiceWorker.enable --params '{}'
