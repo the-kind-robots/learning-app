@@ -34,13 +34,12 @@
          [:input.word-item__input
           {:name "translation" :autocapitalize "off" :autocomplete "off"
            :autocorrect "off" :lang "ru" :placeholder "Перевод" :value translation}]]
-        [:div.word-item__actions
+       [:div.word-item__actions
          [:button.word-item__save {:type "submit"} "Сохранить"]
          [:button.word-item__cancel
           {:type      "button"
-           :hx-get    "/words"
-           :hx-include "closest .vocabulary"
-           :hx-target "#word-list"
+           :hx-get    (str "/words/" id)
+           :hx-target (str "#" item-id)
            :hx-swap   "outerHTML"}
           "Отмена"]
          [:button.word-item__delete
@@ -54,9 +53,8 @@
           "Удалить"]]]
        ;; Display mode - show text, tap to edit
        [:div.word-item__display
-        {:hx-get      (str "/words?edit=" id)
-         :hx-include  "closest .vocabulary"
-         :hx-target   "#word-list"
+        {:hx-get      (str "/words/" id "?edit=true")
+         :hx-target   (str "#" item-id)
          :hx-swap     "outerHTML"}
         [:div.word-item__retention
          {:style {:background-color (utils/prozent->color retention-level)}

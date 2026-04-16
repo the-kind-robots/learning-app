@@ -5,6 +5,7 @@
 - [ ] 1.3 Fix word-list edit UI jitter and visual instability.
 - [ ] 1.4 Fix the transition when deleting the last word so the empty-state screen appears without a visible jerk.
 - [x] 1.5 Fix the first-word add flow so the add-word panel does not jump vertically when the lesson footer appears.
+- [x] 1.6 Preserve loaded lazy-list context when opening word edit mode outside the first chunk.
 
 ## 2. Lesson UI Stability
 
@@ -27,3 +28,4 @@
 - [x] 4.5 Verify the first-word add flow keeps the add panel visually stable when the lesson footer appears.
 - [x] 4.6 Verify keyboard-only lesson progression after answer checking on desktop.
 - [x] 4.7 Verify keyboard progression returns focus to the next answer input on desktop.
+- [x] 4.8 Verify editing a word from a later lazy-loaded chunk does not collapse the list back to the first chunk.
