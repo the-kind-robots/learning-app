@@ -161,21 +161,10 @@ body:has(.lesson) #app {
 
 .lesson__footer {
   --padding-x: calc(50% - 500px);
-  display: flex;
+  --page-footer-keyboard-offset: env(keyboard-inset-height, 0px);
+  --page-footer-padding-x-wide: var(--padding-x);
   flex: 0 0 auto;
-  flex-direction: column;
-  gap: 16px;
-  padding: 16px;
-  padding-bottom: calc(
-    16px +
-    env(safe-area-inset-bottom) +
-    env(keyboard-inset-height, 0px)
-  );
   position: relative;
-  width: 100%;
-}
-
-.lesson__footer {
   transition: padding-bottom 180ms ease;
 }
 
@@ -184,19 +173,9 @@ body:has(.lesson) #app {
   transition: transform 180ms ease;
 }
 
-.lesson__action {
-  display: flex;
-  justify-content: center;
-  margin-inline: auto;
-  width: 100%;
-}
-
-.lesson__action button {
-  width: 100%;
-}
-
 .lesson__footer--input {
   align-items: center;
+  --page-footer-padding-bottom: 16px;
 }
 
 .lesson__input {
@@ -259,21 +238,6 @@ body:has(.lesson) #app {
 
 .lesson__footer--error .lesson__answer {
   min-width: 0;
-}
-
-@media (min-width: 700px) {
-  .lesson__action {
-    max-width: 320px;
-  }
-
-  .lesson__footer {
-    gap: 24px;
-    padding: 24px;
-    padding-bottom: calc(
-        24px +
-        env(safe-area-inset-bottom)
-    );
-  }
 }
 
 .lesson__footer--error .lesson__answer-body {
@@ -364,14 +328,6 @@ body:has(.lesson) #app {
     justify-content: space-around;
   }
 
-  .lesson__footer {
-    padding-bottom: calc(
-      24px +
-      env(safe-area-inset-bottom) +
-      env(keyboard-inset-height, 0px)
-    );
-  }
-
   .lesson__footer--input {
     flex-direction: column;
     justify-content: center;
@@ -379,12 +335,6 @@ body:has(.lesson) #app {
 
   .lesson__footer--error {
     justify-content: space-between;
-  }
-}
-
-@media (min-width: 1000px) {
-  .lesson__footer {
-    padding: 24px var(--padding-x);
   }
 }
 
@@ -398,8 +348,10 @@ body:has(.lesson) #app {
   }
 
   .lesson__footer {
-    gap: 10px;
-    padding: 12px 16px 16px;
+    --page-footer-gap: 10px;
+    --page-footer-padding-top: 12px;
+    --page-footer-padding-x: 16px;
+    --page-footer-padding-bottom: 16px;
   }
 
   .lesson__body {

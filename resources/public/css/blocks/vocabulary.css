@@ -104,13 +104,13 @@ body:has(.vocabulary) #app {
 }
 
 .vocabulary__footer {
+  --page-footer-gap: 0px;
+  --page-footer-padding-top: 16px;
+  --page-footer-padding-x: 16px;
+  --page-footer-padding-bottom: 16px;
   background: rgb(var(--color-polar));
   bottom: 0;
-  display: flex;
-  justify-content: center;
   left: 0;
-  padding: 16px;
-  padding-bottom: calc(16px + env(safe-area-inset-bottom));
   position: fixed;
   right: 0;
   z-index: 10;
@@ -124,11 +124,6 @@ body:has(.vocabulary) #app {
 
 .vocabulary__start {
   display: block;
-  width: 100%;
-}
-
-.vocabulary__start.big-button {
-  width: 100%;
 }
 
 .vocabulary:has(.word-list__empty--no-words) .vocabulary__search,
@@ -144,26 +139,4 @@ body:has(.vocabulary) #app {
 
 .vocabulary:has(.word-list__empty--no-words) .vocabulary__list > * {
   width: 100%;
-}
-
-@media (min-width: 700px) {
-  .vocabulary__start {
-    max-width: 320px;
-  }
-}
-
-@media (max-width: 699px) {
-  .vocabulary__footer {
-    justify-content: stretch;
-  }
-
-  .vocabulary__start {
-    max-width: none;
-  }
-}
-
-@media (max-width: 600px) {
-  .vocabulary__start {
-    width: 100%;
-  }
 }

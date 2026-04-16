@@ -52,16 +52,13 @@
 
 
 .home__footer {
+  --page-footer-gap: 0px;
+  --page-footer-padding-top: 16px;
+  --page-footer-padding-x: 16px;
+  --page-footer-padding-bottom: 16px;
   background: rgb(var(--color-polar));
   bottom: 0;
-  display: flex;
-  justify-content: center;
   left: 0;
-  padding: 16px;
-  padding-bottom: calc(
-      16px +
-      env(safe-area-inset-bottom)
-  );
   position: fixed;
   right: 0;
   z-index: 0;
@@ -69,10 +66,6 @@
 
 .home__footer[hidden] {
   display: none;
-}
-
-.home__footer .home__lesson-button.big-button {
-  width: 100%;
 }
 
 @keyframes home-words-button-fade-in {
@@ -227,10 +220,6 @@
   .home__add-fieldset {
     gap: 24px;
   }
-
-  .home__footer .home__lesson-button.big-button {
-    max-width: 320px;
-  }
 }
 
 @media (min-width: 900px) {
@@ -264,7 +253,4 @@
     padding-bottom: 12px;
   }
 
-  .home__footer {
-    justify-content: stretch;
-  }
 }

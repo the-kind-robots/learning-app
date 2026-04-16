@@ -24,6 +24,7 @@
     "/css/blocks/app-shell.css"
     "/css/blocks/home.css"
     "/css/blocks/lesson.css"
+    "/css/blocks/page-footer.css"
     "/css/blocks/pwa-install.css"
     "/css/blocks/vocabulary.css"
     "/css/blocks/word-item.css"

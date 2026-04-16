@@ -211,11 +211,12 @@
           :search      search
           :show-more?  show-more?
           :words       words})]
-       [:footer.vocabulary__footer
-        [:button.vocabulary__start.big-button.green-button
-         {:hx-get       "/lesson"
-          :hx-indicator "#loader"
-          :hx-push-url  "true"
-          :hx-swap      "innerHTML"
-          :hx-target    "#app"}
-         "НАЧАТЬ УРОК"]]])))
+       [:footer.vocabulary__footer.page-footer
+        [:div.page-footer__action
+         [:button.vocabulary__start.big-button.green-button
+          {:hx-get       "/lesson"
+           :hx-indicator "#loader"
+           :hx-push-url  "true"
+           :hx-swap      "innerHTML"
+           :hx-target    "#app"}
+          "НАЧАТЬ УРОК"]]]])))
