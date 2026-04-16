@@ -4,7 +4,7 @@
 - [ ] 1.2 Fix mobile add-word help/overlay behavior so it does not cover the input field.
 - [ ] 1.3 Fix word-list edit UI jitter and visual instability.
 - [ ] 1.4 Fix the transition when deleting the last word so the empty-state screen appears without a visible jerk.
-- [ ] 1.5 Fix the first-word add flow so the add-word panel does not jump vertically when the lesson footer appears.
+- [x] 1.5 Fix the first-word add flow so the add-word panel does not jump vertically when the lesson footer appears.
 
 ## 2. Lesson UI Stability
 
@@ -23,5 +23,5 @@
 - [ ] 4.2 Verify mobile home flow after the fixes.
 - [ ] 4.3 Verify lesson answer-check flow after the fixes.
 - [x] 4.4 Verify the home-to-lesson footer transition keeps CTA position and size visually stable.
-- [ ] 4.5 Verify the first-word add flow keeps the add panel visually stable when the lesson footer appears.
+- [x] 4.5 Verify the first-word add flow keeps the add panel visually stable when the lesson footer appears.
 - [ ] 4.6 Verify keyboard-only lesson progression after answer checking on desktop.

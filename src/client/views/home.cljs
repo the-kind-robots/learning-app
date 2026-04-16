@@ -130,11 +130,13 @@
       [:h2.home__panel-title
        "Быстрое добавление"]
       [:button#home-words-button.home__words-button
-       {:type    "button"
-        :hidden  empty-vocab?
-        :hx-get  "/words"
+       {:type        "button"
+        :class       (when empty-vocab? "home__words-button--hidden")
+        :aria-hidden (when empty-vocab? "true")
+        :tabindex    (when empty-vocab? "-1")
+        :hx-get      "/words"
         :hx-push-url "true"
-        :hx-swap "innerHTML"
+        :hx-swap     "innerHTML"
         :hx-target   "#app"}
        "Список слов"]]
 

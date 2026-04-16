@@ -112,14 +112,24 @@
 
 .home__words-button {
   animation: home-words-button-fade-in 400ms ease-out forwards;
+  align-items: center;
   background: none;
   border: 1px solid rgb(var(--color-swan));
   border-radius: 20px;
   color: rgb(var(--color-wolf));
+  display: inline-flex;
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
+  justify-content: center;
   padding: 8px 16px;
+}
+
+.home__words-button--hidden {
+  animation: none;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .home__add-form {
