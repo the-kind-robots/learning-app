@@ -140,6 +140,7 @@
                         editing-id edit
                         list-opts  {:words-query words-query
                                     :editing-id editing-id
+                                    :search      search
                                     :show-more?  show-more?
                                     :words       words}]
                     {:status    200
@@ -153,6 +154,7 @@
                                   :else
                                   (views.word/page
                                    {:empty?     (zero? total)
+                                    :search     search
                                     :words      words
                                     :show-more? show-more?}))}))))
 
@@ -200,16 +202,35 @@
                          :status    200}
                         {:status 404})))))
 
-      :delete (fn [{:keys [dbs path-params]}]
-                (let [word-id (:id path-params)]
+      :delete (fn [{:keys [dbs path-params params headers]}]
+                (let [word-id     (:id path-params)
+                      search      (:search params)
+                      htmx-target (get headers "hx-target")
+                      words-query {:order  :asc
+                                   :limit  10
+                                   :offset 0
+                                   :search search}]
                   (p/do
                     (vocabulary/delete! dbs word-id)
-                    (p/let [total (vocabulary/count dbs)]
+                    (p/let [{:keys [words total]} (vocabulary/list dbs words-query)]
                       (if (zero? total)
                         {:headers   {"HX-Retarget" "#app" "HX-Reswap" "innerHTML"}
                          :html/body (views.word/page {:empty? true})
                          :status    200}
-                        {:status 200})))))}]
+                        (let [words      (presenter.vocabulary/word-list-props words)
+                              show-more? (> total 10)
+                              list-opts  {:words-query words-query
+                                          :search      search
+                                          :show-more?  show-more?
+                                          :words       words}]
+                          {:status    200
+                           :html/body (if (= htmx-target "word-list")
+                                        (views.word/word-list list-opts)
+                                        (views.word/page
+                                         {:empty?     false
+                                          :search     search
+                                          :words      words
+                                          :show-more? show-more?}))}))))))}]
 
     ["/lesson"
      {:get    (fn [{:keys [dbs]}]

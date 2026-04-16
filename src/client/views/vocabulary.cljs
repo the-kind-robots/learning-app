@@ -1,6 +1,8 @@
 (ns views.vocabulary
   "Pure view functions for word-related UI. Data → Hiccup."
-  (:require [utils :as utils]))
+  (:require
+   [clojure.string :as str]
+   [utils :as utils]))
 
 
 (defn retention-text
@@ -46,8 +48,9 @@
            :hx-delete  (str "/words/" id)
            :hx-confirm (str "Удалить «" value "»?")
            :hx-trigger "click"
-           :hx-swap    "delete"
-           :hx-target  (str "#" item-id)}
+           :hx-include "closest .vocabulary"
+           :hx-swap    "outerHTML"
+           :hx-target  "#word-list"}
           "Удалить"]]]
        ;; Display mode - show text, tap to edit
        [:div.word-item__display
@@ -90,6 +93,8 @@
    {:id "word-list"}
    (or (word-items+sentinel opts)
        [:li.word-list__empty
+        {:class (when (str/blank? (:search opts))
+                  "word-list__empty--no-words")}
         (if (utils/non-blank (:search opts))
           [:div.vocabulary__empty-state
            [:p.vocabulary__empty-state-text "Ничего не найдено"]
@@ -162,14 +167,14 @@
 (defn page
   "Words page. When empty? is true, shows empty state without header/search/footer.
    When :words is provided, renders the list inline (no extra load request)."
-  [& {:keys [empty? words show-more?]}]
+  [& {:keys [empty? search words show-more?]}]
   (if empty?
     [:div.vocabulary
      (state-marker true)
      [:div.vocabulary__list
       [:ul.word-list
        {:id "word-list"}
-       [:li.word-list__empty
+       [:li.word-list__empty.word-list__empty--no-words
         [:div.vocabulary__empty-state
          [:p.vocabulary__empty-state-text "Слов пока нет"]
          [:p.vocabulary__empty-state-hint "Добавьте первое слово на главной странице"]
@@ -203,6 +208,7 @@
        [:div.vocabulary__list
         (word-list
          {:words-query words-query
+          :search      search
           :show-more?  show-more?
           :words       words})]
        [:footer.vocabulary__footer

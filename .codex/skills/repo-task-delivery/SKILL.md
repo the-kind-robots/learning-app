@@ -63,6 +63,9 @@ In those cases, use the narrower workflow skill directly.
 5. Verify.
    - Run the relevant automated checks.
    - For UX or browser bugs, prefer a real browser validation pass, not only unit tests.
+   - For visual or layout-quality bugs, do not treat DOM shape, HTMX events, or end-state screenshots as sufficient by themselves.
+   - When the question is whether UI is visually stable, anchored, centered correctly, or free of jumps, verify the actual rendered layout with precise visual instrumentation: frame-by-frame geometry, performance/layout traces, animation tooling, or an equivalent browser-level measurement.
+   - Be explicit about what was and was not proven. If you only proved the DOM state or swap path, say that you did not yet prove visual stability.
    - Use `openspec-verify-change` when the change is implementation-complete.
 
 6. Close the OpenSpec loop.

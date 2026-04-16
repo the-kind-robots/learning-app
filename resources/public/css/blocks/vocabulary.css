@@ -131,18 +131,18 @@ body:has(.vocabulary) #app {
   width: 100%;
 }
 
-.vocabulary:has(.vocabulary__state--empty) .vocabulary__search,
-.vocabulary:has(.vocabulary__state--empty) .vocabulary__footer {
+.vocabulary:has(.word-list__empty--no-words) .vocabulary__search,
+.vocabulary:has(.word-list__empty--no-words) .vocabulary__footer {
   display: none;
 }
 
-.vocabulary:has(.vocabulary__state--empty) .vocabulary__list {
+.vocabulary:has(.word-list__empty--no-words) .vocabulary__list {
   align-items: center;
   display: flex;
   justify-content: center;
 }
 
-.vocabulary:has(.vocabulary__state--empty) .vocabulary__list > * {
+.vocabulary:has(.word-list__empty--no-words) .vocabulary__list > * {
   width: 100%;
 }
 

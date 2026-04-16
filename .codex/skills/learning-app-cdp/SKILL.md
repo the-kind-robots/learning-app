@@ -26,6 +26,20 @@ Use this skill for:
 - comparing local and production behavior in the same CDP workflow
 - refreshing the app with service-worker update-on-reload enabled so local debugging does not inspect stale builds
 
+Use this skill especially when the user cares about visual quality questions such as:
+
+- whether a panel jumps
+- whether an element is really centered
+- whether a footer or prompt is visually stable during swaps
+- whether an empty state animates or reflows incorrectly
+
+In those cases, do not stop at DOM inspection alone. Prefer browser-level evidence such as:
+
+- frame-by-frame `getBoundingClientRect()` capture across the transition
+- DevTools animation/performance/layout traces
+- buffered monitor events combined with measured element geometry
+- screenshots or screencasts tied to specific transition phases
+
 Do not use this skill for:
 
 - generic browsing for unrelated sites
@@ -44,6 +58,11 @@ When running scripts from this skill, prefer `exec_command` with:
 ## Files
 
 - `scripts/learning_app_cdp.sh` - repo-specific wrapper for local and production app targets
+- `scripts/layout_probe.js` - reusable HTMX/layout geometry probe for swap transitions
+- `scripts/setup_single_word.js` - reset vocab and create one-word scenario for delete-layout checks
+- `scripts/run_delete_last_word.js` - open edit mode and delete the only visible word
+- `scripts/setup_filter_delete_scenario.js` - reset vocab and create two-word scenario for filter/delete bugs
+- `scripts/run_filtered_delete_check.js` - apply a filter, delete the remaining visible word, and report the resulting empty state
 - `/home/u473t8/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh` - shared global low-level CDP entrypoint used by the wrapper
 
 ## Quick workflow
@@ -118,6 +137,33 @@ Evaluate a multiline script from a file:
 ```bash
 bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --file /tmp/inspect-idb.js
+```
+
+Use the reusable probes saved with this skill:
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .codex/skills/learning-app-cdp/scripts/layout_probe.js
+```
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .codex/skills/learning-app-cdp/scripts/setup_single_word.js
+```
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .codex/skills/learning-app-cdp/scripts/run_delete_last_word.js
+```
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .codex/skills/learning-app-cdp/scripts/setup_filter_delete_scenario.js
+```
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .codex/skills/learning-app-cdp/scripts/run_filtered_delete_check.js
 ```
 
 Monitor local:
@@ -202,6 +248,8 @@ bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
 - For this repository, prefer this skill over generic browser workflows when inspecting app behavior in a real browser.
 - `refresh-local` / `refresh-prod` enable Chrome's service-worker update-on-reload behavior before reloading the page.
 - Use `monitor-start -> user interacts -> read` as the primary debugging workflow.
+- For layout-stability bugs, combine event traces with visual measurements. HTMX/DOM traces can prove swap order, but they do not by themselves prove the absence of visual jerk.
+- When a transition replaces the page or destroys the JS runtime, prefer an external DevTools trace or repeated geometry snapshots that survive the swap, rather than relying only on in-page probes.
 - If DevTools is open, there may be multiple `page` targets; the wrapper filters by `sprecha.local` or `sprecha.de` so it attaches to the real app tab.
 - Prefer `eval-local` / `eval-prod` for anything you would normally type into DevTools Console, including IndexedDB inspection and JS-visible app hooks.
 - ClojureScript functions can be called only if they are visible in the page runtime. The wrapper does not invent exports; it gives you the same execution surface as DevTools Console.
