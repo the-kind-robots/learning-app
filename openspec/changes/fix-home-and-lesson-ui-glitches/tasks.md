@@ -11,7 +11,7 @@
 - [ ] 2.1 Fix prompt/task-card jumping during answer checking on the lesson screen.
 - [ ] 2.2 Fix closely related lesson-screen layout shifts discovered during verification.
 - [x] 2.3 Fix lesson entry CTA so the initial `ПРОВЕРИТЬ` footer matches the `НАЧАТЬ УРОК` footer position and button size without a visible jump.
-- [ ] 2.4 Fix post-check lesson keyboard flow so `Space`/`Enter` can activate `ДАЛЕЕ` or finish without reaching for the mouse.
+- [x] 2.4 Fix post-check lesson keyboard flow so `Space`/`Enter` can activate `ДАЛЕЕ` or finish without reaching for the mouse.
 
 ## 3. Nearby Glitches
 
@@ -24,4 +24,4 @@
 - [ ] 4.3 Verify lesson answer-check flow after the fixes.
 - [x] 4.4 Verify the home-to-lesson footer transition keeps CTA position and size visually stable.
 - [x] 4.5 Verify the first-word add flow keeps the add panel visually stable when the lesson footer appears.
-- [ ] 4.6 Verify keyboard-only lesson progression after answer checking on desktop.
+- [x] 4.6 Verify keyboard-only lesson progression after answer checking on desktop.

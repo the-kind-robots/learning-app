@@ -76,7 +76,9 @@
        {:hx-post "/lesson/next" :hx-target "#lesson-footer" :hx-swap "outerHTML"})
      [:div.lesson__action.page-footer__action
       [:button.big-button
-       {:id (if finished? "lesson-finish" "lesson-next") :type "submit"}
+       {:id        (if finished? "lesson-finish" "lesson-next")
+        :type      "submit"
+        :autofocus true}
        (if finished? "ЗАКОНЧИТЬ" "ДАЛЕЕ")]]]]])
 
 
@@ -94,7 +96,7 @@
     [:form {:hx-post "/lesson/next" :hx-target "#lesson-footer" :hx-swap "outerHTML"}
      [:div.lesson__action.page-footer__action
       [:button.big-button
-       {:id "lesson-next" :type "submit"}
+       {:id "lesson-next" :type "submit" :autofocus true}
        "ДАЛЕЕ"]]]]])
 
 
