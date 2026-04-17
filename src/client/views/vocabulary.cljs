@@ -20,7 +20,8 @@
   [{:keys [id retention-level translation value]} & {:keys [editing? oob?]}]
   (let [item-id (str "word-" id)]
     [:li.word-item
-     (cond-> {:id item-id}
+     (cond-> {:id item-id
+              :hx-on:htmx:after-settle "matchMedia('(min-width: 700px)').matches && htmx.find(this, 'input')?.focus({preventScroll:true})"}
        editing? (assoc :class "word-item--editing")
        oob?     (assoc :hx-swap-oob "outerHTML"))
      (if editing?
@@ -33,12 +34,11 @@
         [:div.word-item__inputs
          [:span.word-item__value {:lang "de"} value]
          [:span.word-item__arrow "→"]
-         [:input.word-item__input
-          {:name           "translation"
+        [:input.word-item__input
+         {:name           "translation"
            :autocapitalize "off"
            :autocomplete   "off"
            :autocorrect    "off"
-           :autofocus      true
            :lang           "ru" :placeholder "Перевод" :value translation}]]
         [:div.word-item__actions
          [:button.word-item__save {:type "submit"} "Сохранить"]
@@ -62,7 +62,7 @@
        [:div.word-item__display
         {:hx-get      (str "/words/" id "?edit=true")
          :hx-vals     "js:{editing: document.querySelector('#word-list-editing-id')?.dataset.editingId || ''}"
-         :hx-on:click "this.scrollIntoView({block:'nearest'})"
+         :hx-on:click "matchMedia('(min-width: 700px)').matches && this.scrollIntoView({block:'nearest'})"
          :hx-target   (str "#" item-id)
          :hx-swap     "outerHTML"}
         [:div.word-item__retention

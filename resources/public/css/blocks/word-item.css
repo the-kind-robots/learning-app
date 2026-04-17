@@ -160,4 +160,19 @@
   .word-item__cancel {
     flex: 1;
   }
+
+  .word-item--editing {
+    min-height: 56px;
+  }
+
+  .word-item--editing .word-item__form {
+    background: rgb(var(--color-polar));
+    border-top: 1px solid rgb(0 0 0 / 0.08);
+    box-shadow: 0 -12px 32px rgb(0 0 0 / 0.12);
+    bottom: calc(env(keyboard-inset-height, 0px) + 12px);
+    left: 12px;
+    position: fixed;
+    right: 12px;
+    z-index: 20;
+  }
 }
