@@ -46,7 +46,8 @@
           {:type      "button"
            :hx-get    (str "/words/" id)
            :hx-target (str "#" item-id)
-           :hx-swap   "outerHTML"}
+           :hx-swap   "outerHTML"
+           :hx-trigger "click, keydown[key=='Escape'] from:body"}
           "Отмена"]
          [:button.word-item__delete
           {:type       "button"
