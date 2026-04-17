@@ -12,6 +12,7 @@ PROD_BASE_URL="https://sprecha.de"
 LOCAL_SUBSTRING="sprecha.local"
 PROD_SUBSTRING="sprecha.de"
 MONITOR_BASE_DIR="/mnt/c/temp/windows-chrome-cdp-monitor"
+STATE_BASE_DIR="/tmp/learning-app-cdp-state"
 
 die() {
   printf '%s\n' "$*" >&2
@@ -37,7 +38,69 @@ monitor_paths() {
     "$MONITOR_BASE_DIR/${safe_session}.state.json"
 }
 
-resolve_page_target_id() {
+state_path() {
+  local env_name="$1"
+  local port="$2"
+  mkdir -p "$STATE_BASE_DIR"
+  printf '%s\n' "$STATE_BASE_DIR/${env_name}-${port}.json"
+}
+
+read_saved_target_id() {
+  read_saved_state_field "$1" "$2" targetId
+}
+
+read_saved_path() {
+  read_saved_state_field "$1" "$2" path
+}
+
+read_saved_state_field() {
+  local env_name="$1"
+  local port="$2"
+  local field="$3"
+  local path
+  path="$(state_path "$env_name" "$port")"
+  [[ -f "$path" ]] || return 0
+  jq -r --arg field "$field" '.[$field] // empty' "$path" 2>/dev/null || true
+}
+
+write_saved_state() {
+  local env_name="$1"
+  local port="$2"
+  local target_id="$3"
+  local saved_path="${4:-}"
+  local path
+  path="$(state_path "$env_name" "$port")"
+  jq -n --arg targetId "$target_id" --arg pathValue "$saved_path" '
+    {targetId:$targetId}
+    + (if ($pathValue | length) > 0 then {path:$pathValue} else {} end)
+  ' >"$path"
+}
+
+write_saved_target_id() {
+  local env_name="$1"
+  local port="$2"
+  local target_id="$3"
+  local saved_path
+  saved_path="$(read_saved_path "$env_name" "$port")"
+  write_saved_state "$env_name" "$port" "$target_id" "$saved_path"
+}
+
+write_saved_path() {
+  local env_name="$1"
+  local port="$2"
+  local saved_path="$3"
+  local target_id
+  target_id="$(read_saved_target_id "$env_name" "$port")"
+  write_saved_state "$env_name" "$port" "$target_id" "$saved_path"
+}
+
+clear_saved_target_id() {
+  local env_name="$1"
+  local port="$2"
+  rm -f "$(state_path "$env_name" "$port")"
+}
+
+page_targets_json() {
   local port="$1"
   local url_substring="$2"
   bash "$LOW_LEVEL_SCRIPT" send \
@@ -45,31 +108,114 @@ resolve_page_target_id() {
     --browser \
     --method Target.getTargets \
     --params '{}' \
-    --timeout-sec 20 | jq -r --arg needle "$url_substring" '
+    --timeout-sec 20 | jq -c --arg needle "$url_substring" '
       .result.targetInfos
       | map(select(.type == "page" and ((.url // "") | contains($needle))))
-      | .[0].targetId
     '
+}
+
+close_page_target() {
+  local port="$1"
+  local target_id="$2"
+  bash "$LOW_LEVEL_SCRIPT" send \
+    --port "$port" \
+    --browser \
+    --method Target.closeTarget \
+    --params "{\"targetId\":$(jq -Rn --arg id "$target_id" '$id')}" \
+    --timeout-sec 20 >/dev/null
+}
+
+pick_primary_target_id() {
+  local targets_json="$1"
+  local full_url="${2:-}"
+  printf '%s\n' "$targets_json" | jq -r --arg url "$full_url" '
+    if ($url | length) > 0 then
+      (map(select((.url // "") == $url)) + map(select((.url // "") != $url)) | .[0].targetId)
+    else
+      .[0].targetId
+    end // empty
+  '
+}
+
+ensure_single_target() {
+  local env_name="$1"
+  local port="$2"
+  local url_substring="$3"
+  local full_url="${4:-}"
+  local targets_json primary_target_id
+
+  targets_json="$(page_targets_json "$port" "$url_substring")"
+  primary_target_id="$(pick_primary_target_id "$targets_json" "$full_url")"
+
+  [[ -n "$primary_target_id" ]] || return 1
+
+  while IFS= read -r extra_target_id; do
+    [[ -n "$extra_target_id" ]] || continue
+    [[ "$extra_target_id" == "$primary_target_id" ]] && continue
+    close_page_target "$port" "$extra_target_id"
+  done < <(printf '%s\n' "$targets_json" | jq -r '.[].targetId')
+
+  write_saved_target_id "$env_name" "$port" "$primary_target_id"
+  printf '%s\n' "$primary_target_id"
+}
+
+resolve_saved_or_single_target_id() {
+  local env_name="$1"
+  local port="$2"
+  local url_substring="$3"
+  local saved_target_id targets_json count matched_target_id
+
+  saved_target_id="$(read_saved_target_id "$env_name" "$port")"
+  if [[ -n "$saved_target_id" ]]; then
+    matched_target_id="$(page_targets_json "$port" "$url_substring" | jq -r --arg id "$saved_target_id" '
+      map(select(.targetId == $id)) | .[0].targetId // empty
+    ')"
+    if [[ -n "$matched_target_id" ]]; then
+      printf '%s\n' "$matched_target_id"
+      return 0
+    fi
+    clear_saved_target_id "$env_name" "$port"
+  fi
+
+  targets_json="$(page_targets_json "$port" "$url_substring")"
+  count="$(printf '%s\n' "$targets_json" | jq 'length')"
+  if [[ "$count" == "1" ]]; then
+    matched_target_id="$(printf '%s\n' "$targets_json" | jq -r '.[0].targetId')"
+    write_saved_target_id "$env_name" "$port" "$matched_target_id"
+    printf '%s\n' "$matched_target_id"
+    return 0
+  fi
+
+  return 1
+}
+
+resolve_page_target_id() {
+  local port="$1"
+  local env_name="$2"
+  local url_substring="$3"
+  resolve_saved_or_single_target_id "$env_name" "$port" "$url_substring"
 }
 
 resolve_page_ws_url() {
   local port="$1"
-  local url_substring="$2"
+  local env_name="$2"
+  local url_substring="$3"
   local target_id
-  target_id="$(resolve_page_target_id "$port" "$url_substring")"
+  target_id="$(resolve_page_target_id "$port" "$env_name" "$url_substring")"
   [[ -n "$target_id" && "$target_id" != "null" ]] || return 1
   printf 'ws://127.0.0.1:%s/devtools/page/%s\n' "$port" "$target_id"
 }
 
 wait_for_page_ws_url() {
   local port="$1"
-  local url_substring="$2"
-  local attempts="${3:-40}"
-  local delay_sec="${4:-0.25}"
+  local env_name="$2"
+  local url_substring="$3"
+  local attempts="${4:-40}"
+  local delay_sec="${5:-0.25}"
   local ws_url=""
 
   for _ in $(seq 1 "$attempts"); do
-    ws_url="$(resolve_page_ws_url "$port" "$url_substring" 2>/dev/null || true)"
+    ws_url="$(resolve_page_ws_url "$port" "$env_name" "$url_substring" 2>/dev/null || true)"
     if [[ -n "$ws_url" ]]; then
       printf '%s\n' "$ws_url"
       return 0
@@ -224,24 +370,61 @@ parse_eval_args() {
 }
 
 runtime_eval_env() {
-  local url_substring="$1"
+  local env_name="$1"
+  local url_substring="$2"
+  shift
   shift
   parse_eval_args "$@"
   local ws_url params_json
-  ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
+  ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
   params_json="$(jq -Rn --arg expr "$EXPRESSION" \
     '{expression:$expr, returnByValue:true, awaitPromise:true, userGesture:true}')"
   bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method Runtime.evaluate --params "$params_json"
 }
 
+current_path_via_ws_url() {
+  local ws_url="$1"
+  local params_json
+  params_json="$(jq -Rn --arg expr 'location.pathname' \
+    '{expression:$expr, returnByValue:true, awaitPromise:true, userGesture:true}')"
+  bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method Runtime.evaluate --params "$params_json" \
+    | jq -r '.result.result.value // empty'
+}
+
+wait_for_path() {
+  local port="$1"
+  local env_name="$2"
+  local url_substring="$3"
+  local expected_path="$4"
+  local timeout_sec="${5:-10}"
+  local deadline ws_url current_path
+
+  deadline=$((SECONDS + timeout_sec))
+  while :; do
+    ws_url="$(wait_for_page_ws_url "$port" "$env_name" "$url_substring")"
+    [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+    current_path="$(current_path_via_ws_url "$ws_url")"
+    if [[ "$current_path" == "$expected_path" ]]; then
+      return 0
+    fi
+    if (( SECONDS >= deadline )); then
+      die "Timed out waiting for path $expected_path"
+    fi
+    sleep 0.25
+  done
+}
+
 start_env() {
-  local base_url="$1"
-  local url_substring="$2"
+  local env_name="$1"
+  local base_url="$2"
+  local url_substring="$3"
+  shift
   shift
   shift
   parse_port_and_path "$@"
   local full_url="${base_url}${PATH_SUFFIX}"
+  local saved_path="${PATH_SUFFIX:-}"
 
   if bash "$LOW_LEVEL_SCRIPT" version --port "$PORT" >/tmp/learning-app-cdp-version.json 2>/dev/null; then
     bash "$LOW_LEVEL_SCRIPT" send \
@@ -250,24 +433,37 @@ start_env() {
       --method Target.createTarget \
       --params "{\"url\":$(jq -Rn --arg url "$full_url" '$url')}" \
       --timeout-sec 20 >/dev/null
+    ensure_single_target "$env_name" "$PORT" "$url_substring" "$full_url" >/dev/null
+    write_saved_path "$env_name" "$PORT" "$saved_path"
+    if [[ -n "$saved_path" ]]; then
+      wait_for_path "$PORT" "$env_name" "$url_substring" "$saved_path"
+    fi
     cat /tmp/learning-app-cdp-version.json
     rm -f /tmp/learning-app-cdp-version.json
     return 0
   fi
 
   bash "$LOW_LEVEL_SCRIPT" start --port "$PORT" --url "$full_url"
-  wait_for_page_ws_url "$PORT" "$url_substring" >/dev/null
+  ensure_single_target "$env_name" "$PORT" "$url_substring" "$full_url" >/dev/null
+  write_saved_path "$env_name" "$PORT" "$saved_path"
+  if [[ -n "$saved_path" ]]; then
+    wait_for_path "$PORT" "$env_name" "$url_substring" "$saved_path"
+  else
+    wait_for_page_ws_url "$PORT" "$env_name" "$url_substring" >/dev/null
+  fi
 }
 
 monitor_env() {
-  local url_substring="$1"
+  local env_name="$1"
+  local url_substring="$2"
+  shift
   shift
   parse_monitor_args "$@"
   if [[ -z "$SESSION" ]]; then
     SESSION="${url_substring}-${PORT}"
   fi
   local ws_url
-  ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
+  ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
 
   mkdir -p "$MONITOR_BASE_DIR"
@@ -303,11 +499,13 @@ monitor_env() {
 }
 
 console_env() {
-  local url_substring="$1"
+  local env_name="$1"
+  local url_substring="$2"
+  shift
   shift
   parse_console_args "$@"
   local ws_url
-  ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
+  ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
   (
     cd /mnt/c
@@ -318,25 +516,44 @@ console_env() {
 }
 
 refresh_env() {
-  local url_substring="$1"
+  local env_name="$1"
+  local base_url="$2"
+  local url_substring="$3"
+  shift
+  shift
   shift
   parse_refresh_args "$@"
-  local ws_url
-  ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
+  local ws_url saved_path current_path
+  ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
 
   bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method ServiceWorker.enable --params '{}'
   bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method ServiceWorker.setForceUpdateOnPageLoad --params '{"forceUpdateOnPageLoad":true}'
   bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method Page.reload --params '{"ignoreCache":true}'
+
+  saved_path="$(read_saved_path "$env_name" "$PORT")"
+  [[ -n "$saved_path" ]] || return 0
+
+  ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
+  [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+  current_path="$(current_path_via_ws_url "$ws_url")"
+  if [[ "$current_path" != "$saved_path" ]]; then
+    start_env "$env_name" "$base_url" "$url_substring" --port "$PORT" --path "$saved_path" >/dev/null
+  fi
 }
 
 wait_env() {
-  local url_substring="$1"
+  local env_name="$1"
+  local url_substring="$2"
+  shift
   shift
   parse_wait_args "$@"
+  if [[ -n "$WAIT_PATH" ]]; then
+    write_saved_path "$env_name" "$PORT" "$WAIT_PATH"
+  fi
 
   local ws_url expression params_json
-  ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
+  ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
 
   expression="$(jq -rn --arg path "$WAIT_PATH" --arg selector "$WAIT_SELECTOR" '
@@ -370,7 +587,7 @@ wait_env() {
     fi
 
     sleep 0.25
-    ws_url="$(wait_for_page_ws_url "$PORT" "$url_substring")"
+    ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
     [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
   done
 }
@@ -445,40 +662,40 @@ main() {
 
   case "$subcommand" in
     start-local)
-      start_env "$LOCAL_BASE_URL" "$LOCAL_SUBSTRING" "$@"
+      start_env "local" "$LOCAL_BASE_URL" "$LOCAL_SUBSTRING" "$@"
       ;;
     start-prod)
-      start_env "$PROD_BASE_URL" "$PROD_SUBSTRING" "$@"
+      start_env "prod" "$PROD_BASE_URL" "$PROD_SUBSTRING" "$@"
       ;;
     monitor-local)
-      monitor_env "$LOCAL_SUBSTRING" "$@"
+      monitor_env "local" "$LOCAL_SUBSTRING" "$@"
       ;;
     monitor-prod)
-      monitor_env "$PROD_SUBSTRING" "$@"
+      monitor_env "prod" "$PROD_SUBSTRING" "$@"
       ;;
     console-local)
-      console_env "$LOCAL_SUBSTRING" "$@"
+      console_env "local" "$LOCAL_SUBSTRING" "$@"
       ;;
     console-prod)
-      console_env "$PROD_SUBSTRING" "$@"
+      console_env "prod" "$PROD_SUBSTRING" "$@"
       ;;
     refresh-local)
-      refresh_env "$LOCAL_SUBSTRING" "$@"
+      refresh_env "local" "$LOCAL_BASE_URL" "$LOCAL_SUBSTRING" "$@"
       ;;
     refresh-prod)
-      refresh_env "$PROD_SUBSTRING" "$@"
+      refresh_env "prod" "$PROD_BASE_URL" "$PROD_SUBSTRING" "$@"
       ;;
     wait-local)
-      wait_env "$LOCAL_SUBSTRING" "$@"
+      wait_env "local" "$LOCAL_SUBSTRING" "$@"
       ;;
     wait-prod)
-      wait_env "$PROD_SUBSTRING" "$@"
+      wait_env "prod" "$PROD_SUBSTRING" "$@"
       ;;
     eval-local)
-      runtime_eval_env "$LOCAL_SUBSTRING" "$@"
+      runtime_eval_env "local" "$LOCAL_SUBSTRING" "$@"
       ;;
     eval-prod)
-      runtime_eval_env "$PROD_SUBSTRING" "$@"
+      runtime_eval_env "prod" "$PROD_SUBSTRING" "$@"
       ;;
     read)
       read_monitor "$@"

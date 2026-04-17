@@ -15,6 +15,18 @@ This skill is Windows-specific:
 - it reaches DevTools HTTP endpoints through Windows `curl.exe`
 - it sends CDP websocket messages through Windows `powershell.exe`
 
+Wrapper invariant:
+
+- one debug instance keeps exactly one app tab per environment (`sprecha.local` or `sprecha.de`)
+- `start-local` / `start-prod` reuse that single app tab instead of accumulating duplicates
+- the wrapper remembers the requested path and `refresh-local` / `refresh-prod` preserve that path instead of drifting to another app route
+
+Repair-first invariant:
+
+- if this skill is the intended verification path and it is broken, flaky, or attached to the wrong target, fix this skill or its repo-owned wrapper first
+- do not silently fall back to another browser tool just to get a quick proof
+- only use a non-CDP fallback when the user explicitly asks for it or after clearly stating that the CDP repair path is blocked
+
 ## When to use
 
 Use this skill for:
@@ -110,6 +122,12 @@ Open the local lesson page directly:
 bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local --path /lesson
 ```
 
+Switch the existing single local app tab to the words page:
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local --path /words
+```
+
 Open production:
 
 ```bash
@@ -145,6 +163,8 @@ bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
 
 For dependent browser steps, do not run `setup`/`navigation` and the next `eval` in parallel.
 After a setup script or route-changing action, prefer `wait-local` / `wait-prod` before the next `eval-*` call.
+The wrapper now enforces one app tab, but dependent steps are still sequential work, not parallel work.
+If this workflow fails, repair the workflow first rather than hopping to a different browser stack.
 
 Evaluate a multiline script from a file:
 

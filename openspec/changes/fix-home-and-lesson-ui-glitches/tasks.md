@@ -6,6 +6,7 @@
 - [ ] 1.4 Fix the transition when deleting the last word so the empty-state screen appears without a visible jerk.
 - [x] 1.5 Fix the first-word add flow so the add-word panel does not jump vertically when the lesson footer appears.
 - [x] 1.6 Preserve loaded lazy-list context when opening word edit mode outside the first chunk.
+- [x] 1.7 Keep an opened word edit form fully visible within the scrollable list and enforce single-edit mode.
 
 ## 2. Lesson UI Stability
 
@@ -18,6 +19,7 @@
 ## 3. Nearby Glitches
 
 - [ ] 3.1 Capture and fix other small home/lesson UI glitches found while verifying the same interaction flows.
+- [x] 3.2 Fix the learning-app CDP wrapper so one debug instance keeps exactly one app tab and stable target selection.
 
 ## 4. Verify
 
@@ -29,3 +31,5 @@
 - [x] 4.6 Verify keyboard-only lesson progression after answer checking on desktop.
 - [x] 4.7 Verify keyboard progression returns focus to the next answer input on desktop.
 - [x] 4.8 Verify editing a word from a later lazy-loaded chunk does not collapse the list back to the first chunk.
+- [x] 4.9 Verify opening an edit form near the top or bottom edge keeps the form visible and closes any previously opened edit row.
+- [x] 4.10 Verify `learning-app-cdp` reuses a single app tab and does not drift to another local page target after start/refresh/wait/eval flows.
