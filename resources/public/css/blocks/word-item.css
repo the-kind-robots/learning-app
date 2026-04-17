@@ -1,5 +1,6 @@
 .word-item {
   border-bottom: 1px solid rgb(0 0 0 / 0.06);
+  scroll-margin-block: 12px;
 }
 
 .word-item:last-child {

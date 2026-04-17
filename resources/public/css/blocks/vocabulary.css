@@ -69,6 +69,8 @@ body:has(.vocabulary) #app {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scroll-padding-block: 6px;
 }
 
 .vocabulary__empty-state {

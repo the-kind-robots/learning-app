@@ -17,10 +17,12 @@
 
 (defn word-list-item
   "Renders a single word item in the list."
-  [{:keys [id retention-level translation value]} & {:keys [editing?]}]
+  [{:keys [id retention-level translation value]} & {:keys [editing? oob?]}]
   (let [item-id (str "word-" id)]
     [:li.word-item
-     {:class (when editing? "word-item--editing") :id item-id}
+     (cond-> {:id item-id}
+       editing? (assoc :class "word-item--editing")
+       oob?     (assoc :hx-swap-oob "outerHTML"))
      (if editing?
        ;; Edit mode - show inputs
        [:form.word-item__form
@@ -32,9 +34,13 @@
          [:span.word-item__value {:lang "de"} value]
          [:span.word-item__arrow "→"]
          [:input.word-item__input
-          {:name "translation" :autocapitalize "off" :autocomplete "off"
-           :autocorrect "off" :lang "ru" :placeholder "Перевод" :value translation}]]
-       [:div.word-item__actions
+          {:name           "translation"
+           :autocapitalize "off"
+           :autocomplete   "off"
+           :autocorrect    "off"
+           :autofocus      true
+           :lang           "ru" :placeholder "Перевод" :value translation}]]
+        [:div.word-item__actions
          [:button.word-item__save {:type "submit"} "Сохранить"]
          [:button.word-item__cancel
           {:type      "button"
@@ -54,6 +60,8 @@
        ;; Display mode - show text, tap to edit
        [:div.word-item__display
         {:hx-get      (str "/words/" id "?edit=true")
+         :hx-vals     "js:{editing: document.querySelector('#word-list-editing-id')?.dataset.editingId || ''}"
+         :hx-on:click "this.scrollIntoView({block:'nearest'})"
          :hx-target   (str "#" item-id)
          :hx-swap     "outerHTML"}
         [:div.word-item__retention
@@ -70,7 +78,7 @@
   (when (seq words)
     (list
      (for [word words]
-       (word-list-item word {:editing? (= (:id word) editing-id)}))
+       (word-list-item word :editing? (= (:id word) editing-id)))
      (when show-more?
        [:li.word-list__sentinel
         {:aria-hidden "true"
@@ -84,25 +92,35 @@
          :hx-trigger  "intersect once"}]))))
 
 
+(defn editing-marker
+  [editing-id & {:keys [oob?]}]
+  [:span#word-list-editing-id
+   (cond-> {:data-editing-id (or editing-id "")
+            :hidden          true}
+     oob? (assoc :hx-swap-oob "true"))])
+
+
 (defn word-list
   "Renders the word list shell (UL) for HTMX swaps."
   [opts]
-  [:ul.word-list
-   {:id "word-list"}
-   (or (word-items+sentinel opts)
-       [:li.word-list__empty
-        {:class (when (str/blank? (:search opts))
-                  "word-list__empty--no-words")}
-        (if (utils/non-blank (:search opts))
-          [:div.vocabulary__empty-state
-           [:p.vocabulary__empty-state-text "Ничего не найдено"]
-           [:p.vocabulary__empty-state-hint "Попробуйте другой запрос"]]
-          [:div.vocabulary__empty-state
-           [:p.vocabulary__empty-state-text "Слов пока нет"]
-           [:p.vocabulary__empty-state-hint "Добавьте первое слово на главной странице"]
-           [:button.vocabulary__empty-state-cta
-            {:hx-get "/home" :hx-push-url "true" :hx-swap "innerHTML" :hx-target "#app"}
-            "Добавить слово"]])])])
+  (list
+   (editing-marker (:editing-id opts))
+   [:ul.word-list
+    {:id "word-list"}
+    (or (word-items+sentinel opts)
+        [:li.word-list__empty
+         {:class (when (str/blank? (:search opts))
+                   "word-list__empty--no-words")}
+         (if (utils/non-blank (:search opts))
+           [:div.vocabulary__empty-state
+            [:p.vocabulary__empty-state-text "Ничего не найдено"]
+            [:p.vocabulary__empty-state-hint "Попробуйте другой запрос"]]
+           [:div.vocabulary__empty-state
+            [:p.vocabulary__empty-state-text "Слов пока нет"]
+            [:p.vocabulary__empty-state-hint "Добавьте первое слово на главной странице"]
+            [:button.vocabulary__empty-state-cta
+             {:hx-get "/home" :hx-push-url "true" :hx-swap "innerHTML" :hx-target "#app"}
+             "Добавить слово"]])])]))
 
 
 (defn word-list-chunk
