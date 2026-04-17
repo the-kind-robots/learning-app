@@ -10,6 +10,7 @@
 @import url("./components/autocomplete.css") layer(components);
 
 @import url("./blocks/app-shell.css") layer(blocks);
+@import url("./blocks/page-footer.css") layer(blocks);
 @import url("./blocks/lesson.css") layer(blocks);
 @import url("./blocks/home.css") layer(blocks);
 @import url("./blocks/word-list.css") layer(blocks);

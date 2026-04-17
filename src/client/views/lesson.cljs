@@ -4,6 +4,13 @@
    [presenter.lesson :as presenter.lesson]))
 
 
+(def result-action-keydown
+  "if(event.key==='Enter' || event.key===' ' || event.key==='Spacebar'){event.preventDefault(); this.form.requestSubmit();}")
+
+(def input-focus-after-settle
+  "if(matchMedia('(pointer:fine)').matches){var input=this.querySelector('#lesson-answer'); if(input){input.focus();}}")
+
+
 (defn progress
   [state attrs]
   (let [value (presenter.lesson/progress-props state)]
@@ -40,9 +47,12 @@
 (defn input
   []
   [:footer#lesson-footer
+   {:hx-on:htmx:load input-focus-after-settle}
    ;; User focuses input manually (avoids auto keyboard open/layout jumps).
-   [:form.lesson__footer.lesson__footer--input
-    {:hx-post "/lesson/answer" :hx-target "#lesson-footer" :hx-swap "outerHTML"}
+   [:form.lesson__footer.lesson__footer--input.page-footer
+    {:hx-post   "/lesson/answer"
+     :hx-target "#lesson-footer"
+     :hx-swap   "outerHTML"}
     [:label.lesson__input-label
      {:for "lesson-answer"}
      "Ответ на немецком"]
@@ -55,7 +65,7 @@
       :lang        "de"
       :hx-on:keydown
       "if(event.key==='Enter' && (event.ctrlKey || event.metaKey)){event.preventDefault(); this.form.requestSubmit();}"}]
-    [:div.lesson__action
+    [:div.lesson__action.page-footer__action
      [:button.big-button {:type "submit"} "ПРОВЕРИТЬ"]]]])
 
 
@@ -66,7 +76,7 @@
     :hx-on:htmx:afterSettle
     "var btn = this.querySelector('#lesson-next') || this.querySelector('#lesson-finish'); if(btn){btn.focus();}"
    }
-   [:div.lesson__footer.lesson__footer--success
+   [:div.lesson__footer.lesson__footer--success.page-footer
     [:div.lesson__answer
      [:h3.lesson__answer-header "Правильно!"]
      [:p.lesson__answer-body {:lang "de"} correct-answer]]
@@ -74,9 +84,12 @@
      (if finished?
        {:hx-delete "/lesson" :hx-target "#app" :hx-swap "innerHTML"}
        {:hx-post "/lesson/next" :hx-target "#lesson-footer" :hx-swap "outerHTML"})
-     [:div.lesson__action
+     [:div.lesson__action.page-footer__action
       [:button.big-button
-       {:id (if finished? "lesson-finish" "lesson-next") :type "submit"}
+       {:id        (if finished? "lesson-finish" "lesson-next")
+        :type      "submit"
+        :autofocus true
+        :hx-on:keydown result-action-keydown}
        (if finished? "ЗАКОНЧИТЬ" "ДАЛЕЕ")]]]]])
 
 
@@ -85,16 +98,19 @@
   [:footer#lesson-footer
    {:tabindex "-1"
     :hx-on:htmx:afterSettle "var btn = this.querySelector('#lesson-next'); if(btn){btn.focus();}"}
-   [:div.lesson__footer.lesson__footer--error
+   [:div.lesson__footer.lesson__footer--error.page-footer
     [:div.lesson__answer
      [:h3.lesson__answer-header "Ваш ответ:"]
      [:p.lesson__answer-body {:lang "de"} (or user-answer "")]
      [:h3.lesson__answer-header "Правильный ответ:"]
      [:p.lesson__answer-body {:lang "de"} correct-answer]]
     [:form {:hx-post "/lesson/next" :hx-target "#lesson-footer" :hx-swap "outerHTML"}
-     [:div.lesson__action
+     [:div.lesson__action.page-footer__action
       [:button.big-button
-       {:id "lesson-next" :type "submit"}
+       {:id "lesson-next"
+        :type "submit"
+        :autofocus true
+        :hx-on:keydown result-action-keydown}
        "ДАЛЕЕ"]]]]])
 
 

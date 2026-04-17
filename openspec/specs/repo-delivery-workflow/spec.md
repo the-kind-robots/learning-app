@@ -28,3 +28,20 @@ The GitHub Project start-work workflow SHALL continue when an optional configure
 - **THEN** the issue and project item are still created successfully
 - **AND** missing optional fields are skipped with a warning instead of failing the workflow
 
+### Requirement: Visual UI work favors perceptual stability
+The repository workflow SHALL treat unnecessary visible UI jumps, jerks, or geometry shifts as quality regressions during visual interaction work.
+
+#### Scenario: Verifying a UI change that affects layout or transitions
+- **WHEN** a task changes interactive UI layout, swapping, focus flow, keyboard flow, or footer/panel geometry
+- **THEN** the expected quality bar includes that the screen remains perceptually stable instead of visibly jumping or jerking
+- **AND** verification uses real browser evidence such as measured geometry, traces, or equivalent browser-level checks rather than DOM shape alone
+
+### Requirement: Repo-owned verification tooling is repaired before fallback
+The repository workflow SHALL treat failures in repo-owned verification tooling as task-relevant bugs to repair before relying on alternate verification stacks by default.
+
+#### Scenario: Preferred CDP workflow is flaky during a browser/UI task
+- **WHEN** a browser or UI task is supposed to be verified through the repository's preferred CDP/browser workflow
+- **AND** that workflow fails because it attaches to the wrong target, loses route state, races setup, or otherwise gives untrustworthy results
+- **THEN** the workflow first repairs the repo-owned tooling or wrapper as part of the tracked work
+- **AND** alternate browser tooling is not used as the default workaround
+- **AND** a fallback path is used only when the user explicitly allows it or the assistant clearly states that repair of the preferred tooling is blocked

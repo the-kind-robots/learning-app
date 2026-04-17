@@ -69,6 +69,8 @@ body:has(.vocabulary) #app {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scroll-padding-block: 6px;
 }
 
 .vocabulary__empty-state {
@@ -104,14 +106,13 @@ body:has(.vocabulary) #app {
 }
 
 .vocabulary__footer {
+  --page-footer-gap: 0px;
+  --page-footer-padding-top: 16px;
+  --page-footer-padding-x: 16px;
+  --page-footer-padding-bottom: 16px;
   background: rgb(var(--color-polar));
   bottom: 0;
-  box-shadow: 0 -2px 12px rgb(0 0 0 / 0.08);
-  display: flex;
-  justify-content: center;
   left: 0;
-  padding: 16px;
-  padding-bottom: calc(16px + env(safe-area-inset-bottom));
   position: fixed;
   right: 0;
   z-index: 10;
@@ -125,46 +126,19 @@ body:has(.vocabulary) #app {
 
 .vocabulary__start {
   display: block;
-  width: 100%;
 }
 
-.vocabulary__start.big-button {
-  width: 100%;
-}
-
-.vocabulary:has(.vocabulary__state--empty) .vocabulary__search,
-.vocabulary:has(.vocabulary__state--empty) .vocabulary__footer {
+.vocabulary:has(.word-list__empty--no-words) .vocabulary__search,
+.vocabulary:has(.word-list__empty--no-words) .vocabulary__footer {
   display: none;
 }
 
-.vocabulary:has(.vocabulary__state--empty) .vocabulary__list {
+.vocabulary:has(.word-list__empty--no-words) .vocabulary__list {
   align-items: center;
   display: flex;
   justify-content: center;
 }
 
-.vocabulary:has(.vocabulary__state--empty) .vocabulary__list > * {
+.vocabulary:has(.word-list__empty--no-words) .vocabulary__list > * {
   width: 100%;
-}
-
-@media (min-width: 700px) {
-  .vocabulary__start {
-    max-width: 320px;
-  }
-}
-
-@media (max-width: 699px) {
-  .vocabulary__footer {
-    justify-content: stretch;
-  }
-
-  .vocabulary__start {
-    max-width: none;
-  }
-}
-
-@media (max-width: 600px) {
-  .vocabulary__start {
-    width: 100%;
-  }
 }

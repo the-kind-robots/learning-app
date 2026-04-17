@@ -124,7 +124,7 @@
                  :headers {"X-Total-Count" (str total)}}))
 
       :get  (fn [{:keys [dbs params headers]}]
-              (let [{:keys [offset limit search fragment]} params
+              (let [{:keys [edit offset limit search fragment]} params
                     htmx-target (get headers "hx-target")
                     offset      (utils/parse-int offset 0)
                     limit       (utils/parse-int limit 10)
@@ -137,7 +137,10 @@
 
                   (let [words      (presenter.vocabulary/word-list-props words)
                         show-more? (> total (+ offset limit))
+                        editing-id edit
                         list-opts  {:words-query words-query
+                                    :editing-id editing-id
+                                    :search      search
                                     :show-more?  show-more?
                                     :words       words}]
                     {:status    200
@@ -151,6 +154,7 @@
                                   :else
                                   (views.word/page
                                    {:empty?     (zero? total)
+                                    :search     search
                                     :words      words
                                     :show-more? show-more?}))}))))
 
@@ -175,12 +179,26 @@
     ["/words/:id"
      {:get    (fn [{:keys [dbs path-params params]}]
                 (let [word-id (:id path-params)
-                      edit?   (= "true" (:edit params))]
-                  (p/let [word (vocabulary/get dbs word-id)]
+                      edit?   (= "true" (:edit params))
+                      prev-id (:editing params)]
+                  (p/let [word      (vocabulary/get dbs word-id)
+                          prev-word (when (and edit? prev-id (not= prev-id word-id))
+                                      (vocabulary/get dbs prev-id))]
                     (if word
-                      {:html/body (views.word/word-list-item
-                                   (presenter.vocabulary/word-item-props word)
-                                   {:editing? edit?})
+                      {:html/body (if edit?
+                                    (list
+                                     (when prev-word
+                                       (views.word/word-list-item
+                                        (presenter.vocabulary/word-item-props prev-word)
+                                        :oob? true))
+                                     (views.word/word-list-item
+                                      (presenter.vocabulary/word-item-props word)
+                                      :editing? true)
+                                     (views.word/editing-marker word-id :oob? true))
+                                    (list
+                                     (views.word/word-list-item
+                                      (presenter.vocabulary/word-item-props word))
+                                     (views.word/editing-marker nil :oob? true)))
                        :status    200}
                       {:status 404}))))
 
@@ -193,21 +211,42 @@
                     {:status 400 :body error}
                     (p/let [word (vocabulary/update! dbs word-id translation)]
                       (if word
-                        {:html/body (views.word/word-list-item
-                                     (presenter.vocabulary/word-item-props word))
+                        {:html/body (list
+                                     (views.word/word-list-item
+                                      (presenter.vocabulary/word-item-props word))
+                                     (views.word/editing-marker nil :oob? true))
                          :status    200}
                         {:status 404})))))
 
-      :delete (fn [{:keys [dbs path-params]}]
-                (let [word-id (:id path-params)]
+      :delete (fn [{:keys [dbs path-params params headers]}]
+                (let [word-id     (:id path-params)
+                      search      (:search params)
+                      htmx-target (get headers "hx-target")
+                      words-query {:order  :asc
+                                   :limit  10
+                                   :offset 0
+                                   :search search}]
                   (p/do
                     (vocabulary/delete! dbs word-id)
-                    (p/let [total (vocabulary/count dbs)]
+                    (p/let [{:keys [words total]} (vocabulary/list dbs words-query)]
                       (if (zero? total)
                         {:headers   {"HX-Retarget" "#app" "HX-Reswap" "innerHTML"}
                          :html/body (views.word/page {:empty? true})
                          :status    200}
-                        {:status 200})))))}]
+                        (let [words      (presenter.vocabulary/word-list-props words)
+                              show-more? (> total 10)
+                              list-opts  {:words-query words-query
+                                          :search      search
+                                          :show-more?  show-more?
+                                          :words       words}]
+                          {:status    200
+                           :html/body (if (= htmx-target "word-list")
+                                        (views.word/word-list list-opts)
+                                        (views.word/page
+                                         {:empty?     false
+                                          :search     search
+                                          :words      words
+                                          :show-more? show-more?}))}))))))}]
 
     ["/lesson"
      {:get    (fn [{:keys [dbs]}]

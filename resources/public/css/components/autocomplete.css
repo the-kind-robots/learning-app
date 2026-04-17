@@ -42,3 +42,38 @@
 .suggestions__item[data-exact] {
   font-weight: 700;
 }
+
+@media (hover: none), (pointer: coarse), (max-width: 600px) {
+  .autocomplete {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .suggestions {
+    position: static;
+    left: auto;
+    right: auto;
+    height: 0;
+    max-height: none;
+    margin-top: 0;
+    opacity: 0;
+    overflow: hidden auto;
+    transition: height 180ms ease-out, opacity 140ms ease-out, margin-top 180ms ease-out;
+  }
+
+  .suggestions:empty {
+    display: block;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+  }
+
+  .autocomplete:has(.suggestions:not(:empty)) .suggestions {
+    border-width: 1px;
+    height: min(176px, 34svh);
+    margin-top: 8px;
+    opacity: 1;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+}

@@ -100,16 +100,17 @@
         :hx-swap     "innerHTML"
         :hx-target   "#app"}
        "Список слов"]
-      [:footer#home-lesson-footer.home__footer
+      [:footer#home-lesson-footer.home__footer.page-footer
        {:hx-swap-oob "true"}
        [:h2.home__lesson-title "Урок"]
-       [:button.home__lesson-button.big-button.green-button
-        {:hx-get       "/lesson"
-         :hx-indicator "#loader"
-         :hx-push-url  "true"
-         :hx-swap      "innerHTML"
-         :hx-target    "#app"}
-        "НАЧАТЬ УРОК"]]))))
+       [:div.page-footer__action
+        [:button.home__lesson-button.big-button.green-button
+         {:hx-get       "/lesson"
+          :hx-indicator "#loader"
+          :hx-push-url  "true"
+          :hx-swap      "innerHTML"
+          :hx-target    "#app"}
+         "НАЧАТЬ УРОК"]]]))))
 
 
 (defn page
@@ -129,24 +130,27 @@
       [:h2.home__panel-title
        "Быстрое добавление"]
       [:button#home-words-button.home__words-button
-       {:type    "button"
-        :hidden  empty-vocab?
-        :hx-get  "/words"
+       {:type        "button"
+        :class       (when empty-vocab? "home__words-button--hidden")
+        :aria-hidden (when empty-vocab? "true")
+        :tabindex    (when empty-vocab? "-1")
+        :hx-get      "/words"
         :hx-push-url "true"
-        :hx-swap "innerHTML"
+        :hx-swap     "innerHTML"
         :hx-target   "#app"}
        "Список слов"]]
 
      (add-form {:oob? false})]]
 
-   [:footer#home-lesson-footer.home__footer
+   [:footer#home-lesson-footer.home__footer.page-footer
     {:hidden empty-vocab?}
     [:h2.home__lesson-title
      "Урок"]
-    [:button.home__lesson-button.big-button.green-button
-     {:hx-get       "/lesson"
-      :hx-indicator "#loader"
-      :hx-push-url  "true"
-      :hx-swap      "innerHTML"
-      :hx-target    "#app"}
-     "НАЧАТЬ УРОК"]]])
+    [:div.page-footer__action
+     [:button.home__lesson-button.big-button.green-button
+      {:hx-get       "/lesson"
+       :hx-indicator "#loader"
+       :hx-push-url  "true"
+       :hx-swap      "innerHTML"
+       :hx-target    "#app"}
+      "НАЧАТЬ УРОК"]]]])
