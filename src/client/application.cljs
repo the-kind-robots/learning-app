@@ -36,7 +36,7 @@
      [:meta {:charset "UTF-8"}]
      [:meta
       {:name    "viewport"
-       :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
+       :content "width=device-width, initial-scale=1, interactive-widget=overlays-content"}]
      [:title "Sprecha"]
      [:link {:rel "icon" :href "/favicon.ico"}]
      [:link {:rel "manifest" :href "/manifest.json"}]
