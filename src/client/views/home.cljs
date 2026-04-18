@@ -116,6 +116,7 @@
 (defn page
   [& {:keys [empty-vocab?]}]
   [:div.home
+   {:data-vk-overlay true}
    [:header.home__intro
     [:h1.home__title
      "Главная"]

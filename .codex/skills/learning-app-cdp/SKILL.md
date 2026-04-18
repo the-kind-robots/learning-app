@@ -27,6 +27,10 @@ Repair-first invariant:
 - do not silently fall back to another browser tool just to get a quick proof
 - only use a non-CDP fallback when the user explicitly asks for it or after clearly stating that the CDP repair path is blocked
 
+Related companion skill:
+
+- `learning-app-remote-inspect` - use when the user already has a real phone page open through `chrome://inspect/#devices` and wants a copy-paste console loop instead of direct automation
+
 ## When to use
 
 Use this skill for:

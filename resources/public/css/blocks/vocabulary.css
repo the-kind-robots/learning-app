@@ -16,8 +16,8 @@ body:has(.vocabulary) #app {
   flex-direction: column;
   margin: 0 auto;
   max-width: 600px;
-  height: 100vh;
-  height: 100dvh;
+  height: 100svh;
+  min-height: 100svh;
   overflow: hidden;
   padding-bottom: calc(80px + env(safe-area-inset-bottom));
   padding-top: 56px;
@@ -67,10 +67,9 @@ body:has(.vocabulary) #app {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  padding-bottom: calc(16px + env(keyboard-inset-height));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  scroll-behavior: smooth;
-  scroll-padding-block: 6px;
 }
 
 .vocabulary__empty-state {
@@ -118,7 +117,7 @@ body:has(.vocabulary) #app {
   z-index: 10;
 }
 
-@media (hover: none), (pointer: coarse) {
+@media (max-width: 600px) {
   .vocabulary__back {
     display: none;
   }

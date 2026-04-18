@@ -8,6 +8,7 @@
 - [ ] 2.1 Replace keyboard-sensitive fixed/vh composer positioning with geometry-stable mobile layout primitives.
 - [ ] 2.2 Ensure form and sibling actions remain structurally mounted during focus transitions.
 - [ ] 2.3 Keep suggestion-container behavior stable without overflow mode thrash.
+- [x] 2.4 Keep mobile word edit on the vocabulary list from fighting the keyboard, scroll, and footer while opening.
 
 ## 3. Submit and HTMX Churn Reduction
 
@@ -26,3 +27,4 @@
 - [ ] 5.1 Manual QA on mobile viewports: keyboard open, focus switch between two inputs, repeated submit, and route transitions.
 - [ ] 5.2 Confirm that `НАЧАТЬ УРОК` does not flash during input focus changes.
 - [ ] 5.3 Run `npx shadow-cljs compile app` and address any regressions.
+- [x] 5.4 Verify mobile word-list edit opens without a visible layout thrash or squeezed form.

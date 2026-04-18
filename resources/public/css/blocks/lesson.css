@@ -112,30 +112,32 @@ body:has(.lesson) #app {
 }
 
 .lesson__body {
-  align-content: start;
-  display: grid;
   flex: 1 1 auto;
   font-size: 19px;
-  grid-template-columns: 1fr;
-  grid-template-rows: min-content;
-  height: auto;
-  justify-content: center;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: clamp(48px, 18vh, 160px) 24px 0;
+  overflow: hidden;
   text-align: center;
   width: 100%;
 }
 
 .lesson__challenge {
-  align-self: start;
+  --challenge-top-rest: 160px;
+  --challenge-top-min:  96px; /* progress-bar bottom + ~8px gap */
+  --challenge-lift:     min(0px,
+                            max(calc(var(--challenge-top-min) - var(--challenge-top-rest)),
+                                calc(0px - env(keyboard-inset-height, 0px))));
   align-items: center;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  min-height: 0;
-  overflow: visible;
+  left: 0;
+  padding: 0 24px;
+  position: absolute;
+  right: 0;
+  top: var(--challenge-top-rest);
+  transform: translateY(var(--challenge-lift));
+  transition: transform 220ms ease;
+  will-change: transform;
 }
 
 .lesson__prompt {
@@ -163,14 +165,11 @@ body:has(.lesson) #app {
   --padding-x: calc(50% - 500px);
   --page-footer-keyboard-offset: env(keyboard-inset-height, 0px);
   --page-footer-padding-x-wide: var(--padding-x);
-  flex: 0 0 auto;
-  position: relative;
-  transition: padding-bottom 180ms ease;
-}
-
-.lesson__challenge {
-  transform: translateY(calc(-1 * clamp(0px, env(keyboard-inset-height, 0px), 12px)));
-  transition: transform 180ms ease;
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  z-index: 10;
 }
 
 .lesson__footer--input {
@@ -302,19 +301,12 @@ body:has(.lesson) #app {
     padding: 50px 16px 0;
   }
 
-  .lesson__body {
-    grid-template-columns: min-content;
-    grid-template-rows: min-content;
-    padding-top: clamp(56px, 18vh, 170px);
-  }
-
   .lesson__challenge {
-    align-items: center;
+    --challenge-top-rest: 200px;
+    --challenge-top-min:  120px;
     gap: 24px;
-    justify-content: start;
-    min-height: 150px;
-    overflow: visible;
-    width: 600px;
+    margin-inline: auto;
+    max-width: 600px;
   }
 
   .lesson__input {
