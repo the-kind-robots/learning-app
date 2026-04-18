@@ -24,9 +24,11 @@
     "/css/blocks/app-shell.css"
     "/css/blocks/home.css"
     "/css/blocks/lesson.css"
+    "/css/blocks/modal.css"
     "/css/blocks/page-footer.css"
     "/css/blocks/pwa-install.css"
     "/css/blocks/vocabulary.css"
+    "/css/blocks/word-edit-dialog.css"
     "/css/blocks/word-item.css"
     "/css/blocks/word-list.css"
     "/css/components/autocomplete.css"
@@ -168,7 +170,8 @@
 (defn local-handler
   [request]
   (let [ring-request (request->ring request)]
-    (p/-> (application/ring-handler ring-request) ring->response)))
+    (p/let [response (p/-> (application/ring-handler ring-request) ring->response)]
+      (or response (js/fetch request)))))
 
 
 (js/self.addEventListener

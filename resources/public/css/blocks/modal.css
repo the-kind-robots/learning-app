@@ -1,0 +1,19 @@
+.modal {
+  background: rgb(var(--color-polar));
+  border: 1px solid rgb(0 0 0 / 0.08);
+  border-radius: 20px;
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.18);
+  max-width: 560px;
+  padding: 0;
+  width: calc(100% - 32px);
+}
+
+.modal::backdrop {
+  background: rgb(0 0 0 / 0.32);
+}
+
+@media (max-width: 600px) {
+  .modal {
+    margin-top: calc(env(safe-area-inset-top) + 56px);
+  }
+}

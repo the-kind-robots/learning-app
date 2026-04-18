@@ -9,12 +9,17 @@
 
 .word-item__display {
   align-items: center;
+  background: none;
+  border: none;
   cursor: pointer;
   display: flex;
+  font-family: inherit;
   gap: 12px;
   min-height: 56px;
   padding: 12px 16px;
+  text-align: left;
   transition: background-color 0.15s ease;
+  width: 100%;
 }
 
 .word-item__display:hover {
@@ -54,125 +59,4 @@
   font-weight: 300;
   margin-left: auto;
   opacity: 0.6;
-}
-
-.word-item--editing {
-  background: rgb(var(--color-polar));
-  border-radius: 0;
-  box-shadow: none;
-  margin: 0;
-}
-
-.word-item__form {
-  padding: 12px 16px;
-}
-
-.word-item__inputs {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
-  min-height: 56px;
-}
-
-.word-item__input {
-  background: rgb(var(--color-snow));
-  border: 2px solid rgb(var(--color-swan));
-  border-radius: 10px;
-  flex: 1;
-  font-family: inherit;
-  font-size: 16px;
-  height: 48px;
-  padding: 12px 14px;
-  transition: border-color 0.15s;
-}
-
-.word-item__input:focus {
-  border-color: rgb(var(--color-macaw));
-  outline: none;
-}
-
-.word-item__input::placeholder {
-  color: rgb(var(--color-hare));
-}
-
-.word-item__actions {
-  display: flex;
-  gap: 10px;
-  min-height: 44px;
-}
-
-.word-item__save {
-  background: rgb(var(--color-macaw));
-  border: none;
-  border-radius: 10px;
-  color: white;
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  height: 44px;
-  padding: 0 20px;
-}
-
-.word-item__cancel {
-  background: rgb(var(--color-swan));
-  border: none;
-  border-radius: 10px;
-  color: rgb(var(--color-wolf));
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  height: 44px;
-  padding: 0 20px;
-}
-
-.word-item__delete {
-  background: none;
-  border: none;
-  color: rgb(var(--color-cardinal));
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  height: 44px;
-  margin-left: auto;
-  padding: 0 12px;
-}
-
-@media (max-width: 600px) {
-  .word-item__inputs {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .word-item__inputs .word-item__arrow {
-    display: none;
-  }
-
-  .word-item__input {
-    width: 100%;
-  }
-
-  .word-item__actions {
-    flex-wrap: wrap;
-  }
-
-  .word-item__save,
-  .word-item__cancel {
-    flex: 1;
-  }
-
-  .word-item--editing {
-    min-height: 56px;
-  }
-
-  .word-item--editing .word-item__form {
-    background: rgb(var(--color-polar));
-    border-top: 1px solid rgb(0 0 0 / 0.08);
-    box-shadow: 0 -12px 32px rgb(0 0 0 / 0.12);
-    bottom: calc(env(keyboard-inset-height, 0px) + 12px);
-    left: 12px;
-    position: fixed;
-    right: 12px;
-    z-index: 20;
-  }
 }

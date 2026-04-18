@@ -67,11 +67,9 @@ body:has(.vocabulary) #app {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  overflow-anchor: none;
+  padding-bottom: calc(16px + env(keyboard-inset-height));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  scroll-behavior: smooth;
-  scroll-padding-block: 6px;
 }
 
 .vocabulary__empty-state {
@@ -112,7 +110,7 @@ body:has(.vocabulary) #app {
   --page-footer-padding-x: 16px;
   --page-footer-padding-bottom: 16px;
   background: rgb(var(--color-polar));
-  bottom: env(keyboard-inset-height, 0px);
+  bottom: 0;
   left: 0;
   position: fixed;
   right: 0;
@@ -121,10 +119,6 @@ body:has(.vocabulary) #app {
 
 @media (max-width: 600px) {
   .vocabulary__back {
-    display: none;
-  }
-
-  .vocabulary:has(.word-item--editing) .vocabulary__footer {
     display: none;
   }
 }
