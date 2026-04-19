@@ -103,7 +103,12 @@
                  trials (:trials lesson)]
              (is (= 2 (count trials)))
              (is (= 1 (count (filter #(= "word" (:type %)) trials))))
-             (is (= 1 (count (filter #(= "example" (:type %)) trials)))))))))))
+             (is (= 1 (count (filter #(= "example" (:type %)) trials))))
+             (is (= [true]
+                    (->> trials
+                         (filter #(= "example" (:type %)))
+                         (map :locked?)
+                         vec))))))))))
 
 
 ;; =============================================================================
@@ -225,6 +230,27 @@
                  final-reviews   (db-queries/fetch-by-type (:user/db dbs) "review")]
            ;; No new review should be created for example trials
            (is (= (count initial-reviews) (count final-reviews)))))))))
+
+
+(deftest check-answer-correct-word-unlocks-example-trial
+  (async-testing "`check-answer!` unlocks examples after successful word answer"
+    (with-test-dbs
+     (fn [dbs]
+       (p/do
+         (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}])
+         (db-seed/seed-examples! (:device/db dbs)
+                                 [{:_id         "example-1"
+                                   :word-id     "word-1"
+                                   :word        "der Hund"
+                                   :value       "Der Hund schlaeft."
+                                   :translation "Пёс спит."}])
+         (p/let [_      (sut/start! dbs {:trial-selector :first})
+                 result (sut/check-answer! dbs "der Hund")
+                 trial  (->> (:remaining-trials (:lesson-state result))
+                             (filter domain/example-trial?)
+                             first)]
+           (is (some? trial))
+           (is (false? (:locked? trial)))))))))
 
 
 (deftest check-answer-returns-error-when-no-lesson

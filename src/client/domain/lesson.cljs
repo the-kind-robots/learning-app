@@ -42,7 +42,8 @@
                  (filter #(= "ru" (:lang %)))
                  (map :value)
                  (str/join ", "))
-   :answer  (:value word)})
+   :answer  (:value word)
+   :locked? false})
 
 
 (defn- example->trial
@@ -53,7 +54,8 @@
    :word-id        (:word-id example)
    :prompt         (:translation example)
    :answer         (:value example)
-   :gloss-mismatch (:gloss-mismatch example)})
+   :gloss-mismatch (:gloss-mismatch example)
+   :locked?        true})
 
 
 (defn generate-trials
@@ -69,6 +71,23 @@
   "Return a stable identifier for a trial (composite of type + word-id)."
   [trial]
   (str (:type trial) ":" (:word-id trial)))
+
+
+(defn- locked-trial?
+  [trial]
+  (true? (:locked? trial)))
+
+
+(defn- unlock-example-trial
+  [word-id trial]
+  (cond-> trial
+    (and (example-trial? trial) (-> trial :word-id (= word-id)))
+    (assoc :locked? false)))
+
+
+(defn- unlock-example-trials
+  [trials word-id]
+  (mapv #(unlock-example-trial word-id %) trials))
 
 
 (defn- select-trial
@@ -93,7 +112,7 @@
      :options       {:trial-selector trial-selector}
      :trials        trials
      :remaining-trials trials
-     :current-trial (select-trial trials trial-selector)
+     :current-trial (select-trial (remove locked-trial? trials) trial-selector)
      :last-result   nil}))
 
 
@@ -127,9 +146,16 @@
                           (normalized-answer correct-answer))
         remaining      (cond-> (:remaining-trials state)
                          correct? (remove-trial current-trial))
+        remaining      (if (and correct? (word-trial? current-trial))
+                         (unlock-example-trials remaining (:word-id current-trial))
+                         remaining)
+        trials         (if (and correct? (word-trial? current-trial))
+                         (unlock-example-trials (:trials state) (:word-id current-trial))
+                         (:trials state))
         last-result    {:correct? correct?
                         :answer   answer}]
     (-> state
+        (assoc :trials trials)
         (assoc :remaining-trials remaining)
         (assoc :last-result last-result))))
 
@@ -138,9 +164,10 @@
   "Returns trials available for next selection.
    Excludes current trial to avoid immediate repetition (unless only one remains)."
   [remaining-trials current-trial]
-  (if (> (count remaining-trials) 1)
-    (remove-trial remaining-trials current-trial)
-    remaining-trials))
+  (let [unlocked-trials (filterv (complement locked-trial?) remaining-trials)]
+    (if (> (count unlocked-trials) 1)
+      (remove-trial unlocked-trials current-trial)
+      unlocked-trials)))
 
 
 (defn advance
