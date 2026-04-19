@@ -249,12 +249,8 @@ else
 fi
 
 if [ "${issue_cert}" = true ]; then
-  if certbot certificates | grep -q 'sprecha.de'; then
-    info "Certificate already exists; skipping issuance"
-  else
-    certbot --nginx -d sprecha.de -d www.sprecha.de
-    cert_issued=true
-  fi
+  certbot --nginx --cert-name sprecha.de -d sprecha.de -d www.sprecha.de
+  cert_issued=true
 else
   info "Skipping certificate issuance (use --issue-cert)"
 fi
