@@ -42,4 +42,7 @@ app.db
 # Local agent/tool artifacts
 /.claude/
 /.opencode/
+/.beads/
+/.clojure-mcp/
+/opencode.json
 /.tmp/
