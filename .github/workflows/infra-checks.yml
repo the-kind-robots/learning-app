@@ -1,0 +1,38 @@
+name: Infrastructure Checks
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'infra/**'
+      - 'docs/ops/**'
+      - '.github/workflows/deploy-infra.yml'
+      - '.github/workflows/infra-checks.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'infra/**'
+      - 'docs/ops/**'
+      - '.github/workflows/deploy-infra.yml'
+      - '.github/workflows/infra-checks.yml'
+
+concurrency:
+  group: infra-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  infra-checks:
+    name: Infra Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Validate shell scripts
+        run: |
+          while IFS= read -r file; do
+            bash -n "$file"
+          done < <(find infra/production -type f \( -name '*.sh' -o -path '*/DEBIAN/postinst' -o -path '*/DEBIAN/postrm' \) | sort)
+
+      - name: Build infra deb
+        run: |
+          mkdir -p target
+          dpkg-deb --root-owner-group --build infra/production target/learning-app-infra.deb

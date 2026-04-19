@@ -2,8 +2,24 @@ name: Integration
 on:
   pull_request:
     branches: [master]
+    paths:
+      - 'src/**'
+      - 'resources/**'
+      - 'shadow-cljs.edn'
+      - 'deps.edn'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/integration.yml'
   push:
     branches: [master]
+    paths:
+      - 'src/**'
+      - 'resources/**'
+      - 'shadow-cljs.edn'
+      - 'deps.edn'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/integration.yml'
 
 concurrency:
   group: integration-${{ github.workflow }}-${{ github.ref }}
