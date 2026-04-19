@@ -110,6 +110,18 @@
       (is (= (first (:trials state)) (:current-trial state))))))
 
 
+(deftest initial-state-keeps-example-trials-locked
+  (testing "example trials are present but locked at lesson start"
+    (let [state          (sut/initial-state
+                          fixtures/lesson-words
+                          fixtures/lesson-examples
+                          :first
+                          "2024-08-20T10:00:00.000Z")
+          example-trials (filter sut/example-trial? (:remaining-trials state))]
+      (is (= 1 (count example-trials)))
+      (is (every? :locked? example-trials)))))
+
+
 ;; =============================================================================
 ;; expected-answer
 ;; =============================================================================
@@ -162,6 +174,19 @@
       (is (= 1 (count (:remaining-trials state)))))))
 
 
+(deftest check-answer-correct-word-unlocks-examples
+  (testing "correct word answer unlocks example trials for that word"
+    (let [state         (sut/initial-state
+                         fixtures/lesson-words
+                         fixtures/lesson-examples
+                         :first
+                         "2024-08-20T10:00:00.000Z")
+          updated-state (sut/check-answer state "der Hund")
+          example-trial (first (filter sut/example-trial? (:remaining-trials updated-state)))]
+      (is (some? example-trial))
+      (is (false? (:locked? example-trial))))))
+
+
 (deftest check-answer-correct-case-insensitive
   (testing "answer comparison ignores case"
     (let [state (sut/initial-state
@@ -188,6 +213,19 @@
           state (sut/check-answer state "wrong answer")]
       (is (false? (:correct? (sut/last-result state))))
       (is (= 2 (count (:remaining-trials state)))))))
+
+
+(deftest check-answer-wrong-word-keeps-examples-locked
+  (testing "wrong word answer does not unlock example trials"
+    (let [state         (sut/initial-state
+                         fixtures/lesson-words
+                         fixtures/lesson-examples
+                         :first
+                         "2024-08-20T10:00:00.000Z")
+          updated-state (sut/check-answer state "wrong answer")
+          example-trial (first (filter sut/example-trial? (:remaining-trials updated-state)))]
+      (is (some? example-trial))
+      (is (true? (:locked? example-trial))))))
 
 
 ;; =============================================================================
@@ -275,6 +313,31 @@
           next-state (sut/advance state)]
       (is (some? (sut/last-result state)))
       (is (nil? (sut/last-result next-state))))))
+
+
+(deftest advance-skips-locked-example-trials
+  (testing "advance selects only unlocked trials"
+    (let [state      (sut/initial-state
+                      fixtures/lesson-words
+                      fixtures/lesson-examples
+                      :first
+                      "2024-08-20T10:00:00.000Z")
+          next-state (sut/advance state)]
+      (is (sut/word-trial? (:current-trial next-state)))
+      (is (not (:locked? (:current-trial next-state)))))))
+
+
+(deftest advance-keeps-random-pool-after-unlock
+  (testing "unlocked examples join normal selectable pool instead of forcing next trial"
+    (let [state      (sut/initial-state
+                      fixtures/lesson-words
+                      fixtures/lesson-examples
+                      :first
+                      "2024-08-20T10:00:00.000Z")
+          state      (sut/check-answer state "der Hund")
+          next-state (sut/advance state)]
+      (is (= "word-2" (:word-id (:current-trial next-state))))
+      (is (sut/word-trial? (:current-trial next-state))))))
 
 
 (deftest advance-returns-nil-when-no-remaining

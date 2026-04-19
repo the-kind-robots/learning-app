@@ -81,7 +81,8 @@ Example:
       "type": "word",
       "word-id": "<vocab-id>",
       "prompt": "dog",
-      "answer": "der Hund"
+      "answer": "der Hund",
+      "locked?": false
     }
   ],
   "remaining-trials": [
@@ -89,25 +90,29 @@ Example:
       "type": "word",
       "word-id": "<vocab-id>",
       "prompt": "dog",
-      "answer": "der Hund"
+      "answer": "der Hund",
+      "locked?": false
     }
   ],
   "current-trial": {
     "type": "word",
     "word-id": "<vocab-id>",
     "prompt": "dog",
-    "answer": "der Hund"
+    "answer": "der Hund",
+    "locked?": false
   },
   "last-result": null
 }
 ```
 
-### Requirement: Lesson trials include prompt and answer
-The system SHALL store lesson trials with prompt and answer strings.
+### Requirement: Lesson trials include prompt, answer, and lock state
+The system SHALL store lesson trials with prompt and answer strings plus a lock flag used for lesson selection.
 
 #### Scenario: Lesson trial shape
 - **WHEN** a lesson trial is stored
-- **THEN** it includes `type`, `word-id`, `prompt`, and `answer`
+- **THEN** it includes `type`, `word-id`, `prompt`, `answer`, and `locked?`
+- **AND** word trials are stored with `locked?` false
+- **AND** example trials may be stored with `locked?` true until unlocked by lesson progress
 
 Example:
 ```json
@@ -115,7 +120,8 @@ Example:
   "type": "word",
   "word-id": "<vocab-id>",
   "prompt": "dog",
-  "answer": "der Hund"
+  "answer": "der Hund",
+  "locked?": false
 }
 ```
 
@@ -167,4 +173,3 @@ The system SHALL use the trial-selector from lesson options to determine trial s
 - **WHEN** selecting trials for a lesson
 - **THEN** the selection uses the `trial-selector` value from `options`
 - **AND** defaults to `"random"` if options or trial-selector is missing
-

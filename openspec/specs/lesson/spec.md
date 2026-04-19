@@ -46,6 +46,7 @@ The system SHALL generate trials for each word and each example, using denormali
 #### Scenario: Trial generation
 - **WHEN** a lesson starts
 - **THEN** each word produces a word trial and each example produces an example trial
+- **AND** example trials start in a locked state until the matching word trial is answered correctly
 
 ### Requirement: Lesson state is denormalized
 The system SHALL store lesson state without a separate `:words` collection.
@@ -75,3 +76,16 @@ The system SHALL record review data for word-trial answers so retention-based pr
 - **WHEN** a user submits an answer for an example trial
 - **THEN** the system does not create a vocabulary review document for that answer
 
+### Requirement: Lesson trial unlocking controls example visibility
+The system SHALL keep example trials hidden from lesson selection until the matching word trial has been answered correctly.
+
+#### Scenario: Lesson start selectable pool
+- **WHEN** a lesson starts
+- **THEN** the selectable trial pool contains only unlocked word trials
+- **AND** locked example trials still count as lesson trials for progress tracking
+
+#### Scenario: Successful word answer unlocks examples
+- **WHEN** a user answers a word trial correctly
+- **THEN** example trials with the same `word-id` become unlocked
+- **AND** those unlocked example trials join the normal selectable pool
+- **AND** the next selected trial is still chosen by the lesson trial-selector rather than forced to that example

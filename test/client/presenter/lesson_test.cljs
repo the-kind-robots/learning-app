@@ -17,16 +17,23 @@
 
 (deftest footer-props-includes-user-answer-for-example-trial
   (testing "wrong example answer includes both user and correct sentences"
-    (let [state (domain/initial-state
-                 []
-                 [{:_id         "example-1"
-                   :word-id     "word-1"
-                   :word        "der Hund"
-                   :value       "Der Hund schlaeft."
-                   :translation "Пёс спит"}]
-                 :first
-                 "2024-08-20T10:00:00.000Z")
-          state (domain/check-answer state "Mein Hund schlaeft")
+    (let [state {:trials            [{:type    "example"
+                                      :word-id "word-1"
+                                      :prompt  "Пёс спит"
+                                      :answer  "Der Hund schlaeft."
+                                      :locked? false}]
+                 :remaining-trials  [{:type    "example"
+                                      :word-id "word-1"
+                                      :prompt  "Пёс спит"
+                                      :answer  "Der Hund schlaeft."
+                                      :locked? false}]
+                 :current-trial     {:type    "example"
+                                     :word-id "word-1"
+                                     :prompt  "Пёс спит"
+                                     :answer  "Der Hund schlaeft."
+                                     :locked? false}
+                 :last-result       {:correct? false
+                                     :answer   "Mein Hund schlaeft"}}
           props (sut/footer-props state)]
       (is (= :error (:variant props)))
       (is (= "Mein Hund schlaeft" (:user-answer props)))

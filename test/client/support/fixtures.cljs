@@ -70,11 +70,13 @@
   [{:type    "word"
     :word-id "word-1"
     :prompt  "пёс"
-    :answer  "der Hund"}
+    :answer  "der Hund"
+    :locked? false}
    {:type    "word"
     :word-id "word-2"
     :prompt  "кошка"
-    :answer  "die Katze"}])
+    :answer  "die Katze"
+    :locked? false}])
 
 
 (def expected-example-trials
@@ -83,7 +85,8 @@
     :word-id "word-1"
     :prompt  "Пёс спит"
     :answer  "Der Hund schlaeft."
-    :gloss-mismatch nil}])
+    :gloss-mismatch nil
+    :locked? true}])
 
 
 (def all-expected-trials
