@@ -1,28 +1,28 @@
-html:has(.lesson) {
-  overflow: hidden;
-}
-
-body:has(.lesson) {
-  height: 100%;
-  overflow: hidden;
-}
-
-body:has(.lesson) #app {
-  height: 100%;
-}
+/*
+ * Lesson layout: full-viewport flex column.
+ *
+ * Geometry:
+ *   - position:fixed + inset:0 keeps the lesson detached from document flow,
+ *     so body height and document scrolling cannot interfere.
+ *   - Layout viewport shrinks when the keyboard opens because the page sets
+ *     `interactive-widget=resizes-content`. Fixed positioning with inset:0
+ *     follows that shrink, redistributing space via flex.
+ *
+ * Stability invariant:
+ *   - .lesson__body uses flex:1 and contains the challenge top-aligned. When
+ *     the footer changes height (input <-> success/error), the body shrinks
+ *     from its bottom edge, leaving the challenge top position unchanged.
+ *
+ * `overflow:hidden` is the only enforced overflow rule and is required by the
+ * "nothing scrolls on the lesson page" constraint.
+ */
 
 .lesson {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  height: 100svh;
-  left: 0;
-  min-height: 100svh;
+  inset: 0;
   overflow: hidden;
-  padding-top: 56px;
-  position: absolute;
-  top: 0;
-  width: 100%;
+  position: fixed;
 }
 
 .lesson__header {
@@ -31,8 +31,8 @@ body:has(.lesson) #app {
   gap: 12px;
   margin: 0 auto;
   max-width: 600px;
-  padding: 16px;
-  padding-top: 0px;
+  /* top: clears the fixed app-shell logo (top:16px + height:28px = 44px). */
+  padding: 56px 16px 0;
   width: 100%;
 }
 
@@ -49,7 +49,13 @@ body:has(.lesson) #app {
   width: 44px;
 }
 
-/* Structural headings/labels are present for accessibility, hidden visually. */
+@media (hover: hover) {
+  .lesson__cancel:hover {
+    filter: var(--web-ui_button-filter-hover, brightness(1.1));
+  }
+}
+
+/* Structural headings/labels stay in the DOM for accessibility. */
 .lesson__title,
 .lesson__input-label {
   border: 0;
@@ -64,10 +70,10 @@ body:has(.lesson) #app {
   width: 1px;
 }
 
-@media (hover: hover) {
-  .lesson__cancel:hover {
-    filter: var(--web-ui_button-filter-hover, brightness(1.1));
-  }
+.lesson__progress-shell {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .lesson__progress {
@@ -79,12 +85,6 @@ body:has(.lesson) #app {
   min-width: 0;
   position: relative;
   width: 100%;
-}
-
-.lesson__progress-shell {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
 }
 
 .lesson__progress-value {
@@ -113,7 +113,7 @@ body:has(.lesson) #app {
 
 .lesson__body {
   flex: 1 1 auto;
-  font-size: 19px;
+  /* min-height:0 lets the body shrink below its content size in a flex column. */
   min-height: 0;
   overflow: hidden;
   text-align: center;
@@ -121,23 +121,22 @@ body:has(.lesson) #app {
 }
 
 .lesson__challenge {
-  --challenge-top-rest: 160px;
-  --challenge-top-min:  96px; /* progress-bar bottom + ~8px gap */
-  --challenge-lift:     min(0px,
-                            max(calc(var(--challenge-top-min) - var(--challenge-top-rest)),
-                                calc(0px - env(keyboard-inset-height, 0px))));
   align-items: center;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  left: 0;
-  padding: 0 24px;
-  position: absolute;
-  right: 0;
-  top: var(--challenge-top-rest);
-  transform: translateY(var(--challenge-lift));
-  transition: transform 220ms ease;
-  will-change: transform;
+  margin-inline: auto;
+  max-width: 600px;
+  /*
+   * padding-top is a pure function of dvh: it anchors the prompt near 30% of
+   * the viewport height (minus the header's ~100px so the 30% is measured
+   * from the viewport top), and collapses to a minimum 16px on short
+   * viewports (keyboard open with `interactive-widget=resizes-content`).
+   * No CSS transition here — the value tracks whatever timing the browser
+   * uses to animate dvh during the keyboard show/hide, so the prompt follows
+   * the viewport shrink naturally, in sync with the footer.
+   */
+  padding: max(16px, calc(30dvh - 100px)) 24px 0;
+  width: 100%;
 }
 
 .lesson__prompt {
@@ -162,19 +161,11 @@ body:has(.lesson) #app {
 }
 
 .lesson__footer {
-  --padding-x: calc(50% - 500px);
-  --page-footer-keyboard-offset: env(keyboard-inset-height, 0px);
-  --page-footer-padding-x-wide: var(--padding-x);
-  bottom: 0;
-  left: 0;
-  position: fixed;
-  right: 0;
-  z-index: 10;
+  width: 100%;
 }
 
 .lesson__footer--input {
   align-items: center;
-  --page-footer-padding-bottom: 16px;
 }
 
 .lesson__input {
@@ -186,26 +177,21 @@ body:has(.lesson) #app {
   font-family: Nunito, sans-serif;
   font-size: 1.25rem;
   line-height: 1.5rem;
+  margin-inline: auto;
   max-width: 600px;
   min-height: 87px;
   padding: 0.625rem 0.875rem;
   resize: none;
-  width: 100% !important;
+  width: 100%;
 }
 
 .lesson__input:focus-visible {
   outline: none;
 }
 
-.lesson__footer--input .lesson__input {
-  max-width: 600px;
-  width: min(600px, 100%) !important;
-}
-
 .lesson__answer {
   display: grid;
-  grid-auto-flow: row;
-  grid-gap: 5px;
+  gap: 5px;
   line-height: 22px;
   margin-inline: auto;
   max-width: 600px;
@@ -218,7 +204,7 @@ body:has(.lesson) #app {
 
 .lesson__answer-body {
   font-size: 15px;
-  font-weight: 500 !important;
+  font-weight: 500;
 }
 
 .lesson__footer--success {
@@ -249,12 +235,10 @@ body:has(.lesson) #app {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  grid-row: 1 / -1;
   height: 100%;
   justify-content: center;
   padding: 40px 24px;
   text-align: center;
-  width: 100%;
 }
 
 .lesson__empty-state {
@@ -290,31 +274,24 @@ body:has(.lesson) #app {
 }
 
 @media (min-width: 700px) {
-  .lesson {
-    gap: 0;
-    min-height: 690px;
-    padding: 0;
-  }
-
   .lesson__header {
-    gap: 16px;
-    padding: 50px 16px 0;
+    padding-top: 64px;
   }
 
   .lesson__challenge {
-    --challenge-top-rest: 200px;
-    --challenge-top-min:  120px;
-    gap: 24px;
-    margin-inline: auto;
-    max-width: 600px;
+    gap: 12px;
   }
 
   .lesson__input {
     min-height: 170px;
-    width: 600px !important;
   }
 
   .lesson__footer {
+    /*
+     * Row layout on desktop (success/error). align-items: center vertically
+     * centers the form beside a tall answer block so the button does not
+     * float to the top of the flex item.
+     */
     align-items: center;
     flex-direction: row;
     justify-content: space-around;
@@ -327,30 +304,5 @@ body:has(.lesson) #app {
 
   .lesson__footer--error {
     justify-content: space-between;
-  }
-}
-
-@media (max-height: 700px) {
-  .lesson {
-    gap: 12px;
-  }
-
-  .lesson__header {
-    padding: 16px 16px 8px;
-  }
-
-  .lesson__footer {
-    --page-footer-gap: 10px;
-    --page-footer-padding-top: 12px;
-    --page-footer-padding-x: 16px;
-    --page-footer-padding-bottom: 16px;
-  }
-
-  .lesson__body {
-    padding: 0 16px;
-  }
-
-  .lesson__footer--input .lesson__input {
-    min-height: 56px;
   }
 }
