@@ -5,6 +5,10 @@ on:
     paths:
       - 'src/**'
       - 'resources/**'
+      - 'openspec/**'
+      - '.codex/**'
+      - 'codex/**'
+      - '.gitignore'
       - 'shadow-cljs.edn'
       - 'deps.edn'
       - 'package.json'
@@ -15,6 +19,10 @@ on:
     paths:
       - 'src/**'
       - 'resources/**'
+      - 'openspec/**'
+      - '.codex/**'
+      - 'codex/**'
+      - '.gitignore'
       - 'shadow-cljs.edn'
       - 'deps.edn'
       - 'package.json'
