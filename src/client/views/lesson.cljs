@@ -127,7 +127,6 @@
 (defn empty-state
   []
   [:div.lesson
-   {:data-vk-overlay true}
    [:h1.lesson__title
     "Урок"]
    [:main.lesson__body
@@ -148,7 +147,6 @@
   "Render the lesson page. Takes lesson state, uses presenter for props."
   [state]
   [:div.lesson
-   {:data-vk-overlay true}
    [:h1.lesson__title
     "Урок"]
    [:header.lesson__header
