@@ -26,6 +26,7 @@
           (is (= "Bearer groq-test-key" (get headers "Authorization")))
           (is (= "application/json" (get headers "Content-Type")))
           (is (= "openai/gpt-oss-20b" (:model payload)))
+          (is (= 300 (:max_tokens payload)))
           (is (= "json_schema" (get-in payload [:response_format :type])))
           (is (= ["value" "translation" "glossMismatch" "structure"]
                  (get-in payload [:response_format :json_schema :schema :required])))
@@ -35,6 +36,8 @@
                  (get-in payload [:response_format :json_schema :schema :properties :structure :items :type])))
           (is (= ["usedForm" "dictionaryForm" "translation"]
                  (get-in payload [:response_format :json_schema :schema :properties :structure :items :required])))
+          (is (nil?
+               (get-in payload [:response_format :json_schema :schema :properties :structure :items :properties :wordIndex])))
           (is (= "sentence_example" (get-in payload [:response_format :json_schema :name])))
           (is (string? (get-in payload [:messages 0 :content])))
           (is (re-find #"learner-facing German example sentences"
@@ -42,6 +45,12 @@
           (is (re-find #"part of speech"
                        (get-in payload [:messages 0 :content])))
           (is (re-find #"Ich stehe jeden Morgen um sieben Uhr auf"
+                       (get-in payload [:messages 0 :content])))
+          (is (re-find #"Er passt auf die Kinder auf"
+                       (get-in payload [:messages 0 :content])))
+          (is (re-find #"Separable verbs emit the prefix exactly once"
+                       (get-in payload [:messages 0 :content])))
+          (is (re-find #"Never emit two `structure` items with the same `usedForm` and `dictionaryForm` pair"
                        (get-in payload [:messages 0 :content])))
           (is (re-find #"sich vorstellen"
                        (get-in payload [:messages 0 :content])))
@@ -52,6 +61,10 @@
           (is (re-find #"die Leiter"
                        (get-in payload [:messages 0 :content])))
           (is (re-find #"Each item in `structure` must be a JSON object"
+                       (get-in payload [:messages 0 :content])))
+          (is (re-find #"Order `structure` items strictly left to right"
+                       (get-in payload [:messages 0 :content])))
+          (is (re-find #"The backend assigns `wordIndex`; do not return `wordIndex`"
                        (get-in payload [:messages 0 :content])))
           (is (re-find #"Never use arrays like"
                        (get-in payload [:messages 0 :content])))
@@ -73,10 +86,28 @@
           (is (= "https://example.test/openai/v1/chat/completions" url))
           (is (= "Bearer openai-override-key" (get headers "Authorization")))
           (is (= "openai/gpt-oss-120b" (:model payload)))
+          (is (= 300 (:max_tokens payload)))
           (is (= ["value" "translation" "glossMismatch" "structure"]
                  (get-in payload [:response_format :json_schema :schema :required])))
+          (is (= ["usedForm" "dictionaryForm" "translation"]
+                 (get-in payload [:response_format :json_schema :schema :properties :structure :items :required])))
           (is (re-find #"собака"
                        (get-in payload [:messages 1 :content]))))))))
+
+
+(deftest example-api-request-allows-max-tokens-env-override
+  (testing "max tokens can be overridden for example generation requests"
+    (let [captured (atom nil)]
+      (with-redefs [client/request (fn [request]
+                                     (reset! captured request)
+                                     ::request)
+                    provider/config (constantly {:api-url "https://example.test/openai/v1/chat/completions"
+                                                 :api-key "openai-override-key"
+                                                 :model "openai/gpt-oss-120b"})]
+        (with-redefs [sut/example-max-tokens (constantly 180)]
+          (is (= ::request (sut/example-api-request "Hund" "собака" nil nil)))
+          (let [payload (cheshire/parse-string (:body @captured) true)]
+            (is (= 180 (:max_tokens payload)))))))))
 
 
 (deftest example-api-request-includes-retry-feedback
@@ -101,12 +132,13 @@
                 "лестница"
                 nil
                 {:example rejected-example
-                 :issue   :target-dictionary-form-gloss-mismatch})))
+                 :issue   :target-gloss-mismatch})))
         (let [payload      (cheshire/parse-string (:body @captured) true)
               user-message (get-in payload [:messages 1 :content])]
           (is (re-find #"previousAttempt" user-message))
-          (is (re-find #"previousIssues" user-message))
-          (is (re-find #"target-dictionary-form-gloss-mismatch" user-message))
+          (is (re-find #"previousIssue" user-message))
+          (is (re-find #"target-gloss-mismatch" user-message))
+          (is (re-find #"structure `translation` contradicts" user-message))
           (is (re-find #"Der Leiter steht neben der Wand" user-message)))))))
 
 
@@ -139,11 +171,8 @@
                    [{:usedForm "aufstehen"
                      :dictionaryForm "aufstehen"
                      :translation "to stand up"}]}]
-      (is (= :invalid-generated-example
-             (#'sut/example-issue
-              "aufstehen"
-              "вставать"
-              example))))))
+      (is (= :malformed-example
+             (:issue (#'sut/example-issue "aufstehen" "вставать" example)))))))
 
 
 (deftest deterministic-example-issues-reject-target-present-only-in-structure
@@ -165,11 +194,73 @@
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (= :structure-value-mismatch
-               (#'sut/example-issue
-                "Leiter"
-                "лестница"
-                example)))))))
+        (is (= :structure-mismatch
+               (:issue (#'sut/example-issue "Leiter" "лестница" example))))))))
+
+
+(deftest deterministic-example-issues-reject-used-form-at-wrong-word-index
+  (testing "structure items must stay in left-to-right sentence order"
+    (let [example {:value "Pass auf deine Seele auf."
+                   :translation "Береги свою душу."
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "auf"
+                     :dictionaryForm "aufpassen"
+                     :translation "беречь"}
+                    {:usedForm "Pass"
+                     :dictionaryForm "aufpassen"
+                     :translation "беречь"}
+                    {:usedForm "Seele"
+                     :dictionaryForm "die Seele"
+                     :translation "душа"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (= :structure-mismatch
+               (:issue (#'sut/example-issue "aufpassen" "беречь" example))))))))
+
+
+(deftest deterministic-example-issues-reject-duplicate-structure-items
+  (testing "duplicate {usedForm, dictionaryForm} pairs reject the structure (e.g. a doubled separable-verb prefix mistaken for a preposition)"
+    (let [example {:value "Pass auf deine Sachen auf!"
+                   :translation "Береги свои вещи!"
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Pass"
+                     :dictionaryForm "aufpassen"
+                     :translation "беречь"}
+                    {:usedForm "auf"
+                     :dictionaryForm "aufpassen"
+                     :translation "беречь"}
+                    {:usedForm "Sachen"
+                     :dictionaryForm "die Sache"
+                     :translation "вещи"}
+                    {:usedForm "auf"
+                     :dictionaryForm "aufpassen"
+                     :translation "беречь"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (= :structure-mismatch
+               (:issue (#'sut/example-issue "aufpassen" "беречь" example))))))))
+
+
+(deftest add-word-indexes-handles-last-separable-prefix
+  (testing "backend assigns the final token index for a detached prefix near punctuation"
+    (let [example {:value "Pass gut auf das kleine Kind auf!"
+                   :translation "Присмотри внимательно за маленьким ребёнком!"
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Pass"
+                     :dictionaryForm "aufpassen"
+                     :translation "присматривать"}
+                    {:usedForm "gut"
+                     :dictionaryForm "gut"
+                     :translation "хорошо"}
+                    {:usedForm "Kind"
+                     :dictionaryForm "das Kind"
+                     :translation "ребёнок"}
+                    {:usedForm "auf"
+                     :dictionaryForm "aufpassen"
+                     :translation "присматривать"}]}]
+      (is (= [0 1 5 6]
+             (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))))))
 
 
 (deftest valid-generated-example-rejects-mixed-language-translation
@@ -190,8 +281,8 @@
                     {:usedForm "Park"
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
-      (is (= :invalid-generated-example
-             (#'sut/example-issue "Hund" "собака" example))))))
+      (is (= :malformed-example
+             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
 
 
 (deftest valid-generated-example-rejects-small-latin-tail-in-translation
@@ -212,8 +303,8 @@
                     {:usedForm "Park"
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
-      (is (= :invalid-generated-example
-             (#'sut/example-issue "Hund" "собака" example))))))
+      (is (= :malformed-example
+             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
 
 
 (deftest valid-generated-example-rejects-latin-in-structure-translation
@@ -234,8 +325,8 @@
                     {:usedForm "Park"
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
-      (is (= :invalid-generated-example
-             (#'sut/example-issue "Hund" "собака" example))))))
+      (is (= :malformed-example
+             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
 
 
 (deftest valid-generated-example-rejects-cyrillic-in-german-sentence
@@ -250,8 +341,8 @@
                     {:usedForm "Park"
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
-      (is (= :invalid-generated-example
-             (#'sut/example-issue "Hund" "собака" example))))))
+      (is (= :malformed-example
+             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
 
 
 (deftest valid-generated-example-rejects-multiple-sentences
@@ -269,8 +360,8 @@
                     {:usedForm "schnell"
                      :dictionaryForm "schnell"
                      :translation "быстрый"}]}]
-      (is (= :invalid-generated-example
-             (#'sut/example-issue "Hund" "собака" example))))))
+      (is (= :malformed-example
+             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
 
 
 (deftest valid-generated-example-rejects-colon-prefixed-german-meta
@@ -288,8 +379,8 @@
                     {:usedForm "Park"
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
-      (is (= :invalid-generated-example
-             (#'sut/example-issue "Hund" "собака" example))))))
+      (is (= :malformed-example
+             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
 
 
 (deftest valid-generated-example-rejects-colon-prefixed-russian-meta
@@ -307,8 +398,8 @@
                     {:usedForm "Park"
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
-      (is (= :invalid-generated-example
-             (#'sut/example-issue "Hund" "собака" example))))))
+      (is (= :malformed-example
+             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
 
 
 (deftest deterministic-example-issues-allow-three-word-sentence
@@ -410,7 +501,7 @@
                                                    (swap! responses subvec 1)
                                                    next-example))
                     dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (= good-example
+        (is (= (#'sut/add-word-indexes good-example)
                (sut/generate-one! {:word "Leiter" :translation "лестница"} 2)))
         (is (= [nil
                 {:example bad-example
@@ -418,51 +509,38 @@
                @retry-contexts))))))
 
 
-(deftest generate-one-retries-when-dictionary-gloss-disagrees
-  (testing "backend dictionary validation rejects a wrong noun article for the intended gloss"
-    (let [bad-example {:value "Der Leiter steht neben der Wand."
-                       :translation "Лестница стоит рядом со стеной."
-                       :glossMismatch false
-                       :structure
-                       [{:usedForm "Leiter"
-                         :dictionaryForm "der Leiter"
-                         :translation "лестница"}
-                        {:usedForm "steht"
-                         :dictionaryForm "stehen"
-                         :translation "стоять"}
-                        {:usedForm "Wand"
-                          :dictionaryForm "die Wand"
-                          :translation "стена"}]}
-          good-example {:value "Die Leiter steht neben der Wand."
-                        :translation "Лестница стоит рядом со стеной."
-                        :glossMismatch false
-                        :structure
-                        [{:usedForm "Leiter"
-                          :dictionaryForm "die Leiter"
-                          :translation "лестница"}
-                         {:usedForm "steht"
-                          :dictionaryForm "stehen"
-                          :translation "стоять"}
-                         {:usedForm "Wand"
-                          :dictionaryForm "die Wand"
-                          :translation "стена"}]}
-          responses (atom [bad-example good-example])]
-      (with-redefs [sut/generate-attempt!      (fn [_word _translation _word-meta _retry-context]
-                                                 (let [next-example (first @responses)]
-                                                   (swap! responses subvec 1)
-                                                   next-example))
+(deftest generate-one-keeps-example-when-dictionary-gloss-disagrees
+  (testing "dictionary gloss mismatch keeps the example and marks glossMismatch for the client"
+    (let [example {:value "Pass auf deine Sachen auf!"
+                   :translation "Береги свои вещи!"
+                   :glossMismatch false
+                   :structure
+                   [{:usedForm "Pass"
+                     :dictionaryForm "aufpassen"
+                     :translation "беречь"}
+                    {:usedForm "Sachen"
+                     :dictionaryForm "die Sache"
+                     :translation "вещи"}
+                    {:usedForm "auf"
+                     :dictionaryForm "aufpassen"
+                     :translation "беречь"}]}
+          calls (atom 0)]
+      (with-redefs [sut/generate-attempt! (fn [_word _translation _word-meta _retry-context]
+                                            (swap! calls inc)
+                                            example)
                     dictionary/lookup-dictionary-entries
                     (fn [dictionary-form]
                       (case dictionary-form
-                        "der Leiter" [{:_id "lemma:der leiter:noun"
-                                       :value "der Leiter"
-                                       :translation [{:lang "ru" :value "руководитель"}]}]
-                        "die Leiter" [{:_id "lemma:die leiter:noun"
-                                       :value "die Leiter"
-                                       :translation [{:lang "ru" :value "лестница"}]}]
+                        "aufpassen" [{:_id "lemma:aufpassen:verb"
+                                      :value "aufpassen"
+                                      :translation [{:lang "ru" :value "присматривать"}]}]
+                        "die Sache" [{:_id "lemma:die sache:noun"
+                                      :value "die Sache"
+                                      :translation [{:lang "ru" :value "вещь"}]}]
                         []))]
-        (is (= good-example
-               (sut/generate-one! {:word "Leiter" :translation "лестница"} 2)))))))
+        (is (= (assoc (#'sut/add-word-indexes example) :glossMismatch true)
+               (sut/generate-one! {:word "aufpassen" :translation "беречь"} 3)))
+        (is (= 1 @calls))))))
 
 
 (deftest dictionary-gloss-validation-allows-overlapping-translation-variants
@@ -492,7 +570,7 @@
       (with-redefs [sut/generate-attempt! (fn [_word _translation _word-meta _retry-context]
                                             example)
                     dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (= example
+        (is (= (#'sut/add-word-indexes example)
                (sut/generate-one! {:word "Leiter" :translation "лестница"} 1)))))))
 
 
