@@ -253,6 +253,38 @@
            (is (false? (:locked? trial)))))))))
 
 
+(deftest add-word-from-structure-creates-vocab-and-fetch-task
+  (async-testing "`add-word-from-structure!` adds vocab and schedules fetch task"
+    (with-test-dbs
+     (fn [dbs]
+       (let [fetch-tasks (atom [])]
+         (p/with-redefs [examples/create-fetch-task! (fn [word-id]
+                                                       (swap! fetch-tasks conj word-id)
+                                                       (p/resolved nil))]
+           (p/let [result (sut/add-word-from-structure! dbs "die Seele" "душа")
+                   words  (db-queries/fetch-by-type (:user/db dbs) "vocab")]
+             (is (true? (:created? result)))
+             (is (= ["die Seele"] (mapv :value words)))
+             (is (= [(:word-id result)] @fetch-tasks)))))))))
+
+
+(deftest add-word-from-structure-skips-fetch-task-for-duplicate
+  (async-testing "`add-word-from-structure!` skips fetch task for duplicate"
+    (with-test-dbs
+     (fn [dbs]
+       (let [fetch-tasks (atom [])]
+         (p/do
+           (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "die Seele" :translation "душа"}])
+           (p/with-redefs [examples/create-fetch-task! (fn [word-id]
+                                                         (swap! fetch-tasks conj word-id)
+                                                         (p/resolved nil))]
+             (p/let [result (sut/add-word-from-structure! dbs "die Seele" "душа")
+                     words  (db-queries/fetch-by-type (:user/db dbs) "vocab")]
+               (is (false? (:created? result)))
+               (is (= 1 (count words)))
+               (is (empty? @fetch-tasks))))))))))
+
+
 (deftest check-answer-returns-error-when-no-lesson
   (async-testing "`check-answer!` errors when no lesson"
     (with-test-dbs

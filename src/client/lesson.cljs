@@ -120,3 +120,20 @@
             (log/error :advance-lesson/save-failed {:error (ex-message err)})
             {:error :lesson-save-failed}))))))
 
+
+(defn token-info
+  "Return token info for lesson answer annotation card."
+  [dbs dictionary-form translation]
+  (p/let [existing (vocabulary/find-duplicate-by-value dbs dictionary-form)]
+    {:dictionary-form dictionary-form
+     :translation     translation
+     :known?          (some? existing)}))
+
+
+(defn add-word-from-structure!
+  "Add dictionary form from lesson example structure into vocabulary."
+  [dbs dictionary-form translation]
+  (p/let [result (vocabulary/add! dbs dictionary-form translation)]
+    (when (:created? result)
+      (examples/create-fetch-task! (:word-id result)))
+    result))

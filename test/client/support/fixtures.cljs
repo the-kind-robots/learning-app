@@ -61,7 +61,14 @@
     :word        "der Hund"
     :value       "Der Hund schlaeft."
     :translation "Пёс спит"
-    :structure   []
+    :structure   [{:usedForm "Hund"
+                   :dictionaryForm "der Hund"
+                   :translation "пёс"
+                   :wordIndex 1}
+                  {:usedForm "schlaeft"
+                   :dictionaryForm "schlafen"
+                   :translation "спать"
+                   :wordIndex 2}]
     :created-at  "2024-08-20T10:00:00.000Z"}])
 
 
@@ -85,6 +92,14 @@
     :word-id "word-1"
     :prompt  "Пёс спит"
     :answer  "Der Hund schlaeft."
+    :structure [{:usedForm "Hund"
+                 :dictionaryForm "der Hund"
+                 :translation "пёс"
+                 :wordIndex 1}
+                {:usedForm "schlaeft"
+                 :dictionaryForm "schlafen"
+                 :translation "спать"
+                 :wordIndex 2}]
     :gloss-mismatch nil
     :locked? true}])
 

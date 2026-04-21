@@ -1,0 +1,44 @@
+/*
+ * Generic popover shell. Singleton element mounted once in app-shell;
+ * callers render arbitrary content into #popover-content.
+ *
+ * Uses HTML popover API — browser handles light-dismiss (click outside, Esc)
+ * and top-layer rendering (escapes ancestor overflow:hidden).
+ * Positioning is JS-driven (resources/public/js/popover.js).
+ */
+
+.popover {
+  background: transparent;
+  border: 0;
+  inset: auto;
+  margin: 0;
+  max-width: min(280px, calc(100vw - 16px));
+  overflow: visible;
+  padding: 0;
+  position: fixed;
+  width: max-content;
+}
+
+.popover::backdrop {
+  background: transparent;
+}
+
+.popover__arrow {
+  background: rgb(var(--color-snow));
+  border-right: 1px solid rgb(var(--color-swan));
+  border-bottom: 1px solid rgb(var(--color-swan));
+  height: 10px;
+  pointer-events: none;
+  position: absolute;
+  width: 10px;
+}
+
+.popover[data-side="top"] .popover__arrow {
+  bottom: -6px;
+  transform: translateX(-5px) rotate(45deg);
+}
+
+.popover[data-side="bottom"] .popover__arrow {
+  top: -6px;
+  transform: translateX(-5px) rotate(225deg);
+}

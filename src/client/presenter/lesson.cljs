@@ -26,7 +26,10 @@
    Returns map with :variant (:success/:error) and display data."
   [state]
   (when-let [result (domain/last-result state)]
-    {:variant        (if (:correct? result) :success :error)
-     :correct-answer (domain/expected-answer state)
-     :user-answer    (:answer result)
-     :finished?      (domain/finished? state)}))
+    (let [trial (domain/current-trial state)]
+      {:variant                 (if (:correct? result) :success :error)
+       :correct-answer          (domain/expected-answer state)
+       :correct-answer-segments (when (domain/example-trial? trial)
+                                  (domain/answer-segments trial))
+       :user-answer             (:answer result)
+       :finished?               (domain/finished? state)})))
