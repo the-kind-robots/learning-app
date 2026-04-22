@@ -36,6 +36,12 @@ Use this skill when the user wants to update `openspec/specs/` before archiving.
 
 - This skill is mainly for cases where the user wants specs synced before archive.
 - If the user is ready to close the change, `openspec-archive-change` is usually the better path.
+- In the repo delivery flow, sync specs before PR creation/merge when the change remains active; otherwise archive before PR creation/merge.
+- Use OpenSpec CLI with telemetry disabled by default:
+
+```bash
+OPENSPEC_TELEMETRY=0 openspec ...
+```
 
 ## Guardrails
 
