@@ -136,6 +136,26 @@
     (is (= "der Hund" (sut/expected-answer state)))))
 
 
+(deftest answer-segments-builds-annotated-and-plain-words
+  (testing "example answer segments use wordIndex to annotate matching words"
+    (let [trial {:type      "example"
+                 :word-id   "word-1"
+                 :answer    "Der Hund schlaeft."
+                 :structure [{:usedForm "Hund"
+                              :dictionaryForm "der Hund"
+                              :translation "пёс"
+                              :wordIndex 1}
+                             {:usedForm "schlaeft"
+                              :dictionaryForm "schlafen"
+                              :translation "спать"
+                              :wordIndex 2}]}
+          segments (sut/answer-segments trial)]
+      (is (= [{:type :plain-word :text "Der" :word-index 0}
+              {:type :annotated-word :text "Hund" :used-form "Hund" :dictionary-form "der Hund" :translation "пёс" :word-index 1}
+              {:type :annotated-word :text "schlaeft." :used-form "schlaeft" :dictionary-form "schlafen" :translation "спать" :word-index 2}]
+             segments)))))
+
+
 ;; =============================================================================
 ;; normalized-answer
 ;; =============================================================================

@@ -16,6 +16,8 @@
 @import url("./blocks/word-list.css") layer(blocks);
 @import url("./blocks/word-item.css") layer(blocks);
 @import url("./blocks/modal.css") layer(blocks);
+@import url("./blocks/popover.css") layer(blocks);
+@import url("./blocks/token-card.css") layer(blocks);
 @import url("./blocks/word-edit-dialog.css") layer(blocks);
 @import url("./blocks/vocabulary.css") layer(blocks);
 @import url("./blocks/pwa-install.css") layer(blocks);

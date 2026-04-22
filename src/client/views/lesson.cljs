@@ -1,7 +1,8 @@
 (ns views.lesson
   "Lesson page views."
   (:require
-   [presenter.lesson :as presenter.lesson]))
+   [presenter.lesson :as presenter.lesson]
+   [utils :as utils]))
 
 
 (def result-action-keydown
@@ -9,6 +10,58 @@
 
 (def input-focus-after-settle
   "if(matchMedia('(pointer:fine)').matches){var input=this.querySelector('#lesson-answer'); if(input){input.focus();}}")
+
+
+(defn- answer-body
+  [{:keys [correct-answer correct-answer-segments]}]
+  (if (seq correct-answer-segments)
+    (into
+     [:p.lesson__answer-body {:lang "de"}]
+     (interpose " ")
+     (for [{:keys [type text dictionary-form translation word-index]} correct-answer-segments]
+       (if (= :annotated-word type)
+         [:button.lesson__answer-token
+          {:type                     "button"
+           :data-word-index          word-index
+           :data-dictionary-form     dictionary-form
+           :data-translation         translation
+           :aria-haspopup            "dialog"
+           :aria-expanded            "false"
+           :aria-controls            "popover"
+           :hx-get                   (utils/build-url "/lesson/token-info"
+                                                     {:dictionary-form dictionary-form
+                                                      :translation     translation})
+           :hx-target                "#popover-content"
+           :hx-swap                  "innerHTML"
+           :hx-on:htmx:after-request "if(event.detail.successful) openPopover(this)"}
+          text]
+         text)))
+    [:p.lesson__answer-body {:lang "de"} correct-answer]))
+
+
+(defn- token-add-form
+  [dictionary-form translation label]
+  [:form.token-card__form
+   {:hx-post   "/lesson/token-add"
+    :hx-target "#popover-content"
+    :hx-swap   "innerHTML"}
+   [:input {:type "hidden" :name "dictionary-form" :value dictionary-form}]
+   [:input {:type "hidden" :name "translation" :value translation}]
+   [:button.token-card__button
+    {:type "submit"}
+    label]])
+
+
+(defn token-card
+  [{:keys [dictionary-form translation state]}]
+  [:div.token-card
+   (when (= state :known-with-translation) {:data-dismiss "900"})
+   [:p.token-card__word {:lang "de"} dictionary-form]
+   [:p.token-card__translation {:lang "ru"} translation]
+   (case state
+     :known-with-translation    [:p.token-card__state "✓ В словаре"]
+     :known-missing-translation (token-add-form dictionary-form translation "+ ДОБАВИТЬ ПЕРЕВОД")
+     :unknown-word              (token-add-form dictionary-form translation "+ В СЛОВАРЬ"))])
 
 
 (defn progress
@@ -30,14 +83,12 @@
 (defn challenge
   "Renders a challenge - prompt text and instruction."
   [state & {:as attrs}]
-  (let [{:keys [prompt is-example? gloss-mismatch?]} (presenter.lesson/challenge-props state)]
+  (let [{:keys [prompt is-example?]} (presenter.lesson/challenge-props state)]
     [:div#lesson-challenge.lesson__challenge
      attrs
      [:h2.lesson__prompt
       {:lang "ru"}
       prompt]
-     (when gloss-mismatch?
-       [:p.lesson__gloss-warning "Перевод слова может быть неточным"])
      [:p.lesson__instruction
       (if is-example?
         "Переведите предложение на немецкий"
@@ -70,16 +121,16 @@
 
 
 (defn- success
-  [{:keys [correct-answer finished?]}]
+  [{:keys [finished?] :as props}]
   [:footer#lesson-footer
    {:tabindex "-1"
     :hx-on:htmx:afterSettle
     "var btn = this.querySelector('#lesson-next') || this.querySelector('#lesson-finish'); if(btn){btn.focus();}"
    }
-   [:div.lesson__footer.lesson__footer--success.page-footer
+    [:div.lesson__footer.lesson__footer--success.page-footer
     [:div.lesson__answer
      [:h3.lesson__answer-header "Правильно!"]
-     [:p.lesson__answer-body {:lang "de"} correct-answer]]
+     (answer-body props)]
     [:form
      (if finished?
        {:hx-delete "/lesson" :hx-target "#app" :hx-swap "innerHTML"}
@@ -94,16 +145,16 @@
 
 
 (defn- error
-  [{:keys [correct-answer user-answer]}]
+  [{:keys [user-answer] :as props}]
   [:footer#lesson-footer
    {:tabindex "-1"
     :hx-on:htmx:afterSettle "var btn = this.querySelector('#lesson-next'); if(btn){btn.focus();}"}
-   [:div.lesson__footer.lesson__footer--error.page-footer
+    [:div.lesson__footer.lesson__footer--error.page-footer
     [:div.lesson__answer
      [:h3.lesson__answer-header "Ваш ответ:"]
      [:p.lesson__answer-body {:lang "de"} (or user-answer "")]
      [:h3.lesson__answer-header "Правильный ответ:"]
-     [:p.lesson__answer-body {:lang "de"} correct-answer]]
+     (answer-body props)]
     [:form {:hx-post "/lesson/next" :hx-target "#lesson-footer" :hx-swap "outerHTML"}
      [:div.lesson__action.page-footer__action
       [:button.big-button
