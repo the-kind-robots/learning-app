@@ -275,7 +275,7 @@
               (p/let [_ (lesson/add-word-from-structure! dbs (:dictionary-form params) (:translation params))]
                 {:html/body (views.lesson/token-card {:dictionary-form (:dictionary-form params)
                                                       :translation     (:translation params)
-                                                      :known?          true})
+                                                      :state           :known-with-translation})
                  :status    200}))}]]])
 
 

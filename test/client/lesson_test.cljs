@@ -7,6 +7,7 @@
    [client.support.time :as time]
    [db :as db]
    [domain.lesson :as domain]
+   [examples]
    [lesson :as sut]
    [promesa.core :as p]
    [utils :as utils])
@@ -251,6 +252,59 @@
                              first)]
            (is (some? trial))
            (is (false? (:locked? trial)))))))))
+
+
+;; =============================================================================
+;; token-info
+;; =============================================================================
+
+
+(deftest token-info-returns-unknown-for-missing-word
+  (async-testing "`token-info` reports unknown word when dictionary form not in vocabulary"
+    (with-test-dbs
+     (fn [dbs]
+       (p/let [info (sut/token-info dbs "die Seele" "душа")]
+         (is (= :unknown-word (:state info)))
+         (is (= "die Seele" (:dictionary-form info)))
+         (is (= "душа" (:translation info))))))))
+
+
+(deftest token-info-returns-known-when-translation-in-set
+  (async-testing "`token-info` reports known-with-translation when the gloss is already on the word"
+    (with-test-dbs
+     (fn [dbs]
+       (p/do
+         (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "w" :value "die Seele" :translation "душа"}])
+         (p/let [info (sut/token-info dbs "die Seele" "душа")]
+           (is (= :known-with-translation (:state info)))))))))
+
+
+(deftest token-info-returns-missing-when-translation-not-in-set
+  (async-testing "`token-info` reports known-missing-translation when the gloss is new for an existing word"
+    (with-test-dbs
+     (fn [dbs]
+       (p/do
+         (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "w" :value "die Bank" :translation "банк"}])
+         (p/let [info (sut/token-info dbs "die Bank" "скамейка")]
+           (is (= :known-missing-translation (:state info)))))))))
+
+
+(deftest add-word-from-structure-appends-translation-to-existing-word
+  (async-testing "`add-word-from-structure!` merges a new translation into an existing word's set"
+    (with-test-dbs
+     (fn [dbs]
+       (p/do
+         (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "w" :value "die Bank" :translation "банк"}])
+         (let [fetch-tasks (atom [])]
+           (p/with-redefs [examples/create-fetch-task! (fn [word-id]
+                                                          (swap! fetch-tasks conj word-id)
+                                                          (p/resolved nil))]
+             (p/let [result (sut/add-word-from-structure! dbs "die Bank" "скамейка")
+                     word   (db/get (:user/db dbs) "w")]
+               (is (false? (:created? result)))
+               (is (empty? @fetch-tasks))
+               (is (= ["банк" "скамейка"]
+                      (mapv :value (:translation word))))))))))))
 
 
 (deftest add-word-from-structure-creates-vocab-and-fetch-task

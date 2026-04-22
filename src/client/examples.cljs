@@ -13,13 +13,14 @@
   "Invalid example response from backend")
 
 
-(defn- primary-translation
+(defn- russian-translations
+  "Collect user-confirmed Russian translations as a vector of strings."
   [word-doc]
-  (or (->> (:translation word-doc)
-           (filter #(= "ru" (:lang %)))
-           first
-           :value)
-      (some-> (:translation word-doc) first :value)))
+  (->> (:translation word-doc)
+       (filter #(= "ru" (:lang %)))
+       (map :value)
+       (filter utils/non-blank)
+       vec))
 
 
 (defn- retry-after-ms
@@ -35,14 +36,17 @@
 
 (defn fetch-one
   "Fetches an example sentence for the given German word from the backend.
-   Returns a promise that resolves to the example map.
+   `translations` is a vector of Russian glosses the user has confirmed; all
+   are sent as repeated `translation` query params so the backend prompt can
+   weigh every sense. Returns a promise resolving to the example map.
    Rejects on network or server errors."
   ([word]
-   (fetch-one word nil))
-  ([word translation]
-   (let [url (str "/api/examples?word=" (js/encodeURIComponent word)
-                  (when (utils/non-blank translation)
-                    (str "&translation=" (js/encodeURIComponent translation))))]
+   (fetch-one word []))
+  ([word translations]
+   (let [url (->> translations
+                  (filter utils/non-blank)
+                  (map #(str "&translation=" (js/encodeURIComponent %)))
+                  (reduce str (str "/api/examples?word=" (js/encodeURIComponent word))))]
      (p/let [response (js/fetch url)]
        (if (.-ok response)
          ;; Successful HTTP still needs validation: the body may be invalid JSON
@@ -142,7 +146,7 @@
 
         (p/catch
           (p/let [example (fetch-one (:value word-doc)
-                                     (primary-translation word-doc))]
+                                     (russian-translations word-doc))]
             (save-example! dbs word-id (:value word-doc) example)
             true)
 

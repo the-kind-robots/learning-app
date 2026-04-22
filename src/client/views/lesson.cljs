@@ -39,23 +39,29 @@
     [:p.lesson__answer-body {:lang "de"} correct-answer]))
 
 
+(defn- token-add-form
+  [dictionary-form translation label]
+  [:form.token-card__form
+   {:hx-post   "/lesson/token-add"
+    :hx-target "#popover-content"
+    :hx-swap   "innerHTML"}
+   [:input {:type "hidden" :name "dictionary-form" :value dictionary-form}]
+   [:input {:type "hidden" :name "translation" :value translation}]
+   [:button.token-card__button
+    {:type "submit"}
+    label]])
+
+
 (defn token-card
-  [{:keys [dictionary-form translation known?]}]
+  [{:keys [dictionary-form translation state]}]
   [:div.token-card
-   (when known? {:data-dismiss "900"})
+   (when (= state :known-with-translation) {:data-dismiss "900"})
    [:p.token-card__word {:lang "de"} dictionary-form]
    [:p.token-card__translation {:lang "ru"} translation]
-   (if known?
-     [:p.token-card__state "✓ В словаре"]
-     [:form.token-card__form
-      {:hx-post   "/lesson/token-add"
-       :hx-target "#popover-content"
-       :hx-swap   "innerHTML"}
-      [:input {:type "hidden" :name "dictionary-form" :value dictionary-form}]
-      [:input {:type "hidden" :name "translation" :value translation}]
-      [:button.token-card__button
-       {:type "submit"}
-       "+ В МОЙ СЛОВАРЬ"]])])
+   (case state
+     :known-with-translation    [:p.token-card__state "✓ В словаре"]
+     :known-missing-translation (token-add-form dictionary-form translation "+ ДОБАВИТЬ ПЕРЕВОД")
+     :unknown-word              (token-add-form dictionary-form translation "+ В МОЙ СЛОВАРЬ"))])
 
 
 (defn progress

@@ -199,6 +199,18 @@
    "Examples generation failed"))
 
 
+(defn- normalize-translations
+  "Accepts a string, a collection of strings, or nil. Returns a vector of
+   non-blank strings, preserving order and deduping."
+  [translation]
+  (let [raw (cond
+              (nil? translation)         []
+              (string? translation)      [translation]
+              (sequential? translation)  translation
+              :else                      [])]
+    (->> raw (remove str/blank?) distinct vec)))
+
+
 (def ^:private issue-messages
   {:malformed-example            "The generated example did not match the required JSON shape or text constraints. See `details` for the specific field errors."
    :structure-mismatch           "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, each `usedForm` must match the word at its position, and a `{usedForm, dictionaryForm}` pair must not repeat (each separable-verb prefix appears once, not twice)."
@@ -208,7 +220,7 @@
 
 
 (defn- example-issue
-  [word translation example]
+  [word translations example]
   (let [raw     (strip-word-indexes example)
         valid?  (m/validate valid-generated-example-schema raw)
         indexed (when valid? (add-word-indexes raw))]
@@ -230,7 +242,7 @@
       (not (dictionary/lemma-in-structure? word (:structure indexed)))
       {:issue :target-lemma-missing}
 
-      (not (dictionary/word-gloss-valid? word translation (:structure indexed)))
+      (not (dictionary/word-gloss-valid? word translations (:structure indexed)))
       {:issue :target-gloss-mismatch})))
 
 
@@ -246,16 +258,6 @@
   (= ::generation-failure (::type result)))
 
 
-(defn- gloss-mismatch-issue?
-  [issue]
-  (= :target-gloss-mismatch issue))
-
-
-(defn- mark-gloss-mismatch
-  [example]
-  (assoc example :glossMismatch true))
-
-
 (def system-prompt
   (str/join
    "\n"
@@ -263,7 +265,8 @@
     "Return only JSON that matches the supplied schema."
     "Input fields: word, translation, part of speech, cefrLevel, previousAttempt, previousIssue."
     "Missing cefrLevel => B2."
-    "- Match the intended Russian gloss sence."
+    "- `translation` is one or more Russian glosses the learner has confirmed; any of them is an acceptable sense for the sentence."
+    "- Pick one sense that fits naturally; the structure `translation` of the target lemma must match the gloss you chose."
     "- Produce one natural standard German sentence, 6-12 words, using the target lemma or a correct inflected form."
     "- German sentence only: no labels, notes, markdown, or meta commentary."
     "- `translation` must be one natural Russian sentence, not a calque."
@@ -309,7 +312,7 @@
 
 
 (defn- user-prompt
-  [word translation word-meta retry-context]
+  [word translations word-meta retry-context]
   (str/join
    "\n"
    ["Generate one example."
@@ -319,17 +322,17 @@
      (cond-> {:word         word
               :partOfSpeech (:partOfSpeech word-meta)
               :cefrLevel    (:cefrLevel word-meta "C2")
-              :translation  translation}
+              :translation  translations}
        retry-context (assoc :previousAttempt (:example retry-context)
                             :previousIssue   (previous-issue-payload retry-context))))]))
 
 
 (defn- request-body
-  [word translation word-meta retry-context]
+  [word translations word-meta retry-context]
   {:messages        [{:role    "system"
                       :content system-prompt}
                      {:role    "user"
-                      :content (user-prompt word translation word-meta retry-context)}]
+                      :content (user-prompt word translations word-meta retry-context)}]
    :temperature     0.1
    :max_tokens      (example-max-tokens)
    :response_format {:type        "json_schema"
@@ -340,9 +343,9 @@
 
 
 (defn example-api-request
-  [word translation word-meta retry-context]
+  [word translations word-meta retry-context]
   (provider/request
-   (request-body word translation word-meta retry-context)
+   (request-body word translations word-meta retry-context)
    (example-generation-timeout-ms)))
 
 
@@ -371,9 +374,9 @@
 
 
 (defn- generate-attempt!
-  [word translation word-meta retry-context]
+  [word translations word-meta retry-context]
   (try
-    (-> @(example-api-request word translation word-meta retry-context)
+    (-> @(example-api-request word translations word-meta retry-context)
         (parse-generated-example word))
     (catch Exception error
       (let [failure {::type      ::generation-failure
@@ -388,29 +391,31 @@
 
 (defn generate-one!
   "Generates a German example sentence for word/translation.
-  Returns a map with keyword keys:
-  * :value — German text;
-  * :translation — Russian translation;
-  * :glossMismatch — true if the supplied gloss appears mismatched to the word;
-  * :structure — list of maps with keyword keys :usedForm, :dictionaryForm, :translation.
-  Returns a generation-failure map on a hard error (e.g. 429), nil when all attempts are exhausted."
+  `translation` may be a single string or a collection of strings; all are
+  passed through to the prompt and validation so any can be the chosen sense.
+  Returns one of:
+  * success — map with keys :value, :translation, :glossMismatch,
+    :structure (a vector of maps with :usedForm, :dictionaryForm, :translation);
+  * generation-failure map on a hard error (e.g. 429);
+  * nil when all attempts are exhausted."
   ([input]
    (generate-one! input 3))
   ([{:keys [word translation]} max-attempts]
-   (let [word-meta (dictionary/lookup-word-meta word translation)]
+   (let [translations (normalize-translations translation)
+         word-meta    (dictionary/lookup-word-meta word translations)]
      (loop [attempt 1 retry-context nil]
-       (let [example  (generate-attempt! word translation word-meta retry-context)
+       (let [example  (generate-attempt! word translations word-meta retry-context)
              failure? (generation-failure? example)
-             result   (when-not failure? (example-issue word translation example))
+             result   (when-not failure? (example-issue word translations example))
              issue    (:issue result)]
          (cond
            (and failure? (not (:retryable? example)))
            example
 
-           (and (not failure?) (gloss-mismatch-issue? issue))
+           (and (not failure?) (= :target-gloss-mismatch issue))
            (-> example
                add-word-indexes
-               mark-gloss-mismatch)
+               (assoc :glossMismatch true))
 
            (and (not failure?) (nil? issue))
            (add-word-indexes example)
@@ -442,4 +447,4 @@
 
 
 (comment
-  (generate-one! {:word "das Entsetzen"}))
+  (generate-one! {:word "das Entsetzen" :translation ["ужас" "испуг"]}))

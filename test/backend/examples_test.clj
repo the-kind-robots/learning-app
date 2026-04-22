@@ -18,7 +18,7 @@
                     provider/config (constantly {:api-url "https://api.groq.com/openai/v1/chat/completions"
                                                           :api-key "groq-test-key"
                                                           :model "openai/gpt-oss-20b"})]
-        (is (= ::request (sut/example-api-request "Hund" nil nil nil)))
+        (is (= ::request (sut/example-api-request "Hund" [] nil nil)))
         (let [{:keys [url method headers body]} @captured
               payload (cheshire/parse-string body true)]
           (is (= "https://api.groq.com/openai/v1/chat/completions" url))
@@ -80,7 +80,7 @@
                     provider/config (constantly {:api-url "https://example.test/openai/v1/chat/completions"
                                                           :api-key "openai-override-key"
                                                           :model "openai/gpt-oss-120b"})]
-        (is (= ::request (sut/example-api-request "Hund" "собака" nil nil)))
+        (is (= ::request (sut/example-api-request "Hund" ["собака"] nil nil)))
         (let [{:keys [url headers body]} @captured
               payload (cheshire/parse-string body true)]
           (is (= "https://example.test/openai/v1/chat/completions" url))
@@ -105,9 +105,27 @@
                                                  :api-key "openai-override-key"
                                                  :model "openai/gpt-oss-120b"})]
         (with-redefs [sut/example-max-tokens (constantly 180)]
-          (is (= ::request (sut/example-api-request "Hund" "собака" nil nil)))
+          (is (= ::request (sut/example-api-request "Hund" ["собака"] nil nil)))
           (let [payload (cheshire/parse-string (:body @captured) true)]
             (is (= 180 (:max_tokens payload)))))))))
+
+
+(deftest example-api-request-serializes-translations-as-array
+  (testing "user prompt sends every confirmed translation so the model can pick the fitting sense"
+    (let [captured (atom nil)]
+      (with-redefs [client/request (fn [request]
+                                     (reset! captured request)
+                                     ::request)
+                    provider/config (constantly {:api-url "https://api.groq.com/openai/v1/chat/completions"
+                                                 :api-key "groq-test-key"
+                                                 :model "openai/gpt-oss-20b"})]
+        (is (= ::request (sut/example-api-request "Bank" ["банк" "скамейка"] nil nil)))
+        (let [payload      (cheshire/parse-string (:body @captured) true)
+              user-message (get-in payload [:messages 1 :content])
+              payload-line (re-find #"(?m)^\{.*\}$" user-message)
+              user-payload (cheshire/parse-string payload-line true)]
+          (is (= ["банк" "скамейка"] (:translation user-payload)))
+          (is (= "Bank" (:word user-payload))))))))
 
 
 (deftest example-api-request-includes-retry-feedback
@@ -129,7 +147,7 @@
         (is (= ::request
                (sut/example-api-request
                 "Leiter"
-                "лестница"
+                ["лестница"]
                 nil
                 {:example rejected-example
                  :issue   :target-gloss-mismatch})))
@@ -172,7 +190,7 @@
                      :dictionaryForm "aufstehen"
                      :translation "to stand up"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "aufstehen" "вставать" example)))))))
+             (:issue (#'sut/example-issue "aufstehen" ["вставать"] example)))))))
 
 
 (deftest deterministic-example-issues-reject-target-present-only-in-structure
@@ -195,7 +213,7 @@
                      :translation "парк"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= :structure-mismatch
-               (:issue (#'sut/example-issue "Leiter" "лестница" example))))))))
+               (:issue (#'sut/example-issue "Leiter" ["лестница"] example))))))))
 
 
 (deftest deterministic-example-issues-reject-used-form-at-wrong-word-index
@@ -215,7 +233,7 @@
                      :translation "душа"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= :structure-mismatch
-               (:issue (#'sut/example-issue "aufpassen" "беречь" example))))))))
+               (:issue (#'sut/example-issue "aufpassen" ["беречь"] example))))))))
 
 
 (deftest deterministic-example-issues-reject-duplicate-structure-items
@@ -238,7 +256,7 @@
                      :translation "беречь"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= :structure-mismatch
-               (:issue (#'sut/example-issue "aufpassen" "беречь" example))))))))
+               (:issue (#'sut/example-issue "aufpassen" ["беречь"] example))))))))
 
 
 (deftest add-word-indexes-handles-last-separable-prefix
@@ -282,7 +300,7 @@
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
+             (:issue (#'sut/example-issue "Hund" ["собака"] example)))))))
 
 
 (deftest valid-generated-example-rejects-small-latin-tail-in-translation
@@ -304,7 +322,7 @@
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
+             (:issue (#'sut/example-issue "Hund" ["собака"] example)))))))
 
 
 (deftest valid-generated-example-rejects-latin-in-structure-translation
@@ -326,7 +344,7 @@
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
+             (:issue (#'sut/example-issue "Hund" ["собака"] example)))))))
 
 
 (deftest valid-generated-example-rejects-cyrillic-in-german-sentence
@@ -342,7 +360,7 @@
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
+             (:issue (#'sut/example-issue "Hund" ["собака"] example)))))))
 
 
 (deftest valid-generated-example-rejects-multiple-sentences
@@ -361,7 +379,7 @@
                      :dictionaryForm "schnell"
                      :translation "быстрый"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
+             (:issue (#'sut/example-issue "Hund" ["собака"] example)))))))
 
 
 (deftest valid-generated-example-rejects-colon-prefixed-german-meta
@@ -380,7 +398,7 @@
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
+             (:issue (#'sut/example-issue "Hund" ["собака"] example)))))))
 
 
 (deftest valid-generated-example-rejects-colon-prefixed-russian-meta
@@ -399,7 +417,7 @@
                      :dictionaryForm "der Park"
                      :translation "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" "собака" example)))))))
+             (:issue (#'sut/example-issue "Hund" ["собака"] example)))))))
 
 
 (deftest deterministic-example-issues-allow-three-word-sentence
@@ -418,7 +436,7 @@
         (is (= nil
                (#'sut/example-issue
                 "Hund"
-                "собака"
+                ["собака"]
                 example)))))))
 
 
@@ -441,7 +459,7 @@
         (is (= nil
                (#'sut/example-issue
                 "Leiter"
-                "лестница"
+                ["лестница"]
                 example)))))))
 
 
@@ -467,7 +485,7 @@
         (is (= nil
                (#'sut/example-issue
                 "vorstellen"
-                "представляться"
+                ["представляться"]
                 example)))))))
 
 
@@ -544,7 +562,7 @@
 
 
 (deftest dictionary-gloss-validation-allows-overlapping-translation-variants
-  (testing "expected and dictionary glosses may match through shared translation variants"
+  (testing "validation accepts when any supplied gloss matches the dictionary entry"
     (with-redefs [dictionary/lookup-dictionary-entries
                   (fn [_dictionary-form]
                     [{:_id "lemma:die leiter:noun"
@@ -552,7 +570,7 @@
                       :translation [{:lang "ru" :value "лестница"}]}])]
       (is (true? (dictionary/word-gloss-valid?
                   "Leiter"
-                  "лестница, стремянка"
+                  ["лестница" "стремянка"]
                   [{:usedForm "Leiter"
                     :dictionaryForm "die Leiter"
                     :translation "лестница"}]))))))
