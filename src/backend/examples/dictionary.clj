@@ -157,15 +157,6 @@
            (canonical-dictionary-form target))))))
 
 
-(defn lemma-forms
-  "Returns the distinct dictionaryForm values from structure whose lemma matches word."
-  [word structure]
-  (->> structure
-       (keep :dictionaryForm)
-       (filter #(same-lemma? word %))
-       distinct))
-
-
 ;; =============================================================================
 ;; Translation matching
 ;; =============================================================================
@@ -224,17 +215,6 @@
         (:translation entry)))
 
 
-(defn- form-has-gloss?
-  [dictionary-form translation]
-  (let [entries (lookup-dictionary-entries dictionary-form)]
-    ;; If dictionary lookup itself is unavailable, do not turn that outage into a
-    ;; hard example-generation failure. Only reject when the lookup succeeds and
-    ;; the returned entries disagree with the intended gloss.
-    (or (nil? entries)
-        (some #(dictionary-entry-matches-gloss? % translation)
-              entries))))
-
-
 ;; =============================================================================
 ;; Public API
 ;; =============================================================================
@@ -254,17 +234,6 @@
                      (first entries))]
         {:partOfSpeech (:pos best)
          :cefrLevel    (get-in best [:meta :cefr_level])}))))
-
-
-(defn word-gloss-valid?
-  "Returns true if at least one dictionaryForm for word in structure has a
-   dictionary entry whose Russian gloss matches any of `translations`.
-   Returns true when translations is empty or DB is unavailable."
-  [word translations structure]
-  (let [form-matches-any? (fn [form]
-                            (some #(form-has-gloss? form %) translations))]
-    (or (empty? (remove str/blank? translations))
-        (some form-matches-any? (lemma-forms word structure)))))
 
 
 (defn lemma-in-structure?

@@ -28,7 +28,7 @@
           (is (= "openai/gpt-oss-20b" (:model payload)))
           (is (= 300 (:max_tokens payload)))
           (is (= "json_schema" (get-in payload [:response_format :type])))
-          (is (= ["value" "translation" "glossMismatch" "structure"]
+          (is (= ["value" "translation" "structure"]
                  (get-in payload [:response_format :json_schema :schema :required])))
           (is (= "array"
                  (get-in payload [:response_format :json_schema :schema :properties :structure :type])))
@@ -87,7 +87,7 @@
           (is (= "Bearer openai-override-key" (get headers "Authorization")))
           (is (= "openai/gpt-oss-120b" (:model payload)))
           (is (= 300 (:max_tokens payload)))
-          (is (= ["value" "translation" "glossMismatch" "structure"]
+          (is (= ["value" "translation" "structure"]
                  (get-in payload [:response_format :json_schema :schema :required])))
           (is (= ["usedForm" "dictionaryForm" "translation"]
                  (get-in payload [:response_format :json_schema :schema :properties :structure :items :required])))
@@ -133,7 +133,6 @@
     (let [captured (atom nil)
           rejected-example {:value "Der Leiter steht neben der Wand."
                             :translation "Лестница стоит рядом со стеной."
-                            :glossMismatch false
                             :structure
                             [{:usedForm "Leiter"
                               :dictionaryForm "der Leiter"
@@ -150,13 +149,13 @@
                 ["лестница"]
                 nil
                 {:example rejected-example
-                 :issue   :target-gloss-mismatch})))
+                 :issue   :structure-mismatch})))
         (let [payload      (cheshire/parse-string (:body @captured) true)
               user-message (get-in payload [:messages 1 :content])]
           (is (re-find #"previousAttempt" user-message))
           (is (re-find #"previousIssue" user-message))
-          (is (re-find #"target-gloss-mismatch" user-message))
-          (is (re-find #"structure `translation` contradicts" user-message))
+          (is (re-find #"structure-mismatch" user-message))
+          (is (re-find #"Items in `structure` must appear in strict left-to-right order" user-message))
           (is (re-find #"Der Leiter steht neben der Wand" user-message)))))))
 
 
@@ -169,7 +168,6 @@
                     (cheshire/generate-string
                      {:value "The example for 'aufstehen' is ..."
                       :translation "to stand up"
-                      :glossMismatch true
                       :structure
                       [{:usedForm "aufstehen"
                         :dictionaryForm "aufstehen"
@@ -184,7 +182,6 @@
   (testing "structurally invalid examples return only the structural issue"
     (let [example {:value "The example for 'aufstehen' is ..."
                    :translation "to stand up"
-                   :glossMismatch true
                    :structure
                    [{:usedForm "aufstehen"
                      :dictionaryForm "aufstehen"
@@ -197,7 +194,6 @@
   (testing "target forms mentioned only in structure do not count as present in the sentence"
     (let [example {:value "Der Hund läuft schnell im Park."
                    :translation "Собака быстро бежит по парку."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Leiter"
                      :dictionaryForm "die Leiter"
@@ -220,7 +216,6 @@
   (testing "structure items must stay in left-to-right sentence order"
     (let [example {:value "Pass auf deine Seele auf."
                    :translation "Береги свою душу."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "auf"
                      :dictionaryForm "aufpassen"
@@ -240,7 +235,6 @@
   (testing "duplicate {usedForm, dictionaryForm} pairs reject the structure (e.g. a doubled separable-verb prefix mistaken for a preposition)"
     (let [example {:value "Pass auf deine Sachen auf!"
                    :translation "Береги свои вещи!"
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Pass"
                      :dictionaryForm "aufpassen"
@@ -263,7 +257,6 @@
   (testing "backend assigns the final token index for a detached prefix near punctuation"
     (let [example {:value "Pass gut auf das kleine Kind auf!"
                    :translation "Присмотри внимательно за маленьким ребёнком!"
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Pass"
                      :dictionaryForm "aufpassen"
@@ -285,7 +278,6 @@
   (testing "translation must be predominantly Cyrillic, not mixed with English"
     (let [example {:value "Der Hund läuft schnell im Park."
                    :translation "The dog runs quickly in the park, собака."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Hund"
                      :dictionaryForm "der Hund"
@@ -307,7 +299,6 @@
   (testing "translation must not keep even a small Latin fragment"
     (let [example {:value "Der Hund läuft schnell im Park."
                    :translation "Собака бежит fast."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Hund"
                      :dictionaryForm "der Hund"
@@ -329,7 +320,6 @@
   (testing "structure item translation must not keep Latin fragments either"
     (let [example {:value "Der Hund läuft schnell im Park."
                    :translation "Собака быстро бежит по парку."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Hund"
                      :dictionaryForm "der Hund"
@@ -351,7 +341,6 @@
   (testing "german sentence should not contain Cyrillic text"
     (let [example {:value "Der Hund бежит по парку."
                    :translation "Собака бежит по парку."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Hund"
                      :dictionaryForm "der Hund"
@@ -367,7 +356,6 @@
   (testing "german example must contain exactly one sentence"
     (let [example {:value "Der Hund läuft. Er ist schnell."
                    :translation "Собака бежит. Она быстрая."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Hund"
                      :dictionaryForm "der Hund"
@@ -386,7 +374,6 @@
   (testing "german value should look like a plain sentence, not a prefixed explanation"
     (let [example {:value "Sentence: Der Hund läuft im Park."
                    :translation "Собака бежит в парке."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Hund"
                      :dictionaryForm "der Hund"
@@ -405,7 +392,6 @@
   (testing "russian translation should look like a plain sentence, not a prefixed explanation"
     (let [example {:value "Der Hund läuft im Park."
                    :translation "Перевод: Собака бежит в парке."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Hund"
                      :dictionaryForm "der Hund"
@@ -424,7 +410,6 @@
   (testing "simple three-word sentence is acceptable"
     (let [example {:value "Der Hund schläft."
                    :translation "Собака спит."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Hund"
                      :dictionaryForm "der Hund"
@@ -440,34 +425,10 @@
                 example)))))))
 
 
-(deftest deterministic-example-issues-ignore-gloss-mismatch-flag
-  (testing "glossMismatch alone does not reject an otherwise valid example"
-    (let [example {:value "Die Leiter steht neben der Wand."
-                   :translation "Лестница стоит рядом со стеной."
-                   :glossMismatch true
-                   :structure
-                   [{:usedForm "Leiter"
-                     :dictionaryForm "die Leiter"
-                     :translation "лестница"}
-                    {:usedForm "steht"
-                     :dictionaryForm "stehen"
-                     :translation "стоять"}
-                    {:usedForm "Wand"
-                     :dictionaryForm "die Wand"
-                     :translation "стена"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (= nil
-               (#'sut/example-issue
-                "Leiter"
-                ["лестница"]
-                example)))))))
-
-
 (deftest target-dictionary-form-allows-reflexive-lemma-match
   (testing "non-article target can match reflexive dictionary form"
     (let [example {:value "Er stellt sich heute freundlich vor."
                    :translation "Он сегодня дружелюбно представляется."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "stellt"
                      :dictionaryForm "sich vorstellen"
@@ -493,14 +454,12 @@
   (testing "best-of-N style retries can skip a bad candidate and keep a later valid one"
     (let [bad-example {:value "Die Leiter."
                        :translation "Лестница стоит рядом со стеной."
-                       :glossMismatch false
                        :structure
                        [{:usedForm "Leiter"
                          :dictionaryForm "die Leiter"
                          :translation "лестница"}]}
           good-example {:value "Die Leiter steht neben der Wand."
                         :translation "Лестница стоит рядом со стеной."
-                        :glossMismatch false
                         :structure
                         [{:usedForm "Leiter"
                           :dictionaryForm "die Leiter"
@@ -527,60 +486,10 @@
                @retry-contexts))))))
 
 
-(deftest generate-one-keeps-example-when-dictionary-gloss-disagrees
-  (testing "dictionary gloss mismatch keeps the example and marks glossMismatch for the client"
-    (let [example {:value "Pass auf deine Sachen auf!"
-                   :translation "Береги свои вещи!"
-                   :glossMismatch false
-                   :structure
-                   [{:usedForm "Pass"
-                     :dictionaryForm "aufpassen"
-                     :translation "беречь"}
-                    {:usedForm "Sachen"
-                     :dictionaryForm "die Sache"
-                     :translation "вещи"}
-                    {:usedForm "auf"
-                     :dictionaryForm "aufpassen"
-                     :translation "беречь"}]}
-          calls (atom 0)]
-      (with-redefs [sut/generate-attempt! (fn [_word _translation _word-meta _retry-context]
-                                            (swap! calls inc)
-                                            example)
-                    dictionary/lookup-dictionary-entries
-                    (fn [dictionary-form]
-                      (case dictionary-form
-                        "aufpassen" [{:_id "lemma:aufpassen:verb"
-                                      :value "aufpassen"
-                                      :translation [{:lang "ru" :value "присматривать"}]}]
-                        "die Sache" [{:_id "lemma:die sache:noun"
-                                      :value "die Sache"
-                                      :translation [{:lang "ru" :value "вещь"}]}]
-                        []))]
-        (is (= (assoc (#'sut/add-word-indexes example) :glossMismatch true)
-               (sut/generate-one! {:word "aufpassen" :translation "беречь"} 3)))
-        (is (= 1 @calls))))))
-
-
-(deftest dictionary-gloss-validation-allows-overlapping-translation-variants
-  (testing "validation accepts when any supplied gloss matches the dictionary entry"
-    (with-redefs [dictionary/lookup-dictionary-entries
-                  (fn [_dictionary-form]
-                    [{:_id "lemma:die leiter:noun"
-                      :value "die Leiter"
-                      :translation [{:lang "ru" :value "лестница"}]}])]
-      (is (true? (dictionary/word-gloss-valid?
-                  "Leiter"
-                  ["лестница" "стремянка"]
-                  [{:usedForm "Leiter"
-                    :dictionaryForm "die Leiter"
-                    :translation "лестница"}]))))))
-
-
 (deftest generate-one-accepts-map-input
   (testing "single-item API accepts {:word :translation} input"
     (let [example {:value "Die Leiter steht neben der Wand."
                    :translation "Лестница стоит рядом со стеной."
-                   :glossMismatch false
                    :structure
                    [{:usedForm "Leiter"
                      :dictionaryForm "die Leiter"

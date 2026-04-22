@@ -9,9 +9,8 @@
   "Props for the challenge display (prompt + instruction)."
   [state]
   (let [trial (domain/current-trial state)]
-    {:prompt          (:prompt trial)
-     :is-example?     (domain/example-trial? trial)
-     :gloss-mismatch? (:gloss-mismatch trial)}))
+    {:prompt      (:prompt trial)
+     :is-example? (domain/example-trial? trial)}))
 
 
 (defn progress-props

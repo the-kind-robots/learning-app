@@ -50,13 +50,12 @@
   "Convert an example document to an example trial.
    Example doc has :word-id, :value, :translation."
   [example]
-  {:type           trial-type-example
-   :word-id        (:word-id example)
-   :prompt         (:translation example)
-   :answer         (:value example)
-   :structure      (:structure example)
-   :gloss-mismatch (:gloss-mismatch example)
-   :locked?        true})
+  {:type      trial-type-example
+   :word-id   (:word-id example)
+   :prompt    (:translation example)
+   :answer    (:value example)
+   :structure (:structure example)
+   :locked?   true})
 
 
 (defn generate-trials

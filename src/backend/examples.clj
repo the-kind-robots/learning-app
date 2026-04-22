@@ -90,9 +90,6 @@
    [:translation
     {:description "Russian translation of the sentence."}
     [:string {:min 1}]]
-   [:glossMismatch
-    {:description "Whether the supplied Russian gloss appears mismatched to the German word."}
-    :boolean]
    [:structure
     {:description "A list of JSON objects containing the used word form, its dictionary form, and its translation, ordered left to right as they appear in the German sentence."}
     [:vector {:min 1}
@@ -215,8 +212,7 @@
   {:malformed-example            "The generated example did not match the required JSON shape or text constraints. See `details` for the specific field errors."
    :structure-mismatch           "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, each `usedForm` must match the word at its position, and a `{usedForm, dictionaryForm}` pair must not repeat (each separable-verb prefix appears once, not twice)."
    :sentence-length-out-of-range "The German sentence must contain between 3 and 12 words."
-   :target-lemma-missing         "The target lemma must appear as a `dictionaryForm` entry in `structure`."
-   :target-gloss-mismatch        "The target lemma's structure `translation` contradicts the supplied Russian gloss."})
+   :target-lemma-missing         "The target lemma must appear as a `dictionaryForm` entry in `structure`."})
 
 
 (defn- example-issue
@@ -240,10 +236,7 @@
       {:issue :sentence-length-out-of-range}
 
       (not (dictionary/lemma-in-structure? word (:structure indexed)))
-      {:issue :target-lemma-missing}
-
-      (not (dictionary/word-gloss-valid? word translations (:structure indexed)))
-      {:issue :target-gloss-mismatch})))
+      {:issue :target-lemma-missing})))
 
 
 
@@ -270,7 +263,6 @@
     "- Produce one natural standard German sentence, 6-12 words, using the target lemma or a correct inflected form."
     "- German sentence only: no labels, notes, markdown, or meta commentary."
     "- `translation` must be one natural Russian sentence, not a calque."
-    "- Set `glossMismatch` to true only if the supplied gloss clearly mismatches the target lemma; otherwise false."
     "- `structure` must include every noun, verb (including auxiliaries and modals), adjective, and adverb in the sentence."
     "- Each item in `structure` must be a JSON object with keys `usedForm`, `dictionaryForm`, and `translation`."
     "- Never use arrays like `[\"Fenster\", \"das Fenster\", \"окно\"]` inside `structure`."
@@ -287,19 +279,19 @@
     "- Ambiguous noun articles and ambiguous prefixes (`um-`, `über-`, `unter-`, `durch-`, `wieder-`) must follow the supplied Russian gloss."
     "- Example structure item: `{\"usedForm\":\"Fenster\",\"dictionaryForm\":\"das Fenster\",\"translation\":\"окно\"}`."
     "Example word=aufstehen gloss=вставать:"
-    "{\"value\":\"Ich stehe jeden Morgen um sieben Uhr auf.\",\"translation\":\"Я встаю каждое утро в семь часов.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"stehe\",\"dictionaryForm\":\"aufstehen\",\"translation\":\"вставать\"},{\"usedForm\":\"Morgen\",\"dictionaryForm\":\"der Morgen\",\"translation\":\"утро\"},{\"usedForm\":\"auf\",\"dictionaryForm\":\"aufstehen\",\"translation\":\"вставать\"}]}"
+    "{\"value\":\"Ich stehe jeden Morgen um sieben Uhr auf.\",\"translation\":\"Я встаю каждое утро в семь часов.\",\"structure\":[{\"usedForm\":\"stehe\",\"dictionaryForm\":\"aufstehen\",\"translation\":\"вставать\"},{\"usedForm\":\"Morgen\",\"dictionaryForm\":\"der Morgen\",\"translation\":\"утро\"},{\"usedForm\":\"auf\",\"dictionaryForm\":\"aufstehen\",\"translation\":\"вставать\"}]}"
     "Example word=aufpassen gloss=следить:"
-    "{\"value\":\"Er passt auf die Kinder auf.\",\"translation\":\"Он следит за детьми.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"passt\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"},{\"usedForm\":\"Kinder\",\"dictionaryForm\":\"das Kind\",\"translation\":\"дети\"},{\"usedForm\":\"auf\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"}]}"
+    "{\"value\":\"Er passt auf die Kinder auf.\",\"translation\":\"Он следит за детьми.\",\"structure\":[{\"usedForm\":\"passt\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"},{\"usedForm\":\"Kinder\",\"dictionaryForm\":\"das Kind\",\"translation\":\"дети\"},{\"usedForm\":\"auf\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"}]}"
     "Note: the first `auf` is a preposition and is excluded; only the sentence-final `auf` is the detached separable prefix."
     "Example word=das Verstehen gloss=понимание:"
-    "{\"value\":\"Das Verstehen dieser Regel dauert lange.\",\"translation\":\"Понимание этого правила требует времени.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"Verstehen\",\"dictionaryForm\":\"das Verstehen\",\"translation\":\"понимание\"},{\"usedForm\":\"Regel\",\"dictionaryForm\":\"die Regel\",\"translation\":\"правило\"},{\"usedForm\":\"dauert\",\"dictionaryForm\":\"dauern\",\"translation\":\"длиться\"},{\"usedForm\":\"lange\",\"dictionaryForm\":\"lang\",\"translation\":\"долго\"}]}"
+    "{\"value\":\"Das Verstehen dieser Regel dauert lange.\",\"translation\":\"Понимание этого правила требует времени.\",\"structure\":[{\"usedForm\":\"Verstehen\",\"dictionaryForm\":\"das Verstehen\",\"translation\":\"понимание\"},{\"usedForm\":\"Regel\",\"dictionaryForm\":\"die Regel\",\"translation\":\"правило\"},{\"usedForm\":\"dauert\",\"dictionaryForm\":\"dauern\",\"translation\":\"длиться\"},{\"usedForm\":\"lange\",\"dictionaryForm\":\"lang\",\"translation\":\"долго\"}]}"
     "Example word=die Bank gloss=скамейка:"
-    "{\"value\":\"Wir sitzen auf einer Bank im Park.\",\"translation\":\"Мы сидим на скамейке в парке.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"sitzen\",\"dictionaryForm\":\"sitzen\",\"translation\":\"сидеть\"},{\"usedForm\":\"Bank\",\"dictionaryForm\":\"die Bank\",\"translation\":\"скамейка\"},{\"usedForm\":\"Park\",\"dictionaryForm\":\"der Park\",\"translation\":\"парк\"}]}"
+    "{\"value\":\"Wir sitzen auf einer Bank im Park.\",\"translation\":\"Мы сидим на скамейке в парке.\",\"structure\":[{\"usedForm\":\"sitzen\",\"dictionaryForm\":\"sitzen\",\"translation\":\"сидеть\"},{\"usedForm\":\"Bank\",\"dictionaryForm\":\"die Bank\",\"translation\":\"скамейка\"},{\"usedForm\":\"Park\",\"dictionaryForm\":\"der Park\",\"translation\":\"парк\"}]}"
     "Example word=Leiter gloss=лестница:"
-    "{\"value\":\"Die Leiter steht neben der Wand.\",\"translation\":\"Лестница стоит у стены.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"Leiter\",\"dictionaryForm\":\"die Leiter\",\"translation\":\"лестница\"},{\"usedForm\":\"steht\",\"dictionaryForm\":\"stehen\",\"translation\":\"стоять\"},{\"usedForm\":\"Wand\",\"dictionaryForm\":\"die Wand\",\"translation\":\"стена\"}]}"
+    "{\"value\":\"Die Leiter steht neben der Wand.\",\"translation\":\"Лестница стоит у стены.\",\"structure\":[{\"usedForm\":\"Leiter\",\"dictionaryForm\":\"die Leiter\",\"translation\":\"лестница\"},{\"usedForm\":\"steht\",\"dictionaryForm\":\"stehen\",\"translation\":\"стоять\"},{\"usedForm\":\"Wand\",\"dictionaryForm\":\"die Wand\",\"translation\":\"стена\"}]}"
     "Do not use `der Leiter` for this meaning."
     "Example word=sich vorstellen gloss=представляться:"
-    "{\"value\":\"Er stellt sich bei den neuen Kollegen vor.\",\"translation\":\"Он представляется новым коллегам.\",\"glossMismatch\":false,\"structure\":[{\"usedForm\":\"stellt\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"neu\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"]))
+    "{\"value\":\"Er stellt sich bei den neuen Kollegen vor.\",\"translation\":\"Он представляется новым коллегам.\",\"structure\":[{\"usedForm\":\"stellt\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"neu\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"]))
 
 
 
@@ -394,8 +386,8 @@
   `translation` may be a single string or a collection of strings; all are
   passed through to the prompt and validation so any can be the chosen sense.
   Returns one of:
-  * success — map with keys :value, :translation, :glossMismatch,
-    :structure (a vector of maps with :usedForm, :dictionaryForm, :translation);
+  * success — map with keys :value, :translation, :structure
+    (a vector of maps with :usedForm, :dictionaryForm, :translation);
   * generation-failure map on a hard error (e.g. 429);
   * nil when all attempts are exhausted."
   ([input]
@@ -411,11 +403,6 @@
          (cond
            (and failure? (not (:retryable? example)))
            example
-
-           (and (not failure?) (= :target-gloss-mismatch issue))
-           (-> example
-               add-word-indexes
-               (assoc :glossMismatch true))
 
            (and (not failure?) (nil? issue))
            (add-word-indexes example)

@@ -100,7 +100,6 @@
                  :dictionaryForm "schlafen"
                  :translation "спать"
                  :wordIndex 2}]
-    :gloss-mismatch nil
     :locked? true}])
 
 

@@ -101,7 +101,6 @@
                      :value         (:value example)
                      :translation   (:translation example)
                      :structure     (:structure example)
-                     :gloss-mismatch (:glossMismatch example)
                      :created-at    (utils/now-iso)}]
     (dbs/insert dbs example-doc)))
 
