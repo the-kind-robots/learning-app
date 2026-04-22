@@ -27,12 +27,15 @@ gh auth refresh -s project
 - Set these environment variables before running scripts:
   - `GHWF_OWNER` (project owner login)
   - `GHWF_REPO` (`owner/repo`)
-  - `GHWF_PROJECT_NUMBER` (Project V2 number)
+  - `GHWF_PROJECT_NUMBER` (Project V2 number; this repo uses `2` for the `Learning app` project)
 - Optionally set:
   - `GHWF_AREA_FIELD` (default: `Area`, optional if your project does not expose it)
+  - `GHWF_PRIORITY_FIELD` (default: `Priority`)
+  - `GHWF_SIZE_FIELD` (default: `Size`)
   - `GHWF_STATUS_FIELD` (default: `Status`)
   - `GHWF_DEFAULT_ASSIGNEES` (default: `@me`)
-  - `GHWF_DEFAULT_STATUS` (default: `Todo`)
+  - `GHWF_DEFAULT_STATUS` (default: `Backlog` in this repo)
+  - `GHWF_REVIEW_STATUS` (default: `In review` in this repo)
   - `GHWF_DONE_STATUS` (default: `Done`)
   - `GHWF_DEFAULT_BASE` (default: `master`)
   - `GHWF_DEPLOY_CMD` (deploy command used by `scripts/deploy.sh`)
@@ -46,18 +49,25 @@ Run this when the user wants to create a new item and begin implementation.
   --title "Add offline start screen" \
   --body "Allow basic lesson entry without network" \
   --area "Backend" \
-  --status "Todo" \
+  --priority "Major" \
+  --status "In progress" \
   --assignees "@me" \
   --labels "enhancement,offline" \
   --base master
 ```
 
 Important behavior:
-- Default mode (`--mode issue`) creates an issue first, adds it to project, sets fields, and creates/checks out a dev branch.
-- Draft mode (`--mode draft-convert`) creates a draft item, sets fields, converts it to an issue, then creates/checks out branch.
+- Before creating anything, the script searches the configured project for an exact-title item and reuses it when found.
+- Existing issue project items are reused as-is; existing draft items are converted to issues.
+- If `--issue <number>` is passed, that issue is reused and added to the project when needed.
+- If no project item exists, the script searches repo issues by exact title before creating a new issue.
+- Default mode (`--mode issue`) creates an issue only when no reusable project item or issue exists, adds it to project, sets fields, and creates/checks out a dev branch.
+- Draft mode (`--mode draft-convert`) creates a draft item only when no reusable item exists, sets fields, converts it to an issue, then creates/checks out branch.
 - Branch creation uses `gh issue develop <number> --checkout`.
-- Requested optional fields like `Area` are skipped with a warning when the target project does not expose them.
-- If no assignee or status is provided, the workflow defaults to `@me` and `Todo`.
+- Requested optional fields like `Area`, `Priority`, and `Size` are skipped with a warning when the target project does not expose them.
+- Missing labels are skipped with a warning instead of aborting issue creation.
+- If no assignee or status is provided, the workflow defaults to `@me` and `Backlog`.
+- For active work, pass `--status "In progress"` explicitly.
 - After the current task is merged or closed, do not keep reusing its branch/issue for the next non-trivial repo scope; start a fresh issue/branch unless the user is clearly asking only for final closeout steps.
 
 ## Finish Work
@@ -76,6 +86,8 @@ Important behavior:
 - Creates PR if needed.
 - Merges PR (or falls back to enabling auto-merge when direct merge is blocked).
 - After a successful merge, attempts to set the GitHub Project `Status` field to `Done`.
+- When a PR is created and merge is not skipped, attempts to set project `Status` to `In review` before merging.
+- After a successful merge, attempts to set project `Status` to `Done`.
 - Successful finish changes the task boundary: later repo work should be treated as a new issue/branch by default unless it is obviously just archive/deploy/closeout cleanup for the just-finished task.
 
 If the worktree contains unrelated local changes, prefer manual Git/PR steps instead of staging everything through the wrapper script.

@@ -20,6 +20,7 @@ Options:
   --owner <login>               Project owner (default: GHWF_OWNER)
   --project-number <number>     Project number (default: GHWF_PROJECT_NUMBER)
   --status-field <name>         Field name (default: GHWF_STATUS_FIELD or Status)
+  --review-status <option>      Status option to set after PR creation (default: GHWF_REVIEW_STATUS or In review)
   --done-status <option>        Status option to set after merge (default: GHWF_DONE_STATUS or Done)
   --no-push                     Skip push
   --no-pr                       Skip PR creation
@@ -91,14 +92,14 @@ apply_single_select_field() {
     --single-select-option-id "$option_id" >/dev/null
 }
 
-mark_issue_done_in_project() {
+mark_issue_status_in_project() {
   local owner="$1"
   local project_number="$2"
   local issue_number="$3"
   local status_field="$4"
-  local done_status="$5"
+  local status="$5"
 
-  [[ -n "$owner" && -n "$project_number" && -n "$issue_number" ]] || return 0
+  [[ -n "$owner" && -n "$project_number" && -n "$issue_number" && -n "$status" ]] || return 0
 
   local project_id
   project_id="$(gh project view "$project_number" --owner "$owner" --format json --jq '.id' 2>/dev/null || true)"
@@ -111,7 +112,7 @@ mark_issue_done_in_project() {
   fields_json="$(normalize_fields_json "$(gh project field-list "$project_number" --owner "$owner" --format json)")"
 
   local item_json item_id
-  item_json="$(gh project item-list "$project_number" --owner "$owner" --limit 100 --format json)"
+  item_json="$(gh project item-list "$project_number" --owner "$owner" --limit "${GHWF_ITEM_LIMIT:-200}" --format json)"
   item_id="$(jq -r --argjson issue_number "$issue_number" '.items[] | select(.content.number? == $issue_number) | .id' <<<"$item_json" | head -n1)"
 
   [[ -n "$item_id" ]] || {
@@ -119,7 +120,7 @@ mark_issue_done_in_project() {
     return 0
   }
 
-  apply_single_select_field "$item_id" "$project_id" "$fields_json" "$status_field" "$done_status" true
+  apply_single_select_field "$item_id" "$project_id" "$fields_json" "$status_field" "$status" true
 }
 
 infer_repo_from_origin() {
@@ -138,6 +139,7 @@ repo="${GHWF_REPO:-}"
 owner="${GHWF_OWNER:-}"
 project_number="${GHWF_PROJECT_NUMBER:-}"
 status_field="${GHWF_STATUS_FIELD:-Status}"
+review_status="${GHWF_REVIEW_STATUS:-In review}"
 done_status="${GHWF_DONE_STATUS:-Done}"
 base_branch="${GHWF_DEFAULT_BASE:-master}"
 issue_number=""
@@ -200,6 +202,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --status-field)
       status_field="$2"
+      shift 2
+      ;;
+    --review-status)
+      review_status="$2"
       shift 2
       ;;
     --done-status)
@@ -328,6 +334,8 @@ if [[ "$skip_merge" -eq 1 ]]; then
   exit 0
 fi
 
+mark_issue_status_in_project "$owner" "$project_number" "$issue_number" "$status_field" "$review_status"
+
 merge_flag="--squash"
 if [[ "$merge_method" == "merge" ]]; then
   merge_flag="--merge"
@@ -346,7 +354,7 @@ fi
 
 pr_state="$(gh pr view "$pr_url" -R "$repo" --json state --jq '.state' 2>/dev/null || true)"
 if [[ "$pr_state" == "MERGED" ]]; then
-  mark_issue_done_in_project "$owner" "$project_number" "$issue_number" "$status_field" "$done_status"
+  mark_issue_status_in_project "$owner" "$project_number" "$issue_number" "$status_field" "$done_status"
 fi
 
 echo "Commit Message: $commit_message"
