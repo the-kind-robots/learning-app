@@ -19,7 +19,7 @@ This is the orchestration skill that turns a user report like:
 
 into the repo's standard delivery flow:
 
-`GitHub issue -> OpenSpec change -> implementation -> verify -> archive -> PR/merge`
+`GitHub issue -> OpenSpec change -> implementation -> verify -> OpenSpec sync/archive -> PR/merge`
 
 ## When to use
 
@@ -53,6 +53,8 @@ In those cases, use the narrower workflow skill directly.
 3. Start OpenSpec.
    - Use `openspec-propose-change` to create the change and first artifact.
    - The change should describe the user-visible bug or feature outcome, not just an implementation detail.
+   - Prefer proper OpenSpec delta specs under `openspec/changes/<name>/specs/**/spec.md`.
+   - If this repo intentionally updates `openspec/specs/**` directly for a small change, record that as a deliberate direct-spec mode in the task notes so archive warnings about missing deltas are expected.
 
 4. Implement.
    - Use `openspec-apply-change`.
@@ -68,15 +70,24 @@ In those cases, use the narrower workflow skill directly.
    - When the question is whether UI is visually stable, anchored, centered correctly, or free of jumps, verify the actual rendered layout with precise visual instrumentation: frame-by-frame geometry, performance/layout traces, animation tooling, or an equivalent browser-level measurement.
    - Be explicit about what was and was not proven. If you only proved the DOM state or swap path, say that you did not yet prove visual stability.
    - Use `openspec-verify-change` when the change is implementation-complete.
+   - Run OpenSpec CLI commands with telemetry disabled unless the user explicitly opts in:
+
+```bash
+OPENSPEC_TELEMETRY=0 openspec ...
+```
 
 6. Close the OpenSpec loop.
-   - If the change is complete, archive it.
-   - Keep the archived change and main spec updates in the same delivery branch when appropriate.
+   - Close OpenSpec before opening or merging the feature PR.
+   - Use the proper OpenSpec tools: `openspec-sync-specs` when specs must be synced while the change stays active, or `openspec-archive-change` when the change is complete.
+   - If the change is complete, archive it on the delivery branch before PR creation.
+   - Keep the archive move and main spec updates in the same delivery branch and same PR as the implementation.
+   - Do not merge implementation first and archive later unless the user explicitly chooses a follow-up PR.
 
 7. Deliver.
    - Commit only the task-related files.
    - Push, open PR, merge, and close the issue.
    - If branch protection blocks merge, inspect checks first rather than forcing admin overrides.
+   - Never push directly to `master`; use PRs for feature work and closeout work.
 
 8. Reset task boundary after delivery.
    - After the issue is closed or the PR is merged, stop assuming follow-up repo work belongs to the same task.
@@ -92,6 +103,7 @@ When finishing a task:
 - do not blindly use a script that stages everything if unrelated changes are present
 - stage only the files related to the current issue/change
 - prefer manual `git add` / `git commit` / `gh pr create` / `gh pr merge` over all-in-one wrappers when the tree is dirty
+- do not run finish scripts that stage everything until OpenSpec sync/archive is already present in the same branch
 
 ## Decision Rules
 
@@ -115,6 +127,15 @@ When finishing a task:
 - Do not wait for the user to explicitly say "create an issue" if the repo's normal expectation is tracked delivery.
 - Do not silently continue on the previous issue/branch just because the conversation did not pause; re-evaluate task boundaries after each closeout.
 - Do not silently switch to another browser tool just because the preferred repo-owned CDP workflow failed once; repair the preferred tooling first unless the user explicitly approves a fallback.
+- Do not archive OpenSpec after the feature PR is merged. Archive before PR merge so one PR contains implementation, spec updates, and archive.
+- Do not push archive commits directly to protected `master`; if late archive is unavoidable, create a separate PR and note the workflow miss.
+- Do not ignore OpenSpec "No deltas found" warnings unless the task explicitly used direct-spec mode.
+
+## OpenSpec Telemetry
+
+OpenSpec CLI currently includes PostHog telemetry. Local inspection of the installed CLI shows it sends an anonymous `command_executed` event with command name, OpenSpec version, `surface=cli`, and `$ip=null`; it stores a random anonymous ID in `~/.config/openspec/config.json`. It does not send arguments, paths, or file content by design, but this repo should still avoid unsolicited telemetry.
+
+Run OpenSpec commands with `OPENSPEC_TELEMETRY=0` by default. Treat PostHog flush/network errors as telemetry noise only when the OpenSpec command itself already succeeded.
 
 ## Output Expectations
 
