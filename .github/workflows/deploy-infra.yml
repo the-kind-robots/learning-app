@@ -25,7 +25,7 @@ jobs:
           overwrite: true
 
       - name: Install infra deb and restart app
-        uses: appleboy/ssh-action@v1.2.4
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}

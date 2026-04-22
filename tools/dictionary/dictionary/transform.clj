@@ -24,6 +24,7 @@
     "postp"
     "prep"
     "pron"
+    "unknown"
     "verb"})
 
 
