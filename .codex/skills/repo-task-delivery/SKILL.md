@@ -47,6 +47,8 @@ In those cases, use the narrower workflow skill directly.
 
 2. Start GitHub tracking.
    - Use `gh-project-workflow` to create the issue/project item and branch.
+   - First let `gh-project-workflow` search the configured project for an existing exact-title item or issue; reuse it instead of creating duplicates.
+   - This repo's active GitHub Project is user project `Learning app` number `2`; do not use older project `1`.
    - In this repo, prefer base branch `master`.
    - For bug reports, default category/type to bug-oriented values when the project supports them.
 

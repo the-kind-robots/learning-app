@@ -13,8 +13,11 @@ Options:
   --body-file <path>            Body file path
   --labels <csv>                Comma-separated labels
   --assignees <csv>             Comma-separated assignees (supports @me)
+  --issue <number>              Reuse existing issue number instead of creating one
   --area <option>               Area field option to set
   --category <option>           Deprecated alias for --area
+  --priority <option>           Priority field option to set
+  --size <option>               Size field option to set
   --status <option>             Status field option to set
   --mode <issue|draft-convert>  Default: issue
   --owner <login>               Project owner (default: GHWF_OWNER)
@@ -22,9 +25,12 @@ Options:
   --project-number <number>     Project number (default: GHWF_PROJECT_NUMBER)
   --area-field <name>           Field name (default: GHWF_AREA_FIELD or Area)
   --category-field <name>       Deprecated alias for --area-field
+  --priority-field <name>       Field name (default: GHWF_PRIORITY_FIELD or Priority)
+  --size-field <name>           Field name (default: GHWF_SIZE_FIELD or Size)
   --status-field <name>         Field name (default: GHWF_STATUS_FIELD or Status)
   --base <branch>               Base branch for dev branch (default: GHWF_DEFAULT_BASE or master)
   --branch-name <name>          Override branch name
+  --no-reuse-existing           Do not reuse exact-title project item or issue
   --skip-branch                 Do not create/checkout development branch
   --help                        Show this help
 USAGE
@@ -92,10 +98,119 @@ apply_single_select_field() {
     --single-select-option-id "$option_id" >/dev/null
 }
 
+project_items_json() {
+  gh project item-list "$project_number" --owner "$owner" --limit "${GHWF_ITEM_LIMIT:-200}" --format json
+}
+
+find_project_item_by_title() {
+  local items_json="$1"
+  local item_title="$2"
+  jq -c --arg item_title "$item_title" '.items[] | select(.title == $item_title)' <<<"$items_json" | head -n1
+}
+
+find_project_item_by_issue_number() {
+  local items_json="$1"
+  local number="$2"
+  jq -c --argjson number "$number" '.items[] | select(.content.number? == $number)' <<<"$items_json" | head -n1
+}
+
+find_issue_by_title() {
+  local issue_title="$1"
+  gh issue list -R "$repo" --state all --search "$issue_title in:title" --limit 20 --json number,title,url \
+    | jq -c --arg issue_title "$issue_title" '.[] | select(.title == $issue_title)' \
+    | head -n1
+}
+
+label_exists() {
+  local label="$1"
+
+  if [[ -z "${labels_json:-}" ]]; then
+    labels_json="$(gh label list -R "$repo" --limit 200 --json name 2>/dev/null || true)"
+  fi
+
+  [[ -n "$labels_json" ]] || return 1
+  jq -e --arg label "$label" '.[] | select(.name == $label)' <<<"$labels_json" >/dev/null
+}
+
+append_existing_labels() {
+  local -n args_ref=$1
+  local csv="$2"
+  local flag="${3:---label}"
+
+  [[ -n "$csv" ]] || return 0
+
+  IFS=',' read -r -a labels <<<"$csv"
+  for label in "${labels[@]}"; do
+    label="$(trim "$label")"
+    [[ -n "$label" ]] || continue
+    if label_exists "$label"; then
+      args_ref+=("$flag" "$label")
+    else
+      echo "Warning: Label '$label' not found in repo '$repo', skipping" >&2
+    fi
+  done
+}
+
+append_assignees() {
+  local -n args_ref=$1
+  local csv="$2"
+  local flag="${3:---assignee}"
+
+  [[ -n "$csv" ]] || return 0
+
+  IFS=',' read -r -a assignees <<<"$csv"
+  for assignee in "${assignees[@]}"; do
+    assignee="$(trim "$assignee")"
+    [[ -n "$assignee" ]] && args_ref+=("$flag" "$assignee")
+  done
+}
+
+convert_project_draft_to_issue() {
+  local draft_item_id="$1"
+
+  local repo_id
+  repo_id="$(gh repo view "$repo" --json id --jq '.id')"
+  [[ -n "$repo_id" ]] || die "Failed to resolve repository id"
+
+  local convert_query convert_json
+  convert_query='mutation($projectItemId:ID!,$repositoryId:ID!){ convertProjectV2DraftIssueItemToIssue(input:{projectItemId:$projectItemId,repositoryId:$repositoryId}) { issue { number url } } }'
+  convert_json="$(gh api graphql -f query="$convert_query" -F projectItemId="$draft_item_id" -F repositoryId="$repo_id")"
+
+  issue_number="$(jq -r '.data.convertProjectV2DraftIssueItemToIssue.issue.number // empty' <<<"$convert_json")"
+  issue_url="$(jq -r '.data.convertProjectV2DraftIssueItemToIssue.issue.url // empty' <<<"$convert_json")"
+  [[ -n "$issue_number" && -n "$issue_url" ]] || die "Draft item conversion to issue failed"
+}
+
+use_project_item() {
+  local item="$1"
+
+  item_id="$(jq -r '.id // empty' <<<"$item")"
+  [[ -n "$item_id" ]] || die "Existing project item has no id"
+
+  local content_type
+  content_type="$(jq -r '.content.type // empty' <<<"$item")"
+
+  case "$content_type" in
+    Issue)
+      issue_number="$(jq -r '.content.number // empty' <<<"$item")"
+      issue_url="$(jq -r '.content.url // empty' <<<"$item")"
+      [[ -n "$issue_number" && -n "$issue_url" ]] || die "Existing issue item is missing issue data"
+      ;;
+    DraftIssue)
+      convert_project_draft_to_issue "$item_id"
+      ;;
+    *)
+      die "Existing project item '$title' is not an issue or draft issue"
+      ;;
+  esac
+}
+
 owner="${GHWF_OWNER:-}"
 repo="${GHWF_REPO:-}"
 project_number="${GHWF_PROJECT_NUMBER:-}"
 area_field="${GHWF_AREA_FIELD:-${GHWF_CATEGORY_FIELD:-Area}}"
+priority_field="${GHWF_PRIORITY_FIELD:-Priority}"
+size_field="${GHWF_SIZE_FIELD:-Size}"
 status_field="${GHWF_STATUS_FIELD:-Status}"
 base_branch="${GHWF_DEFAULT_BASE:-master}"
 
@@ -104,11 +219,16 @@ body=""
 body_file=""
 labels_csv=""
 assignees_csv="${GHWF_DEFAULT_ASSIGNEES:-@me}"
+issue_number_override=""
 area_option="${GHWF_DEFAULT_AREA:-}"
-status_option="${GHWF_DEFAULT_STATUS:-Todo}"
+priority_option="${GHWF_DEFAULT_PRIORITY:-}"
+size_option="${GHWF_DEFAULT_SIZE:-}"
+status_option="${GHWF_DEFAULT_STATUS:-Backlog}"
 mode="issue"
 branch_name=""
+reuse_existing=1
 skip_branch=0
+labels_json=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -132,12 +252,24 @@ while [[ $# -gt 0 ]]; do
       assignees_csv="$2"
       shift 2
       ;;
+    --issue)
+      issue_number_override="$2"
+      shift 2
+      ;;
     --area)
       area_option="$2"
       shift 2
       ;;
     --category)
       area_option="$2"
+      shift 2
+      ;;
+    --priority)
+      priority_option="$2"
+      shift 2
+      ;;
+    --size)
+      size_option="$2"
       shift 2
       ;;
     --status)
@@ -168,6 +300,14 @@ while [[ $# -gt 0 ]]; do
       area_field="$2"
       shift 2
       ;;
+    --priority-field)
+      priority_field="$2"
+      shift 2
+      ;;
+    --size-field)
+      size_field="$2"
+      shift 2
+      ;;
     --status-field)
       status_field="$2"
       shift 2
@@ -179,6 +319,10 @@ while [[ $# -gt 0 ]]; do
     --branch-name)
       branch_name="$2"
       shift 2
+      ;;
+    --no-reuse-existing)
+      reuse_existing=0
+      shift
       ;;
     --skip-branch)
       skip_branch=1
@@ -208,7 +352,43 @@ issue_url=""
 issue_number=""
 item_id=""
 
-if [[ "$mode" == "issue" ]]; then
+if [[ "$reuse_existing" -eq 1 ]]; then
+  items_json="$(project_items_json)"
+  existing_item=""
+
+  if [[ -n "$issue_number_override" ]]; then
+    existing_item="$(find_project_item_by_issue_number "$items_json" "$issue_number_override")"
+  fi
+
+  if [[ -z "$existing_item" ]]; then
+    existing_item="$(find_project_item_by_title "$items_json" "$title")"
+  fi
+
+  if [[ -n "$existing_item" ]]; then
+    use_project_item "$existing_item"
+  elif [[ -n "$issue_number_override" ]]; then
+    issue_number="$issue_number_override"
+    issue_url="$(gh issue view "$issue_number" -R "$repo" --json url --jq '.url')"
+    [[ -n "$issue_url" ]] || die "Issue #$issue_number not found"
+
+    item_json="$(gh project item-add "$project_number" --owner "$owner" --url "$issue_url" --format json)"
+    item_id="$(jq -r '.id // empty' <<<"$item_json")"
+    [[ -n "$item_id" ]] || die "Failed to add issue to project"
+  else
+    existing_issue="$(find_issue_by_title "$title")"
+    if [[ -n "$existing_issue" ]]; then
+      issue_number="$(jq -r '.number // empty' <<<"$existing_issue")"
+      issue_url="$(jq -r '.url // empty' <<<"$existing_issue")"
+      [[ -n "$issue_number" && -n "$issue_url" ]] || die "Existing issue is missing issue data"
+
+      item_json="$(gh project item-add "$project_number" --owner "$owner" --url "$issue_url" --format json)"
+      item_id="$(jq -r '.id // empty' <<<"$item_json")"
+      [[ -n "$item_id" ]] || die "Failed to add existing issue to project"
+    fi
+  fi
+fi
+
+if [[ -z "$issue_number" && "$mode" == "issue" ]]; then
   issue_args=(issue create -R "$repo" --title "$title")
 
   if [[ -n "$body_file" ]]; then
@@ -217,21 +397,8 @@ if [[ "$mode" == "issue" ]]; then
     issue_args+=(--body "$body")
   fi
 
-  if [[ -n "$labels_csv" ]]; then
-    IFS=',' read -r -a labels <<<"$labels_csv"
-    for label in "${labels[@]}"; do
-      label="$(trim "$label")"
-      [[ -n "$label" ]] && issue_args+=(--label "$label")
-    done
-  fi
-
-  if [[ -n "$assignees_csv" ]]; then
-    IFS=',' read -r -a assignees <<<"$assignees_csv"
-    for assignee in "${assignees[@]}"; do
-      assignee="$(trim "$assignee")"
-      [[ -n "$assignee" ]] && issue_args+=(--assignee "$assignee")
-    done
-  fi
+  append_existing_labels issue_args "$labels_csv"
+  append_assignees issue_args "$assignees_csv"
 
   issue_url="$(gh "${issue_args[@]}" | tail -n1 | tr -d '\r')"
   [[ -n "$issue_url" ]] || die "Issue creation failed"
@@ -241,7 +408,7 @@ if [[ "$mode" == "issue" ]]; then
   [[ -n "$item_id" ]] || die "Failed to add issue to project"
 
   issue_number="${issue_url##*/}"
-else
+elif [[ -z "$issue_number" ]]; then
   draft_args=(project item-create "$project_number" --owner "$owner" --title "$title" --format json)
 
   if [[ -n "$body_file" ]]; then
@@ -254,18 +421,21 @@ else
   item_id="$(jq -r '.id // empty' <<<"$item_json")"
   [[ -n "$item_id" ]] || die "Draft item creation failed"
 
-  repo_id="$(gh repo view "$repo" --json id --jq '.id')"
-  [[ -n "$repo_id" ]] || die "Failed to resolve repository id"
+  convert_project_draft_to_issue "$item_id"
+fi
 
-  convert_query='mutation($projectItemId:ID!,$repositoryId:ID!){ convertProjectV2DraftIssueItemToIssue(input:{projectItemId:$projectItemId,repositoryId:$repositoryId}) { issue { number url } } }'
-  convert_json="$(gh api graphql -f query="$convert_query" -F projectItemId="$item_id" -F repositoryId="$repo_id")"
-
-  issue_number="$(jq -r '.data.convertProjectV2DraftIssueItemToIssue.issue.number // empty' <<<"$convert_json")"
-  issue_url="$(jq -r '.data.convertProjectV2DraftIssueItemToIssue.issue.url // empty' <<<"$convert_json")"
-  [[ -n "$issue_number" && -n "$issue_url" ]] || die "Draft item conversion to issue failed"
+if [[ -n "$issue_number" ]]; then
+  edit_args=(issue edit "$issue_number" -R "$repo")
+  append_existing_labels edit_args "$labels_csv" "--add-label"
+  append_assignees edit_args "$assignees_csv" "--add-assignee"
+  if [[ "${#edit_args[@]}" -gt 5 ]]; then
+    gh "${edit_args[@]}" >/dev/null
+  fi
 fi
 
 apply_single_select_field "$item_id" "$project_id" "$fields_json" "$area_field" "$area_option" false
+apply_single_select_field "$item_id" "$project_id" "$fields_json" "$priority_field" "$priority_option" false
+apply_single_select_field "$item_id" "$project_id" "$fields_json" "$size_field" "$size_option" false
 apply_single_select_field "$item_id" "$project_id" "$fields_json" "$status_field" "$status_option" true
 
 checked_out_branch=""
