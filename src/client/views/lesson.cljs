@@ -61,7 +61,7 @@
    (case state
      :known-with-translation    [:p.token-card__state "✓ В словаре"]
      :known-missing-translation (token-add-form dictionary-form translation "+ ДОБАВИТЬ ПЕРЕВОД")
-     :unknown-word              (token-add-form dictionary-form translation "+ В МОЙ СЛОВАРЬ"))])
+     :unknown-word              (token-add-form dictionary-form translation "+ В СЛОВАРЬ"))])
 
 
 (defn progress
