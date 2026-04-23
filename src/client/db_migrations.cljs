@@ -4,22 +4,12 @@
    [dbs :as dbs]
    [lambdaisland.glogi :as log]
    [promesa.core :as p]
+   [tasks :as tasks]
    [utils :as utils]))
 
 
 (def ^:private migration-id "migration:local-db-split")
 
-
-
-(defn- conflict?
-  [err]
-  (let [status (or (.-status err)
-                   (:status err)
-                   (get-in err [:body :status]))
-        name   (or (.-name err) (:name err))]
-    (or (= status 409)
-        (= status "409")
-        (= name "conflict"))))
 
 
 (defn- strip-rev
@@ -32,7 +22,7 @@
   (p/catch
     (db/insert db (strip-rev doc))
     (fn [err]
-      (if (conflict? err)
+      (if (db/conflict? err)
         nil
         (throw err)))))
 
@@ -101,6 +91,106 @@
           :complete)))))
 
 
+(def ^:private example-fetch-task-dedupe-migration-id
+  "migration:dedupe-example-fetch-tasks")
+
+
+(defn- active-task?
+  [task]
+  (not= "failed" (:status task)))
+
+
+(defn- task-word-id
+  [task]
+  ;; Keep top-level fallback for partially migrated devices that may fail between
+  ;; task-data-payload and this cleanup migration.
+  (or (get-in task [:data :word-id])
+      (:word-id task)))
+
+
+(defn- example-fetch-task-id
+  [word-id]
+  (tasks/id-for "example-fetch" {:word-id word-id}))
+
+
+(defn- task-sort-key
+  [task]
+  (let [word-id (task-word-id task)]
+    [(if (= (example-fetch-task-id word-id) (:_id task)) 0 1)
+     (or (:created-at task) "")
+     (or (:_id task) "")]))
+
+
+(defn- canonical-example-fetch-task
+  [task]
+  (let [word-id (task-word-id task)]
+    (-> task
+        (assoc :_id       (example-fetch-task-id word-id)
+               :task-type "example-fetch"
+               :data      {:word-id word-id})
+        (dissoc :_rev :word-id))))
+
+
+(defn- ensure-canonical-example-fetch-task!
+  [device-db task]
+  (p/catch
+    (db/insert device-db (canonical-example-fetch-task task))
+    (fn [err]
+      (if (db/conflict? err)
+        nil
+        (throw err)))))
+
+
+(defn- canonical-example-fetch-task?
+  [task]
+  (= (example-fetch-task-id (task-word-id task)) (:_id task)))
+
+
+(defn- canonicalize-example-fetch-group!
+  [device-db tasks]
+  (let [[keep & duplicates] (sort-by task-sort-key tasks)
+        remove-tasks        (if (canonical-example-fetch-task? keep)
+                              duplicates
+                              tasks)]
+    (p/do
+      (when-not (canonical-example-fetch-task? keep)
+        (ensure-canonical-example-fetch-task! device-db keep))
+      (when (seq remove-tasks)
+        (log/info :db-migrations/dedupe-example-fetch-tasks
+                  {:word-id (task-word-id keep)
+                   :kept    (example-fetch-task-id (task-word-id keep))
+                   :removed (mapv :_id remove-tasks)})
+        (p/all (map #(db/remove device-db %) remove-tasks))))))
+
+
+(defn- run-example-fetch-task-dedupe!
+  []
+  (let [device-db (dbs/device-db)]
+    (p/let [marker (db/get device-db example-fetch-task-dedupe-migration-id)]
+      (if marker
+        (do
+          (log/info :db-migrations/already-complete {:id example-fetch-task-dedupe-migration-id})
+          :already-complete)
+        (p/do
+          (p/let [{:keys [docs]} (db/find-all device-db
+                                              {:selector {:type      "task"
+                                                          :task-type "example-fetch"}})
+                  groups (->> docs
+                              (filter active-task?)
+                              (filter task-word-id)
+                              (group-by task-word-id)
+                              (vals))]
+            (p/doseq [tasks groups]
+              (canonicalize-example-fetch-group! device-db tasks)))
+          (db/insert device-db
+                     {:_id          example-fetch-task-dedupe-migration-id
+                      :type         "migration"
+                      :migration-id "dedupe-example-fetch-tasks"
+                      :created-at   (utils/now-iso)})
+          (log/info :db-migrations/complete {:id example-fetch-task-dedupe-migration-id})
+          :complete)))))
+
+
 ;; ---------------------------------------------------------------------------
 ;; Public state & API
 ;; ---------------------------------------------------------------------------
@@ -110,7 +200,9 @@
   [{:id  "migration:local-db-split"
     :run #(run-local-db-split!)}
    {:id  "migration:task-data-payload"
-    :run #(run-task-data-payload!)}])
+    :run #(run-task-data-payload!)}
+   {:id  "migration:dedupe-example-fetch-tasks"
+    :run #(run-example-fetch-task-dedupe!)}])
 
 
 (def ^:private migration-state
@@ -140,7 +232,7 @@
     (case status
       :done        (p/resolved true)
       :in-progress promise
-      ;; :not-started or :failed — (re)try
+      ;; :not-started or :failed - (re)try
       (let [p (run-all-migrations!)]
         (swap! migration-state assoc :status :in-progress :promise p)
         p))))

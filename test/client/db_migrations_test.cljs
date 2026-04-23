@@ -6,6 +6,7 @@
    [db-migrations :as sut]
    [dbs :as dbs]
    [promesa.core :as p]
+   [tasks :as tasks]
    [utils :as utils])
   (:require-macros
    [client.support.test :refer [async-testing]]))
@@ -62,6 +63,11 @@
     docs))
 
 
+(defn- example-fetch-id
+  [word-id]
+  (tasks/id-for "example-fetch" {:word-id word-id}))
+
+
 ;; =============================================================================
 ;; run-local-db-split!
 ;; =============================================================================
@@ -104,7 +110,7 @@
        (p/do
          (seed-local-docs! local-db)
          (#'sut/run-local-db-split!)
-         ;; Run again — should detect marker and skip
+         ;; Run again - should detect marker and skip
          (p/let [result (#'sut/run-local-db-split!)]
            (is (= :already-complete result))
            ;; Should still only have original docs (no duplicates)
@@ -178,6 +184,122 @@
 
 
 ;; =============================================================================
+;; run-example-fetch-task-dedupe!
+;; =============================================================================
+
+
+(deftest run-example-fetch-task-dedupe-removes-extra-active-tasks
+  (async-testing "dedupes active example-fetch tasks by word id"
+    (with-test-dbs
+     (fn [{:keys [device-db]}]
+       (p/do
+         (db/insert device-db
+                    {:_id        "legacy-1"
+                     :type       "task"
+                     :task-type  "example-fetch"
+                     :data       {:word-id "w1"}
+                     :attempts   0
+                     :run-at     "2024-01-01T00:00:00.000Z"
+                     :created-at "2024-01-01T00:00:00.000Z"})
+         (db/insert device-db
+                    {:_id        (example-fetch-id "w1")
+                     :type       "task"
+                     :task-type  "example-fetch"
+                     :data       {:word-id "w1"}
+                     :attempts   0
+                     :run-at     "2024-01-01T00:01:00.000Z"
+                     :created-at "2024-01-01T00:01:00.000Z"})
+         (db/insert device-db
+                    {:_id        "legacy-2"
+                     :type       "task"
+                     :task-type  "example-fetch"
+                     :data       {:word-id "w1"}
+                     :attempts   0
+                     :run-at     "2024-01-01T00:02:00.000Z"
+                     :created-at "2024-01-01T00:02:00.000Z"})
+
+         (#'sut/run-example-fetch-task-dedupe!)
+
+         (p/let [{:keys [docs]} (db/find device-db
+                                         {:selector {:type      "task"
+                                                     :task-type "example-fetch"}})]
+           (is (= 1 (count docs)))
+           (is (= (example-fetch-id "w1") (:_id (first docs))))))))))
+
+
+(deftest run-example-fetch-task-dedupe-canonicalizes-single-legacy-task
+  (async-testing "moves a single active legacy example-fetch task to canonical id"
+    (with-test-dbs
+     (fn [{:keys [device-db]}]
+       (p/do
+         (db/insert device-db
+                    {:_id        "legacy-1"
+                     :type       "task"
+                     :task-type  "example-fetch"
+                     :data       {:word-id "w1"}
+                     :attempts   2
+                     :run-at     "2024-01-01T00:00:00.000Z"
+                     :created-at "2024-01-01T00:00:00.000Z"
+                     :last-error "Still pending"})
+
+         (#'sut/run-example-fetch-task-dedupe!)
+
+         (p/let [{:keys [docs]} (db/find device-db
+                                         {:selector {:type      "task"
+                                                     :task-type "example-fetch"}})
+                 task (first docs)]
+           (is (= 1 (count docs)))
+           (is (= (example-fetch-id "w1") (:_id task)))
+           (is (= 2 (:attempts task)))
+           (is (= "Still pending" (:last-error task)))))))))
+
+
+(deftest run-example-fetch-task-dedupe-ignores-failed-tasks
+  (async-testing "does not delete failed task history"
+    (with-test-dbs
+     (fn [{:keys [device-db]}]
+       (p/do
+         (db/insert device-db
+                    {:_id        "active-task"
+                     :type       "task"
+                     :task-type  "example-fetch"
+                     :data       {:word-id "w1"}
+                     :attempts   0
+                     :run-at     "2024-01-01T00:00:00.000Z"
+                     :created-at "2024-01-01T00:00:00.000Z"})
+         (db/insert device-db
+                    {:_id            "failed-task"
+                     :type           "task"
+                     :task-type      "example-fetch"
+                     :data           {:word-id "w1"}
+                     :attempts       5
+                     :run-at         nil
+                     :created-at     "2024-01-01T00:00:00.000Z"
+                     :status         "failed"
+                     :failure-reason "retry-limit-reached"})
+
+         (#'sut/run-example-fetch-task-dedupe!)
+
+         (p/let [{:keys [docs]} (db/find device-db
+                                         {:selector {:type      "task"
+                                                     :task-type "example-fetch"}})]
+           (is (= 2 (count docs)))
+           (is (= #{(example-fetch-id "w1") "failed-task"}
+                  (set (map :_id docs))))))))))
+
+
+(deftest run-example-fetch-task-dedupe-writes-marker
+  (async-testing "writes migration marker document to device-db"
+    (with-test-dbs
+     (fn [{:keys [device-db]}]
+       (p/do
+         (#'sut/run-example-fetch-task-dedupe!)
+         (p/let [marker (db/get device-db "migration:dedupe-example-fetch-tasks")]
+           (is (some? marker))
+           (is (= "migration" (:type marker)))))))))
+
+
+;; =============================================================================
 ;; ensure-migrated!
 ;; =============================================================================
 
@@ -189,6 +311,39 @@
        (p/let [result (sut/ensure-migrated!)]
          (is (true? result))
          (is (= :done (sut/migration-status))))))))
+
+
+(deftest ensure-migrated-runs-example-fetch-task-dedupe
+  (async-testing "ensure-migrated! runs example-fetch task dedupe migration"
+    (with-test-dbs
+     (fn [{:keys [device-db]}]
+       (p/do
+         (db/insert device-db
+                    {:_id        "legacy-1"
+                     :type       "task"
+                     :task-type  "example-fetch"
+                     :data       {:word-id "w1"}
+                     :attempts   0
+                     :run-at     "2024-01-01T00:00:00.000Z"
+                     :created-at "2024-01-01T00:00:00.000Z"})
+         (db/insert device-db
+                    {:_id        "legacy-2"
+                     :type       "task"
+                     :task-type  "example-fetch"
+                     :data       {:word-id "w1"}
+                     :attempts   0
+                     :run-at     "2024-01-01T00:01:00.000Z"
+                     :created-at "2024-01-01T00:01:00.000Z"})
+
+         (sut/ensure-migrated!)
+
+         (p/let [{:keys [docs]} (db/find device-db
+                                         {:selector {:type      "task"
+                                                     :task-type "example-fetch"}})
+                 marker (db/get device-db "migration:dedupe-example-fetch-tasks")]
+           (is (= 1 (count docs)))
+           (is (= (example-fetch-id "w1") (:_id (first docs))))
+           (is (some? marker))))))))
 
 
 (deftest ensure-migrated-returns-resolved-when-already-done
@@ -232,7 +387,7 @@
                                              :migration-id "local-db-split"
                                              :created-at   (utils/now-iso)}))
                                :complete)))]
-           ;; First call fails — rejects and sets status to :failed.
+          ;; First call fails - rejects and sets status to :failed.
            (p/do
              (p/catch
                (p/do
@@ -240,7 +395,7 @@
                  (is false "First ensure-migrated! call should reject"))
                (fn [_]
                  (is (= :failed (sut/migration-status)))))
-             ;; Second call retries — succeeds.
+             ;; Second call retries - succeeds.
              (p/let [result2 (sut/ensure-migrated!)]
                (is (true? result2))
                (is (= 2 @call-count))

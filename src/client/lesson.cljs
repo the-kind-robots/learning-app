@@ -153,5 +153,5 @@
   [dbs dictionary-form translation]
   (p/let [result (vocabulary/add! dbs dictionary-form translation)]
     (when (:created? result)
-      (examples/create-fetch-task! (:word-id result)))
+      (examples/fetch! dbs (:word-id result)))
     result))

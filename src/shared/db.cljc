@@ -109,6 +109,13 @@
         (= name "not_found"))))
 
 
+(defn conflict?
+  [error]
+  #?(:clj  (= 409 (:status (ex-data error)))
+     :cljs (and (= 409 (.-status error))
+                (= "conflict" (.-name error)))))
+
+
 #?(:clj
    (defn- apply-conn
      [conn opts]

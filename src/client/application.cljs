@@ -179,7 +179,7 @@
                       (let [{:keys [word-id created?]} result
                             first-word? (and created? (zero? total))]
                         (when created?
-                          (examples/create-fetch-task! word-id))
+                          (examples/fetch! dbs word-id))
                         {:html/body (views.home/add-success :first-word? first-word?)
                          :status    201}))))))}]
 

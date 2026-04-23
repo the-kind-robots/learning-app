@@ -127,10 +127,27 @@
       (dbs/remove dbs example))))
 
 
-(defn create-fetch-task!
-  "Creates a task to fetch an example for the given word-id."
-  [word-id]
-  (tasks/create-task! "example-fetch" {:word-id word-id}))
+(defn fetch!
+  "Schedule an example fetch for the given word-id. Idempotent per word."
+  [dbs word-id]
+  (tasks/ensure! dbs "example-fetch" {:word-id word-id}))
+
+
+(defn- fetch-and-save!
+  [dbs word-id word-doc]
+  (p/let [example (fetch-one (:value word-doc)
+                             (russian-translations word-doc))]
+    (save-example! dbs word-id (:value word-doc) example)
+    true))
+
+
+(defn- fetch-failure-retry
+  [word-id err]
+  (log/warn :example-fetch/failed {:word-id word-id :error (ex-message err)})
+  (tasks/retry
+   (cond-> {:last-error (ex-message err)}
+     (:retry-after-ms (ex-data err))
+     (assoc :retry-after-ms (:retry-after-ms (ex-data err))))))
 
 
 (defmethod tasks/execute-task "example-fetch"
@@ -140,17 +157,7 @@
       (if-not word-doc
         (do
           (log/warn :example-fetch/word-not-found {:word-id word-id})
-          ;; Word deleted, consider task done
           true)
-
         (p/catch
-          (p/let [example (fetch-one (:value word-doc)
-                                     (russian-translations word-doc))]
-            (save-example! dbs word-id (:value word-doc) example)
-            true)
-
-          (fn [err]
-            (log/warn :example-fetch/failed {:word-id word-id :error (ex-message err)})
-            (if-let [retry-after-ms (:retry-after-ms (ex-data err))]
-              {:retry-after-ms retry-after-ms}
-              false)))))))
+          (fetch-and-save! dbs word-id word-doc)
+          #(fetch-failure-retry word-id %))))))

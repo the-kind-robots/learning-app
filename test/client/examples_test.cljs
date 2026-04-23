@@ -238,6 +238,21 @@
 ;; =============================================================================
 
 
+(deftest fetch-is-idempotent-for-word
+  (async-testing "`fetch!` creates one active task per word"
+    (with-test-dbs
+     (fn [app-dbs]
+       (p/with-redefs [tasks/flush! (constantly nil)]
+         (p/do
+           (sut/fetch! app-dbs "word-123")
+           (sut/fetch! app-dbs "word-123")
+           (p/let [{:keys [docs]} (db/find (:device/db app-dbs)
+                                           {:selector {:type "task"}})]
+             (is (= 1 (count docs)))
+             (is (= (tasks/id-for "example-fetch" {:word-id "word-123"})
+                    (:_id (first docs))))
+             (is (= {:word-id "word-123"} (:data (first docs)))))))))))
+
 (deftest task-handler-returns-true-when-word-deleted
   (async-testing "task handler returns true when word is deleted"
     (with-test-dbs
@@ -308,8 +323,8 @@
           (set! js/fetch original-fetch))))))
 
 
-(deftest task-handler-returns-false-on-fetch-failure
-  (async-testing "task handler returns false on fetch failure"
+(deftest task-handler-returns-retry-result-on-fetch-failure
+  (async-testing "task handler returns retry result on fetch failure"
     (let [original-fetch js/fetch]
       (set! js/fetch (fetch-mocks/mock-fetch-error 500))
       (p/finally
@@ -321,7 +336,8 @@
                              {:task-type "example-fetch"
                               :data      {:word-id "word-123"}}
                              dbs)]
-               (is (false? result))))))
+               (is (= :retry (:task-result result)))
+               (is (string? (:last-error result)))))))
         (fn []
           (set! js/fetch original-fetch))))))
 
@@ -343,13 +359,15 @@
                              {:task-type "example-fetch"
                               :data      {:word-id "word-123"}}
                              dbs)]
-               (is (= {:retry-after-ms 3000} result))))))
+               (is (= :retry (:task-result result)))
+               (is (= 3000 (:retry-after-ms result)))
+               (is (= "Examples are temporarily unavailable" (:last-error result)))))))
         (fn []
           (set! js/fetch original-fetch))))))
 
 
-(deftest task-handler-returns-false-on-invalid-example-payload
-  (async-testing "task handler returns false on invalid example payload"
+(deftest task-handler-returns-retry-result-on-invalid-example-payload
+  (async-testing "task handler returns retry result on invalid example payload"
     (let [original-fetch js/fetch]
       (set! js/fetch (fetch-mocks/mock-fetch-success {:translation "Собака бежит"}))
       (p/finally
@@ -361,7 +379,8 @@
                              {:task-type "example-fetch"
                               :data      {:word-id "word-123"}}
                              dbs)]
-               (is (false? result))
+               (is (= :retry (:task-result result)))
+               (is (= sut/invalid-response-message (:last-error result)))
                (p/let [examples (db-queries/fetch-examples (:device/db dbs))]
                  (is (empty? examples)))))))
         (fn []
