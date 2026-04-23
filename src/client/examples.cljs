@@ -13,6 +13,54 @@
   "Invalid example response from backend")
 
 
+(defn source
+  "Missing source is legacy AI."
+  [example]
+  (or (:source example) "ai"))
+
+
+(defn ai-example?
+  [example]
+  (= "ai" (source example)))
+
+
+(defn user-example?
+  [example]
+  (= "user" (source example)))
+
+
+(defn- structure-item?
+  [item]
+  (and (utils/non-blank (:usedForm item))
+       (utils/non-blank (:dictionaryForm item))
+       (utils/non-blank (:translation item))
+       (int? (:wordIndex item))))
+
+
+(defn valid-structure?
+  [structure]
+  (and (vector? structure)
+       (seq structure)
+       (every? structure-item? structure)))
+
+
+(defn usable?
+  [example]
+  (and (utils/non-blank (:value example))
+       (utils/non-blank (:translation example))
+       (case (source example)
+         "ai"   (valid-structure? (:structure example))
+         "user" true
+         false)))
+
+
+(defn- valid-generated-example?
+  [example]
+  (and (utils/non-blank (:value example))
+       (utils/non-blank (:translation example))
+       (valid-structure? (:structure example))))
+
+
 (defn- russian-translations
   "Collect user-confirmed Russian translations as a vector of strings."
   [word-doc]
@@ -60,7 +108,7 @@
                         :status 502
                         :error-kind :invalid-json}))
              (let [example (js->clj json :keywordize-keys true)]
-               (if (and (:value example) (:translation example))
+               (if (valid-generated-example? example)
                  example
                  (p/rejected
                   (ex-info invalid-response-message
@@ -92,16 +140,19 @@
 
    Returns a promise. Throws if example is invalid."
   [dbs word-id word example]
-  (when-not (and (:value example) (:translation example))
+  (when-not (valid-generated-example? example)
     (throw (ex-info "Invalid example: missing required fields"
                     {:word-id word-id :example example})))
-  (let [example-doc {:type          "example"
-                     :word-id       word-id
-                     :word          word
-                     :value         (:value example)
-                     :translation   (:translation example)
-                     :structure     (:structure example)
-                     :created-at    (utils/now-iso)}]
+  (let [now-iso     (utils/now-iso)
+        example-doc {:type        "example"
+                     :word-id     word-id
+                     :word        word
+                     :value       (:value example)
+                     :translation (:translation example)
+                     :source      "ai"
+                     :structure   (:structure example)
+                     :created-at  now-iso
+                     :modified-at now-iso}]
     (dbs/insert dbs example-doc)))
 
 
@@ -115,8 +166,62 @@
 (defn list
   "Retrieves example documents for the given word-ids."
   [dbs word-ids]
-  (p/let [{examples :docs} (dbs/find dbs {:selector {:type "example" :word-id {:$in word-ids}}})]
-    examples))
+  (if (empty? word-ids)
+    (p/resolved [])
+    (p/let [{examples :docs} (dbs/find dbs {:selector {:type "example" :word-id {:$in word-ids}}})]
+      examples)))
+
+
+(defn- list-fetch-tasks
+  [dbs]
+  (p/let [{tasks :docs} (dbs/find-all dbs {:selector {:type      "task"
+                                                      :task-type "example-fetch"}})]
+    tasks))
+
+
+(defn- task-word-id
+  [task]
+  (get-in task [:data :word-id]))
+
+
+(defn- failed-task?
+  [task]
+  (= "failed" (:status task)))
+
+
+(defn- active-task?
+  [task]
+  (not (failed-task? task)))
+
+
+(defn- state-for
+  [word-id examples tasks]
+  (let [word-examples (filter #(= word-id (:word-id %)) examples)
+        word-tasks    (filter #(= word-id (task-word-id %)) tasks)]
+    (cond
+      (some usable? word-examples)
+      {:state :ready}
+
+      (some active-task? word-tasks)
+      {:state :generating}
+
+      (some failed-task? word-tasks)
+      {:state      :failed
+       :last-error (:last-error (first (filter failed-task? word-tasks)))}
+
+      :else
+      {:state :no-example})))
+
+
+(defn states
+  "Returns example state by word id: ready, generating, failed, or no-example."
+  [dbs word-ids]
+  (p/let [examples (list dbs word-ids)
+          tasks    (list-fetch-tasks dbs)]
+    (into {}
+          (map (fn [word-id]
+                 [word-id (state-for word-id examples tasks)]))
+          word-ids)))
 
 
 (defn remove!

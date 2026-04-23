@@ -9,11 +9,11 @@
 
 ## 2. Example State Model
 
-- [ ] 2.1 Extend example docs with `source`, `preferred?`, `structure-status`, and `modified-at`.
-- [ ] 2.2 Derive per-word example state: no example, generating, failed, ready.
-- [ ] 2.3 Ensure exactly one preferred example is used for lesson rendering when examples exist.
-- [ ] 2.4 Add tests for state derivation and preferred example selection.
-- [ ] 2.5 Audit existing example docs for outdated structure shape from the previous PR and migrate, invalidate, or regenerate unsafe docs.
+- [x] 2.1 Extend example docs with `source` and `modified-at`.
+- [x] 2.2 Derive per-word example state: no example, generating, failed, ready.
+- [x] 2.3 Pick a random usable example for lesson rendering when multiple exist.
+- [x] 2.4 Add tests for state derivation and random usable example selection.
+- [x] 2.5 Audit existing AI example docs for missing/outdated structure and regenerate or invalidate unsafe docs.
 
 ## 3. Example Management UI
 
@@ -27,7 +27,7 @@
 
 - [ ] 4.1 Render structured AI examples with existing word popups.
 - [ ] 4.2 Render unstructured user examples as plain sentence/translation with no word popups.
-- [ ] 4.3 Add lesson tests for preferred user example and unstructured rendering.
+- [ ] 4.3 Add lesson tests for random usable example selection and unstructured user rendering.
 
 ## 5. Verification And Delivery
 

@@ -68,6 +68,13 @@
   (tasks/id-for "example-fetch" {:word-id word-id}))
 
 
+(def example-structure
+  [{:usedForm       "Hund"
+    :dictionaryForm "der Hund"
+    :translation    "собака"
+    :wordIndex      1}])
+
+
 ;; =============================================================================
 ;; run-local-db-split!
 ;; =============================================================================
@@ -300,6 +307,90 @@
 
 
 ;; =============================================================================
+;; run-example-docs-source!
+;; =============================================================================
+
+
+(deftest run-example-docs-source-adds-source-to-safe-ai-docs
+  (async-testing "adds source and modified-at to AI examples with valid structure"
+    (with-test-dbs
+     (fn [{:keys [device-db]}]
+       (p/do
+         (db/insert device-db
+                    {:_id        "example-1"
+                     :type       "example"
+                     :word-id    "w1"
+                     :word       "der Hund"
+                     :value      "Der Hund bellt."
+                     :translation "Собака лает."
+                     :structure  example-structure
+                     :created-at "2024-01-01T00:00:00.000Z"})
+
+         (#'sut/run-example-docs-source!)
+
+         (p/let [example (db/get device-db "example-1")]
+           (is (= "ai" (:source example)))
+           (is (= "2024-01-01T00:00:00.000Z" (:modified-at example)))))))))
+
+
+(deftest run-example-docs-source-removes-unsafe-ai-and-schedules-fetch
+  (async-testing "removes AI examples without valid structure and schedules regeneration"
+    (with-test-dbs
+     (fn [{:keys [device-db]}]
+       (p/do
+         (db/insert device-db
+                    {:_id        "example-1"
+                     :type       "example"
+                     :word-id    "w1"
+                     :word       "der Hund"
+                     :value      "Der Hund bellt."
+                     :translation "Собака лает."
+                     :created-at "2024-01-01T00:00:00.000Z"})
+
+         (#'sut/run-example-docs-source!)
+
+         (p/let [example (db/get device-db "example-1")
+                 task    (db/get device-db (example-fetch-id "w1"))]
+           (is (nil? example))
+           (is (= "task" (:type task)))
+           (is (= {:word-id "w1"} (:data task)))))))))
+
+
+(deftest run-example-docs-source-keeps-user-example-without-structure
+  (async-testing "user examples do not need structure"
+    (with-test-dbs
+     (fn [{:keys [device-db]}]
+       (p/do
+         (db/insert device-db
+                    {:_id        "example-1"
+                     :type       "example"
+                     :word-id    "w1"
+                     :word       "der Hund"
+                     :value      "Mein Hund schläft."
+                     :translation "Моя собака спит."
+                     :source     "user"
+                     :created-at "2024-01-01T00:00:00.000Z"})
+
+         (#'sut/run-example-docs-source!)
+
+         (p/let [example (db/get device-db "example-1")]
+           (is (= "user" (:source example)))
+           (is (nil? (:structure example)))
+           (is (= "2024-01-01T00:00:00.000Z" (:modified-at example)))))))))
+
+
+(deftest run-example-docs-source-writes-marker
+  (async-testing "writes migration marker document to device-db"
+    (with-test-dbs
+     (fn [{:keys [device-db]}]
+       (p/do
+         (#'sut/run-example-docs-source!)
+         (p/let [marker (db/get device-db "migration:example-doc-source-and-structure")]
+           (is (some? marker))
+           (is (= "migration" (:type marker)))))))))
+
+
+;; =============================================================================
 ;; ensure-migrated!
 ;; =============================================================================
 
@@ -343,6 +434,29 @@
                  marker (db/get device-db "migration:dedupe-example-fetch-tasks")]
            (is (= 1 (count docs)))
            (is (= (example-fetch-id "w1") (:_id (first docs))))
+           (is (some? marker))))))))
+
+
+(deftest ensure-migrated-runs-example-docs-source-migration
+  (async-testing "ensure-migrated! runs example doc source/structure migration"
+    (with-test-dbs
+     (fn [{:keys [device-db]}]
+       (p/do
+         (db/insert device-db
+                    {:_id        "example-1"
+                     :type       "example"
+                     :word-id    "w1"
+                     :word       "der Hund"
+                     :value      "Der Hund bellt."
+                     :translation "Собака лает."
+                     :structure  example-structure
+                     :created-at "2024-01-01T00:00:00.000Z"})
+
+         (sut/ensure-migrated!)
+
+         (p/let [example (db/get device-db "example-1")
+                 marker  (db/get device-db "migration:example-doc-source-and-structure")]
+           (is (= "ai" (:source example)))
            (is (some? marker))))))))
 
 

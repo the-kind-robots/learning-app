@@ -24,6 +24,21 @@
       (is (= fixtures/expected-example-trials trials)))))
 
 
+(deftest generate-trials-omits-structure-when-example-has-none
+  (testing "user examples can render as plain example trials"
+    (let [trials (sut/generate-trials []
+                                      [{:word-id     "word-1"
+                                        :value       "Mein Hund schläft."
+                                        :translation "Мой пёс спит."
+                                        :source      "user"}])]
+      (is (= [{:type    "example"
+               :word-id "word-1"
+               :prompt  "Мой пёс спит."
+               :answer  "Mein Hund schläft."
+               :locked? true}]
+             trials)))))
+
+
 (deftest generate-trials-combines-words-and-examples
   (testing "word trials come first, then example trials"
     (let [trials (sut/generate-trials fixtures/lesson-words fixtures/lesson-examples)]

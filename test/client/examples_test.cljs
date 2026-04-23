@@ -41,6 +41,20 @@
      (f {:device/db device-db :user/db user-db}))))
 
 
+(def example-structure
+  [{:usedForm       "Hund"
+    :dictionaryForm "der Hund"
+    :translation    "собака"
+    :wordIndex      1}])
+
+
+(defn- example-payload
+  []
+  {:value       "Ich habe einen Hund"
+   :translation "У меня есть собака"
+   :structure   example-structure})
+
+
 ;; =============================================================================
 ;; Unit Tests: fetch-one
 ;; =============================================================================
@@ -48,13 +62,14 @@
 
 (deftest fetch-one-returns-parsed-json-on-success
   (async-testing "`fetch-one` returns parsed JSON on success"
-    (let [example        {:value "Ich habe einen Hund" :translation "I have a dog"}
+    (let [example        (example-payload)
           original-fetch js/fetch]
       (set! js/fetch (fetch-mocks/mock-fetch-success example))
       (p/finally
         (p/let [result (sut/fetch-one "Hund")]
           (is (= "Ich habe einen Hund" (:value result)))
-          (is (= "I have a dog" (:translation result))))
+          (is (= "У меня есть собака" (:translation result)))
+          (is (= example-structure (:structure result))))
         (fn []
           (set! js/fetch original-fetch))))))
 
@@ -156,7 +171,7 @@
   (async-testing "`save-example!` inserts correct document"
     (with-test-db
       (fn [db]
-        (let [example {:value "Der Hund" :translation "The dog" :structure []}
+        (let [example {:value "Der Hund" :translation "The dog" :structure example-structure}
               dbs     {:device/db db}]
           (p/do
             (sut/save-example! dbs "word-123" "Hund" example)
@@ -166,7 +181,11 @@
                 (is (= "example" (:type saved)))
                 (is (= "word-123" (:word-id saved)))
                 (is (= "Hund" (:word saved)))
-                (is (= "Der Hund" (:value saved)))))))))))
+                (is (= "Der Hund" (:value saved)))
+                (is (= "ai" (:source saved)))
+                (is (= example-structure (:structure saved)))
+                (is (some? (:created-at saved)))
+                (is (= (:created-at saved) (:modified-at saved)))))))))))
 
 
 (deftest save-example-throws-on-missing-value
@@ -178,6 +197,13 @@
 
 (deftest save-example-throws-on-missing-translation
   (let [example {:value "Der Hund"}]
+    (is (thrown-with-msg? js/Error
+                          #"missing required fields"
+                          (sut/save-example! nil "word-123" "Hund" example)))))
+
+
+(deftest save-example-throws-on-missing-structure
+  (let [example {:value "Der Hund" :translation "The dog"}]
     (is (thrown-with-msg? js/Error
                           #"missing required fields"
                           (sut/save-example! nil "word-123" "Hund" example)))))
@@ -197,6 +223,50 @@
           (p/let [result (sut/find {:device/db db} "word-123")]
             (is (some? result))
             (is (= "word-123" (:word-id result)))))))))
+
+
+;; =============================================================================
+;; Unit Tests: list / states
+;; =============================================================================
+
+
+(deftest list-returns-all-examples-for-words
+  (async-testing "`list` returns all matching docs without lesson selection"
+    (with-test-db
+      (fn [db]
+        (p/do
+          (db/insert db {:_id "ai-ok" :type "example" :word-id "w1" :word "Hund"
+                         :value "Der Hund bellt." :translation "Собака лает."
+                         :source "ai" :structure example-structure})
+          (db/insert db {:_id "ai-bad" :type "example" :word-id "w1" :word "Hund"
+                         :value "Bad" :translation "Плохо" :source "ai"})
+          (db/insert db {:_id "user-ok" :type "example" :word-id "w2" :word "Katze"
+                         :value "Meine Katze schläft." :translation "Моя кошка спит."
+                         :source "user"})
+          (p/let [examples (sut/list {:device/db db} ["w1" "w2"])]
+            (is (= #{"ai-ok" "ai-bad" "user-ok"} (set (map :_id examples))))))))))
+
+
+(deftest states-reports-example-state-by-word
+  (async-testing "`states` derives ready/generating/failed/no-example"
+    (with-test-dbs
+      (fn [dbs]
+        (let [db (:device/db dbs)]
+          (p/do
+            (db/insert db {:_id "ready-example" :type "example" :word-id "ready" :word "Hund"
+                           :value "Der Hund bellt." :translation "Собака лает."
+                           :source "ai" :structure example-structure})
+            (db/insert db {:_id "active-task" :type "task" :task-type "example-fetch"
+                           :data {:word-id "generating"} :attempts 0})
+            (db/insert db {:_id "failed-task" :type "task" :task-type "example-fetch"
+                           :data {:word-id "failed"} :status "failed"
+                           :last-error "No credits" :attempts 5})
+            (p/let [states (sut/states dbs ["ready" "generating" "failed" "none"])]
+              (is (= :ready (get-in states ["ready" :state])))
+              (is (= :generating (get-in states ["generating" :state])))
+              (is (= :failed (get-in states ["failed" :state])))
+              (is (= "No credits" (get-in states ["failed" :last-error])))
+              (is (= :no-example (get-in states ["none" :state]))))))))))
 
 
 (deftest find-returns-nil-when-not-exists
@@ -266,7 +336,7 @@
 
 (deftest task-handler-fetches-and-saves-on-success
   (async-testing "task handler fetches and saves example"
-    (let [example        {:value "Der Hund läuft" :translation "The dog runs"}
+    (let [example        {:value "Der Hund läuft" :translation "The dog runs" :structure example-structure}
           requested-url  (atom nil)
           original-fetch js/fetch]
       (set! js/fetch
@@ -289,15 +359,20 @@
                (is (= "/api/examples?word=Hund&translation=%D1%81%D0%BE%D0%B1%D0%B0%D0%BA%D0%B0"
                       @requested-url))
                (p/let [examples (db-queries/fetch-examples (:device/db dbs))]
-                 (is (= 1 (count examples)))
-                 (is (= "Der Hund läuft" (:value (first examples)))))))))
+                 (let [saved (first examples)]
+                   (is (= 1 (count examples)))
+                   (is (= "Der Hund läuft" (:value saved)))
+                   (is (= "ai" (:source saved)))
+                   (is (= (:created-at saved) (:modified-at saved)))))))))
         (fn []
           (set! js/fetch original-fetch))))))
 
 
 (deftest task-handler-sends-all-confirmed-translations
   (async-testing "task handler sends every confirmed Russian translation as a repeated query param"
-    (let [example        {:value "Wir sitzen auf einer Bank im Park." :translation "Мы сидим на скамейке в парке."}
+    (let [example        {:value "Wir sitzen auf einer Bank im Park."
+                          :translation "Мы сидим на скамейке в парке."
+                          :structure example-structure}
           requested-url  (atom nil)
           original-fetch js/fetch]
       (set! js/fetch

@@ -1,12 +1,16 @@
 ## MODIFIED Requirements
 
 ### Requirement: Example documents are stored
-The system SHALL store example documents linked to vocabulary words with source, preference, structure status, and ISO 8601 timestamps.
+The system SHALL store example documents linked to vocabulary words with source and ISO 8601 timestamps.
 
 #### Scenario: Example document shape
 - **WHEN** an example is stored
-- **THEN** the document includes `type`, `word-id`, `word`, `value`, `translation`, `source`, `preferred?`, `structure-status`, `created-at`, and `modified-at`
-- **AND** the document includes `structure` when sentence structure is ready
+- **THEN** the document includes `type`, `word-id`, `word`, `value`, `translation`, `source`, `created-at`, and `modified-at`
+
+#### Scenario: AI example shape
+- **WHEN** an AI-generated example is stored
+- **THEN** the document includes `source` set to `"ai"`
+- **AND** the document includes valid `structure`
 
 Example:
 ```json
@@ -17,8 +21,6 @@ Example:
   "value": "Der Hund schlaeft unter dem Tisch.",
   "translation": "The dog sleeps under the table.",
   "source": "ai",
-  "preferred?": true,
-  "structure-status": "ready",
   "structure": [
     {"usedForm": "Hund", "dictionaryForm": "der Hund", "translation": "dog", "wordIndex": 1}
   ],
@@ -30,8 +32,11 @@ Example:
 #### Scenario: Unstructured user example shape
 - **WHEN** a user-owned example is stored
 - **THEN** the document includes `source` set to `"user"`
-- **AND** the document includes `structure-status` set to `"absent"`
 - **AND** the document MAY omit `structure`
+
+#### Scenario: Legacy example source
+- **WHEN** an existing example document has no `source`
+- **THEN** it is treated as AI-generated legacy data
 
 ### Requirement: Task documents are stored
 The system SHALL store task documents for asynchronous work with ISO 8601 scheduling and creation timestamps.

@@ -112,6 +112,116 @@
                          vec))))))))))
 
 
+(deftest start-picks-selected-usable-example-when-multiple-exist
+  (async-testing "`start!` picks one usable example per word"
+    (with-test-dbs
+     (fn [dbs]
+       (p/do
+         (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}])
+         (db-seed/seed-examples! (:device/db dbs)
+                                 [{:_id         "example-1"
+                                   :word-id     "word-1"
+                                   :word        "der Hund"
+                                   :value       "Der Hund bellt."
+                                   :translation "Пёс лает."}
+                                  {:_id         "example-2"
+                                   :word-id     "word-1"
+                                  :word        "der Hund"
+                                  :value       "Mein Hund schläft."
+                                  :translation "Мой пёс спит."
+                                  :source      "user"}])
+         (p/let [result (sut/start! dbs {:trial-selector :first
+                                         :example-selector second})]
+           (let [examples (filter domain/example-trial? (-> result :lesson-state :trials))]
+             (is (= 1 (count examples)))
+             (is (= "Mein Hund schläft." (:answer (first examples))))
+             (is (nil? (:structure (first examples)))))))))))
+
+
+(deftest start-example-selector-first-picks-first-usable-example
+  (async-testing "`start!` supports :example-selector :first"
+    (with-test-dbs
+     (fn [dbs]
+       (p/do
+         (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}])
+         (db-seed/seed-examples! (:device/db dbs)
+                                 [{:_id         "example-1"
+                                   :word-id     "word-1"
+                                   :word        "der Hund"
+                                   :value       "Der Hund bellt."
+                                   :translation "Пёс лает."}
+                                  {:_id         "example-2"
+                                   :word-id     "word-1"
+                                   :word        "der Hund"
+                                   :value       "Mein Hund schläft."
+                                   :translation "Мой пёс спит."
+                                   :source      "user"}])
+         (p/let [result (sut/start! dbs {:trial-selector :first
+                                         :example-selector :first})]
+           (let [examples (filter domain/example-trial? (-> result :lesson-state :trials))]
+             (is (= ["Der Hund bellt."] (mapv :answer examples))))))))))
+
+
+(deftest start-picks-one-example-per-word-and-skips-unusable
+  (async-testing "`start!` owns example filtering and selection"
+    (with-test-dbs
+     (fn [dbs]
+       (p/do
+         (db-seed/seed-vocabulary! (:user/db dbs)
+                                   [{:_id "word-1" :value "der Hund" :translation "пёс"}
+                                    {:_id "word-2" :value "die Katze" :translation "кошка"}])
+         (db-seed/seed-examples! (:device/db dbs)
+                                 [{:_id         "example-1"
+                                   :word-id     "word-1"
+                                   :word        "der Hund"
+                                   :value       "Der Hund bellt."
+                                   :translation "Пёс лает."}
+                                  {:_id         "example-2"
+                                   :word-id     "word-1"
+                                   :word        "der Hund"
+                                   :value       "Mein Hund schläft."
+                                   :translation "Мой пёс спит."
+                                   :source      "user"}
+                                  {:_id         "example-3"
+                                   :word-id     "word-2"
+                                   :word        "die Katze"
+                                   :value       "Die Katze schläft."
+                                   :translation "Кошка спит."}])
+         (db/insert (:device/db dbs)
+                    {:_id         "bad-ai"
+                     :type        "example"
+                     :word-id     "word-2"
+                     :word        "die Katze"
+                     :value       "Bad"
+                     :translation "Плохо"
+                     :source      "ai"})
+         (p/let [result (sut/start! dbs {:trial-selector :first
+                                         :example-selector last})]
+           (let [examples (filter domain/example-trial? (-> result :lesson-state :trials))]
+             (is (= 2 (count examples)))
+             (is (= #{"Mein Hund schläft." "Die Katze schläft."}
+                    (set (map :answer examples)))))))))))
+
+
+(deftest start-excludes-unusable-ai-examples
+  (async-testing "`start!` excludes AI examples without valid structure"
+    (with-test-dbs
+     (fn [dbs]
+       (p/do
+         (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}])
+         (db/insert (:device/db dbs)
+                    {:_id        "example-1"
+                     :type       "example"
+                     :word-id    "word-1"
+                     :word       "der Hund"
+                     :value      "Der Hund bellt."
+                     :translation "Пёс лает."
+                     :source     "ai"})
+         (p/let [result (sut/start! dbs {:trial-selector :first})]
+           (is (= 1 (count (-> result :lesson-state :trials))))
+           (is (empty? (filter domain/example-trial? (-> result :lesson-state :trials))))))))))
+
+
 ;; =============================================================================
 ;; restart!
 ;; =============================================================================

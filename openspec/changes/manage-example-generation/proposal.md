@@ -8,7 +8,7 @@ Example generation is currently opaque and can retry forever, so users cannot te
 - Dead-letter repeatedly failing example fetch tasks and retain enough failure detail for debugging and UI state.
 - Expose example state on vocabulary rows: no example, generating, failed, or ready.
 - Add user controls to generate, retry, add, edit, replace, and delete examples without automatic re-generation loops.
-- Allow user-owned examples to coexist with AI examples, with the user-preferred example used for lesson rendering.
+- Allow user-owned examples to coexist with AI examples; lessons choose a random usable example for the word.
 - Store user-owned examples exactly as entered, without AI-generated sentence structure, so user examples do not surprise the user.
 
 ## Capabilities
@@ -21,7 +21,7 @@ Example generation is currently opaque and can retry forever, so users cannot te
 
 - `examples`: add user-visible example management, user-owned examples, generation state, and unstructured user-example behavior.
 - `task-runner`: add idempotent task creation behavior and retry exhaustion/dead-letter behavior for repeat failures.
-- `data-model`: extend example and task document shapes for source/preference, structure readiness, and failure details.
+- `data-model`: extend example and task document shapes for source, modification timestamps, and failure details.
 
 ## Impact
 

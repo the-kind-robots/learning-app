@@ -33,27 +33,42 @@
    :translation translation})
 
 
+(defn- pick-examples
+  [examples example-selector]
+  (let [example-selector (case example-selector
+                           :first  first
+                           :random rand-nth
+                           nil     rand-nth
+                           example-selector)]
+    (->> examples
+         (filter examples/usable?)
+         (group-by :word-id)
+         (vals)
+         (mapv example-selector))))
+
+
 (defn start!
   "Start a new lesson. Fetches words and examples, creates and persists lesson state.
    Returns {:lesson-state ...} or {:error ...}."
   ([dbs]
    (start! dbs {}))
   ([dbs
-    {:keys [words-per-lesson trial-selector]
+    {:keys [words-per-lesson trial-selector example-selector]
      :or   {words-per-lesson domain/default-words-per-lesson}}]
    (p/catch
-     (p/let [{selected-words :words} (vocabulary/list dbs {:order :asc :limit words-per-lesson})]
-       (if-not (seq selected-words)
-         {:error :no-words-available}
-         (p/let [lesson-words  (mapv lesson-word selected-words)
-                 word-ids      (mapv :id lesson-words)
-                 examples      (examples/list dbs word-ids)
-                 lesson-state  (domain/initial-state lesson-words examples trial-selector (utils/now-iso))
-                 {:keys [rev]} (dbs/insert dbs lesson-state)]
-           {:lesson-state (assoc lesson-state :_rev rev)})))
-     (fn [err]
-       (log/error :lesson/start-failed {:error (ex-message err)})
-       {:error :lesson-start-failed}))))
+    (p/let [{selected-words :words} (vocabulary/list dbs {:order :asc :limit words-per-lesson})]
+      (if-not (seq selected-words)
+        {:error :no-words-available}
+        (p/let [lesson-words  (mapv lesson-word selected-words)
+                word-ids      (mapv :id lesson-words)
+                all-examples  (examples/list dbs word-ids)
+                used-examples (pick-examples all-examples example-selector)
+                lesson-state  (domain/initial-state lesson-words used-examples trial-selector (utils/now-iso))
+                {:keys [rev]} (dbs/insert dbs lesson-state)]
+          {:lesson-state (assoc lesson-state :_rev rev)})))
+    (fn [err]
+      (log/error :lesson/start-failed {:error (ex-message err)})
+      {:error :lesson-start-failed}))))
 
 
 (defn finish!

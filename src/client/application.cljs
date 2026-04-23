@@ -222,7 +222,8 @@
 
     ["/lesson"
      {:get    (fn [{:keys [dbs]}]
-                (p/let [{:keys [lesson-state error]} (lesson/restart! dbs {:trial-selector :random})]
+                (p/let [{:keys [lesson-state error]} (lesson/restart! dbs {:trial-selector   :random
+                                                                           :example-selector :random})]
                   (cond
                     lesson-state
                     {:html/body (views.lesson/page lesson-state) :status 200}

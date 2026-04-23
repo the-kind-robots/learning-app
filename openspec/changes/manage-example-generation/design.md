@@ -18,7 +18,7 @@ Example documents currently represent generated sentence data, but the app has n
 **Non-Goals:**
 
 - No login, account identity, telemetry, or personal-data tracking.
-- No multi-example selection UI beyond choosing the preferred example.
+- No multi-example selection UI; lessons choose among usable examples automatically.
 - No full example marketplace/library; examples stay local to the user's vocabulary.
 
 ## Decisions
@@ -41,7 +41,7 @@ Alternative considered: 10 attempts. Rejected as too high for paid-token/API fai
 
 ### Keep AI and user examples
 
-Store AI and user examples as separate example docs with `source` and `preferred?`. Lesson rendering uses the preferred example for the word. Adding a user example makes it preferred, but does not delete the AI example.
+Store AI and user examples as separate example docs with `source`. Missing `source` means legacy AI. Lesson creation chooses a random usable example for the word.
 
 Rationale: replacing the AI example would lose data and force a migration if multiple examples become useful later.
 
@@ -49,20 +49,26 @@ Alternative considered: one canonical example per word. Rejected because it dest
 
 ### User examples are intentionally unstructured
 
-User-created examples save text and translation exactly as entered with `structure-status "absent"` and no `structure`. No AI structure task is scheduled for user examples. Lessons render sentence/translation, but word popups only appear for examples that already have ready structure.
+User-created examples save text and translation exactly as entered with `source "user"` and no required `structure`. No AI structure task is scheduled for user examples. Lessons render user examples as plain sentence/translation with no word popups.
 
 Rationale: user examples are controlled input. Running AI structure on them can surprise the user by changing interpretation or adding affordances they did not ask for.
 
+### AI examples require structure
+
+AI examples (`source "ai"` or missing legacy `source`) must have valid sentence structure before lesson use. If an existing AI example lacks valid structure or has an outdated structure shape, the app treats it as unusable and regenerates or invalidates it instead of showing a broken structured trial.
+
+Rationale: AI examples are the only source of word popups. Missing structure on AI docs means legacy/outdated/broken data, not intentional plain rendering.
+
 ### Delete does not auto-regenerate
 
-Deleting an example removes or unprefers that example and leaves the word in `no example` state unless another preferred example exists. It does not enqueue generation.
+Deleting an example removes that example and leaves the word in `no example` state unless another usable example exists. It does not enqueue generation.
 
 Rationale: delete is user control. Auto-regeneration after delete creates a loop goblin.
 
 ## Risks / Trade-offs
 
 - Race handling differs by task type -> keep unique-task APIs small and explicit until another task type needs them.
-- Multiple examples can make "the example" ambiguous -> require exactly one preferred example per word in normal flows.
+- Random example choice reduces exact lesson reproducibility but gives useful variety.
 - User examples have fewer lesson affordances -> render plain text and reserve popups for structured AI examples.
 - Old random example-fetch tasks may already exist -> migration/dead-letter cleanup should collapse or disable duplicates before new deterministic tasks take over.
 
@@ -70,8 +76,9 @@ Rationale: delete is user control. Auto-regeneration after delete creates a loop
 
 - Add deterministic ids for new example-fetch tasks.
 - Add a local migration that groups active legacy example-fetch tasks by word and keeps at most one active task.
-- Extend existing example docs with `source "ai"`, `preferred? true` when no other preferred example exists, and `structure-status "ready"` when `structure` is present.
-- Store new user examples with `source "user"`, `preferred? true`, and `structure-status "absent"`.
+- Extend existing safe AI example docs with `source "ai"` and `modified-at`.
+- Regenerate or invalidate existing AI example docs that have no valid structure or have an outdated structure shape.
+- Store new user examples with `source "user"` and `modified-at`; do not require or generate structure.
 - Existing failed tasks without `last-error` remain valid; new failures record richer details.
 
 ## Open Questions

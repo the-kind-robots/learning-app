@@ -49,13 +49,13 @@
 (defn- example->trial
   "Convert an example document to an example trial.
    Example doc has :word-id, :value, :translation."
-  [example]
-  {:type      trial-type-example
-   :word-id   (:word-id example)
-   :prompt    (:translation example)
-   :answer    (:value example)
-   :structure (:structure example)
-   :locked?   true})
+  [{:keys [word-id translation value structure]}]
+  (cond-> {:type    trial-type-example
+           :word-id word-id
+           :prompt  translation
+           :answer  value
+           :locked? true}
+    structure (assoc :structure structure)))
 
 
 (defn generate-trials
