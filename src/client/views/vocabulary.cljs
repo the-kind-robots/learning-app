@@ -174,6 +174,13 @@
       [:button {:type "submit"} "Добавить пример"]]]))
 
 
+(defn word-detail
+  [{:keys [word examples fetch-state]}]
+  (list
+   (edit-form word)
+   (examples-panel {:word word :examples examples :fetch-state fetch-state})))
+
+
 (defn- word-items+sentinel
   "Builds word items and optional infinite-scroll sentinel."
   [{:keys [words-query show-more? words] :or {show-more? true}}]

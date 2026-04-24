@@ -211,9 +211,13 @@
      {:get (fn [{:keys [dbs path-params]}]
              (with-word dbs (:id path-params)
                (fn [word]
-                 {:status    200
-                  :html/body (views.word/edit-form
-                              (presenter.vocabulary/word-item-props word))})))}]
+                 (p/let [example-docs (examples/list dbs [(:id path-params)])
+                         fetch-state  (examples/state dbs (:id path-params))]
+                   {:status    200
+                    :html/body (views.word/word-detail
+                                {:word        (presenter.vocabulary/word-item-props word)
+                                 :examples    example-docs
+                                 :fetch-state fetch-state})}))))}]
 
     ["/words/:id/examples"
      {:get  (fn [{:keys [dbs path-params]}]

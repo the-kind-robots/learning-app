@@ -98,6 +98,24 @@
             (is (not (str/includes? body "type=\"hidden\"")))))))))
 
 
+(deftest get-word-edit-renders-example-management
+  (async-testing "GET /words/:id/edit includes example state and actions"
+    (with-test-dbs
+      (fn [app-dbs]
+        (p/do
+          (db/insert (:user/db app-dbs) {:_id "word-1"
+                                         :type "vocab"
+                                         :value "der Hund"
+                                         :translation [{:lang "ru" :value "собака"}]})
+          (p/let [response (request :get "/words/word-1/edit")
+                  body     (:body response)]
+            (is (= 200 (:status response)))
+            (is (str/includes? body "word-examples"))
+            (is (str/includes? body "Примера пока нет"))
+            (is (str/includes? body "Найти пример"))
+            (is (str/includes? body "Добавить пример"))))))))
+
+
 (deftest put-example-fetch-creates-idempotent-task-resource
   (async-testing "PUT /words/:id/example-fetch requests an example"
     (with-test-dbs
