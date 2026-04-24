@@ -407,8 +407,8 @@
     (assoc task :_id id :_rev rev)))
 
 
-(defn- insert-or-get-existing!
-  "Insert a unique task. On 409 conflict, return the existing doc instead."
+(defn- claim-task!
+  "Insert unique task, or return already-claimed task on conflict."
   [dbs task-id task]
   (p/catch
     (insert-task! dbs task)
@@ -425,7 +425,7 @@
   [dbs task-type data]
   (let [task-id (id-for task-type data)
         task    (create-task task-type data (utils/now-iso) {:id task-id})]
-    (p/let [doc (insert-or-get-existing! dbs task-id task)]
+    (p/let [doc (claim-task! dbs task-id task)]
       (flush!)
       doc)))
 

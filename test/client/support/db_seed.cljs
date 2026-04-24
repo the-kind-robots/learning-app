@@ -33,7 +33,7 @@
   [db examples]
   (p/all
    (map (fn [{:keys [_id word-id word value translation source structure]}]
-          (let [source    (or source "ai")
+          (let [source    (or source "fetched")
                 structure (or structure
                               [{:usedForm       (or word value)
                                 :dictionaryForm (or word value)
@@ -49,6 +49,6 @@
                                 :source      source
                                 :created-at  time/test-now-iso
                                 :modified-at time/test-now-iso}
-                         (= "ai" source)
+                         (= "fetched" source)
                          (assoc :structure structure)))))
         examples)))

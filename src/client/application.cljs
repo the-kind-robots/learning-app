@@ -108,6 +108,30 @@
             ctx)})
 
 
+(defn- with-word
+  "Resolve word by id; pass to handler, or respond 404 if missing."
+  [dbs word-id handler]
+  (p/let [word (vocabulary/get dbs word-id)]
+    (if word
+      (handler word)
+      {:status 404})))
+
+
+(defn- examples-panel-response
+  ([dbs word-id]
+   (examples-panel-response dbs word-id 200))
+  ([dbs word-id status]
+   (with-word dbs word-id
+     (fn [word]
+       (p/let [example-docs (examples/list dbs [word-id])
+               fetch-state  (examples/state dbs word-id)]
+         {:status    status
+          :html/body (views.word/examples-panel
+                      {:word        (presenter.vocabulary/word-item-props word)
+                       :examples    example-docs
+                       :fetch-state fetch-state})})))))
+
+
 (def ui-routes
   [[""
     ["/home"
@@ -122,9 +146,9 @@
                    {:html/body (views.dictionary/suggestions suggestions prefill)
                     :status    200})
                  (p/catch
-                   (fn [_err]
-                     {:html/body (views.dictionary/suggestions [] nil)
-                      :status    200}))))}]
+                  (fn [_err]
+                    {:html/body (views.dictionary/suggestions [] nil)
+                     :status    200}))))}]
 
     ["/words"
      {:head (fn [{:keys [dbs]}]
@@ -185,12 +209,46 @@
 
     ["/words/:id/edit"
      {:get (fn [{:keys [dbs path-params]}]
-             (p/let [word (vocabulary/get dbs (:id path-params))]
-               (if word
+             (with-word dbs (:id path-params)
+               (fn [word]
                  {:status    200
                   :html/body (views.word/edit-form
-                              (presenter.vocabulary/word-item-props word))}
-                 {:status 404})))}]
+                              (presenter.vocabulary/word-item-props word))})))}]
+
+    ["/words/:id/examples"
+     {:get  (fn [{:keys [dbs path-params]}]
+              (examples-panel-response dbs (:id path-params)))
+
+      :post (fn [{:keys [dbs path-params params]}]
+              (let [word-id (:id path-params)]
+                (p/let [added (examples/add! dbs word-id (:value params) (:translation params))]
+                  (case (:error added)
+                    :invalid   {:status 400
+                                :body   "Example value and translation required"}
+                    :not-found {:status 404}
+                    (p/let [response (examples-panel-response dbs word-id 201)]
+                      (assoc-in response [:headers "Location"] (str "/examples/" (:_id added))))))))}]
+
+    ["/words/:id/example-fetch"
+     {:get (fn [{:keys [dbs path-params]}]
+             (let [word-id (:id path-params)]
+               (with-word dbs word-id
+                 (fn [word]
+                   (p/let [fetch-state (examples/state dbs word-id)]
+                     {:status    200
+                      :html/body (views.word/example-fetch
+                                  (presenter.vocabulary/word-item-props word)
+                                  fetch-state)})))))
+
+      :put (fn [{:keys [dbs path-params]}]
+             (let [word-id (:id path-params)]
+               (with-word dbs word-id
+                 (fn [word]
+                   (p/let [fetch-state (examples/fetch! dbs word-id)]
+                     {:status    200
+                      :html/body (views.word/example-fetch
+                                  (presenter.vocabulary/word-item-props word)
+                                  fetch-state)})))))}]
 
     ["/words/:id"
      {:put    (fn [{:keys [dbs path-params params]}]
@@ -219,6 +277,25 @@
                         {:status    200
                          :html/body [:li {:id          (str "word-" word-id)
                                           :hx-swap-oob "delete"}]})))))}]
+
+    ["/examples/:id"
+     {:patch  (fn [{:keys [dbs path-params params]}]
+                (p/let [result (examples/update! dbs
+                                                 (:id path-params)
+                                                 (:value params)
+                                                 (:translation params))]
+                  (case (:error result)
+                    :invalid          {:status 400
+                                       :body   "Example value and translation required"}
+                    :not-found        {:status 404}
+                    :not-user-example {:status 409 :body "Only user examples can be edited"}
+                    (examples-panel-response dbs (:word-id result)))))
+
+      :delete (fn [{:keys [dbs path-params]}]
+                (p/let [result (examples/delete! dbs (:id path-params))]
+                  (case (:error result)
+                    :not-found {:status 404}
+                    (examples-panel-response dbs (:word-id result)))))}]
 
     ["/lesson"
      {:get    (fn [{:keys [dbs]}]

@@ -2,7 +2,6 @@
   (:require
    [db :as db]
    [dbs :as dbs]
-   [examples :as examples]
    [lambdaisland.glogi :as log]
    [promesa.core :as p]
    [tasks :as tasks]
@@ -66,7 +65,7 @@
 
 
 (defn- run-task-data-payload!
-  "Move legacy task payload fields under :data so task handlers read one shape."
+  "Move pre-data task payload fields under :data so task handlers read one shape."
   []
   (let [device-db (dbs/device-db)]
     (p/let [marker (db/get device-db task-data-migration-id)]
@@ -166,7 +165,7 @@
 
 
 (defn- run-example-fetch-task-dedupe!
-  "Collapse active legacy example-fetch duplicates into one canonical task per word."
+  "Collapse active old example-fetch duplicates into one canonical task per word."
   []
   (let [device-db (dbs/device-db)]
     (p/let [marker (db/get device-db example-fetch-task-dedupe-migration-id)]
@@ -194,74 +193,6 @@
           :complete)))))
 
 
-(def ^:private example-docs-source-migration-id
-  "migration:example-doc-source-and-structure")
-
-
-(defn- example-modified-at
-  [example]
-  (or (:modified-at example)
-      (:created-at example)
-      (utils/now-iso)))
-
-
-(defn- user-example?
-  [example]
-  (= "user" (:source example)))
-
-
-(defn- migrated-example-doc
-  [example source]
-  (assoc example
-         :source source
-         :modified-at (example-modified-at example)))
-
-
-(defn- ensure-example-fetch-task!
-  [device-db word-id]
-  (when word-id
-    (tasks/ensure! {:device/db device-db} "example-fetch" {:word-id word-id})))
-
-
-(defn- migrate-example-doc!
-  [device-db example]
-  (cond
-    (user-example? example)
-    (db/insert device-db (migrated-example-doc example "user"))
-
-    (examples/valid-structure? (:structure example))
-    (db/insert device-db (migrated-example-doc example "ai"))
-
-    :else
-    (p/do
-      (log/info :db-migrations/remove-unsafe-ai-example
-                {:id (:_id example) :word-id (:word-id example)})
-      (db/remove device-db example)
-      (ensure-example-fetch-task! device-db (:word-id example)))))
-
-
-(defn- run-example-docs-source!
-  "Mark legacy examples by source and remove AI examples that cannot render safely."
-  []
-  (let [device-db (dbs/device-db)]
-    (p/let [marker (db/get device-db example-docs-source-migration-id)]
-      (if marker
-        (do
-          (log/info :db-migrations/already-complete {:id example-docs-source-migration-id})
-          :already-complete)
-        (p/do
-          (p/let [{:keys [docs]} (db/find-all device-db {:selector {:type "example"}})]
-            (p/doseq [example docs]
-              (migrate-example-doc! device-db example)))
-          (db/insert device-db
-                     {:_id          example-docs-source-migration-id
-                      :type         "migration"
-                      :migration-id "example-doc-source-and-structure"
-                      :created-at   (utils/now-iso)})
-          (log/info :db-migrations/complete {:id example-docs-source-migration-id})
-          :complete)))))
-
-
 ;; ---------------------------------------------------------------------------
 ;; Public state & API
 ;; ---------------------------------------------------------------------------
@@ -273,9 +204,7 @@
    {:id  "migration:task-data-payload"
     :run #(run-task-data-payload!)}
    {:id  "migration:dedupe-example-fetch-tasks"
-    :run #(run-example-fetch-task-dedupe!)}
-   {:id  "migration:example-doc-source-and-structure"
-    :run #(run-example-docs-source!)}])
+    :run #(run-example-fetch-task-dedupe!)}])
 
 
 (def ^:private migration-state

@@ -74,6 +74,106 @@
        "Удалить"]]]))
 
 
+(defn- example-source-label
+  [source]
+  (case (or source "fetched")
+    "user"    "Мой пример"
+    "fetched" "Найденный пример"
+    "Пример"))
+
+
+(defn- example-card
+  [{:keys [_id source value translation]}]
+  [:article.word-example
+   {:id (str "example-" _id)}
+   [:header.word-example__header
+    [:span.word-example__source (example-source-label source)]]
+   [:p.word-example__value {:lang "de"} value]
+   [:p.word-example__translation {:lang "ru"} translation]
+   [:div.word-example__actions
+    (when (= "user" source)
+      [:form.word-example__edit
+       {:hx-patch  (str "/examples/" _id)
+        :hx-target "closest .word-examples"
+        :hx-swap   "outerHTML"}
+       [:label.word-example__field
+        "Пример"
+        [:textarea.word-example__textarea
+         {:name     "value"
+          :lang     "de"
+          :required true
+          :rows     2}
+         value]]
+       [:label.word-example__field
+        "Перевод"
+        [:input.word-example__input
+         {:name     "translation"
+          :lang     "ru"
+          :required true
+          :value    translation}]]
+       [:button {:type "submit"} "Сохранить"]])
+    [:button.word-example__delete
+     {:type       "button"
+      :hx-delete  (str "/examples/" _id)
+      :hx-target  "closest .word-examples"
+      :hx-swap    "outerHTML"
+      :hx-confirm "Удалить пример?"}
+     "Удалить"]]])
+
+
+(defn- fetch-text
+  [{:keys [state last-error]}]
+  (case state
+    :ready       "Пример готов"
+    :fetching    "Ищем пример"
+    :failed      (str "Не удалось найти пример"
+                      (when (utils/non-blank last-error)
+                        (str ": " last-error)))
+    :no-example  "Примера пока нет"
+    "Пример"))
+
+
+(defn example-fetch
+  [{:keys [id]} fetch-state]
+  [:div.word-examples__fetch
+   {:id (str "word-example-fetch-" id)}
+   [:p.word-examples__state (fetch-text fetch-state)]
+   [:form
+    {:hx-put    (str "/words/" id "/example-fetch")
+     :hx-target (str "#word-example-fetch-" id)
+     :hx-swap   "outerHTML"}
+    [:button {:type "submit"}
+     (if (= :failed (:state fetch-state))
+       "Попробовать ещё раз"
+       "Найти пример")]]])
+
+
+(defn examples-panel
+  [{:keys [word examples fetch-state]}]
+  (let [{:keys [id]} word]
+    [:section.word-examples
+     {:id (str "word-examples-" id)}
+     [:header.word-examples__header
+      [:h2.word-examples__title "Примеры"]]
+     (if (seq examples)
+       [:div.word-examples__list
+        (for [example examples]
+          (example-card example))]
+       [:p.word-examples__empty "Для этого слова ещё нет примеров."])
+     (example-fetch word fetch-state)
+     [:form.word-examples__add
+      {:hx-post   (str "/words/" id "/examples")
+       :hx-target (str "#word-examples-" id)
+       :hx-swap   "outerHTML"}
+      [:label
+       "Свой пример"
+       [:input {:name "value" :lang "de" :placeholder "Немецкое предложение"}]]
+      [:label
+       "Перевод"
+       [:input {:name "translation" :lang "ru" :placeholder "Русский перевод"}]]
+      [:button {:type "submit"} "Добавить пример"]]]))
+
+
 (defn- word-items+sentinel
   "Builds word items and optional infinite-scroll sentinel."
   [{:keys [words-query show-more? words] :or {show-more? true}}]

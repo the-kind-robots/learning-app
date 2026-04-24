@@ -7,10 +7,11 @@ The system SHALL store example documents linked to vocabulary words with source 
 - **WHEN** an example is stored
 - **THEN** the document includes `type`, `word-id`, `word`, `value`, `translation`, `source`, `created-at`, and `modified-at`
 
-#### Scenario: AI example shape
-- **WHEN** an AI-generated example is stored
-- **THEN** the document includes `source` set to `"ai"`
-- **AND** the document includes valid `structure`
+#### Scenario: Fetched example shape
+- **WHEN** a fetched example is stored
+- **THEN** the document includes `source` set to `"fetched"`
+- **AND** the document MAY include provider-specific fields unknown to the client
+- **AND** the document MAY include `structure`
 
 Example:
 ```json
@@ -20,7 +21,7 @@ Example:
   "word": "der Hund",
   "value": "Der Hund schlaeft unter dem Tisch.",
   "translation": "The dog sleeps under the table.",
-  "source": "ai",
+  "source": "fetched",
   "structure": [
     {"usedForm": "Hund", "dictionaryForm": "der Hund", "translation": "dog", "wordIndex": 1}
   ],
@@ -34,9 +35,9 @@ Example:
 - **THEN** the document includes `source` set to `"user"`
 - **AND** the document MAY omit `structure`
 
-#### Scenario: Legacy example source
+#### Scenario: Source-less fetched example
 - **WHEN** an existing example document has no `source`
-- **THEN** it is treated as AI-generated legacy data
+- **THEN** it is treated as fetched data
 
 ### Requirement: Task documents are stored
 The system SHALL store task documents for asynchronous work with ISO 8601 scheduling and creation timestamps.

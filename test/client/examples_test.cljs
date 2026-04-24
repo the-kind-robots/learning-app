@@ -113,19 +113,15 @@
           (set! js/fetch original-fetch))))))
 
 
-(deftest fetch-one-rejects-on-invalid-example-payload
-  (async-testing "`fetch-one` rejects on invalid example payload"
+(deftest fetch-one-accepts-tolerant-example-payload
+  (async-testing "`fetch-one` accepts payloads without fields this client can render"
     (let [original-fetch js/fetch]
-      (set! js/fetch (fetch-mocks/mock-fetch-success {:value "Der Hund läuft"}))
+      (set! js/fetch (fetch-mocks/mock-fetch-success {:value "Der Hund läuft"
+                                                       :new-rich-field {:level 2}}))
       (p/finally
-        (p/catch
-          (p/do
-            (sut/fetch-one "Hund")
-            (is false "Should have rejected"))
-          (fn [error]
-            (is (= sut/invalid-response-message (ex-message error)))
-            (is (= "Hund" (:word (ex-data error))))
-            (is (= :invalid-response (:error-kind (ex-data error))))))
+        (p/let [example (sut/fetch-one "Hund")]
+          (is (= "Der Hund läuft" (:value example)))
+          (is (= {:level 2} (:new-rich-field example))))
         (fn []
           (set! js/fetch original-fetch))))))
 
@@ -171,7 +167,8 @@
   (async-testing "`save-example!` inserts correct document"
     (with-test-db
       (fn [db]
-        (let [example {:value "Der Hund" :translation "The dog" :structure example-structure}
+        (let [example {:value "Der Hund" :translation "The dog" :structure example-structure
+                       :difficulty 2 :source "backend-owned"}
               dbs     {:device/db db}]
           (p/do
             (sut/save-example! dbs "word-123" "Hund" example)
@@ -182,31 +179,32 @@
                 (is (= "word-123" (:word-id saved)))
                 (is (= "Hund" (:word saved)))
                 (is (= "Der Hund" (:value saved)))
-                (is (= "ai" (:source saved)))
+                (is (= "fetched" (:source saved)))
                 (is (= example-structure (:structure saved)))
+                (is (= 2 (:difficulty saved)))
                 (is (some? (:created-at saved)))
                 (is (= (:created-at saved) (:modified-at saved)))))))))))
 
 
-(deftest save-example-throws-on-missing-value
-  (let [example {:translation "The dog"}]
-    (is (thrown-with-msg? js/Error
-                          #"missing required fields"
-                          (sut/save-example! nil "word-123" "Hund" example)))))
+(deftest save-example-stores-unusable-but-parseable-map
+  (async-testing "`save-example!` stores parseable fetched docs even if not usable by this client"
+    (with-test-db
+      (fn [db]
+        (let [example {:value "Der Hund läuft."
+                       :translation "The dog runs."
+                       :future-shape true}
+              dbs     {:device/db db}]
+          (p/let [insert-result (sut/save-example! dbs "word-123" "Hund" example)
+                  saved         (db/get db (:id insert-result))]
+              (is (= "fetched" (:source saved)))
+              (is (= true (:future-shape saved)))
+              (is (nil? (:structure saved)))))))))
 
 
-(deftest save-example-throws-on-missing-translation
-  (let [example {:value "Der Hund"}]
-    (is (thrown-with-msg? js/Error
-                          #"missing required fields"
-                          (sut/save-example! nil "word-123" "Hund" example)))))
-
-
-(deftest save-example-throws-on-missing-structure
-  (let [example {:value "Der Hund" :translation "The dog"}]
-    (is (thrown-with-msg? js/Error
-                          #"missing required fields"
-                          (sut/save-example! nil "word-123" "Hund" example)))))
+(deftest save-example-throws-on-non-map-payload
+  (is (thrown-with-msg? js/Error
+                        #"expected map"
+                        (sut/save-example! nil "word-123" "Hund" ["not" "map"]))))
 
 
 ;; =============================================================================
@@ -226,7 +224,7 @@
 
 
 ;; =============================================================================
-;; Unit Tests: list / states
+;; Unit Tests: list / state
 ;; =============================================================================
 
 
@@ -235,38 +233,151 @@
     (with-test-db
       (fn [db]
         (p/do
-          (db/insert db {:_id "ai-ok" :type "example" :word-id "w1" :word "Hund"
+          (db/insert db {:_id "fetched-ok" :type "example" :word-id "w1" :word "Hund"
                          :value "Der Hund bellt." :translation "Собака лает."
-                         :source "ai" :structure example-structure})
-          (db/insert db {:_id "ai-bad" :type "example" :word-id "w1" :word "Hund"
-                         :value "Bad" :translation "Плохо" :source "ai"})
+                         :source "fetched" :structure example-structure})
+          (db/insert db {:_id "fetched-bad" :type "example" :word-id "w1" :word "Hund"
+                         :value "Bad" :translation "Плохо" :source "fetched"})
           (db/insert db {:_id "user-ok" :type "example" :word-id "w2" :word "Katze"
                          :value "Meine Katze schläft." :translation "Моя кошка спит."
                          :source "user"})
           (p/let [examples (sut/list {:device/db db} ["w1" "w2"])]
-            (is (= #{"ai-ok" "ai-bad" "user-ok"} (set (map :_id examples))))))))))
+            (is (= #{"fetched-ok" "fetched-bad" "user-ok"} (set (map :_id examples))))))))))
 
 
-(deftest states-reports-example-state-by-word
-  (async-testing "`states` derives ready/generating/failed/no-example"
+(deftest states-report-example-state-by-word
+  (async-testing "`states` derives ready/fetching/failed/no-example for multiple words"
     (with-test-dbs
       (fn [dbs]
         (let [db (:device/db dbs)]
           (p/do
             (db/insert db {:_id "ready-example" :type "example" :word-id "ready" :word "Hund"
                            :value "Der Hund bellt." :translation "Собака лает."
-                           :source "ai" :structure example-structure})
+                           :source "fetched" :structure example-structure})
             (db/insert db {:_id "active-task" :type "task" :task-type "example-fetch"
-                           :data {:word-id "generating"} :attempts 0})
+                           :data {:word-id "fetching"} :attempts 0})
             (db/insert db {:_id "failed-task" :type "task" :task-type "example-fetch"
                            :data {:word-id "failed"} :status "failed"
                            :last-error "No credits" :attempts 5})
-            (p/let [states (sut/states dbs ["ready" "generating" "failed" "none"])]
+            (p/let [states (sut/states dbs ["ready" "fetching" "failed" "none"])]
               (is (= :ready (get-in states ["ready" :state])))
-              (is (= :generating (get-in states ["generating" :state])))
+              (is (= :fetching (get-in states ["fetching" :state])))
               (is (= :failed (get-in states ["failed" :state])))
               (is (= "No credits" (get-in states ["failed" :last-error])))
               (is (= :no-example (get-in states ["none" :state]))))))))))
+
+
+(deftest state-returns-single-word-state
+  (async-testing "`state` reuses `states` and returns one state map"
+    (with-test-dbs
+      (fn [dbs]
+        (let [db (:device/db dbs)]
+          (p/do
+            (db/insert db {:_id "ready-example" :type "example" :word-id "ready" :word "Hund"
+                           :value "Der Hund bellt." :translation "Собака лает."
+                           :source "fetched" :structure example-structure})
+            (p/let [state (sut/state dbs "ready")]
+              (is (= {:state :ready} state)))))))))
+
+
+(deftest add-user-example-stores-unstructured-doc
+  (async-testing "`add!` stores user example exactly as entered without structure"
+    (with-test-dbs
+      (fn [dbs]
+        (p/do
+          (db/insert (:user/db dbs) {:_id "word-1"
+                                     :type "vocab"
+                                     :value "das Haus"
+                                     :translation [{:lang "ru" :value "дом"}]})
+          (p/let [added (sut/add! dbs
+                                   "word-1"
+                                   "  Mein Haus ist alt.  "
+                                   "  Мой дом старый.  ")
+                  examples (db-queries/fetch-examples (:device/db dbs))
+                  tasks    (db-queries/fetch-by-type (:device/db dbs) "task")]
+            (is (= 1 (count examples)))
+            (is (= (:_id added) (:_id (first examples))))
+            (is (= "user" (:source added)))
+            (is (= "das Haus" (:word added)))
+            (is (= "  Mein Haus ist alt.  " (:value added)))
+            (is (= "  Мой дом старый.  " (:translation added)))
+            (is (nil? (:structure added)))
+            (is (empty? tasks))))))))
+
+
+(deftest add-user-example-coexists-with-fetched-example
+  (async-testing "`add!` adds a separate user example without replacing fetched example"
+    (with-test-dbs
+      (fn [dbs]
+        (p/do
+          (db/insert (:user/db dbs) {:_id "word-1"
+                                     :type "vocab"
+                                     :value "der Hund"
+                                     :translation [{:lang "ru" :value "собака"}]})
+          (db/insert (:device/db dbs) {:_id "fetched-1"
+                                       :type "example"
+                                       :word-id "word-1"
+                                       :word "der Hund"
+                                       :value "Der Hund bellt."
+                                       :translation "Собака лает."
+                                       :source "fetched"
+                                       :structure example-structure})
+          (sut/add! dbs "word-1" "Mein Hund schläft." "Моя собака спит.")
+          (p/let [examples (db-queries/fetch-examples (:device/db dbs))]
+            (is (= #{"fetched" "user"} (set (map :source examples))))
+            (is (= #{"Der Hund bellt." "Mein Hund schläft."}
+                   (set (map :value examples))))))))))
+
+
+(deftest add-user-example-returns-not-found-when-word-missing
+  (async-testing "`add!` returns not-found when parent word does not exist"
+    (with-test-dbs
+      (fn [dbs]
+        (p/let [added (sut/add! dbs "missing" "Hallo." "Привет.")]
+          (is (= {:error :not-found} added)))))))
+
+
+(deftest add-user-example-rejects-invalid-fields
+  (async-testing "`add!` returns invalid when value or translation is blank"
+    (with-test-dbs
+      (fn [dbs]
+        (p/let [added (sut/add! dbs "word-1" "" "Привет.")]
+          (is (= {:error :invalid} added)))))))
+
+
+(deftest update-user-example-updates-only-user-doc
+  (async-testing "`update-user!` updates user example and rejects fetched example"
+    (with-test-dbs
+      (fn [dbs]
+        (let [device-db (:device/db dbs)]
+          (p/do
+            (db/insert device-db {:_id "user-example"
+                                  :type "example"
+                                  :word-id "word-1"
+                                  :word "der Hund"
+                                  :value "Alt."
+                                  :translation "Старый."
+                                  :source "user"
+                                  :created-at "2026-01-01T00:00:00.000Z"
+                                  :modified-at "2026-01-01T00:00:00.000Z"})
+            (db/insert device-db {:_id "fetched-example"
+                                  :type "example"
+                                  :word-id "word-1"
+                                  :word "der Hund"
+                                  :value "Der Hund bellt."
+                                  :translation "Собака лает."
+                                  :source "fetched"
+                                  :structure example-structure})
+            (p/let [updated (sut/update! dbs "user-example" "Neu." "Новый.")
+                    fetched (sut/update! dbs "fetched-example" "Kaputt." "Сломано.")
+                    invalid (sut/update! dbs "user-example" "" "Пусто.")
+                    saved   (db/get device-db "user-example")]
+              (is (= "Neu." (:value updated)))
+              (is (= "Новый." (:translation saved)))
+              (is (= "user" (:source saved)))
+              (is (nil? (:structure saved)))
+              (is (= :not-user-example (:error fetched)))
+              (is (= {:error :invalid} invalid)))))))))
 
 
 (deftest find-returns-nil-when-not-exists
@@ -301,6 +412,80 @@
           (sut/remove! {:device/db db} "nonexistent")
           (p/let [examples (db-queries/fetch-examples db)]
             (is (empty? examples))))))))
+
+
+(deftest delete-does-not-create-replacement-work
+  (async-testing "`delete!` removes example without scheduling replacement work"
+    (with-test-dbs
+      (fn [dbs]
+        (p/do
+          (db/insert (:device/db dbs) {:_id "example-1"
+                                       :type "example"
+                                       :word-id "word-1"
+                                       :word "der Hund"
+                                       :value "Der Hund bellt."
+                                       :translation "Собака лает."
+                                       :source "fetched"
+                                       :structure example-structure})
+          (p/let [result   (sut/delete! dbs "example-1")
+                  examples (db-queries/fetch-examples (:device/db dbs))
+                  tasks    (db-queries/fetch-by-type (:device/db dbs) "task")]
+            (is (= {:deleted? true :word-id "word-1"} result))
+            (is (empty? examples))
+            (is (empty? tasks))))))))
+
+
+(deftest fetch-creates-or-retries-task
+  (async-testing "`fetch!` creates missing task and resets failed task"
+    (with-test-dbs
+     (fn [dbs]
+       (p/with-redefs [tasks/flush! (constantly nil)]
+         (let [failed-id (tasks/id-for "example-fetch" {:word-id "failed-word"})]
+           (p/do
+             (db/insert (:device/db dbs) {:_id "failed-task"
+                                          :type "task"
+                                          :task-type "other-task"
+                                          :data {:word-id "keep-me"}})
+             (db/insert (:device/db dbs) {:_id failed-id
+                                          :type "task"
+                                          :task-type "example-fetch"
+                                          :data {:word-id "failed-word"}
+                                          :status "failed"
+                                          :attempts 5
+                                          :failure-reason "retry-limit-reached"
+                                          :last-error "No credits"
+                                          :failed-at "2026-01-01T00:00:00.000Z"})
+             (sut/fetch! dbs "new-word")
+             (p/let [retried (sut/fetch! dbs "failed-word")
+                     tasks   (db-queries/fetch-by-type (:device/db dbs) "task")]
+               (is (= 3 (count tasks)))
+               (is (= (tasks/id-for "example-fetch" {:word-id "new-word"})
+                      (:_id (first (filter #(= {:word-id "new-word"} (:data %)) tasks)))))
+               (is (= {:state :fetching} retried))
+               (let [retried-task (first (filter #(= failed-id (:_id %)) tasks))]
+                 (is (nil? (:status retried-task)))
+                 (is (= 0 (:attempts retried-task)))
+                 (is (nil? (:last-error retried-task))))))))))))
+
+
+(deftest fetch-skips-ready-example
+  (async-testing "`fetch!` does not create replacement work when example is ready"
+    (with-test-dbs
+      (fn [dbs]
+        (p/with-redefs [tasks/flush! (constantly nil)]
+          (p/do
+            (db/insert (:device/db dbs) {:_id "ready-example"
+                                         :type "example"
+                                         :word-id "word-1"
+                                         :word "der Hund"
+                                         :value "Der Hund bellt."
+                                         :translation "Собака лает."
+                                         :source "fetched"
+                                         :structure example-structure})
+            (p/let [result (sut/fetch! dbs "word-1")
+                    tasks  (db-queries/fetch-by-type (:device/db dbs) "task")]
+              (is (= {:state :ready} result))
+              (is (empty? tasks)))))))))
 
 
 ;; =============================================================================
@@ -362,7 +547,7 @@
                  (let [saved (first examples)]
                    (is (= 1 (count examples)))
                    (is (= "Der Hund läuft" (:value saved)))
-                   (is (= "ai" (:source saved)))
+                   (is (= "fetched" (:source saved)))
                    (is (= (:created-at saved) (:modified-at saved)))))))))
         (fn []
           (set! js/fetch original-fetch))))))
@@ -441,10 +626,11 @@
           (set! js/fetch original-fetch))))))
 
 
-(deftest task-handler-returns-retry-result-on-invalid-example-payload
-  (async-testing "task handler returns retry result on invalid example payload"
+(deftest task-handler-stores-unusable-fetched-payload
+  (async-testing "task handler stores fetched payload even if this client cannot use it"
     (let [original-fetch js/fetch]
-      (set! js/fetch (fetch-mocks/mock-fetch-success {:translation "Собака бежит"}))
+      (set! js/fetch (fetch-mocks/mock-fetch-success {:value "Der Hund läuft."
+                                                       :translation "Собака бежит"}))
       (p/finally
         (with-test-dbs
          (fn [dbs]
@@ -454,9 +640,10 @@
                              {:task-type "example-fetch"
                               :data      {:word-id "word-123"}}
                              dbs)]
-               (is (= :retry (:task-result result)))
-               (is (= sut/invalid-response-message (:last-error result)))
+               (is (true? result))
                (p/let [examples (db-queries/fetch-examples (:device/db dbs))]
-                 (is (empty? examples)))))))
+                 (is (= 1 (count examples)))
+                 (is (= "fetched" (:source (first examples))))
+                 (is (false? (sut/usable? (first examples)))))))))
         (fn []
           (set! js/fetch original-fetch))))))
