@@ -34,4 +34,4 @@
 - [x] 5.1 Run OpenSpec validation for `manage-example-generation`.
 - [x] 5.2 Run relevant ClojureScript tests.
 - [x] 5.3 Run browser validation for vocabulary example controls and lesson rendering.
-- [ ] 5.4 Archive OpenSpec on the delivery branch before PR merge.
+- [x] 5.4 Archive OpenSpec on the delivery branch before PR merge.
