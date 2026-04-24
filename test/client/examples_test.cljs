@@ -488,6 +488,26 @@
               (is (empty? tasks)))))))))
 
 
+(deftest fetch-runs-when-only-user-example-is-ready
+  (async-testing "`fetch!` still creates fetched work when word only has user examples"
+    (with-test-dbs
+      (fn [dbs]
+        (p/with-redefs [tasks/flush! (constantly nil)]
+          (p/do
+            (db/insert (:device/db dbs) {:_id "user-example"
+                                         :type "example"
+                                         :word-id "word-1"
+                                         :word "der Hund"
+                                         :value "Mein Hund schläft."
+                                         :translation "Моя собака спит."
+                                         :source "user"})
+            (p/let [result (sut/fetch! dbs "word-1")
+                    tasks  (db-queries/fetch-by-type (:device/db dbs) "task")]
+              (is (= {:state :fetching} result))
+              (is (= 1 (count tasks)))
+              (is (= {:word-id "word-1"} (:data (first tasks)))))))))))
+
+
 ;; =============================================================================
 ;; Integration Tests: Task Handler
 ;; =============================================================================

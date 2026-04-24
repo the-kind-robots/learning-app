@@ -24,6 +24,11 @@
   (= "user" (source example)))
 
 
+(defn fetched-example?
+  [example]
+  (= "fetched" (source example)))
+
+
 (defn- structure-item?
   [item]
   (and (utils/non-blank (:usedForm item))
@@ -49,6 +54,12 @@
      "fetched" (valid-structure? (:structure example))
      "user"    true
      false)))
+
+
+(defn usable-fetched?
+  [example]
+  (and (fetched-example? example)
+       (usable? example)))
 
 
 (defn- russian-translations
@@ -272,6 +283,24 @@
       {:error :not-found})))
 
 
+(defn refetch!
+  "Deletes a fetched example and schedules replacement work for its word."
+  [dbs example-id]
+  (p/let [example (dbs/get dbs "example" example-id)]
+    (cond
+      (nil? example)
+      {:error :not-found}
+
+      (user-example? example)
+      {:error :user-example}
+
+      :else
+      (p/do
+        (dbs/remove dbs example)
+        (tasks/retry! dbs "example-fetch" {:word-id (:word-id example)})
+        {:word-id (:word-id example)}))))
+
+
 (defn remove!
   "Deletes an example document by its _id. No-op if document doesn't exist."
   [dbs example-id]
@@ -282,11 +311,11 @@
 
 (defn fetch!
   "Fetch an example for the word.
-   If ready, no-op. Otherwise creates/reuses work or retries failed work."
+   If fetched example is ready, no-op. Otherwise creates/reuses work or retries failed work."
   [dbs word-id]
-  (p/let [fetch-state (state dbs word-id)]
-    (if (= :ready (:state fetch-state))
-      fetch-state
+  (p/let [word-examples (list dbs [word-id])]
+    (if (some usable-fetched? word-examples)
+      {:state :ready}
       (p/do
         (tasks/retry! dbs "example-fetch" {:word-id word-id})
         {:state :fetching}))))

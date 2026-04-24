@@ -73,8 +73,8 @@
             (is (nil? (:structure (first examples))))))))))
 
 
-(deftest get-word-examples-renders-visible-user-edit-fields
-  (async-testing "GET /words/:id/examples renders visible inputs for user example edits"
+(deftest get-word-examples-renders-user-edit-action
+  (async-testing "GET /words/:id/examples renders a user example edit action"
     (with-test-dbs
       (fn [app-dbs]
         (p/do
@@ -92,10 +92,34 @@
           (p/let [response (request :get "/words/word-1/examples")
                   body     (:body response)]
             (is (= 200 (:status response)))
+            (is (str/includes? body "/examples/example-1/edit"))
+            (is (str/includes? body "Свой пример"))
+            (is (not (str/includes? body "type=\"hidden\"")))))))))
+
+
+(deftest get-example-edit-renders-inline-user-edit-fields
+  (async-testing "GET /examples/:id/edit renders inline inputs for one user example"
+    (with-test-dbs
+      (fn [app-dbs]
+        (p/do
+          (db/insert (:user/db app-dbs) {:_id "word-1"
+                                         :type "vocab"
+                                         :value "der Hund"
+                                         :translation [{:lang "ru" :value "собака"}]})
+          (db/insert (:device/db app-dbs) {:_id "example-1"
+                                           :type "example"
+                                           :word-id "word-1"
+                                           :word "der Hund"
+                                           :value "Mein Hund schläft."
+                                           :translation "Моя собака спит."
+                                           :source "user"})
+          (p/let [response (request :get "/examples/example-1/edit")
+                  body     (:body response)]
+            (is (= 200 (:status response)))
             (is (str/includes? body "textarea"))
             (is (str/includes? body "name=\"value\""))
             (is (str/includes? body "name=\"translation\""))
-            (is (not (str/includes? body "type=\"hidden\"")))))))))
+            (is (str/includes? body "Отмена"))))))))
 
 
 (deftest get-word-edit-renders-example-management
@@ -112,8 +136,8 @@
             (is (= 200 (:status response)))
             (is (str/includes? body "word-examples"))
             (is (str/includes? body "Примера пока нет"))
-            (is (str/includes? body "Найти пример"))
-            (is (str/includes? body "Добавить пример"))))))))
+            (is (str/includes? body "Сгенерировать"))
+            (is (str/includes? body "Добавить свой пример"))))))))
 
 
 (deftest put-example-fetch-creates-idempotent-task-resource
@@ -159,6 +183,35 @@
                   tasks    (db-queries/fetch-by-type (:device/db app-dbs) "task")]
             (is (= 200 (:status response)))
             (is (empty? tasks))))))))
+
+
+(deftest put-example-refetch-removes-fetched-and-schedules-work
+  (async-testing "PUT /examples/:id/refetch replaces fetched example with fetch work"
+    (with-test-dbs
+      (fn [app-dbs]
+        (p/do
+          (db/insert (:user/db app-dbs) {:_id "word-1"
+                                         :type "vocab"
+                                         :value "der Hund"
+                                         :translation [{:lang "ru" :value "собака"}]})
+          (db/insert (:device/db app-dbs) {:_id "example-1"
+                                           :type "example"
+                                           :word-id "word-1"
+                                           :word "der Hund"
+                                           :value "Der Hund bellt."
+                                           :translation "Собака лает."
+                                           :source "fetched"
+                                           :structure [{:usedForm "Hund"
+                                                        :dictionaryForm "der Hund"
+                                                        :translation "собака"
+                                                        :wordIndex 1}]})
+          (p/let [response (request :put "/examples/example-1/refetch")
+                  examples (db-queries/fetch-examples (:device/db app-dbs))
+                  tasks    (db-queries/fetch-by-type (:device/db app-dbs) "task")]
+            (is (= 200 (:status response)))
+            (is (empty? examples))
+            (is (= 1 (count tasks)))
+            (is (= {:word-id "word-1"} (:data (first tasks))))))))))
 
 
 (deftest delete-example-resource-does-not-create-replacement-work
