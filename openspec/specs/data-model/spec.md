@@ -38,17 +38,11 @@ Example:
 ```
 
 ### Requirement: Example documents are stored
-The system SHALL store example documents linked to vocabulary words with source and ISO 8601 timestamps.
+The system SHALL store example documents linked to vocabulary words with an ISO 8601 creation timestamp.
 
 #### Scenario: Example document shape
 - **WHEN** an example is stored
-- **THEN** the document includes `type`, `word-id`, `word`, `value`, `translation`, `source`, `created-at`, and `modified-at`
-
-#### Scenario: Fetched example shape
-- **WHEN** a fetched example is stored
-- **THEN** the document includes `source` set to `"fetched"`
-- **AND** the document MAY include provider-specific fields unknown to the client
-- **AND** the document MAY include `structure`
+- **THEN** the document includes `type`, `word-id`, `word`, `value`, `translation`, `structure`, and `created-at`
 
 Example:
 ```json
@@ -58,23 +52,12 @@ Example:
   "word": "der Hund",
   "value": "Der Hund schlaeft unter dem Tisch.",
   "translation": "The dog sleeps under the table.",
-  "source": "fetched",
   "structure": [
     {"usedForm": "Hund", "dictionaryForm": "der Hund", "translation": "dog", "wordIndex": 1}
   ],
-  "created-at": "2026-01-20T10:02:00.000Z",
-  "modified-at": "2026-01-20T10:02:00.000Z"
+  "created-at": "2026-01-20T10:02:00.000Z"
 }
 ```
-
-#### Scenario: Unstructured user example shape
-- **WHEN** a user-owned example is stored
-- **THEN** the document includes `source` set to `"user"`
-- **AND** the document MAY omit `structure`
-
-#### Scenario: Source-less fetched example
-- **WHEN** an existing example document has no `source`
-- **THEN** it is treated as fetched data
 
 ### Requirement: Lesson documents are stored
 The system SHALL store lesson documents with an options object containing configuration settings.
@@ -147,16 +130,14 @@ The system SHALL store task documents for asynchronous work with ISO 8601 schedu
 
 #### Scenario: Task document shape
 - **WHEN** a task is stored
-- **THEN** it includes `type`, `task-type`, `data`, `attempts`, `run-at`, and `created-at`
-- **AND** unique tasks use deterministic short `_id` values derived from task type and normalized data
+- **THEN** it includes `type`, `task-type`, `word-id`, `attempts`, `run-at`, and `created-at`
 
 Example:
 ```json
 {
-  "_id": "task:example-fetch:<8-hex-data-hash>",
   "type": "task",
   "task-type": "example-fetch",
-  "data": {"word-id": "<vocab-id>"},
+  "word-id": "<vocab-id>",
   "attempts": 0,
   "run-at": "2026-01-20T10:05:00.000Z",
   "created-at": "2026-01-20T10:00:00.000Z"
@@ -164,26 +145,23 @@ Example:
 ```
 
 ### Requirement: Dead-lettered tasks are recorded
-The system SHALL record failed tasks as dead-lettered task documents with an ISO 8601 failure timestamp and the latest available failure detail.
+The system SHALL record failed tasks as dead-lettered task documents with an ISO 8601 failure timestamp.
 
 #### Scenario: Dead-letter task shape
 - **WHEN** a task is dead-lettered
 - **THEN** it includes `status`, `failure-reason`, and `failed-at`
-- **AND** it includes `last-error` when failure detail is available
 
 Example:
 ```json
 {
-  "_id": "task:example-fetch:<8-hex-data-hash>",
   "type": "task",
   "task-type": "example-fetch",
-  "data": {"word-id": "<vocab-id>"},
-  "attempts": 5,
-  "run-at": null,
+  "word-id": "<vocab-id>",
+  "attempts": 1,
+  "run-at": "2026-01-20T10:05:00.000Z",
   "created-at": "2026-01-20T10:00:00.000Z",
   "status": "failed",
-  "failure-reason": "retry-limit-reached",
-  "last-error": "Server error fetching example",
+  "failure-reason": "unknown-task-type",
   "failed-at": "2026-01-20T10:06:00.000Z"
 }
 ```
