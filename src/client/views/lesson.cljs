@@ -101,9 +101,11 @@
    {:hx-on:htmx:load input-focus-after-settle}
    ;; User focuses input manually (avoids auto keyboard open/layout jumps).
    [:form.lesson__footer.lesson__footer--input.page-footer
-    {:hx-post   "/lesson/answer"
-     :hx-target "#lesson-footer"
-     :hx-swap   "outerHTML"}
+    {:autocapitalize "none"
+     :autocorrect    "off"
+     :hx-post        "/lesson/answer"
+     :hx-target      "#lesson-footer"
+     :hx-swap        "outerHTML"}
     [:label.lesson__input-label
      {:for "lesson-answer"}
      "Ответ на немецком"]
@@ -111,7 +113,7 @@
      {:id             "lesson-answer"
       :name           "answer"
       :rows           4
-      :autocapitalize "off"
+      :autocapitalize "none"
       :autocomplete   "off"
       :autocorrect    "off"
       :enterkeyhint   "done"

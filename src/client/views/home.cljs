@@ -25,12 +25,14 @@
 (defn- add-form
   [{:keys [oob?]}]
   [:form.home__add-form
-   (cond-> {:id            add-form-id
-            :hx-post       "/words"
-            :hx-push-url   "false"
-            :hx-swap       "none"
+   (cond-> {:id              add-form-id
+            :autocapitalize  "none"
+            :autocorrect     "off"
+            :hx-post         "/words"
+            :hx-push-url     "false"
+            :hx-swap         "none"
             :hx-disabled-elt "find button[type='submit']"
-            :hx-disinherit "hx-disabled-elt"}
+            :hx-disinherit   "hx-disabled-elt"}
      oob? (assoc :hx-swap-oob (str "outerHTML:#" add-form-id)))
    [:fieldset.home__add-fieldset
     [:legend.home__add-legend
@@ -44,7 +46,7 @@
        [:input.home__add-form-input
         {:id             "new-word-value"
          :name           "value"
-         :autocapitalize "off"
+         :autocapitalize "none"
          :autocomplete   "off"
          :autocorrect    "off"
          :enterkeyhint   "next"
@@ -70,7 +72,7 @@
        [:input.home__add-form-input
         {:id             "new-word-translation"
          :name           "translation"
-         :autocapitalize "off"
+         :autocapitalize "none"
          :autocomplete   "off"
          :autocorrect    "off"
          :enterkeyhint   "done"
