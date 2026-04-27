@@ -47,6 +47,8 @@
          :autocapitalize "off"
          :autocomplete   "off"
          :autocorrect    "off"
+         :enterkeyhint   "next"
+         :spellcheck     "false"
          :data-ac-role   "word"
          :hx-get         "/dictionary-entries"
          :hx-include     "this"
@@ -66,15 +68,17 @@
         {:for "new-word-translation"}
         "Перевод (русский)"]
        [:input.home__add-form-input
-        {:id           "new-word-translation"
-         :name         "translation"
+        {:id             "new-word-translation"
+         :name           "translation"
          :autocapitalize "off"
-         :autocomplete "off"
-         :autocorrect  "off"
-         :data-ac-role "translation"
-         :lang         "ru"
-         :placeholder  "Перевод"
-         :required     true}]]]]
+         :autocomplete   "off"
+         :autocorrect    "off"
+         :enterkeyhint   "done"
+         :spellcheck     "false"
+         :data-ac-role   "translation"
+         :lang           "ru"
+         :placeholder    "Перевод"
+         :required       true}]]]]
 
     [:button.home__add-form-submit.big-button.big-button--request-stable
      {:type "submit"}

@@ -108,12 +108,17 @@
      {:for "lesson-answer"}
      "Ответ на немецком"]
     [:textarea.lesson__input
-     {:id          "lesson-answer"
-      :name        "answer"
-      :rows        4
-      :placeholder "Введите перевод..."
-      :maxlength   1000
-      :lang        "de"
+     {:id             "lesson-answer"
+      :name           "answer"
+      :rows           4
+      :autocapitalize "off"
+      :autocomplete   "off"
+      :autocorrect    "off"
+      :enterkeyhint   "done"
+      :placeholder    "Введите перевод..."
+      :maxlength      1000
+      :lang           "de"
+      :spellcheck     "false"
       :hx-on:keydown
       "if(event.key==='Enter' && (event.ctrlKey || event.metaKey)){event.preventDefault(); this.form.requestSubmit();}"}]
     [:div.lesson__action.page-footer__action
