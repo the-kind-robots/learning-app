@@ -55,8 +55,10 @@
         :autocapitalize "off"
         :autocomplete   "off"
         :autocorrect    "off"
+        :enterkeyhint   "done"
         :lang           "ru"
         :placeholder    "Перевод"
+        :spellcheck     "false"
         :value          translation
         :autofocus      true
         :hx-on:focus    "this.setSelectionRange(this.value.length, this.value.length)"}]]
@@ -135,6 +137,7 @@
          :autocapitalize "off"
          :autocomplete   "off"
          :autocorrect    "off"
+         :enterkeyhint   "next"
          :data-ac-role   "word"
          :hx-get         "/dictionary-entries"
          :hx-trigger     "input changed delay:300ms"
@@ -146,23 +149,26 @@
          :lang           "de"
          :placeholder    "Новое слово"
          :required       true
+         :spellcheck     "false"
          :value          ""}])
 
       translation-blank?
       (conj
        [:input
-        {:class        base-input-classes
-         :hx-swap-oob  "true"
-         :id           "new-word-translation"
-         :name         "translation"
-         :data-ac-role "translation"
+        {:class          base-input-classes
+         :hx-swap-oob    "true"
+         :id             "new-word-translation"
+         :name           "translation"
+         :data-ac-role   "translation"
          :autocapitalize "off"
-         :autocomplete "off"
-         :autocorrect  "off"
-         :lang         "ru"
-         :placeholder  "Перевод"
-         :required     true
-         :value        ""}]))))
+         :autocomplete   "off"
+         :autocorrect    "off"
+         :enterkeyhint   "done"
+         :lang           "ru"
+         :placeholder    "Перевод"
+         :required       true
+         :spellcheck     "false"
+         :value          ""}]))))
 
 
 (defn- state-marker
@@ -207,14 +213,18 @@
          [:div.input
           [:span.input__search-icon]
           [:input.input__input-area.input__input-area--icon
-           {:autocomplete "off"
-            :hx-get       base-list-url
-            :placeholder  "Поиск"
-            :hx-target    "#word-list"
-            :hx-swap      "outerHTML"
-            :hx-sync      "this:replace"
-            :hx-trigger   "input changed delay:500ms, keyup[key=='Enter']"
-            :name         "search"}]]]
+           {:autocapitalize "off"
+            :autocomplete   "off"
+            :autocorrect    "off"
+            :enterkeyhint   "search"
+            :hx-get         base-list-url
+            :placeholder    "Поиск"
+            :spellcheck     "false"
+            :hx-target      "#word-list"
+            :hx-swap        "outerHTML"
+            :hx-sync        "this:replace"
+            :hx-trigger     "input changed delay:500ms, keyup[key=='Enter']"
+            :name           "search"}]]]
         [:div.vocabulary__list
          (word-list
           {:words-query words-query
