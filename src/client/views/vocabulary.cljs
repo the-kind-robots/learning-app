@@ -42,9 +42,11 @@
   (let [item-id  (str "word-" id)
         word-url (str "/words/" id)]
     [:form.word-edit-dialog__form
-     {:hx-put    word-url
-      :hx-target (str "#" item-id)
-      :hx-swap   "outerHTML"
+     {:autocapitalize "none"
+      :autocorrect    "off"
+      :hx-put         word-url
+      :hx-target      (str "#" item-id)
+      :hx-swap        "outerHTML"
       :hx-on:htmx:after-request
       "if(event.detail.successful) this.closest('dialog').close()"}
      [:div.word-edit-dialog__inputs
@@ -52,7 +54,7 @@
       [:span.word-edit-dialog__arrow {:aria-hidden "true"} "→"]
       [:input.word-edit-dialog__input
        {:name           "translation"
-        :autocapitalize "off"
+        :autocapitalize "none"
         :autocomplete   "off"
         :autocorrect    "off"
         :enterkeyhint   "done"
@@ -134,7 +136,7 @@
         {:class          base-input-classes
          :id             "new-word-value"
          :name           "value"
-         :autocapitalize "off"
+         :autocapitalize "none"
          :autocomplete   "off"
          :autocorrect    "off"
          :enterkeyhint   "next"
@@ -160,7 +162,7 @@
          :id             "new-word-translation"
          :name           "translation"
          :data-ac-role   "translation"
-         :autocapitalize "off"
+         :autocapitalize "none"
          :autocomplete   "off"
          :autocorrect    "off"
          :enterkeyhint   "done"
@@ -210,10 +212,12 @@
           "← Назад"]
          [:h1.vocabulary__title "Мои слова"]]
         [:form.vocabulary__search
+         {:autocapitalize "none"
+          :autocorrect    "off"}
          [:div.input
           [:span.input__search-icon]
           [:input.input__input-area.input__input-area--icon
-           {:autocapitalize "off"
+           {:autocapitalize "none"
             :autocomplete   "off"
             :autocorrect    "off"
             :enterkeyhint   "search"
