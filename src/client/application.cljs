@@ -237,7 +237,7 @@
                 (p/do
                   (lesson/finish! dbs)
                   (p/let [total (vocabulary/count dbs)]
-                    {:headers   {"HX-Push-Url" "/home"}
+                    {:headers   {"HX-Replace-Url" "/home"}
                      :html/body (views.home/page :empty-vocab? (zero? total))
                      :status    200})))}]
 
