@@ -214,7 +214,6 @@
       :type        "button"
       :aria-label  "Закрыть урок"
       :hx-delete   "/lesson"
-      :hx-push-url "true"
       :hx-target   "#app"
       :hx-swap     "innerHTML"}
      [:svg
