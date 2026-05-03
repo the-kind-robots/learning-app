@@ -53,7 +53,7 @@ Example:
   "value": "Der Hund schlaeft unter dem Tisch.",
   "translation": "The dog sleeps under the table.",
   "structure": [
-    {"usedForm": "Hund", "dictionaryForm": "der Hund", "translation": "dog"}
+    {"usedForm": "Hund", "dictionaryForm": "der Hund", "translation": "dog", "wordIndex": 1}
   ],
   "created-at": "2026-01-20T10:02:00.000Z"
 }

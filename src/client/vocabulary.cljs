@@ -49,6 +49,12 @@
             {:word-id id :created? true})))))))
 
 
+(defn find-duplicate-by-value
+  "Return existing vocab doc whose normalized value matches value."
+  [dbs value]
+  (find-duplicate dbs (domain/normalize-value value)))
+
+
 (defn get
   "Returns a word row by id, or nil if not found."
   [dbs word-id]

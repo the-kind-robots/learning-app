@@ -280,6 +280,34 @@
           (set! js/fetch original-fetch))))))
 
 
+(deftest task-handler-sends-all-confirmed-translations
+  (async-testing "task handler sends every confirmed Russian translation as a repeated query param"
+    (let [example        {:value "Wir sitzen auf einer Bank im Park." :translation "Мы сидим на скамейке в парке."}
+          requested-url  (atom nil)
+          original-fetch js/fetch]
+      (set! js/fetch
+            (fn [url]
+              (reset! requested-url url)
+              ((fetch-mocks/mock-fetch-success example) url)))
+      (p/finally
+        (with-test-dbs
+         (fn [dbs]
+           (p/do
+             (db/insert (:user/db dbs) {:_id "word-bank"
+                                        :type "vocab"
+                                        :value "Bank"
+                                        :translation [{:lang "ru" :value "банк"}
+                                                      {:lang "ru" :value "скамейка"}]})
+             (p/let [_ (tasks/execute-task
+                        {:task-type "example-fetch"
+                         :data      {:word-id "word-bank"}}
+                        dbs)]
+               (is (= "/api/examples?word=Bank&translation=%D0%B1%D0%B0%D0%BD%D0%BA&translation=%D1%81%D0%BA%D0%B0%D0%BC%D0%B5%D0%B9%D0%BA%D0%B0"
+                      @requested-url))))))
+        (fn []
+          (set! js/fetch original-fetch))))))
+
+
 (deftest task-handler-returns-false-on-fetch-failure
   (async-testing "task handler returns false on fetch failure"
     (let [original-fetch js/fetch]

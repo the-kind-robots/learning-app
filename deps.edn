@@ -1,19 +1,19 @@
 {:paths   ["src/backend" "src/shared" "resources"]
 
  :deps    {buddy/buddy-hashers               {:mvn/version "2.0.167"}
-           cheshire/cheshire                 {:mvn/version "6.1.0"}
+           cheshire/cheshire                 {:mvn/version "6.2.0"}
            com.github.seancorfield/honeysql  {:mvn/version "2.7.1368"}
-           com.github.seancorfield/next.jdbc {:mvn/version "1.3.1086"}
+           com.github.seancorfield/next.jdbc {:mvn/version "1.3.1093"}
            com.lambdaisland/hiccup           {:mvn/version "0.14.67"}
            com.taoensso/telemere             {:mvn/version "1.2.1"}
            funcool/promesa                   {:mvn/version "11.0.678"}
            http-kit/http-kit                 {:mvn/version "2.8.1"}
            metosin/malli                     {:mvn/version "0.20.1"}
-           metosin/reitit                    {:mvn/version "0.10.0"}
+           metosin/reitit                    {:mvn/version "0.10.1"}
            org.clojure/clojure               {:mvn/version "1.12.4"}
-           org.xerial/sqlite-jdbc            {:mvn/version "3.51.1.0"}
+           org.xerial/sqlite-jdbc            {:mvn/version "3.53.0.0"}
            philoskim/debux-stubs             {:mvn/version "0.9.1"}
-           ring/ring                         {:mvn/version "1.15.3"}}
+           ring/ring                         {:mvn/version "1.15.4"}}
 
  :aliases {:dev   {:jvm-opts    ["-Djdk.attach.allowAttachSelf"] ; https://docs.cider.mx/cider/basics/up_and_running.html#enabling-nrepl-jvmti-agent
                    :extra-deps  {philoskim/debux {:mvn/version "0.9.1"}}
@@ -22,18 +22,18 @@
            :test  {:extra-paths ["test"]}
 
            :build {:deps       {org.clojure/clojure           {:mvn/version "1.12.4"}
-                                io.github.clojure/tools.build {:git/tag "v0.10.12" :git/sha "216ff79"}}
+                                io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177"}}
                    :ns-default build}
 
            :dictionary {:extra-paths ["tools/dictionary"]
-                        :extra-deps  {org.clojure/data.csv  {:mvn/version "1.1.0"}
-                                      org.clojure/tools.cli {:mvn/version "1.3.250"}}
+                        :extra-deps  {org.clojure/data.csv  {:mvn/version "1.1.1"}
+                                      org.clojure/tools.cli {:mvn/version "1.4.256"}}
                         :jvm-opts    ["-Dclojure.compiler.direct-linking=true" "-Xmx4g"]
                         :main-opts   ["-m" "dictionary.core"]}
 
            :test-dictionary {:extra-paths ["test/dictionary" "tools/dictionary"]
-                             :extra-deps  {org.clojure/data.csv  {:mvn/version "1.1.0"}
-                                           org.clojure/tools.cli {:mvn/version "1.3.250"}
+                             :extra-deps  {org.clojure/data.csv  {:mvn/version "1.1.1"}
+                                           org.clojure/tools.cli {:mvn/version "1.4.256"}
                                            io.github.cognitect-labs/test-runner
                                            {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
                              :main-opts   ["-m" "cognitect.test-runner"

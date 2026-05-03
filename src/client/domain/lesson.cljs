@@ -50,12 +50,12 @@
   "Convert an example document to an example trial.
    Example doc has :word-id, :value, :translation."
   [example]
-  {:type           trial-type-example
-   :word-id        (:word-id example)
-   :prompt         (:translation example)
-   :answer         (:value example)
-   :gloss-mismatch (:gloss-mismatch example)
-   :locked?        true})
+  {:type      trial-type-example
+   :word-id   (:word-id example)
+   :prompt    (:translation example)
+   :answer    (:value example)
+   :structure (:structure example)
+   :locked?   true})
 
 
 (defn generate-trials
@@ -211,3 +211,30 @@
   "Get the last answer result from lesson state."
   [state]
   (:last-result state))
+
+
+(defn- split-answer-words
+  [answer]
+  (str/split (str/trim (or answer "")) #"\s+"))
+
+
+(defn answer-segments
+  "Build segmented answer tokens using example structure wordIndex data."
+  [trial]
+  (let [structure-by-index (into {}
+                                 (map (juxt :wordIndex identity))
+                                 (:structure trial))]
+    (->> (split-answer-words (:answer trial))
+         (map-indexed
+          (fn [word-index word]
+            (if-let [item (get structure-by-index word-index)]
+              {:type            :annotated-word
+               :text            word
+               :used-form       (:usedForm item)
+               :dictionary-form (:dictionaryForm item)
+               :translation     (:translation item)
+               :word-index      word-index}
+              {:type       :plain-word
+               :text       word
+               :word-index word-index})))
+         vec)))

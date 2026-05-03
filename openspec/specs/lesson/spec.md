@@ -89,3 +89,29 @@ The system SHALL keep example trials hidden from lesson selection until the matc
 - **THEN** example trials with the same `word-id` become unlocked
 - **AND** those unlocked example trials join the normal selectable pool
 - **AND** the next selected trial is still chosen by the lesson trial-selector rather than forced to that example
+
+### Requirement: Example answer rendering keeps structure annotations
+The system SHALL keep example structure data on lesson example trials so the correct answer can be rendered with deterministic word annotations.
+
+#### Scenario: Example trial stores answer structure
+- **WHEN** an example trial is generated for a lesson
+- **THEN** it keeps the example `structure` items alongside the denormalized prompt and answer
+
+#### Scenario: Correct example answer is segmented by structure
+- **WHEN** lesson UI renders the correct answer for an example trial
+- **THEN** it builds answer segments from the German answer text plus each structure item `wordIndex`
+- **AND** annotated segments keep the matching `dictionaryForm` and `translation`
+
+### Requirement: Lesson exit replaces browser history
+The system SHALL replace the current browser history entry when a learner exits a lesson through completion or cancellation.
+
+#### Scenario: Finished lesson exit
+- **WHEN** a learner completes the final lesson trial and exits the lesson flow
+- **THEN** the rendered home screen replaces the current lesson history entry with `/home`
+- **AND** the completed lesson screen is not restored by pressing browser Back
+
+#### Scenario: Cancelled lesson exit
+- **WHEN** a learner cancels an active lesson
+- **THEN** the rendered home screen replaces the current lesson history entry with `/home`
+- **AND** the cancelled lesson screen is not restored by pressing browser Back
+

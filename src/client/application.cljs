@@ -36,7 +36,7 @@
      [:meta {:charset "UTF-8"}]
      [:meta
       {:name    "viewport"
-       :content "width=device-width, initial-scale=1, interactive-widget=overlays-content"}]
+       :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
      [:title "Sprecha"]
      [:link {:rel "icon" :href "/favicon.ico"}]
      [:link {:rel "manifest" :href "/manifest.json"}]
@@ -46,6 +46,7 @@
      [:script {:src "/js/word-autocomplete.js" :defer true}]
      [:script {:src "/js/virtual-keyboard.js" :defer true}]
      [:script {:src "/js/pwa-install.js" :defer true}]
+     [:script {:src "/js/popover.js" :defer true}]
      head]
     [:body
      [:div#loader.app-shell__loader
@@ -67,6 +68,11 @@
      [:dialog#modal.modal
       {:hx-on:htmx:after-swap "if(!this.open) this.showModal()"
        :hx-on:click           "if(event.target===this) this.close()"}]
+     [:div#popover.popover
+      {:popover "auto"}
+      [:div#popover-content.popover__content
+       {:hx-on:htmx:after-swap "repositionPopover()"}]
+      [:div#popover-arrow.popover__arrow]]
      [:div#app body]]]))
 
 
@@ -231,7 +237,7 @@
                 (p/do
                   (lesson/finish! dbs)
                   (p/let [total (vocabulary/count dbs)]
-                    {:headers   {"HX-Push-Url" "/home"}
+                    {:headers   {"HX-Replace-Url" "/home"}
                      :html/body (views.home/page :empty-vocab? (zero? total))
                      :status    200})))}]
 
@@ -256,7 +262,21 @@
                                (views.lesson/challenge lesson-state {:hx-swap-oob "true"})
                                (views.lesson/progress lesson-state {:hx-swap-oob "innerHTML"}))
                    :status    200}
-                  {:status 404})))}]]])
+                  {:status 404})))}]
+
+    ["/lesson/token-info"
+     {:get (fn [{:keys [dbs params]}]
+             (p/let [info (lesson/token-info dbs (:dictionary-form params) (:translation params))]
+               {:html/body (views.lesson/token-card info)
+                :status    200}))}]
+
+    ["/lesson/token-add"
+     {:post (fn [{:keys [dbs params]}]
+              (p/let [_ (lesson/add-word-from-structure! dbs (:dictionary-form params) (:translation params))]
+                {:html/body (views.lesson/token-card {:dictionary-form (:dictionary-form params)
+                                                      :translation     (:translation params)
+                                                      :state           :known-with-translation})
+                 :status    200}))}]]])
 
 
 (def ring-handler

@@ -157,15 +157,6 @@
            (canonical-dictionary-form target))))))
 
 
-(defn lemma-forms
-  "Returns the distinct dictionaryForm values from structure whose lemma matches word."
-  [word structure]
-  (->> structure
-       (keep :dictionaryForm)
-       (filter #(same-lemma? word %))
-       distinct))
-
-
 ;; =============================================================================
 ;; Translation matching
 ;; =============================================================================
@@ -224,17 +215,6 @@
         (:translation entry)))
 
 
-(defn- form-has-gloss?
-  [dictionary-form translation]
-  (let [entries (lookup-dictionary-entries dictionary-form)]
-    ;; If dictionary lookup itself is unavailable, do not turn that outage into a
-    ;; hard example-generation failure. Only reject when the lookup succeeds and
-    ;; the returned entries disagree with the intended gloss.
-    (or (nil? entries)
-        (some #(dictionary-entry-matches-gloss? % translation)
-              entries))))
-
-
 ;; =============================================================================
 ;; Public API
 ;; =============================================================================
@@ -242,26 +222,18 @@
 
 (defn lookup-word-meta
   "Look up partOfSpeech and cefrLevel for a word from dictionary entries.
-   Prefers the entry whose Russian gloss matches `translation`.
+   Prefers entries whose Russian gloss matches any of `translations`.
    Returns nil if the lookup fails or produces no results."
-  [word translation]
-  (let [entries (lookup-dictionary-entries (normalize-dictionary-form word))]
+  [word translations]
+  (let [entries (lookup-dictionary-entries (normalize-dictionary-form word))
+        matches-any-gloss? (fn [entry]
+                             (some #(dictionary-entry-matches-gloss? entry %)
+                                   translations))]
     (when (seq entries)
-      (let [best (or (some #(when (dictionary-entry-matches-gloss? % translation) %) entries)
+      (let [best (or (first (filter matches-any-gloss? entries))
                      (first entries))]
-        (when best
-          {:partOfSpeech (:pos best)
-           :cefrLevel    (get-in best [:meta :cefr_level])})))))
-
-
-(defn word-gloss-valid?
-  "Returns true if at least one dictionaryForm for word in structure has a
-   dictionary entry whose Russian gloss matches translation.
-   Returns true when translation is blank or DB is unavailable."
-  [word translation structure]
-  (or (str/blank? translation)
-      (some #(form-has-gloss? % translation)
-            (lemma-forms word structure))))
+        {:partOfSpeech (:pos best)
+         :cefrLevel    (get-in best [:meta :cefr_level])}))))
 
 
 (defn lemma-in-structure?

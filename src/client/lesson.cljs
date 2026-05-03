@@ -120,3 +120,38 @@
             (log/error :advance-lesson/save-failed {:error (ex-message err)})
             {:error :lesson-save-failed}))))))
 
+
+(defn- token-state
+  "Classify a (word, translation) pair against the user's vocabulary:
+     :unknown-word               — no matching word doc
+     :known-with-translation     — word exists and this translation is in its set
+     :known-missing-translation  — word exists but translation is new for it."
+  [existing translation]
+  (cond
+    (nil? existing)
+    :unknown-word
+
+    (some #(= translation (:value %)) (:translation existing))
+    :known-with-translation
+
+    :else
+    :known-missing-translation))
+
+
+(defn token-info
+  "Return token info for lesson answer annotation card."
+  [dbs dictionary-form translation]
+  (p/let [existing (vocabulary/find-duplicate-by-value dbs dictionary-form)]
+    {:dictionary-form dictionary-form
+     :translation     translation
+     :state           (token-state existing translation)}))
+
+
+(defn add-word-from-structure!
+  "Add dictionary form + translation from lesson example structure into vocabulary.
+   If the word already exists, `vocabulary/add!` merges the new translation."
+  [dbs dictionary-form translation]
+  (p/let [result (vocabulary/add! dbs dictionary-form translation)]
+    (when (:created? result)
+      (examples/create-fetch-task! (:word-id result)))
+    result))

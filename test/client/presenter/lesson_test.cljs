@@ -21,23 +21,39 @@
                                       :word-id "word-1"
                                       :prompt  "Пёс спит"
                                       :answer  "Der Hund schlaeft."
+                                      :structure [{:usedForm "Hund"
+                                                   :dictionaryForm "der Hund"
+                                                   :translation "пёс"
+                                                   :wordIndex 1}]
                                       :locked? false}]
                  :remaining-trials  [{:type    "example"
                                       :word-id "word-1"
                                       :prompt  "Пёс спит"
                                       :answer  "Der Hund schlaeft."
+                                      :structure [{:usedForm "Hund"
+                                                   :dictionaryForm "der Hund"
+                                                   :translation "пёс"
+                                                   :wordIndex 1}]
                                       :locked? false}]
                  :current-trial     {:type    "example"
                                      :word-id "word-1"
                                      :prompt  "Пёс спит"
                                      :answer  "Der Hund schlaeft."
+                                     :structure [{:usedForm "Hund"
+                                                  :dictionaryForm "der Hund"
+                                                  :translation "пёс"
+                                                  :wordIndex 1}]
                                      :locked? false}
                  :last-result       {:correct? false
                                      :answer   "Mein Hund schlaeft"}}
           props (sut/footer-props state)]
       (is (= :error (:variant props)))
       (is (= "Mein Hund schlaeft" (:user-answer props)))
-      (is (= "Der Hund schlaeft." (:correct-answer props))))))
+      (is (= "Der Hund schlaeft." (:correct-answer props)))
+      (is (= [{:type :plain-word :text "Der" :word-index 0}
+              {:type :annotated-word :text "Hund" :used-form "Hund" :dictionary-form "der Hund" :translation "пёс" :word-index 1}
+              {:type :plain-word :text "schlaeft." :word-index 2}]
+             (:correct-answer-segments props))))))
 
 
 (deftest footer-props-includes-user-answer-for-word-trial
