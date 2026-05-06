@@ -16,7 +16,7 @@
   [http-kit/http-kit "2.8.1"]]
 
  :source-paths
- ["src/shared" "src/client" "dev/cljs" "test"]
+ ["lib/db/src" "src/shared" "src/client" "dev/cljs" "test"]
 
  :nrepl
  {:port 4444

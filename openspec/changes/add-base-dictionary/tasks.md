@@ -12,6 +12,11 @@
 - [x] 1.1 Research CEFR A1-C2 sources and RU translations; document licenses and chosen sources in `docs/dictionary-sources.md`.
 - [x] 1.2 Implement a dictionary ingestion script that downloads source data from Kaikki (enwiktionary) and Goethe-Institut CEFR word lists (via sprach-o-mat), outputs JSONL for `dictionary-entry` and `surface-form` plus a manifest (counts, bytes, checksum).
 - [x] 1.3 Implement a CouchDB import pipeline that reads JSONL files and imports to `dictionary-db` with size metrics.
+- [x] 1.4 Keep otherwise-valid German lemmas when Kaikki lacks RU translations, storing empty `translation` vectors and compact source sense hints for later enrichment.
+- [x] 1.5 Add optional frequency input for Clojure generation and use it as the primary rank/order signal for dictionary entries, surface-form entries, autocomplete, and enrichment.
+- [x] 1.6 Add the Go/Bubble Tea RU enrichment runner with checkpoint, failure/crash/recent logs, OpenRouter fallback, provider-pinned BYOK fallback, rate-limit cooldown handling, TUI progress, and manifest refresh with `enriched-at`.
+- [x] 1.7 Relax import validation so unresolved empty translations are accepted with a warning rather than rejected or dropped.
+- [x] 1.8 Document local enrichment commands and review generated dictionary artifacts separately from source/tooling changes.
 
 ## 2. Database Split
 - [x] 2.1 Split client storage into `user-db`, `device-db`, and `dictionary-db`; add a one-time migration from `local-db`.
@@ -114,3 +119,5 @@
 ## 8. Verification
 - [x] 8.1 Measure dictionary DB size and index overhead after import; document in `docs/dictionary-size.md`.
 - [x] 8.2 Smoke test: new install syncs dictionary, autocomplete suggestions appear, add-word prefills canonical value.
+- [x] 8.3 Verify enrichment source/tooling with dictionary tests and Go build/test.
+- [x] 8.4 Report enrichment counts: 153,995 total entries; enrichment run started from 129,294 missing RU entries; committed artifact has 246 unresolved entries.

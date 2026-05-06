@@ -9,13 +9,21 @@
   (io/reader (GZIPInputStream. (io/input-stream gz-path))))
 
 
+(defn- form-of-sense?
+  "True if a sense marks an inflected/declined form.
+   Checks both the :form_of field (may be null in kaikki data) and the 'form-of' tag."
+  [sense]
+  (or (seq (:form_of sense))
+      (some #(= "form-of" %) (:tags sense))))
+
+
 (defn lemma-entry?
   "True if this is a real lemma, not a form-of redirect.
-   Skips entries where ALL senses have form_of."
+   Skips entries where ALL senses indicate a form (via :form_of field or form-of tag)."
   [entry]
   (let [senses (:senses entry)]
     (when (seq senses)
-      (not-every? :form_of senses))))
+      (not-every? form-of-sense? senses))))
 
 
 (defn german-entry?
@@ -29,7 +37,7 @@
     (:word entry ""))))
 
 
-(defn extract-gender
+(defn extract-article
   "Returns \"der\", \"die\", \"das\", or nil for a noun entry.
    Checks entry-level tags for masculine/feminine/neuter,
    then falls back to the first form's article field."
@@ -39,13 +47,9 @@
                     (tag-set "masculine") "der"
                     (tag-set "feminine")  "die"
                     (tag-set "neuter")    "das")]
-    (or from-tags
-        (when-let [article (:article (first (:forms entry)))]
-          (case article
-            "der" "der"
-            "die" "die"
-            "das" "das"
-            nil)))))
+    (or
+     from-tags
+     (-> entry :forms first :article #{"der" "die" "das"}))))
 
 
 (defn russian-translations

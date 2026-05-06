@@ -89,8 +89,8 @@ Example:
   "type": "surface-form",
   "entries": [
     {
-      "lemma-id": "lemma:der hund:noun",
-      "lemma": "der Hund",
+      "lemma-id": "lemma:die größe:noun",
+      "lemma": "die Größe",
       "rank": 100
     }
   ]
@@ -118,15 +118,17 @@ The system SHALL store a dictionary meta document that tracks import metadata.
 
 #### Scenario: Dictionary meta document shape
 - **WHEN** the dictionary import completes
-- **THEN** the document includes `type`, `schema-version`, `generated-at`, `manifest-sha256`, and `files`
+- **THEN** the document includes `type`, `schema-version`, `dictionary-epoch`, `generated-at`, `manifest-sha256`, and `files`
 
 Example:
 ```json
 {
   "_id": "dictionary-meta",
   "type": "dictionary-meta",
-  "schema-version": 1,
+  "schema-version": 2,
+  "dictionary-epoch": "dictionary-v2-raw-lemma-ids",
   "generated-at": "2026-02-01T18:28:42.528Z",
+  "enriched-at": "2026-05-06T10:14:52Z",
   "manifest-sha256": "sha256:example",
   "files": {
     "dictionary-entries.jsonl": {"count": 123, "bytes": 456, "sha256": "sha256:entries"},

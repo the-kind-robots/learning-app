@@ -10,11 +10,13 @@
    #?(:cljs ["pouchdb" :as PouchDB])
    #?(:cljs ["pouchdb-find" :as PouchFind])
    [clojure.string :as str]
-   [promesa.core :as p]
-   [utils :as utils]))
+   [promesa.core :as p]))
 
 
 #?(:cljs (.plugin PouchDB PouchFind))
+
+
+(defn- kebab->snake [k] (str/replace (name k) #"-" "_"))
 
 
 (def conn
@@ -75,7 +77,7 @@
 (defn clj->couch
   "Recursively transforms Clojure structure into CouchDB document."
   [x]
-  (let [keyfn utils/kebab->snake]
+  (let [keyfn kebab->snake]
     #?(:clj (walk/prewalk
              (fn [x]
                (cond-> x
@@ -415,7 +417,7 @@
   ([db fields]
    (create-index db fields {}))
   ([db fields opts]
-   (let [fields (map utils/kebab->snake fields)]
+   (let [fields (map kebab->snake fields)]
      (with-couch-op :couch/create-index
        #?(:clj (p/rejected "not implemented yet")
           :cljs (.createIndex ^js db (clj->couch (merge {:index {:fields fields}} opts))))))))
@@ -450,7 +452,10 @@
    (all-docs db {}))
   ([db opts]
    (with-couch-op :couch/all-docs
-     #?(:clj (p/rejected "not implemented yet")
+     #?(:clj (request (db-conn db)
+                      {:method :post
+                       :url    (str (:name db) "/_all_docs")
+                       :body   opts})
         :cljs (if (seq opts)
                 (.allDocs ^js db (clj->couch opts))
                 (.allDocs ^js db))))))

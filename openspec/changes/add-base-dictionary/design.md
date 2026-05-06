@@ -49,9 +49,21 @@ The app needs a predefined German dictionary to support autocomplete, canonical 
 
 - CEFR-based ranking:
   - Each entry includes a `rank` field (integer).
-  - Computed server-side from CEFR level (A1 highest) and optionally word frequency.
+  - Computed server-side from SUBTLEX-DE subtitle frequency when available, falling back to CEFR level (A1 highest) plus source richness.
   - Autocomplete results sorted with exact matches first, then by rank after deduplication.
   - Ensures common/beginner words appear first.
+
+- Russian translation enrichment:
+  - Ingestion keeps otherwise-valid German lemmas even when Kaikki has no Russian translation.
+  - Missing RU translations are filled by a resumable server-side Go runner, not by client devices.
+  - Compact source senses (`meta.senses[].glosses/tags`) are stored so the runner can ask the model to translate the intended German meaning instead of a nearby homonym.
+  - The runner validates cheap formal constraints locally: JSON shape, Russian/Cyrillic output, and verb translations shaped like Russian infinitives.
+  - The runner refreshes manifest stats for `dictionary-entries.jsonl` and records `enriched-at` when it rewrites manifest-managed artifacts.
+  - Failed/no-parse rows stay unresolved and are logged for follow-up; they are not written as trusted translations.
+
+- Import validation:
+  - Empty `translation` is valid unresolved state.
+  - Import validates artifact integrity and document shape, warns about unresolved translations, and does not drop or rewrite docs during import.
 
 - Store `normalized-value` (and normalized form values) for indexed lookup; keep canonical `value` for display.
 

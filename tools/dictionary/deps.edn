@@ -1,0 +1,19 @@
+{:paths ["." "word-frequencies"]
+
+ :deps {org.clojure/clojure   {:mvn/version "1.12.4"}
+        org.clojure/data.csv  {:mvn/version "1.1.1"}
+        org.clojure/tools.cli {:mvn/version "1.4.256"}
+        cheshire/cheshire     {:mvn/version "6.2.0"}
+        db/db                 {:local/root "../../lib/db"}
+        metosin/malli         {:mvn/version "0.20.1"}}
+
+ :aliases {:build {:deps       {dictionary/dictionary {:local/root "."}}
+                   :ns-default dictionary.core}
+
+           :word-frequencies {:deps       {dictionary/dictionary {:local/root "."}}
+                              :ns-default word-frequencies}
+
+           :test {:extra-deps {io.github.cognitect-labs/test-runner  {:git/tag "v0.5.1"
+                                                                      :git/sha "dfb30dd"}}
+                  :main-opts  ["-m" "cognitect.test-runner"
+                               "-d" "test"]}}}

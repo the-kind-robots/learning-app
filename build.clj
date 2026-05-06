@@ -23,7 +23,7 @@
 (def basis (delay (b/create-basis {:project "deps.edn"})))
 
 
-(def dictionary-basis (delay (b/create-basis {:project "deps.edn" :aliases [:dictionary]})))
+(def dictionary-basis (delay (b/create-basis {:project "deps.edn" :aliases [:dictionary-import]})))
 
 
 (defn clean
