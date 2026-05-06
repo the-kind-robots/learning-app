@@ -17,7 +17,7 @@ The system SHALL download and process two external data sources to build the dic
 - **AND** the Goethe index maps lowercase stems to CEFR levels ("a1", "a2", "b1")
 
 ### Requirement: Only eligible entries become dictionary entries
-The system SHALL filter Kaikki records so that only valid German lemmas with Russian translations are ingested.
+The system SHALL filter Kaikki records so that valid German lemmas are ingested even when upstream Russian translations are absent.
 
 #### Scenario: German language filter
 - **WHEN** a Kaikki record has `lang_code` other than `"de"`
@@ -33,14 +33,15 @@ Example: `"der Hund"` passes; `"犬"` is skipped.
 
 Example: The record for "ging" (past tense of "gehen") where all senses point to "gehen" is excluded; the record for "gehen" itself is kept.
 
-#### Scenario: Must have at least one Russian translation
+#### Scenario: Missing Russian translation is allowed
 - **WHEN** a Kaikki record has no translations with `lang_code` `"ru"`
-- **THEN** the entry is skipped after transformation (no dictionary-entry document is produced)
+- **THEN** the transformed dictionary entry is kept
+- **AND** its `translation` vector is empty so the enrichment runner can fill it later
 
-#### Scenario: Proper names require a CEFR level
-- **WHEN** an entry has POS `"name"` and no Goethe CEFR match
+#### Scenario: Unsupported parts of speech are skipped
+- **WHEN** an entry has POS outside the supported dictionary POS set
 - **THEN** the entry is skipped
-- **AND** proper names that do have a CEFR match are kept
+- **AND** proper names and unknown POS values are skipped even if other metadata is present
 
 ### Requirement: Duplicate entries are merged
 The system SHALL merge multiple Kaikki records that share the same word and POS into a single entry.
@@ -70,16 +71,21 @@ Example: For "Hundefutter", stems "hund" (a1) and "hundefutter" would both match
 - **THEN** the entry has no CEFR level (nil)
 
 ### Requirement: Entries are ranked for autocomplete ordering
-The system SHALL compute a numeric rank for each dictionary entry so that CEFR entries dominate autocomplete ordering.
+The system SHALL compute a numeric rank for each dictionary entry so that empirical frequency drives autocomplete and enrichment ordering when available.
 
-#### Scenario: CEFR entries rank higher than non-CEFR entries
-- **WHEN** an entry has a CEFR level
-- **THEN** its rank starts from a base value determined by its level (A1 highest, then A2, then B1)
+#### Scenario: SUBTLEX-DE subtitle frequency ranks highest
+- **WHEN** an entry matches the optional SUBTLEX-DE frequency input
+- **THEN** its rank is derived from the frequency rank
+- **AND** more frequent words receive higher dictionary rank values
+- **AND** the entry metadata records the frequency source, rank, and count when available
+
+#### Scenario: CEFR and richness rank missing-frequency entries
+- **WHEN** an entry does not match the frequency input but has a CEFR level
+- **THEN** its fallback rank starts from a base value determined by its level (A1 highest, then A2, then B1)
 - **AND** additional points are added based on sense count and translation count
-- **AND** the resulting rank is substantially higher than any non-CEFR entry
 
 #### Scenario: Non-CEFR entries are ranked by richness with a cap
-- **WHEN** an entry has no CEFR level
+- **WHEN** an entry has neither frequency data nor CEFR level
 - **THEN** its rank is computed from sense count and translation count
 - **AND** the rank is capped so it never exceeds the minimum possible CEFR rank
 
@@ -136,13 +142,53 @@ The system SHALL write output as JSONL files accompanied by a manifest for integ
 #### Scenario: dictionary-entries.jsonl contains one document per lemma+POS
 - **WHEN** the pipeline completes
 - **THEN** `dictionary-entries.jsonl` is written with one JSON object per line
-- **AND** each line represents a dictionary-entry document with `_id` following the `lemma:<normalized-value>:<pos>` convention
+- **AND** each line represents a dictionary-entry document with `_id` following the `lemma:<lowercase-entry-value>:<pos>` convention
+- **AND** normalized lookup value is stored separately in `meta.normalized_value`
 - **AND** keys are serialized as snake_case (converted from internal kebab-case)
+- **AND** entries are ordered by `rank` descending
+- **AND** entries MAY include compact `meta.senses[]` with machine `tags[]` and source `glosses[]` for offline enrichment hints
 
 Example line (abbreviated):
 ```json
-{"_id":"lemma:der hund:noun","type":"dictionary-entry","value":"der Hund","pos":"noun","rank":30012,"translation":[{"lang":"ru","value":"собака"}],"forms":["Hundes","Hunde","Hunden"],"meta":{"normalized_value":"der hund","cefr_level":"a1","gender":"der","sense_count":3,"source":"kaikki-enwiktionary"}}
+{"_id":"lemma:die größe:noun","type":"dictionary-entry","value":"die Größe","pos":"noun","rank":30012,"translation":[{"lang":"ru","value":"размер"}],"forms":["Größen"],"meta":{"normalized_value":"die groesse","cefr_level":"a1","gender":"die","senses":[{"tags":["measurement"],"glosses":["size"]}],"sense_count":3,"source":"kaikki-enwiktionary"}}
 ```
+
+### Requirement: Missing Russian translations are enriched offline
+The system SHALL provide a resumable server-side enrichment runner for dictionary entries that still lack Russian translations.
+
+#### Scenario: Enrichment selects only missing RU entries
+- **WHEN** the enrichment runner processes `dictionary-entries.jsonl`
+- **THEN** it selects only entries whose `translation` vector contains no Russian item
+- **AND** existing Russian translations are left unchanged
+
+#### Scenario: Source senses guide translation quality
+- **WHEN** an entry has compact source senses in `meta.senses`
+- **THEN** the enrichment prompt includes those German glosses and machine tags as meaning hints
+- **AND** translations must match the entry part of speech and source senses
+
+#### Scenario: Long runs are resumable and inspectable
+- **WHEN** the enrichment runner is interrupted or an API request fails
+- **THEN** it records checkpoint, failure, crash, and recent-result logs
+- **AND** rerunning with the same input/output/checkpoint continues from the current output file state
+
+#### Scenario: Enrichment refreshes manifest metadata
+- **WHEN** the enrichment runner rewrites `dictionary-entries.jsonl`
+- **THEN** it updates that file's count, byte size, and SHA-256 in `manifest.edn`
+- **AND** it records `enriched-at` without changing the original `generated-at`
+
+#### Scenario: Provider limits are respected
+- **WHEN** OpenRouter returns retry or rate-limit metadata
+- **THEN** the runner backs off or waits until the reset timestamp plus buffer
+- **AND** provider-pinned fallback models can be tried after the primary model fails
+
+### Requirement: Import accepts unresolved translations
+The system SHALL treat empty translation vectors as valid unresolved dictionary state during import.
+
+#### Scenario: Empty translations do not block import
+- **WHEN** a dictionary entry has `translation: []`
+- **THEN** pre-flight import validation accepts the entry
+- **AND** import may warn about unresolved translation count
+- **AND** import does not drop or rewrite unresolved entries
 
 #### Scenario: surface-forms.jsonl contains one document per normalized form
 - **WHEN** the pipeline completes
@@ -159,6 +205,7 @@ Example line (abbreviated):
 - **WHEN** the pipeline completes
 - **THEN** `manifest.edn` is written containing:
   - A generation timestamp
+  - An enrichment timestamp after enrichment rewrites manifest-managed artifacts
   - For each output file: document count, byte size, and SHA-256 checksum
 
 ### Requirement: Import writes dictionary metadata
@@ -170,6 +217,8 @@ The system SHALL store a dictionary meta document after a successful import.
   - `_id: "dictionary-meta"`
   - `type: "dictionary-meta"`
   - `schema-version` (integer)
+  - `dictionary-epoch` (string)
   - `generated-at` (from the manifest)
+  - `enriched-at` when present in the manifest
   - `manifest-sha256` (SHA-256 of the manifest)
   - `files` (the manifest file stats map)

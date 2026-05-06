@@ -92,23 +92,23 @@
 
 (deftest extract-gender-masculine-from-tags
   (testing "masculine from entry-level tags"
-    (is (= "der" (kaikki/extract-gender {:tags ["noun" "masculine"]})))))
+    (is (= "der" (kaikki/extract-article {:tags ["noun" "masculine"]})))))
 
 
 (deftest extract-gender-feminine-from-tags
   (testing "feminine from entry-level tags"
-    (is (= "die" (kaikki/extract-gender {:tags ["feminine"]})))))
+    (is (= "die" (kaikki/extract-article {:tags ["feminine"]})))))
 
 
 (deftest extract-gender-neuter-from-tags
   (testing "neuter from entry-level tags"
-    (is (= "das" (kaikki/extract-gender {:tags ["neuter"]})))))
+    (is (= "das" (kaikki/extract-article {:tags ["neuter"]})))))
 
 
 (deftest extract-gender-fallback-to-form-article
   (testing "falls back to first form's article field"
     (is (= "die"
-           (kaikki/extract-gender
+           (kaikki/extract-article
             {:tags  []
              :forms [{:article "die" :form "Katzen"}]})))))
 
@@ -116,19 +116,19 @@
 (deftest extract-gender-tag-priority-over-article
   (testing "tag gender takes priority over form article"
     (is (= "der"
-           (kaikki/extract-gender
+           (kaikki/extract-article
             {:tags  ["masculine"]
              :forms [{:article "die" :form "Hunde"}]})))))
 
 
 (deftest extract-gender-nil-cases
   (testing "returns nil when no gender info available"
-    (is (nil? (kaikki/extract-gender {:tags [] :forms []})))))
+    (is (nil? (kaikki/extract-article {:tags [] :forms []})))))
 
 
 (deftest extract-gender-nil-unknown-article
   (testing "returns nil for unknown article value"
-    (is (nil? (kaikki/extract-gender
+    (is (nil? (kaikki/extract-article
                {:tags  []
                 :forms [{:article "les" :form "foo"}]})))))
 

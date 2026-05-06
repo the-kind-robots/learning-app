@@ -6,7 +6,7 @@
 *.el
 
 # Caches
-/.cpcache/
+**/.cpcache/
 /classes
 /target/
 
@@ -37,7 +37,12 @@ app.db
 
 # Dictionary build data
 /data/
+/tools/dictionary/data/
 /resources/dictionary/import-metrics.json
+/resources/dictionary/*.jsonl
+/.enrich_*
+/tools/dictionary/enrich-translations/.enrich_*
+/tools/dictionary/enrich-translations/enrich-translations
 
 # Local agent/tool artifacts
 /.claude/

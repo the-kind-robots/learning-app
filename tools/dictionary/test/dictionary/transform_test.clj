@@ -56,6 +56,12 @@
       (is (> b1-min non-max)))))
 
 
+(deftest compute-rank-frequency-dominates-fallbacks
+  (testing "frequency rank is the primary importance signal when present"
+    (is (> (compute-rank nil 0 0 {:rank 10})
+           (compute-rank "a1" 100 100)))))
+
+
 ;; ---------------------------------------------------------------------------
 ;; entry-value (private)
 ;; ---------------------------------------------------------------------------
@@ -129,7 +135,8 @@
                   :pos          "Noun"
                   :lang_code    "de"
                   :tags         ["masculine" "noun"]
-                  :senses       [{:tags ["animal"]} {:tags ["insult"]}]
+                  :senses       [{:tags ["animal"] :glosses ["a dog"]}
+                                  {:tags ["insult"] :glosses ["an unpleasant person"]}]
                   :translations [{:lang_code "ru" :word "собака"}
                                  {:lang_code "en" :word "dog"}]
                   :forms        [{:form "Hundes"} {:form "Hunde"} {:form "Hunden"}]}
@@ -142,7 +149,61 @@
       (is (= ["Hundes" "Hunde" "Hunden"] (:forms result)))
       (is (= "a1" (get-in result [:meta :cefr-level])))
       (is (= "der" (get-in result [:meta :gender])))
+      (is (= [{:tags ["animal"] :glosses ["a dog"]}
+              {:tags ["insult"] :glosses ["an unpleasant person"]}]
+             (get-in result [:meta :senses])))
       (is (pos? (:rank result))))))
+
+
+(deftest dictionary-entry-stores-frequency-metadata
+  (testing "frequency data is copied to meta and drives rank"
+    (let [kentry {:word         "Hund"
+                  :pos          "Noun"
+                  :lang_code    "de"
+                  :tags         ["masculine"]
+                  :senses       [{:tags ["animal"]}]
+                  :translations [{:lang_code "ru" :word "собака"}]
+                  :forms        []}
+          freq   {"hund" {:source "subtitles" :rank 7 :count 12345.0}}
+          result (transform/dictionary-entry kentry sample-goethe-index sample-timestamp freq)]
+      (is (= {:source "subtitles" :rank 7 :count 12345.0 :matched "Hund"}
+             (get-in result [:meta :frequency])))
+      (is (= 999993 (:rank result))))))
+
+
+(deftest dictionary-entry-aggregates-frequency-from-forms
+  (testing "lemma rank uses the best matching surface form and sums matched counts"
+    (let [kentry {:word         "gehen"
+                  :pos          "Verb"
+                  :lang_code    "de"
+                  :tags         []
+                  :senses       [{:tags ["motion"]}]
+                  :translations []
+                  :forms        [{:form "ging"} {:form "gegangen"}]}
+          freq   {"gehen"    {:source "subtlex-de" :rank 500 :count 100.0}
+                  "ging"     {:source "subtlex-de" :rank 20 :count 1000.0}
+                  "gegangen" {:source "subtlex-de" :rank 200 :count 300.0}}
+          result (transform/dictionary-entry kentry sample-goethe-index sample-timestamp freq)]
+      (is (= {:source "subtlex-de" :rank 20 :count 1400.0 :matched "ging"}
+             (get-in result [:meta :frequency])))
+      (is (= 999980 (:rank result))))))
+
+
+(deftest dictionary-entry-aggregates-noun-frequency-from-forms
+  (testing "noun frequency matches bare lemma and inflected forms, not only article value"
+    (let [kentry {:word         "Hund"
+                  :pos          "Noun"
+                  :lang_code    "de"
+                  :tags         ["masculine"]
+                  :senses       [{:tags ["animal"]}]
+                  :translations []
+                  :forms        [{:form "Hunde"} {:form "Hunden"}]}
+          freq   {"hund"  {:source "subtlex-de" :rank 100 :count 100.0}
+                  "hunde" {:source "subtlex-de" :rank 40 :count 300.0}}
+          result (transform/dictionary-entry kentry sample-goethe-index sample-timestamp freq)]
+      (is (= {:source "subtlex-de" :rank 40 :count 400.0 :matched "Hunde"}
+             (get-in result [:meta :frequency])))
+      (is (= 999960 (:rank result))))))
 
 
 (deftest dictionary-entry-verb
@@ -161,8 +222,8 @@
       (is (nil? (get-in result [:meta :gender]))))))
 
 
-(deftest dictionary-entry-nil-when-no-russian
-  (testing "returns nil when no Russian translations"
+(deftest dictionary-entry-empty-translation-when-no-russian
+  (testing "returns entry with empty translation when no Russian translations"
     (let [kentry {:word         "Hund"
                   :pos          "Noun"
                   :lang_code    "de"
@@ -171,7 +232,8 @@
                   :translations [{:lang_code "en" :word "dog"}]
                   :forms        []}
           result (transform/dictionary-entry kentry sample-goethe-index sample-timestamp)]
-      (is (nil? result)))))
+      (is (some? result))
+      (is (= [] (:translation result))))))
 
 
 (deftest dictionary-entry-nil-for-name-without-cefr
@@ -188,8 +250,8 @@
       (is (nil? result)))))
 
 
-(deftest dictionary-entry-name-with-cefr
-  (testing "name POS with CEFR level is included"
+(deftest dictionary-entry-name-always-excluded
+  (testing "name POS is always excluded regardless of CEFR level"
     (let [kentry {:word         "Berlin"
                   :pos          "Name"
                   :lang_code    "de"
@@ -199,12 +261,11 @@
                   :forms        []}
           index  [["berlin" "a1"]]
           result (transform/dictionary-entry kentry index sample-timestamp)]
-      (is (some? result))
-      (is (= "name" (:pos result))))))
+      (is (nil? result)))))
 
 
 (deftest dictionary-entry-id-format
-  (testing "_id follows lemma:normalized:pos format"
+  (testing "_id keeps raw lemma identity while lookup metadata stays normalized"
     (let [kentry {:word         "Größe"
                   :pos          "Noun"
                   :lang_code    "de"
@@ -213,7 +274,8 @@
                   :translations [{:lang_code "ru" :word "размер"}]
                   :forms        []}
           result (transform/dictionary-entry kentry [] sample-timestamp)]
-      (is (= "lemma:die groesse:noun" (:_id result))))))
+      (is (= "lemma:die größe:noun" (:_id result)))
+      (is (= "die groesse" (get-in result [:meta :normalized-value]))))))
 
 
 (deftest dictionary-entry-pos-lowercasing
@@ -230,7 +292,7 @@
 
 
 (deftest dictionary-entry-nil-pos
-  (testing "nil POS defaults to 'unknown'"
+  (testing "nil POS is excluded (unknown not in allowed-pos)"
     (let [kentry {:word         "hmm"
                   :pos          nil
                   :lang_code    "de"
@@ -239,7 +301,7 @@
                   :translations [{:lang_code "ru" :word "хмм"}]
                   :forms        []}
           result (transform/dictionary-entry kentry [] sample-timestamp)]
-      (is (= "unknown" (:pos result))))))
+      (is (nil? result)))))
 
 
 ;; ---------------------------------------------------------------------------

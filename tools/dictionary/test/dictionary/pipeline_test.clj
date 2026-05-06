@@ -89,10 +89,10 @@
 
       ;; Step 2: transform
       (let [transform-result (core/transform-entries (:entries merge-result) goethe-index timestamp)]
-        ;; Hund + gehen = 2 docs, Katze skipped (no Russian)
-        (is (= 2 (:entry-count transform-result)))
-        (is (= 2 (count (:docs transform-result))))
-        (is (= 1 (:skip-count transform-result)))
+        ;; Hund + gehen + Katze = 3 docs (Katze has empty translation, will be enriched later)
+        (is (= 3 (:entry-count transform-result)))
+        (is (= 3 (count (:docs transform-result))))
+        (is (= 0 (:skip-count transform-result)))
 
         ;; Step 3: emit to temp dir
         (let [tmp-dir      (str (System/getProperty "java.io.tmpdir")
@@ -110,7 +110,7 @@
                                                  timestamp)]
 
           ;; Step 4: verify manifest
-          (is (= 2 (get-in manifest [:files "dictionary-entries.jsonl" :count])))
+          (is (= 3 (get-in manifest [:files "dictionary-entries.jsonl" :count])))
           (is (pos? (get-in manifest [:files "dictionary-entries.jsonl" :bytes])))
           (is (pos? (get-in manifest [:files "surface-forms.jsonl" :count])))
 

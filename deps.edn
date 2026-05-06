@@ -1,6 +1,7 @@
 {:paths   ["src/backend" "src/shared" "resources"]
 
- :deps    {buddy/buddy-hashers               {:mvn/version "2.0.167"}
+ :deps    {db/db                             {:local/root "lib/db"}
+           buddy/buddy-hashers               {:mvn/version "2.0.167"}
            cheshire/cheshire                 {:mvn/version "6.2.0"}
            com.github.seancorfield/honeysql  {:mvn/version "2.7.1368"}
            com.github.seancorfield/next.jdbc {:mvn/version "1.3.1093"}
@@ -25,16 +26,15 @@
                                 io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177"}}
                    :ns-default build}
 
-           :dictionary {:extra-paths ["tools/dictionary"]
-                        :extra-deps  {org.clojure/data.csv  {:mvn/version "1.1.1"}
-                                      org.clojure/tools.cli {:mvn/version "1.4.256"}}
-                        :jvm-opts    ["-Dclojure.compiler.direct-linking=true" "-Xmx4g"]
-                        :main-opts   ["-m" "dictionary.core"]}
+           :dictionary {:deps       {dictionary/dictionary {:local/root "tools/dictionary"}}
+                        :ns-default dictionary.core
+                        :exec-args  {:data-dir      "tools/dictionary/data"
+                                     :output-dir    "resources/dictionary"}}
 
-           :test-dictionary {:extra-paths ["test/dictionary" "tools/dictionary"]
-                             :extra-deps  {org.clojure/data.csv  {:mvn/version "1.1.1"}
-                                           org.clojure/tools.cli {:mvn/version "1.4.256"}
-                                           io.github.cognitect-labs/test-runner
-                                           {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
-                             :main-opts   ["-m" "cognitect.test-runner"
-                                           "-d" "test/dictionary"]}}}
+           :word-frequencies {:deps       {dictionary/dictionary {:local/root "tools/dictionary"}}
+                              :ns-default word-frequencies}
+
+           :dictionary-import {:extra-paths ["tools/dictionary"]
+                                :extra-deps  {org.clojure/tools.cli {:mvn/version "1.4.256"}}
+                                :exec-fn     dictionary.import/upload
+                                :exec-args   {:input-dir "resources/dictionary"}}}}

@@ -61,8 +61,8 @@
       (is (every? :form (:forms result))))))
 
 
-(deftest slim-entry-senses-retain-tags-and-form-of
-  (testing "senses retain only tags and form_of (when present)"
+(deftest slim-entry-senses-retain-tags-glosses-and-form-of
+  (testing "senses retain only machine tags, glosses, and form_of when present"
     (let [entry  {:word         "Test"
                   :pos          "Noun"
                   :lang_code    "de"
@@ -72,11 +72,11 @@
                   :translations []
                   :forms        []}
           result (core/slim-entry entry)]
-      ;; first sense has tags + form_of
-      (is (= {:tags ["sense1"] :form_of [{:word "x"}]}
+      ;; first sense has tags + glosses + form_of
+      (is (= {:tags ["sense1"] :glosses ["meaning"] :form_of [{:word "x"}]}
              (first (:senses result))))
-      ;; second sense has only tags (no form_of key)
-      (is (= {:tags ["sense2"]}
+      ;; second sense has tags + glosses only (no form_of key)
+      (is (= {:tags ["sense2"] :glosses ["meaning2"]}
              (second (:senses result)))))))
 
 
@@ -231,13 +231,61 @@
                         ["gehen" "verb"] gehen
                         ["Katze" "noun"] katze}
           result       (core/transform-entries merged goethe-index timestamp)]
-      ;; 2 docs produced (Hund + gehen)
-      (is (= 2 (:entry-count result)))
-      (is (= 2 (count (:docs result))))
-      ;; 1 skipped (Katze)
-      (is (= 1 (:skip-count result)))
+      ;; 3 docs produced (Hund + gehen + Katze with empty translation)
+      (is (= 3 (:entry-count result)))
+      (is (= 3 (count (:docs result))))
+      ;; 0 skipped
+      (is (= 0 (:skip-count result)))
       ;; sf-index populated
       (is (pos? (count (:sf-index result))))
       ;; CEFR counts: a1=1 (Hund), a2=1 (gehen)
       (is (= 1 (get (:cefr-counts result) "a1")))
       (is (= 1 (get (:cefr-counts result) "a2"))))))
+
+
+(deftest transform-entries-sorts-by-rank-desc
+  (testing "dictionary-entries output order follows rank so enrichment starts with important words"
+    (let [timestamp "2026-01-30T12:00:00Z"
+          low       {:word         "Zebra"
+                     :pos          "Noun"
+                     :tags         []
+                     :senses       [{:tags []}]
+                     :translations []
+                     :forms        []}
+          high      {:word         "machen"
+                     :pos          "Verb"
+                     :tags         []
+                     :senses       [{:tags []}]
+                     :translations []
+                     :forms        []}
+          merged    {["Zebra" "noun"] low
+                     ["machen" "verb"] high}
+          freq      {"machen" {:source "subtitles" :rank 1 :count 100000.0}}
+          result    (core/transform-entries merged [] timestamp freq)]
+      (is (= ["machen" "Zebra"] (mapv :value (:docs result)))))))
+
+
+(deftest transform-entries-keeps-raw-id-collisions-separate
+  (testing "spelling variants with the same normalized lookup key keep separate IDs"
+    (let [timestamp "2026-01-30T12:00:00Z"
+          ablass    {:word         "Ablass"
+                     :pos          "Noun"
+                     :tags         ["masculine"]
+                     :senses       [{:glosses ["technical sense"]}]
+                     :translations [{:lang_code "ru" :word "сброс"}]
+                     :forms        [{:form "Ablasse"}]}
+          ablass-ss {:word         "Ablaß"
+                     :pos          "Noun"
+                     :tags         ["masculine"]
+                     :senses       [{:glosses ["religious sense"]}]
+                     :translations [{:lang_code "ru" :word "индульгенция"}]
+                     :forms        [{:form "Ablässe"}]}
+          merged    {["ablass" "noun"] ablass
+                     ["ablaß" "noun"] ablass-ss}
+          result    (core/transform-entries merged [] timestamp)
+          docs      (:docs result)
+          ids       (set (map :_id docs))]
+      (is (= 2 (:entry-count result)))
+      (is (= #{"lemma:der ablass:noun"
+               "lemma:der ablaß:noun"} ids))
+      (is (= 2 (count (get (:sf-index result) "der ablass")))))))
