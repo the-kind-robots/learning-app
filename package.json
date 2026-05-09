@@ -6,6 +6,7 @@
     "shadow-cljs": "3.4.9"
   },
   "dependencies": {
+    "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "@thi.ng/hiccup": "^5.3.15",
     "events": "^3.3.0",
     "pouchdb": "^9.0.0",

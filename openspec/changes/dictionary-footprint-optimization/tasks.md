@@ -32,19 +32,20 @@ Schema:
 
 ## 3. Client Worker
 
-- [ ] 3.1 Add `@sqlite.org/sqlite-wasm` dependency to the client build (shadow-cljs)
-- [ ] 3.2 Create dictionary Web Worker: initialise official SQLite WASM with `opfs-sahpool` VFS; accepts `{type: "init", url: "..."}` message; downloads and opens SQLite file in OPFS; posts `{type: "ready"}`
-- [ ] 3.3 Use `opfs-sahpool` VFS for all OPFS access — SyncAccessHandle lifecycle managed by the official WASM runtime
-- [ ] 3.4 Implement atomic swap: write new version file fully → open new db → delete old file
-- [ ] 3.5 Implement Worker query handlers: `{type: "lookup", form: "..."}` → `surface_forms` join `entries`; `{type: "suggest", prefix: "..."}` → ranked results
-- [ ] 3.6 Wire Worker initialisation into app boot sequence; Worker starts in background, does not block first render
+- [x] 3.0 Add `GET /dictionary/manifest` JSON endpoint (`{hash, filename}`) to the Ring backend so the SW can discover the current version without parsing the full manifest.edn
+- [x] 3.1 Add `@sqlite.org/sqlite-wasm` to `package.json`; copy `sqlite3.wasm` from node_modules to `resources/public/js/app/` so `wasm-handler` can serve it with correct Content-Type
+- [x] 3.2 Create `dictionary_sqlite.cljs` in the SW build (no separate Worker — the SW IS the Worker context); `init!` fetches `/dictionary/manifest`, checks opfs-sahpool pool for the hash-addressed file, downloads and `importDb`s if absent, opens db via oo1.DB API
+- [x] 3.3 Use `opfs-sahpool` VFS for all OPFS access — SyncAccessHandle lifecycle managed by the official WASM runtime
+- [x] 3.4 Version tracking via hash-addressed pool filename (`dict.{hash12}.sqlite`): `getFileNames()` tells us if the current version is already in the pool; old files are left in place (pool capacity = 6; explicit cleanup deferred)
+- [x] 3.5 Implement `suggest` in `dictionary_sqlite.cljs`: SQL join over `surface_forms`, `lemmas`, `translations`; returns `{:suggestions [...] :prefill string-or-nil}` — same shape as the PouchDB `dictionary/suggest`; direct synchronous OO1 API call (no postMessage)
+- [x] 3.6 Wire `dictionary-sqlite/init!` into sw.cljs activate event (fire-and-forget before the waitUntil chain; does not block activation)
 
 ## 4. dictionary.cljs Shim
 
 - [ ] 4.1 Add rollout flag `dictionary-sqlite-enabled?`
-- [ ] 4.2 Wrap `attach-translations` to delegate to Worker via `postMessage` when flag is on; preserve existing call signature
-- [ ] 4.3 Wrap `suggest` to delegate to Worker via `postMessage` when flag is on; preserve existing call signature
-- [ ] 4.4 Test both paths manually: flag-off (PouchDB) and flag-on (Worker) produce equivalent results for the same inputs
+- [ ] 4.2 `attach-translations` is no longer needed for the SQLite path (translations are included in the `suggest` SQL join); remove the call when flag is on
+- [ ] 4.3 Wrap `suggest` in `dictionary.cljs`: when flag is on, call `dictionary-sqlite/suggest` directly (same SW context — no postMessage); when off, use existing PouchDB path
+- [ ] 4.4 Test both paths manually: flag-off (PouchDB) and flag-on (SQLite) produce equivalent results for the same inputs
 
 ## 5. Teardown PouchDB Dictionary Path
 

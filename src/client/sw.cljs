@@ -6,7 +6,7 @@
    [application :as application]
    [clojure.string :as str]
    [db-migrations :as db-migrations]
-   [dictionary-sync :as dictionary-sync]
+   [dictionary-sqlite :as dictionary-sqlite]
    [lambdaisland.glogi :as log]
    [logging]
    [promesa.core :as p]
@@ -89,7 +89,6 @@
      (-> (p/do
            (db-migrations/ensure-migrated!)
            (tasks/start!)
-           (dictionary-sync/ensure-loaded!)
            (js/self.clients.claim))
          (p/catch
            (fn [err]

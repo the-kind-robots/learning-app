@@ -88,10 +88,12 @@ Use the official SQLite WASM build with the `opfs-sahpool` VFS. This is Worker-o
 
 **Rationale:** The official build is maintained by the SQLite team, has native OPFS support, and the `opfs-sahpool` VFS handles the `SyncAccessHandle` lifecycle. No third-party wrapper needed. `sql.js` loads the full db into memory and requires a manual OPFS write step; the official WASM avoids both.
 
-### OPFS Worker-first
-The SQLite file is opened exclusively inside a Worker using `SyncAccessHandle`. The main thread communicates via `postMessage`.
+### SQLite runs in the existing Service Worker
+The app's entire ClojureScript build is a single shadow-cljs module (`:sw`, `:web-worker true`). There is no main-thread ClojureScript; the Service Worker IS the application runtime. `dictionary_sqlite.cljs` lives in that same SW module and calls the SQLite OO1 API directly — no separate dedicated Worker, no `postMessage` protocol.
 
-**Rationale:** `SyncAccessHandle` is Worker-only in Safari and Firefox. Designing Worker-first from the start avoids a re-architecture later. The existing `attach-translations` / `suggest` calls become async `postMessage` shims — no semantic change from the caller's perspective.
+`SyncAccessHandle` is fully available in Service Workers in modern browsers (Chrome shipped this in 2022; Firefox and Safari followed). `opfs-sahpool` uses it exclusively, so running SQLite in the SW requires no browser-compatibility workaround.
+
+**Rationale:** A dedicated Worker + postMessage layer adds complexity (message serialisation, channel management, error propagation) for zero benefit when the code is already running in a Worker context. Direct function calls within the SW are simpler, type-safe, and synchronous.
 
 ### Versioning: content hash in filename
 Filename format: `dict.{hash12}.sqlite` where `hash12` is the first 12 hex chars of the SHA-256 of the file. Written to a temp file, hashed, then renamed — consistent with how `emit/sha256` already fingerprints the JSONL files. Hash is recorded in the manifest so the server and Worker agree on the current file without a separate version-pointer document.
@@ -110,7 +112,7 @@ Serve `dict.v{epoch}.sqlite` from the backend with `Content-Encoding: gzip` and 
 
 ## Risks / Trade-offs
 
-- **sql.js memory footprint (~60 MB heap)** → Acceptable on modern devices; monitor via telemetry. Fallback: switch to wa-sqlite streaming reads.
+- **sqlite-wasm cold-start / first-download latency (~35 MB download)** → Mitigated by fire-and-forget init (does not block first render or activate). Monitor via telemetry (task 6.2).
 - **WASM cold-start latency** → Worker initialises in background on app boot; dictionary is not on the critical path for first render.
 - **Safari OPFS quota** → Same quota constraints as today; the total bytes written are smaller. Check existing `dictionary-sync` quota failure telemetry before Phase 2 rollout.
 - **Phase 1 strips fields that may be needed later** → Acceptable: if a detail view is added, re-populate stripped fields in the build step. The issue's key discriminator question was answered: detail view is not on the near-term roadmap.
