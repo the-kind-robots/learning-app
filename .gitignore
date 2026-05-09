@@ -36,11 +36,11 @@ app.db
 /.clojure-mcp/scratch_pad.edn
 
 # Dictionary build data
-/data/
 /tools/dictionary/data/
-/resources/dictionary/import-metrics.json
-/resources/dictionary/*.jsonl
-/.enrich_*
+/resources/dictionary/**
+!/resources/dictionary/dictionary.sqlite
+!/resources/dictionary/enrichment-meta.jsonl
+!/resources/dictionary/enrichment-output.jsonl
 /tools/dictionary/enrich-translations/.enrich_*
 /tools/dictionary/enrich-translations/enrich-translations
 
@@ -51,3 +51,4 @@ app.db
 /.clojure-mcp/
 /opencode.json
 /.tmp/
+/src/client/sqlite3_cjs.js

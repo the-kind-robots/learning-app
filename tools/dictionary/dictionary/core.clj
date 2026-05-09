@@ -1,5 +1,6 @@
 (ns dictionary.core
   (:require [cheshire.core :as json]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [dictionary.download :as download]
@@ -7,14 +8,15 @@
             [dictionary.frequency :as frequency]
             [dictionary.goethe :as goethe]
             [dictionary.kaikki :as kaikki]
+            [dictionary.sqlite :as sqlite]
             [dictionary.transform :as transform]
-            [utils :refer [now-iso]]))
+            [utils]))
 
+
+(set! *warn-on-reflection* true)
 
 
 (defn slim-entry
-  "Strip a parsed Kaikki entry down to only the fields needed for transformation.
-   Dramatically reduces memory footprint when holding entries in the merge map."
   [entry]
   {:word         (:word entry)
    :pos          (:pos entry)
@@ -28,8 +30,7 @@
    :forms        (filterv :form (mapv #(select-keys % [:form :article]) (:forms entry)))})
 
 
-(defn merge-kaikki-entries
-  "Merge duplicate Kaikki entries (same word+pos) by unioning translations and forms."
+(defn merge-dump-entries
   [existing new-entry]
   (-> existing
       (update :translations (fn [old] (vec (distinct (concat old (:translations new-entry))))))
@@ -37,148 +38,138 @@
       (update :senses (fn [old] (vec (distinct (concat old (:senses new-entry))))))))
 
 
-(defn merge-entries-from-lines
-  "Pure function: given a seq of raw JSON strings, filter German lemma entries,
-   merge duplicates by [word pos]. Returns {:entries {[word pos] → entry},
-   :total-lines n, :parse-errors n}."
+(defn- classify-line
+  [^String line]
+  (if-not (re-find #"\"lang_code\"\s*:\s*\"de\"" line)
+    [:skip]
+    (try
+      (let [entry (json/parse-string line true)]
+        (if (and (kaikki/german-entry? entry) (kaikki/lemma-entry? entry))
+          (let [pos       (str/lower-case (:pos entry "unknown"))
+                entry-key [(str/lower-case (:word entry)) pos (if (= "noun" pos)
+                                                                (kaikki/extract-article entry)
+                                                                (kaikki/entry-discriminant entry pos))]]
+            [:ok entry-key (slim-entry entry)])
+          [:skip]))
+      (catch Exception _ [:parse-error]))))
+
+
+(defn entries-from-lines
   [lines]
-  (reduce (fn [acc ^String line]
-            (when (zero? (mod (:total-lines acc) 10000))
-              (print (format "\r  Lines read: %,d " (:total-lines acc)))
-              (flush))
-            (let [acc (update acc :total-lines inc)]
-              ;; Quick string check: skip lines that aren't German
-              (if-not (re-find #"\"lang_code\"\s*:\s*\"de\"" line)
-                acc
-                (try
-                  (let [entry (json/parse-string line true)]
-                    (if-not (and (kaikki/german-entry? entry)
-                                 (kaikki/lemma-entry? entry))
-                      acc
-                      (let [k    [(str/lower-case (:word entry)) (str/lower-case (or (:pos entry) "unknown"))]
-                            slim (slim-entry entry)]
-                        (update acc
-                                :entries
-                                (fn [m]
-                                  (if-let [existing (get m k)]
-                                    (assoc m k (merge-kaikki-entries existing slim))
-                                    (assoc m k slim)))))))
-                  (catch Exception _
-                    (update acc :parse-errors inc))))))
-          {:entries {} :total-lines 0 :parse-errors 0}
-          lines))
+  (let [result (reduce (fn [acc line]
+                         (when (zero? (mod (:total-lines acc) 10000))
+                           (print (format "\r  Lines read: %,d " (:total-lines acc)))
+                           (flush))
+                         (let [acc            (update acc :total-lines inc)
+                               [tag key slim] (classify-line line)]
+                           (case tag
+                             :skip        acc
+                             :parse-error (update acc :parse-errors inc)
+                             :ok          (update acc :dump-entries
+                                                  (fn [dump-entries]
+                                                    (if-let [existing (get dump-entries key)]
+                                                      (assoc dump-entries key (merge-dump-entries existing slim))
+                                                      (assoc dump-entries key slim)))))))
+                       {:dump-entries {} :total-lines 0 :parse-errors 0}
+                       lines)]
+    (update result :dump-entries vals)))
 
 
-(defn- read-and-merge-entries
-  "Pass 1: Stream Kaikki gz, filter German lemma entries, merge duplicates.
-   Thin I/O wrapper around merge-entries-from-lines."
+(defn- load-dump-entries
   [kaikki-path]
-  (println "  Pass 1: Reading & merging Kaikki entries...")
+  (println "  Reading & merging Kaikki entries...")
   (with-open [reader (kaikki/open-gz-reader kaikki-path)]
-    (let [result (merge-entries-from-lines (line-seq reader))]
-      (println (format "  Lines read: %,d. Unique lemma entries: %,d (parse errors: %,d)"
-                       (:total-lines result)
-                       (count (:entries result))
-                       (:parse-errors result)))
+    (let [result (entries-from-lines (line-seq reader))]
+      (println
+       (format
+        "  Lines read: %,d. Unique lemmas: %,d (parse errors: %,d)"
+        (:total-lines result)
+        (count (:dump-entries result))
+        (:parse-errors result)))
       result)))
 
 
-(defn transform-entries
-  "Pure function: transform merged entries into dictionary docs and surface-form index.
-   Returns {:docs [...], :sf-index {...}, :entry-count n, :skip-count n, :cefr-counts {...}}."
-  ([merged-entries goethe-index timestamp]
-   (transform-entries merged-entries goethe-index timestamp nil))
-  ([merged-entries goethe-index timestamp frequency-index]
-   (let [sorted (sort-by (fn [e] [(:word e) (:pos e)]) (vals merged-entries))]
-     (-> (reduce (fn [acc kentry]
-                   (let [processed (+ (:entry-count acc) (:skip-count acc))]
-                     (when (zero? (mod processed 10000))
-                       (print (format "\r  Entries processed: %,d " processed))
-                       (flush)))
-                   (let [dict-entry (transform/dictionary-entry kentry goethe-index timestamp frequency-index)]
-                     (if dict-entry
-                       (-> acc
-                           (update :docs conj dict-entry)
-                           (update :sf-index transform/accumulate-surface-forms dict-entry)
-                           (update :entry-count inc)
-                           (update :cefr-counts update (get-in dict-entry [:meta :cefr-level]) (fnil inc 0)))
-                       (update acc :skip-count inc))))
-                 {:docs        []
-                  :sf-index    {}
-                  :entry-count 0
-                  :skip-count  0
-                  :cefr-counts {"a1" 0 "a2" 0 "b1" 0 nil 0}}
-                 sorted)
-         (update :docs #(sort-by (juxt (comp - :rank) :value) %))))))
+(defn build-lemmas
+  [dump-entries goethe-index frequency-index]
+  (let [step       (fn [acc dump-entry]
+                     (when (zero? (mod (count acc) 10000))
+                       (print (format "\r  Lemmas processed: %,d " (count acc)))
+                       (flush))
+                     (if-let [lemma (transform/lemma dump-entry goethe-index frequency-index)]
+                       (conj acc lemma)
+                       acc))
+        lemmas     (reduce step [] dump-entries)
+        skip-count (- (count dump-entries) (count lemmas))]
+    [lemmas skip-count]))
 
 
-(defn- transform-and-write-entries
-  "Pass 2: Transform merged entries, write JSONL. Thin I/O wrapper around transform-entries."
-  [merged-entries goethe-index timestamp frequency-index output-dir]
-  (println "  Pass 2: Transforming & writing dictionary entries...")
-  (let [entries-path (str output-dir "/dictionary-entries.jsonl")
-        {:keys [docs sf-index entry-count skip-count cefr-counts]}
-        (transform-entries merged-entries goethe-index timestamp frequency-index)
-        file-stats   (emit/write-jsonl! entries-path docs)]
-    (println (format "  Dictionary entries written: %,d (skipped: %,d)"
-                     entry-count
-                     skip-count))
-    {:file-stats  file-stats
-     :sf-index    sf-index
-     :entry-count entry-count
-     :skip-count  skip-count
-     :cefr-counts cefr-counts}))
+(defn- build-artifacts!
+  [kaikki-path goethe-index frequency-index timestamp output-dir]
+  (println "Building dictionary artifacts...")
+  (let [;; Obtain lemmas
+        {:keys [dump-entries total-lines]} (load-dump-entries kaikki-path)
+        _                                  (println "  Building lemmas...")
+        [lemmas skip-count]                (build-lemmas dump-entries goethe-index frequency-index)
+        _                                  (println (format "  Lemmas: %,d (skipped: %,d)" (count lemmas) skip-count))
+
+        ;; Write dictionary
+        _                                  (println "  Writing dictionary.sqlite...")
+        stats                              (sqlite/write-dictionary! output-dir lemmas)
+        _                                  (println (format "  dictionary.sqlite: %,d bytes" (:bytes stats)))
+
+        ;; Write data metadata useful for enrichment
+        _                                  (println "  Writing enrichment-meta.jsonl...")
+        meta-stats                         (sqlite/emit-enrichment-meta! output-dir lemmas)]
+
+    (println (format "  enrichment-meta.jsonl: %,d bytes" (:bytes meta-stats)))
+    (println "  Writing manifest...")
+    (emit/write-manifest! output-dir
+                          {(:name stats) {:count (count lemmas)
+                                          :bytes (:bytes stats)}}
+                          timestamp)
+    (println "\n=== Ingestion Summary ===")
+    (println (format "  Total Kaikki lines: %,d" total-lines))
+    (println (format "  Lemmas written:     %,d" (count lemmas)))
+    (println (format "  Skipped (bad POS):  %,d" skip-count))
+    (println (format "  Client dictionary:  %s" (:name stats)))
+    (println "========================\n")))
 
 
-(defn- process-kaikki-stream
-  "Stream Kaikki gz, filter & merge entries, write dictionary entries to JSONL,
-   write surface forms, write manifest."
-  [kaikki-path goethe-index timestamp frequency-index output-dir]
-  (println "Processing Kaikki stream...")
-  (let [{:keys [entries total-lines]} (read-and-merge-entries kaikki-path)
-        {:keys [file-stats sf-index entry-count skip-count cefr-counts]}
-        (transform-and-write-entries entries goethe-index timestamp frequency-index output-dir)]
-
-    ;; Write surface forms
-    (println (format "  Surface form index size: %,d normalized forms" (count sf-index)))
-    (println "  Writing surface forms...")
-    (let [sf-docs  (transform/surface-form-documents sf-index)
-          sf-stats (emit/write-jsonl! (str output-dir "/surface-forms.jsonl") sf-docs)]
-      (println (format "  Surface forms written: %,d" (:count sf-stats)))
-
-      ;; Write manifest
-      (println "  Writing manifest...")
-      (emit/write-manifest! output-dir
-                            {"dictionary-entries.jsonl" file-stats
-                             "surface-forms.jsonl"      sf-stats}
-                            timestamp)
-
-      ;; Print summary
-      (println "\n=== Ingestion Summary ===")
-      (println (format "  Total Kaikki lines:      %,d" total-lines))
-      (println (format "  Dictionary entries:      %,d" entry-count))
-      (println (format "  Skipped (disallowed POS):%,d" skip-count))
-      (println (format "  Surface forms:           %,d" (:count sf-stats)))
-      (println "  CEFR breakdown:")
-      (doseq [[level cnt] (sort-by key cefr-counts)]
-        (println (format "    %-4s  %,d" (or level "none") cnt)))
-      (println "========================\n"))))
+(defn apply-enrichment!
+  [{:keys [output-dir]
+    :or   {output-dir "resources/dictionary"}}]
+  (println "Applying enrichment to dictionary.sqlite in" output-dir "...")
+  (sqlite/apply-enrichment! output-dir)
+  (let [manifest    (edn/read-string (slurp (str output-dir "/manifest.edn")))
+        lemma-count (get-in manifest [:files "dictionary.sqlite" :count])
+        sqlite-file (io/file (str output-dir "/dictionary.sqlite"))]
+    (emit/write-manifest! output-dir
+                          {"dictionary.sqlite" {:count lemma-count
+                                                :bytes (.length sqlite-file)}}
+                          (utils/now-iso)))
+  (println "Done."))
 
 
 (defn build
   [{:keys [output-dir data-dir frequency-file]
     :or   {data-dir "data" output-dir "resources/dictionary"}}]
-  (let [timestamp (now-iso)]
-    (println "Dictionary ingestion starting at" timestamp)
-    (.mkdirs (io/file data-dir))
-    (.mkdirs (io/file output-dir))
-    (let [paths (download/download-sources! data-dir)]
-      (println "Building Goethe CEFR index...")
-      (let [goethe-index (goethe/stem-level-index (:goethe paths))]
-        (println (format "  Goethe stems loaded: %,d" (count goethe-index)))
-        (let [frequency-index (frequency/read-frequency-file frequency-file)]
-          (when (seq frequency-index)
-            (println (format "  Frequency entries loaded: %,d" (count frequency-index))))
-          (process-kaikki-stream (:kaikki paths) goethe-index timestamp frequency-index output-dir))))
-    (println "Done.")
+  (let [frequency-file  (or frequency-file (str data-dir "/frequency.tsv"))
+        timestamp       (utils/now-iso)
+        ;; Downloading source data
+        _               (println "Dictionary ingestion starting at" timestamp)
+        _               (.mkdirs (io/file data-dir))
+        _               (.mkdirs (io/file output-dir))
+        paths           (download/download-sources! data-dir)
+
+        ;; Building word importance indexes
+        _               (println "Building Goethe CEFR index...")
+        goethe-index    (goethe/stem-level-index (:goethe paths))
+        _               (println (format "  Goethe stems loaded: %,d" (count goethe-index)))
+
+        frequency-index (frequency/read-frequency-file frequency-file)
+        _               (println (format "  Frequency entries loaded: %,d" (count frequency-index)))
+
+        ;; Building the dictionary
+        _               (build-artifacts! (:kaikki paths) goethe-index frequency-index timestamp output-dir)
+        _               (println "Done.")]
     (shutdown-agents)))

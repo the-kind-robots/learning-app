@@ -1,5 +1,6 @@
 (ns dictionary.kaikki
-  (:require [clojure.java.io :as io])
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str])
   (:import [java.util.zip GZIPInputStream]))
 
 
@@ -52,15 +53,30 @@
      (-> entry :forms first :article #{"der" "die" "das"}))))
 
 
+(defn entry-discriminant
+  "Distinguishes homographs sharing (word, pos). Only meaningful for verbs:
+   returns \"separable\" / \"inseparable\", or nil."
+  [entry pos]
+  (when (= "verb" pos)
+    (let [tag-set (set (:tags entry))]
+      (cond
+        (tag-set "separable")   "separable"
+        (tag-set "inseparable") "inseparable"))))
+
+
 (defn russian-translations
-  "Filter translations for code=\"ru\", return [{:lang \"ru\" :value word}]."
+  "Filter translations for code=\"ru\", return [{:lang \"ru\" :value word}].
+   Splits compound values like \"поезд ; [4] сквозняк\" into separate entries."
   [entry]
   (->> (:translations entry)
        (filter #(= "ru" (:lang_code %)))
-       (keep (fn [t]
-               (when-let [w (:word t)]
-                 {:lang "ru" :value w})))
+       (keep :word)
+       (mapcat #(str/split % #"\s*;\s*"))
+       (map #(str/replace % #"^\s*(\[[^\]]*\]|\(\s*\))\s*" ""))
+       (map str/trim)
+       (remove empty?)
        (distinct)
+       (map (fn [v] {:lang "ru" :value v}))
        (vec)))
 
 
