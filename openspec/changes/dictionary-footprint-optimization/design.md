@@ -83,10 +83,10 @@ CREATE TABLE surface_forms (
 
 **Rationale for `WITHOUT ROWID`:** `translations`, `translation_labels`, and `surface_forms` are append-only reference tables. Every client query hits them with a leading-column prefix (`WHERE lemma_id = ?` or `WHERE normalized_form = ?`). `WITHOUT ROWID` stores rows in a clustered B-tree on the composite PK, making these lookups range scans with no secondary index needed. `translations` in particular benefits most: the previous synthetic `id` column would have required a separate index on `(lemma_id)` to avoid a full-table scan.
 
-### sql.js over wa-sqlite
-Start with `sql.js`. Switch to `wa-sqlite` only if RAM becomes a measured problem (sql.js loads the full db into memory; ~60 MB is acceptable on modern devices).
+### Official SQLite WASM (`@sqlite.org/sqlite-wasm`)
+Use the official SQLite WASM build with the `opfs-sahpool` VFS. This is Worker-only and stores the database directly in OPFS via `SyncAccessHandle`, eliminating the need for a separate download-then-write step.
 
-**Rationale:** `sql.js` has better documentation, simpler Worker integration, and is the lowest-risk path to a working prototype. `wa-sqlite` provides streaming reads from OPFS but adds complexity.
+**Rationale:** The official build is maintained by the SQLite team, has native OPFS support, and the `opfs-sahpool` VFS handles the `SyncAccessHandle` lifecycle. No third-party wrapper needed. `sql.js` loads the full db into memory and requires a manual OPFS write step; the official WASM avoids both.
 
 ### OPFS Worker-first
 The SQLite file is opened exclusively inside a Worker using `SyncAccessHandle`. The main thread communicates via `postMessage`.

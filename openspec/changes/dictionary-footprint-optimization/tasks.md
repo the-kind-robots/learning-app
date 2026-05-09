@@ -25,16 +25,16 @@ Schema:
 
 ## 2. Server Route
 
-- [ ] 2.1 Add `GET /dictionary/v{epoch}` route in Ring/Reitit backend
-- [ ] 2.2 Serve the SQLite file with `Content-Encoding: gzip` and `ETag` / `X-Content-Hash` header
-- [ ] 2.3 Return HTTP 404 for unknown version requests
-- [ ] 2.4 Add SQLite file to Service Worker pre-cache or cache-on-first-fetch strategy
+- [x] 2.1 Add `GET /dictionary/:filename` route in Ring/Reitit backend
+- [x] 2.2 Serve the SQLite file with `ETag` / `X-Content-Hash` and `Cache-Control: immutable`; gzip delegated to reverse proxy
+- [x] 2.3 Return HTTP 404 for unknown version requests
+- [x] 2.4 Add `wasm-handler` intercepting `*.wasm` requests: sets `Content-Type: application/wasm` and `Cache-Control: immutable`
 
 ## 3. Client Worker
 
-- [ ] 3.1 Add `sql.js` dependency to the client build (shadow-cljs)
-- [ ] 3.2 Create dictionary Web Worker: accepts `{type: "init", epoch: N}` message; downloads SQLite file if not already in OPFS; opens db with sql.js; posts `{type: "ready"}`
-- [ ] 3.3 Implement `SyncAccessHandle` OPFS write path in Worker (required for Safari/Firefox)
+- [ ] 3.1 Add `@sqlite.org/sqlite-wasm` dependency to the client build (shadow-cljs)
+- [ ] 3.2 Create dictionary Web Worker: initialise official SQLite WASM with `opfs-sahpool` VFS; accepts `{type: "init", url: "..."}` message; downloads and opens SQLite file in OPFS; posts `{type: "ready"}`
+- [ ] 3.3 Use `opfs-sahpool` VFS for all OPFS access — SyncAccessHandle lifecycle managed by the official WASM runtime
 - [ ] 3.4 Implement atomic swap: write new version file fully → open new db → delete old file
 - [ ] 3.5 Implement Worker query handlers: `{type: "lookup", form: "..."}` → `surface_forms` join `entries`; `{type: "suggest", prefix: "..."}` → ranked results
 - [ ] 3.6 Wire Worker initialisation into app boot sequence; Worker starts in background, does not block first render

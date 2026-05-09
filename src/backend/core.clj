@@ -3,6 +3,8 @@
   (:require
    [buddy.hashers :as hashers]
    [cheshire.core :as cheshire]
+   [clojure.edn :as edn]
+   [clojure.java.io :as io]
    [clojure.string :as str]
    [db :as db]
    [examples :as examples]
@@ -219,6 +221,38 @@
 
 
 ;;
+;; Dictionary
+;;
+
+
+(def ^:private dictionary-manifest
+  (some-> (io/resource "dictionary/manifest.edn")
+          slurp
+          edn/read-string))
+
+
+(defn- dictionary-handler [{:keys [path-params]}]
+  (if-let [{:keys [sha256]} (get-in dictionary-manifest [:files "dictionary.sqlite"])]
+    (let [expected (str "dict." (subs sha256 0 12) ".sqlite")]
+      (if (= (:filename path-params) expected)
+        (-> (response/resource-response "dictionary/dictionary.sqlite")
+            (response/content-type "application/x-sqlite3")
+            (response/header "ETag"           (str "\"" sha256 "\""))
+            (response/header "Content-Hash" sha256)
+            ;; Content-addressed — gzip compression delegated to the reverse proxy.
+            (response/header "Cache-Control"  "public, max-age=31536000, immutable"))
+        {:status 404 :body ""}))
+    {:status 404 :body ""}))
+
+
+(defn- wasm-handler [request]
+  (when (str/ends-with? (:uri request) ".wasm")
+    (some-> (response/resource-response (str "/public" (:uri request)))
+            (response/content-type "application/wasm")
+            (response/header "Cache-Control" "public, max-age=31536000, immutable"))))
+
+
+;;
 ;; Routes
 ;;
 
@@ -244,7 +278,20 @@
   (http/ring-handler
    ;; Main handler
    (http/router
-    [["/auth/check"
+    [["/dictionary/:filename"
+      {:get (fn [{:keys [path-params] :as req}]
+              (if (= (:filename path-params) "manifest")
+                (if-let [{:keys [sha256]} (get-in dictionary-manifest [:files "dictionary.sqlite"])]
+                  (let [hash12 (subs sha256 0 12)]
+                    {:status  200
+                     :headers {"Content-Type"  "application/json"
+                               "Cache-Control" "no-cache"}
+                     :body    (cheshire/generate-string {:hash     sha256
+                                                         :filename (str "dict." hash12 ".sqlite")})})
+                  {:status 404 :body ""})
+                (dictionary-handler req)))}]
+
+     ["/auth/check"
       {:get
        (fn [{:keys [session] :as _request}]
          (auth-proxy-response session))}]
@@ -330,7 +377,7 @@
 
 
 (def ring-handler
-  (let [ring-handler #(ring/routes service-worker-handler resource-handler app-handler)]
+  (let [ring-handler #(ring/routes service-worker-handler wasm-handler resource-handler app-handler)]
     (if dev-mode?
       (ring/reloading-ring-handler ring-handler)
       (ring-handler))))
