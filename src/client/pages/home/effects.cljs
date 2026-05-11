@@ -5,6 +5,7 @@
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
    [reitit.frontend.easy :as rfe]
+   [repo.dictionary :as dictionary]
    [repo.dictionary-legacy :as dictionary-legacy]
    [use-cases.vocabulary :as vocabulary]))
 
@@ -15,7 +16,9 @@
      [dispatch value]
      (try
        (let [dbs    (dbs/dbs)
-             result (await (dictionary-legacy/suggest dbs value))]
+             result (if (dictionary/ready?)
+                      (await (dictionary/suggest dbs value))
+                      (await (dictionary-legacy/suggest dbs value)))]
          (dispatch [[:action/update-suggestions result]]))
        (catch js/Error err
          (log/error :effect/suggest-dictionary {:error (str err)}))))

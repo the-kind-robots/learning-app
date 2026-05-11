@@ -2,6 +2,7 @@
   (:require
    [application]
    [db-migrations :as db-migrations]
+   [dbs :as dbs]
    [lambdaisland.glogi :as log]
    [logging]
    [nexus.registry :as nxr]
@@ -74,6 +75,7 @@
 
   (await (db-migrations/ensure-migrated!))
   (await (tasks/start!))
+  (dbs/init!)
   (when (js-in "serviceWorker" js/navigator)
     (js/navigator.serviceWorker.register "/js/app/sw.js" #js {:scope "/"})))
 

@@ -1,7 +1,8 @@
 (ns dbs
   (:refer-clojure :exclude [get find remove])
   (:require
-   [db :as db]))
+   [db :as db]
+   [lambdaisland.glogi :as log]))
 
 
 ;;
@@ -86,8 +87,76 @@
   (db/find-all (db-for dbs (get-in query [:selector :type])) query))
 
 
+;;
+;; SQLite dictionary — worker proxy
+;;
+
+
+(defonce ^:private worker-state
+  (atom {:worker nil :ready? false :next-id 0}))
+
+
+(defonce ^:private dict-db (atom nil))
+
+
+(defn dictionary-ready?
+  []
+  (:ready? @worker-state))
+
+
+(defn- dictionary-db
+  []
+  @dict-db)
+
+
+(defn- make-exec-proxy
+  [worker]
+  #js {:exec
+       (fn [^js opts]
+         (js/Promise.
+          (fn [resolve reject]
+            (let [id  (:next-id (swap! worker-state update :next-id inc))
+                  msg (doto (js/Object.assign #js {} opts) (aset "id" id))]
+              (..
+               worker
+               (addEventListener
+                "message"
+                (fn handler [^js e]
+                  (when (= (.. e -data -id) id)
+                    (.removeEventListener worker "message" handler)
+                    (if (.. e -data -error)
+                      (reject (js/Error. (.. e -data -error)))
+                      (resolve (.. e -data -result)))))))
+              (.postMessage worker msg)))))})
+
+
+(defn init!
+  []
+  (when (nil? (:worker @worker-state))
+    (let [worker (js/Worker. "/js/sqlite3-worker.js?sqlite3.dir=/js")]
+      (..
+       worker
+       (addEventListener
+        "message"
+        (fn [^js e]
+          (case (.. e -data -type)
+            "ready" (swap! worker-state assoc :ready? true)
+            "error" (log/error :dbs/sqlite3-worker-error {:message (.. e -data -message)})
+            nil))))
+      (..
+       worker
+       (addEventListener
+        "error"
+        (fn [^js e]
+          (log/error :dbs/sqlite3-worker-crashed {:error (str e)})
+          (swap! worker-state assoc :ready? false))))
+      (reset! dict-db (make-exec-proxy worker))
+      (swap! worker-state assoc :worker worker))))
+
+
 (defn dbs
   []
-  {:user/db   (user-db)
-   :device/db (device-db)
+  {:user/db       (user-db)
+   :device/db     (device-db)
+   :dictionary/db (dictionary-db)
    :dictionary/legacy-db (legacy-dictionary-db)})
