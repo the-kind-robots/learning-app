@@ -368,8 +368,7 @@
                      [:circle.sparkle {:cx 78 :cy 56 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:5s;animation-duration:6s"}]
                      [:circle.sparkle {:cx 18 :cy 112 :r 2.5 :fill "hsl(280 50% 65%)" :style "animation-delay:1s;animation-duration:4.5s"}]
                      [:circle.sparkle {:cx 142 :cy 128 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:4.2s;animation-duration:5s"}]]
-                    [:div.splash-sub "Загружаем..."]]
-                   [:script {:src "/js/sw-loader.js" :defer true}]]
+                    [:div.splash-sub "Загружаем..."]]]
        :status 200}
       request))
 

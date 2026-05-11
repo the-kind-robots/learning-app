@@ -8,6 +8,7 @@
    [logging])
   (:require-macros [sw-version]))
 
+
 (def precache
   (sw-version/precache-manifest
    ["/"
@@ -40,7 +41,6 @@
     "/icons/ue-192.png"
     "/icons/ue-512.png"
     "/js/pwa-install.js"
-    "/js/sw-loader.js"
     "/manifest.json"]))
 
 
