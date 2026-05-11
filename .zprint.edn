@@ -60,4 +60,9 @@
            "some->>"       :none
            "with-couch-op" :arg1-body
            "with-test-db"  :none-body
-           "with-mocked-env" :arg1-body}}
+           "with-mocked-env"           :arg1-body
+           ;; nexus.registry — first arg (keyword) stays on same line, handler indented 2
+           "nxr/register-action!"      :arg1-body
+           "nxr/register-effect!"      :arg1-body
+           "nxr/register-placeholder!" :arg1-body
+           "nxr/register-interceptor!" :arg1-body}}
