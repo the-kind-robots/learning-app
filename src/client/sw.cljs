@@ -3,15 +3,9 @@
 ;;
 (ns sw
   (:require
-   [application :as application]
    [clojure.string :as str]
-   [db-migrations :as db-migrations]
-   [dictionary-sqlite :as dictionary-sqlite]
    [lambdaisland.glogi :as log]
-   [logging]
-   [promesa.core :as p]
-   [tasks :as tasks]
-   [utils :as utils])
+   [logging])
   (:require-macros [sw-version]))
 
 (def precache
@@ -45,12 +39,8 @@
     "/icons.svg"
     "/icons/ue-192.png"
     "/icons/ue-512.png"
-    "/js/htmx/class-tools.js"
-    "/js/htmx/htmx.min.js"
     "/js/pwa-install.js"
     "/js/sw-loader.js"
-    "/js/virtual-keyboard.js"
-    "/js/word-autocomplete.js"
     "/manifest.json"]))
 
 
@@ -60,40 +50,32 @@
 (def base-precache-urls (:list precache))
 
 
-;;
-;; Listeners
-;;
-
-
 (js/self.addEventListener
  "install"
- (fn [^InstallEvent event]
+ (fn [event]
    (log/debug :event/install event)
-   (..
+   (.waitUntil
     event
-    (waitUntil
-     (p/do
-       (p/let [cache (js/caches.open "resources")]
-         (.addAll cache
-                  (to-array (map #(js/Request. % #js {:cache "reload"})
-                                 base-precache-urls)))))))))
+    ((fn ^:async event-install []
+       (let [cache (await (js/caches.open "resources"))]
+         (await (.addAll cache
+                         (to-array (map #(js/Request. % #js {:cache "reload"})
+                                        base-precache-urls))))))))))
 
 
 (js/self.addEventListener
  "activate"
  (fn [event]
    (log/debug :event/activate event)
-   (..
+   (.waitUntil
     event
-    (waitUntil
-     (-> (p/do
-           (db-migrations/ensure-migrated!)
-           (tasks/start!)
-           (js/self.clients.claim))
-         (p/catch
-           (fn [err]
-             (log/error :sw/activate-failed {:error (str err)})
-             (throw err))))))))
+    ((fn ^:async f []
+       (let [keys (await (js/caches.keys))]
+         (await (js/Promise.all
+                 (to-array (keep #(when-not (= % "resources")
+                                    (js/caches.delete %))
+                                 keys)))))
+       (await (js/self.clients.claim)))))))
 
 
 (js/self.addEventListener
@@ -105,12 +87,6 @@
      nil)))
 
 
-(js/self.addEventListener
- "online"
- (fn [_event]
-   (tasks/resume!)))
-
-
 (defn- static-request?
   [request]
   (let [path (.-pathname (js/URL. (.-url request)))]
@@ -118,70 +94,26 @@
 
 
 (defn- api-request?
-  "Returns true if this is a request to the backend API (e.g., /api/examples).
-   API requests should be network-only, not cached."
   [request]
-  (let [path (.-pathname (js/URL. (.-url request)))]
-    (str/starts-with? path "/api/")))
+  (str/starts-with? (.-pathname (js/URL. (.-url request))) "/api/"))
 
 
-(defn network-first-fetch
+(defn- cache-first
   [request]
-  (p/catch
-    (p/let [response (js/fetch request)
-            cache    (js/caches.open "resources")]
-      (.put cache request (.clone response))
-      response)
-    (fn [_]
-      (js/caches.match request))))
-
-
-(defn- request->ring
-  "Transforms a JavaScript [Request](https://github.com/ring-clojure/ring/wiki/Concepts#requests) object into a Ring-style request hash map."
-  [request]
-  (let [request    (.clone request)
-        url-object (js/URL. (.-url request))
-        headers    (-> request .-headers .entries js/Object.fromEntries js->clj)
-        headers    (update-keys headers str/lower-case)]
-    {:server-port    (.-port url-object)
-     :server-name    (.-hostname url-object)
-     :uri            (.-pathname url-object)
-     :url            (.-url request)
-     :query-string   (utils/non-blank (.-search url-object))
-     :scheme         (-> url-object .-protocol (str/replace #":" "") keyword)
-     :request-method (-> request .-method str/lower-case keyword)
-     :headers        headers
-     :body           (.-body request)
-     ;; Custom non-ring fields
-     :js/request     request}))
-
-
-(defn- ring->response
-  "Transforms a Ring-style response hash map into JavaScript [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response/Response) object into a Ring-style."
-  [ring-response]
-  (when-not (= (:status ring-response) 404)
-    (js/Response.
-     (:body ring-response)
-     (clj->js
-      (select-keys ring-response [:status :headers])))))
-
-
-(defn local-handler
-  [request]
-  (let [ring-request (request->ring request)]
-    (p/let [response (p/-> (application/ring-handler ring-request) ring->response)]
-      (or response (js/fetch request)))))
+  ((fn ^:async f []
+     (let [cached (await (js/caches.match request))]
+       (if cached
+         cached
+         (let [response (await (js/fetch request))
+               cache    (await (js/caches.open "resources"))]
+           (.put cache request (.clone response))
+           response))))))
 
 
 (js/self.addEventListener
  "fetch"
- (fn [^FetchEvent event]
-   (log/debug :event/fetch event)
-   (..
-    event
-    (respondWith
-     (p/let [request (.. event -request)]
-       (cond
-         (api-request? request)    (js/fetch request)
-         (static-request? request) (network-first-fetch request)
-         :else                     (local-handler request)))))))
+ (fn [event]
+   (let [request (.-request event)]
+     (when (and (not (api-request? request))
+                (static-request? request))
+       (.respondWith event (cache-first request))))))

@@ -3,12 +3,10 @@
    [db :as db]
    [dbs :as dbs]
    [lambdaisland.glogi :as log]
-   [promesa.core :as p]
    [utils :as utils]))
 
 
 (def ^:private migration-id "migration:local-db-split")
-
 
 
 (defn- conflict?
@@ -27,83 +25,77 @@
   (dissoc doc :_rev))
 
 
-(defn- copy-doc!
+(defn ^:async copy-doc!
   [db doc]
-  (p/catch
-    (db/insert db (strip-rev doc))
-    (fn [err]
+  (try
+    (await (db/insert db (strip-rev doc)))
+    (catch js/Error err
       (if (conflict? err)
         nil
         (throw err)))))
 
 
-(defn- copy-type!
+(defn ^:async copy-type!
   [local-db dest-db doc-type]
-  (p/let [{:keys [docs]} (db/find local-db {:selector {:type doc-type}})]
+  (let [{:keys [docs]} (await (db/find local-db {:selector {:type doc-type}}))]
     (when (seq docs)
       (log/info :db-migrations/copy-type {:type doc-type :count (count docs)}))
-    (p/all (map #(copy-doc! dest-db %) docs))))
+    (await (js/Promise.all (into-array (map #(copy-doc! dest-db %) docs))))))
 
 
-(defn- run-local-db-split!
+(defn ^:async run-local-db-split!
   []
   (let [device-db (dbs/device-db)]
-    (p/let [marker (db/get device-db migration-id)]
+    (let [marker (await (db/get device-db migration-id))]
       (if marker
         (do
           (log/info :db-migrations/already-complete {:id migration-id})
           :already-complete)
-        (let [local-db (dbs/local-db)]
+        (let [local-db (dbs/local-db)
+              all-dbs  {:user/db (dbs/user-db) :device/db device-db}]
           (log/info :db-migrations/start {:id migration-id})
-          (p/do
-            (let [all-dbs {:user/db (dbs/user-db) :device/db device-db}]
-              (p/doseq [[doc-type db-key] dbs/doc-type->db]
-                (copy-type! local-db (all-dbs db-key) doc-type)))
-            (db/insert
-             device-db
-             {:_id          migration-id
-              :type         "migration"
-              :migration-id "local-db-split"
-              :source       "local-db"
-              :targets      ["user-db" "device-db"]
-              :created-at   (utils/now-iso)})
-            (log/info :db-migrations/complete {:id migration-id})
-            :complete))))))
+          (doseq [[doc-type db-key] dbs/doc-type->db]
+            (await (copy-type! local-db (all-dbs db-key) doc-type)))
+          (await (db/insert
+                  device-db
+                  {:_id          migration-id
+                   :type         "migration"
+                   :migration-id "local-db-split"
+                   :source       "local-db"
+                   :targets      ["user-db" "device-db"]
+                   :created-at   (utils/now-iso)}))
+          (log/info :db-migrations/complete {:id migration-id})
+          :complete)))))
 
 
 (def ^:private task-data-migration-id "migration:task-data-payload")
 
 
-(defn- run-task-data-payload!
+(defn ^:async run-task-data-payload!
   []
   (let [device-db (dbs/device-db)]
-    (p/let [marker (db/get device-db task-data-migration-id)]
+    (let [marker (await (db/get device-db task-data-migration-id))]
       (if marker
         (do
           (log/info :db-migrations/already-complete {:id task-data-migration-id})
           :already-complete)
-        (p/do
-          (p/let [{:keys [docs]} (db/find device-db
-                                          {:selector {:type    "task"
-                                                      :word-id {:$exists true}
-                                                      :data    {:$exists false}}})]
-            (p/doseq [task docs]
-              (db/insert device-db
-                         (-> task
-                             (assoc :data {:word-id (:word-id task)})
-                             (dissoc :word-id)))))
-          (db/insert device-db
-                     {:_id          task-data-migration-id
-                      :type         "migration"
-                      :migration-id "task-data-payload"
-                      :created-at   (utils/now-iso)})
+        (do
+          (let [{:keys [docs]} (await (db/find device-db
+                                               {:selector {:type    "task"
+                                                           :word-id {:$exists true}
+                                                           :data    {:$exists false}}}))]
+            (doseq [task docs]
+              (await (db/insert device-db
+                                (-> task
+                                    (assoc :data {:word-id (:word-id task)})
+                                    (dissoc :word-id))))))
+          (await (db/insert device-db
+                            {:_id          task-data-migration-id
+                             :type         "migration"
+                             :migration-id "task-data-payload"
+                             :created-at   (utils/now-iso)}))
           (log/info :db-migrations/complete {:id task-data-migration-id})
           :complete)))))
-
-
-;; ---------------------------------------------------------------------------
-;; Public state & API
-;; ---------------------------------------------------------------------------
 
 
 (def ^:private migrations
@@ -120,27 +112,25 @@
 (defn migration-status [] (:status @migration-state))
 
 
-(defn- run-all-migrations!
+(defn ^:async run-all-migrations!
   []
-  (-> (p/do
-        (p/doseq [{:keys [run]} migrations]
-          (run))
-        (swap! migration-state assoc :status :done :promise nil)
-        true)
-      (p/catch
-        (fn [err]
-          (log/error :db-migrations/error {:error (str err)})
-          (swap! migration-state assoc :status :failed :promise nil)
-          (throw err)))))
+  (try
+    (doseq [{:keys [run]} migrations]
+      (await (run)))
+    (swap! migration-state assoc :status :done :promise nil)
+    true
+    (catch js/Error err
+      (log/error :db-migrations/error {:error (str err)})
+      (swap! migration-state assoc :status :failed :promise nil)
+      (throw err))))
 
 
 (defn ensure-migrated!
   []
   (let [{:keys [status promise]} @migration-state]
     (case status
-      :done        (p/resolved true)
+      :done        (js/Promise.resolve true)
       :in-progress promise
-      ;; :not-started or :failed — (re)try
       (let [p (run-all-migrations!)]
         (swap! migration-state assoc :status :in-progress :promise p)
         p))))

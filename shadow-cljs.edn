@@ -3,9 +3,10 @@
   [cheshire/cheshire "6.2.0"]
   [cider/cider-nrepl "0.59.0"]
   [com.lambdaisland/glogi "1.3.169"]
-  [funcool/promesa "11.0.678"]
   [metosin/reitit "0.10.1"]
-  [metosin/sieppari "0.0.0-alpha13"]
+  [no.cjohansen/nexus "2025.11.1"]
+  [no.cjohansen/replicant "2025.12.1"]
+
   [philoskim/debux "0.9.1"]
   [refactor-nrepl/refactor-nrepl "3.11.0"]
 
@@ -31,18 +32,26 @@
 
  :builds
  {:app
-  {:target :browser
-   :output-dir "resources/public/js/app"
-   :asset-path "/js/app"
-   :modules
-   {:sw
-    {:entries    [sw]
-     :web-worker true}}
+  {:target      :browser
+   :output-dir  "resources/public/js/app"
+   :asset-path  "/js/app"
+   :modules     {:main {:init-fn main/start}}
+   :js-options  {:js-provider :shadow}
    :devtools
    {:devtools-url "https://sprecha.local/shadow-cljs"
     :preloads     [debux.preloads]
     :watch-dir    "resources/public/css"
     :watch-path   "/css"}
+   :release-stubs #{debux.core}}
+
+  :sw
+  {:target        :browser
+   :output-dir    "resources/public/js/app"
+   :asset-path    "/js/app"
+   :modules       {:sw {:entries [sw] :web-worker true}}
+   :devtools
+   {:devtools-url "https://sprecha.local/shadow-cljs"
+    :preloads     [debux.preloads]}
    :release-stubs #{debux.core}}
 
   :node-test

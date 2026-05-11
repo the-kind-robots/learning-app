@@ -335,7 +335,9 @@
                         [:meta {:name "viewport" :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
                         [:title "Sprecha"]
                         [:link {:rel "icon" :href "/favicon.ico"}]
-                        [:link {:rel "manifest" :href "/manifest.json"}]]
+                        [:link {:rel "manifest" :href "/manifest.json"}]
+                        [:link {:rel "stylesheet" :href "/css/styles.css"}]
+                        [:script {:src "/js/app/main.js" :defer true}]]
                        [:body
                         body]])
        :html/body [:<>

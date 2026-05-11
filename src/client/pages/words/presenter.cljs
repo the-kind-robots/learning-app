@@ -1,12 +1,11 @@
-(ns presenter.vocabulary
-  "Adapts vocabulary retrieval models for UI views."
+(ns pages.words.presenter
   (:require
    [clojure.string :as str]))
 
 
 (defn word-item-props
-  [{:keys [_id value translation retention-level]}]
-  {:id          _id
+  [{id :_id value :value translation :translation retention-level :retention-level}]
+  {:id          id
    :value       value
    :retention-level retention-level
    :translation (->> translation

@@ -4,6 +4,11 @@
    [db :as db]))
 
 
+;;
+;; PouchDB connections
+;;
+
+
 (def legacy-local-db-name "local-db")
 
 
@@ -13,7 +18,7 @@
 (def device-db-name "device-db")
 
 
-(def dictionary-db-name "dictionary-db")
+(def legacy-dictionary-db-name "dictionary-db")
 
 
 (defn local-db
@@ -31,16 +36,9 @@
   (db/use device-db-name))
 
 
-(defn dictionary-db
+(defn legacy-dictionary-db
   []
-  (db/use dictionary-db-name))
-
-
-(defn dbs
-  []
-  {:user/db       (user-db)
-   :device/db     (device-db)
-   :dictionary/db (dictionary-db)})
+  (db/use legacy-dictionary-db-name))
 
 
 (def doc-type->db
@@ -86,3 +84,10 @@
   "Queries (with auto-pagination) the database determined by [:selector :type] in the query."
   [dbs query]
   (db/find-all (db-for dbs (get-in query [:selector :type])) query))
+
+
+(defn dbs
+  []
+  {:user/db   (user-db)
+   :device/db (device-db)
+   :dictionary/legacy-db (legacy-dictionary-db)})
