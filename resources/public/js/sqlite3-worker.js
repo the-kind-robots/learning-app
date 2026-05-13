@@ -6,7 +6,7 @@ async function init() {
   importScripts(dir ? `${dir}/sqlite3.js` : "sqlite3.js");
 
   const sqlite3 = await sqlite3InitModule();
-  const pool = await sqlite3.installOpfsSAHPoolVfs({ name: "opfs-sahpool", initialCapacity: 6 });
+  const pool = await sqlite3.installOpfsSAHPoolVfs({ name: "opfs-sahpool", initialCapacity: 3 });
 
   const manifest = await fetch("/dictionary/manifest").then(r => r.json());
   const hash12 = manifest.hash.slice(0, 12);
@@ -16,6 +16,13 @@ async function init() {
     const buffer = await fetch(`/dictionary/${manifest.filename}`).then(r => r.arrayBuffer());
     await pool.importDb(poolFile, new Uint8Array(buffer));
   }
+
+  for (const name of pool.getFileNames()) {
+    if (name !== poolFile && name.startsWith("/dict.") && name.endsWith(".sqlite")) {
+      pool.unlink(name);
+    }
+  }
+  await pool.reduceCapacity(1);
 
   db = new sqlite3.oo1.DB({ filename: poolFile, vfs: "opfs-sahpool" });
 }

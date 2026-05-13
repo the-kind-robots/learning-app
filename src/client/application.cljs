@@ -36,6 +36,11 @@
       (some-> (js/document.getElementById element-id) .focus))))
 
 
+(nxr/register-effect! :effect/focus
+  (fn focus [_ _ element-id]
+    (some-> (js/document.getElementById element-id) .focus)))
+
+
 (nxr/register-effect! :effect/cursor-to-end
   (fn cursor-to-end [{:keys [dispatch-data]} _]
     (let [node (:replicant/node dispatch-data)]
@@ -55,6 +60,12 @@
 (nxr/register-effect! :effect/click-target
   (fn click-target [{:keys [dispatch-data]} _]
     (some-> dispatch-data :replicant/dom-event .-target .click)))
+
+
+(nxr/register-effect! :effect/scroll-nearest
+  (fn scroll-nearest [_ _ selector]
+    (some-> (js/document.querySelector selector)
+        (.scrollIntoView #js {:block "nearest"}))))
 
 
 ;;
@@ -112,10 +123,14 @@
     (some-> (:replicant/dom-event dispatch-data) .-key)))
 
 
-(nxr/register-placeholder! :event.keyboard/modifier?
+(nxr/register-placeholder! :event.keyboard/ctrl?
   (fn [dispatch-data]
-    (let [e (:replicant/dom-event dispatch-data)]
-      (or (.-ctrlKey e) (.-metaKey e)))))
+    (some-> (:replicant/dom-event dispatch-data) .-ctrlKey)))
+
+
+(nxr/register-placeholder! :event.keyboard/shift?
+  (fn [dispatch-data]
+    (some-> (:replicant/dom-event dispatch-data) .-shiftKey)))
 
 
 (nxr/register-placeholder! :event/self-click?
@@ -125,8 +140,6 @@
 
 
 (nxr/register-action! :action/submit-if-ctrl-enter
-  (fn submit-if-ctrl-enter [_ {:keys [key modifier?]}]
-    (when (and (= "Enter" key) modifier?)
+  (fn submit-if-ctrl-enter [_ {:keys [key ctrl?]}]
+    (when (and (= "Enter" key) ctrl?)
       [[:effect/request-submit]])))
-
-

@@ -46,8 +46,8 @@
       :lang        "de"
       :spellcheck  "false"
       :on          {:keydown [[:action/submit-if-ctrl-enter
-                               {:key       [:event.keyboard/key]
-                                :modifier? [:event.keyboard/modifier?]}]]}}]
+                               {:key   [:event.keyboard/key]
+                                :ctrl? [:event.keyboard/ctrl?]}]]}}]
     [:div.lesson__action.page-footer__action
      [:button.big-button {:type "submit"} "ПРОВЕРИТЬ"]]]])
 

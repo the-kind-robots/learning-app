@@ -337,7 +337,9 @@
                         [:link {:rel "icon" :href "/favicon.ico"}]
                         [:link {:rel "manifest" :href "/manifest.json"}]
                         [:link {:rel "stylesheet" :href "/css/styles.css"}]
-                        [:script {:src "/js/app/main.js" :defer true}]]
+                        [:script {:src "/js/app/main.js" :defer true}]
+                        [:script {:src "/js/pwa-install.js" :defer true}]
+                        [:script {:src "/js/virtual-keyboard.js" :defer true}]]
                        [:body
                         body]])
        :html/body [:<>

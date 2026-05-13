@@ -63,7 +63,6 @@
 
 (defn- render!
   [state]
-  (js/console.log ::we-are-here (render state))
   (r/render js/document.body (render state)))
 
 
