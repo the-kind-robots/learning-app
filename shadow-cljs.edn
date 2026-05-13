@@ -28,8 +28,6 @@
  :dev-http
  {8021 "target/browser-test"}
 
- :cache-blockers #{sw-version}
-
  :builds
  {:app
   {:target      :browser
@@ -42,16 +40,6 @@
     :preloads     [debux.preloads]
     :watch-dir    "resources/public/css"
     :watch-path   "/css"}
-   :release-stubs #{debux.core}}
-
-  :sw
-  {:target        :browser
-   :output-dir    "resources/public/js/app"
-   :asset-path    "/js/app"
-   :modules       {:sw {:entries [sw] :web-worker true}}
-   :devtools
-   {:devtools-url "https://sprecha.local/shadow-cljs"
-    :preloads     [debux.preloads]}
    :release-stubs #{debux.core}}
 
   :node-test
