@@ -61,6 +61,7 @@ html {
   box-sizing: border-box;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   touch-action: manipulation;
 }
 
@@ -78,6 +79,7 @@ body {
   font: 500 17px/20px sans-serif;
   margin: 0;
   overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 @media (min-width: 700px) {
