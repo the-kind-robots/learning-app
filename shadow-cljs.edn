@@ -4,6 +4,7 @@
   [cider/cider-nrepl "0.59.0"]
   [com.lambdaisland/glogi "1.3.169"]
   [metosin/reitit "0.10.1"]
+  [no.cjohansen/dataspex "2026.04.1"]
   [no.cjohansen/nexus "2025.11.1"]
   [no.cjohansen/replicant "2025.12.1"]
 
@@ -30,11 +31,11 @@
 
  :builds
  {:app
-  {:target      :browser
-   :output-dir  "resources/public/js/app"
-   :asset-path  "/js/app"
-   :modules     {:main {:init-fn main/start}}
-   :js-options  {:js-provider :shadow}
+  {:target     :browser
+   :output-dir "resources/public/js/app"
+   :asset-path "/js/app"
+   :modules    {:main {:init-fn main/start}}
+   :js-options {:js-provider :shadow}
    :devtools
    {:devtools-url "https://sprecha.local/shadow-cljs"
     :preloads     [debux.preloads]

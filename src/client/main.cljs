@@ -7,6 +7,7 @@
    [install-guide.view :as install-guide]
    [lambdaisland.glogi :as log]
    [logging]
+   [nexus.action-log :as action-log]
    [nexus.registry :as nxr]
    [pages.home.actions]
    [pages.home.effects]
@@ -79,6 +80,8 @@
 
 (defn ^:async init
   []
+  (when goog/DEBUG
+    (action-log/inspect))
   (nxr/register-system->state! deref)
   (r/set-dispatch! dispatch!)
   (add-watch store ::render #(render! %4))
