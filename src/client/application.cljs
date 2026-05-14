@@ -65,7 +65,7 @@
 (nxr/register-effect! :effect/scroll-nearest
   (fn scroll-nearest [_ _ selector]
     (some-> (js/document.querySelector selector)
-        (.scrollIntoView #js {:block "nearest"}))))
+            (.scrollIntoView #js {:block "nearest"}))))
 
 
 ;;
@@ -77,20 +77,6 @@
   (fn click-if-enter [_ key]
     (when (= "Enter" key)
       [[:effect/click-target]])))
-
-
-(def dismiss-install-guide
-  (constantly nil))
-
-
-(nxr/register-action! :action/dismiss-install-guide
-  (dismiss-install-guide))
-
-
-(nxr/register-action! :action/dismiss-install-guide-backdrop
-  (fn dismiss-install-guide-backdrop [_ self?]
-    (when self?
-      (dismiss-install-guide))))
 
 
 (nxr/register-action! :action/open-dialog

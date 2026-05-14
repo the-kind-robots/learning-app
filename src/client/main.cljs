@@ -3,6 +3,8 @@
    [application]
    [db-migrations :as db-migrations]
    [dbs :as dbs]
+   [install-guide.core]
+   [install-guide.view :as install-guide]
    [lambdaisland.glogi :as log]
    [logging]
    [nexus.registry :as nxr]
@@ -19,8 +21,7 @@
    [reitit.frontend.controllers :as rfc]
    [reitit.frontend.easy :as rfe]
    [replicant.dom :as r]
-   [tasks :as tasks]
-   [views.app-install-guide :as views.app-install-guide]))
+   [tasks :as tasks]))
 
 
 (defonce store
@@ -50,10 +51,19 @@
       :controllers [{:start #(dispatch! [[:effect/load-lesson]])}]}]]))
 
 
+(defn- sync-virtual-keyboard!
+  []
+  (when (js-in "virtualKeyboard" js/navigator)
+    (when-let [vk (.-virtualKeyboard js/navigator)]
+      (set! (.-overlaysContent vk)
+            (boolean (js/document.querySelector "[data-vk-overlay]"))))))
+
+
 (defn- render
   [state]
   (list
-   (views.app-install-guide/view)
+   [:a.app-shell__logo {:href "/home"} "Sprecha"]
+   (install-guide/render state)
    (case (:app/page state)
      :page/home   (pages.home.view/page state)
      :page/words  (pages.words.view/page state)
@@ -63,7 +73,8 @@
 
 (defn- render!
   [state]
-  (r/render js/document.body (render state)))
+  (r/render js/document.body (render state))
+  (sync-virtual-keyboard!))
 
 
 (defn ^:async init
@@ -71,6 +82,8 @@
   (nxr/register-system->state! deref)
   (r/set-dispatch! dispatch!)
   (add-watch store ::render #(render! %4))
+  (dispatch! [[:effect/pwa-init]])
+  (js/window.addEventListener "pageshow" sync-virtual-keyboard!)
 
   (await (db-migrations/ensure-migrated!))
   (await (tasks/start!))
