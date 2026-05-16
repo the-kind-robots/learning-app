@@ -1,210 +1,110 @@
-{:lint-as {jdbc.core/on-connection clojure.core/with-open
-           promesa.core/doseq clojure.core/doseq
-           promesa.core/let   clojure.core/let}
+{:lint-as {jdbc.core/on-connection clojure.core/with-open}
 
  :linters
- {;; ─── unresolved-symbol: await is cljs.core macro, auto-referred
-  :unresolved-symbol {:exclude [await]}
+ {:unresolved-symbol {:exclude [await]}
 
-  ;; ─── включены (были :off) ────────────────────────────────────────────────
-
-  ;; запрет использования символов через namespace-алиас без самого алиаса
   :aliased-namespace-symbol             {:level :warning}
-  ;; (case x my-var ...) — символ в case-тесте почти всегда баг
   :case-symbol-test                     {:level :warning}
-  ;; условие, которое всегда true (статически)
   :condition-always-true                {:level :warning}
-  ;; ветка :or в деструктуризации вычисляется всегда — часто сюрприз
   :destructured-or-always-evaluates     {:level :warning}
-  ;; ведущие/хвостовые пробелы в docstring
   :docstring-leading-trailing-whitespace {:level :warning}
-  ;; (def ^:dynamic foo ...) без earmuffs — :error, это реальный баг
   :dynamic-var-not-earmuffed            {:level :error}
-  ;; (= x false) → (false? x)
   :equals-false                         {:level :warning}
-  ;; сравнение float через = даёт NaN-сюрпризы
   :equals-float                         {:level :warning}
-  ;; (= x nil) → (nil? x)
   :equals-nil                           {:level :warning}
-  ;; (= x true) → (true? x)
   :equals-true                          {:level :warning}
-  ;; keyword как имя binding-параметра (деструктуризация с опечаткой)
   :keyword-binding                      {:level :warning}
-  ;; (- x 1) → (dec x)
   :minus-one                            {:level :warning}
-  ;; протокол реализован, но не все арности метода
   :missing-protocol-method-arity        {:level :warning}
-  ;; (not (nil? x)) → (some? x)
   :not-nil?                             {:level :warning}
-  ;; (+ x 1) → (inc x)
   :plus-one                             {:level :warning}
-  ;; (reduce f coll) без init-значения — семантика зависит от coll
   :reduce-without-init                  {:level :warning}
-  ;; identity/str/keyword/etc. вызванные без нужды
   :redundant-call                       {:level :warning}
-  ;; #(f %) вместо просто f
   :redundant-fn-wrapper                 {:level :warning}
-  ;; (let [x (let [y 1] y)] ...) — вложенный let можно убрать
   :redundant-let-binding                {:level :warning}
-  ;; (get-in m [:single-key]) → (get m :single-key)
   :single-key-in                        {:level :warning}
-  ;; использование _ -переменной в коде (вероятно, забытый TODO)
   :used-underscored-binding             {:level :warning}
-  ;; interop без type hint — медленно (актуально для .clj)
   :warn-on-reflection                   {:level :warning}
 
-  ;; ─── :warning → :error ───────────────────────────────────────────────────
-
-  ;; использование var'а через полное имя вместо alias
   :aliased-namespace-var-usage          {:level :error}
-  ;; (case x 'foo ...) — quoted символ никогда не совпадёт
   :case-quoted-test                     {:level :error}
-  ;; ошибка в самом clj-kondo конфиге
   :clj-kondo-config                     {:level :error}
-  ;; (cond ... (else ...)) без :else
   :cond-else                            {:level :error}
-  ;; алиасы одного и того же ns должны совпадать во всём проекте
   :consistent-alias                     {:level :error}
-  ;; использование задепрекейченного namespace
   :deprecated-namespace                 {:level :error}
-  ;; использование задепрекейченного var'а
   :deprecated-var                       {:level :error}
-  ;; проблемы в deps.edn
   :deps.edn                             {:level :error}
-  ;; деструктуризация одного и того же ключа из одной и той же map дважды
   :destructured-or-binding-of-same-map  {:level :error}
-  ;; устаревший Java-метод
   :discouraged-java-method              {:level :error}
-  ;; использование дисскурейджд namespace
   :discouraged-namespace                {:level :error}
-  ;; дисскурейджд type tag
   :discouraged-tag                      {:level :error}
-  ;; дисскурейджд var
   :discouraged-var                      {:level :error}
-  ;; do/template — устаревший паттерн
   :do-template                          {:level :error}
-  ;; пустая строка в docstring
   :docstring-blank                      {:level :error}
-  ;; дубликат ключа в map-аргументах функции
   :duplicate-key-args                   {:level :error}
-  ;; один и тот же символ :refer'нут дважды
   :duplicate-refer                      {:level :error}
-  ;; ns :require'нут дважды
   :duplicate-require                    {:level :error}
-  ;; *earmuffed* var, но не ^:dynamic
   :earmuffed-var-not-dynamic            {:level :error}
-  ;; def внутри функции
   :inline-def                           {:level :error}
-  ;; .STATIC_FIELD как вызов метода вместо обращения к полю
   :java-static-field-call               {:level :error}
-  ;; locking по примитиву, String, etc.
   :locking-suspicious-lock              {:level :error}
-  ;; loop без единого recur
   :loop-without-recur                   {:level :error}
-  ;; when-тело пустое
   :missing-body-in-when                 {:level :error}
-  ;; try без catch или finally
   :missing-clause-in-try                {:level :error}
-  ;; if без else там, где обе ветки нужны (if в позиции возвращаемого значения)
   :missing-else-branch                  {:level :error}
-  ;; тип в defrecord/deftype не реализует все методы протокола
   :missing-protocol-method              {:level :error}
-  ;; вызов (is ...) / (are ...) без реального assertion внутри
   :missing-test-assertion               {:level :error}
-  ;; ^ReturnType hint не в векторе аргументов
   :non-arg-vec-return-type-hint         {:level :error}
-  ;; (not (empty? x)) → (seq x)
   :not-empty?                           {:level :error}
-  ;; арность реализации метода протокола не совпадает с определением
   :protocol-method-arity-mismatch       {:level :error}
-  ;; varargs-метод в defprotocol недопустим
   :protocol-method-varargs              {:level :error}
-  ;; (case x 'sym ...) — quoted-символ всегда false
   :quoted-case-test-constant            {:level :error}
-  ;; лишний declare (var уже определён)
   :redundant-declare                    {:level :error}
-  ;; лишний do
   :redundant-do                         {:level :error}
-  ;; let с одним binding, который сразу возвращается
   :redundant-let                        {:level :error}
-  ;; (:require [ns :refer :all]) — запрещено
   :refer-all                            {:level :error}
-  ;; :refer разрешён только для test-макросов; всё остальное — через alias
   :refer                                {:level :error
-                                         :exclude [clojure.test
+                                         :exclude [client.support.test
+                                                   clojure.test
                                                    cljs.test
                                                    clojure.test.check.generators
                                                    cljs.test.check.generators]}
-  ;; ns в :require должны быть отсортированы (case-insensitive, как в большинстве IDE)
   :unsorted-required-namespaces         {:level :warning
                                          :sort  :case-insensitive}
-  ;; Java-импорты тоже сортируем
   :unsorted-imports                     {:level :warning}
-  ;; ns требует сам себя
   :self-requiring-namespace             {:level :error}
-  ;; параметр функции затеняет другой параметр той же функции
   :shadowed-fn-param                    {:level :error}
-  ;; (and x) / (or x) с одним операндом
   :single-logical-operand               {:level :error}
-  ;; (< x) / (> x) с одним операндом
   :single-operand-comparison            {:level :error}
-  ;; синтаксическая ошибка
   :syntax                               {:level :error}
-  ;; деструктуризация с :or для ключа, которого нет в :keys
   :unbound-destructuring-default        {:level :error}
-  ;; подчёркивание в имени namespace (foo_bar вместо foo-bar)
   :underscore-in-namespace              {:level :error}
-  ;; var объявлен, но значение не инициализировано
   :uninitialized-var                    {:level :error}
-  ;; неизвестная опция в ns-форме
   :unknown-ns-option                    {:level :error}
-  ;; неизвестная опция в :require
   :unknown-require-option               {:level :error}
-  ;; unquote вне syntax-quote
   :unquote-not-syntax-quoted            {:level :error}
-  ;; недостижимый код после return/throw
   :unreachable-code                     {:level :error}
-  ;; метод протокола использован, но не определён в нём
   :unresolved-protocol-method           {:level :error}
-  ;; var в алиасированном ns не существует
   :unresolved-var                       {:level :error}
-  ;; неиспользуемый binding; не ошибаться на деструктурированных ключах map
   :unused-binding                       {:level :error
                                          :exclude-destructured-keys-in-fn-args true
                                          :exclude-destructured-as true}
-  ;; import без использования
   :unused-import                        {:level :error}
-  ;; :require'нутый ns ни разу не использован
   :unused-namespace                     {:level :error}
-  ;; private var ни разу не использован
   :unused-private-var                   {:level :error}
-  ;; :refer'нутый символ ни разу не использован
   :unused-referred-var                  {:level :error}
-  ;; возвращаемое значение выброшено (не в хвостовой позиции)
   :unused-value                         {:level :error}
-  ;; (use ...) запрещено
   :use                                  {:level :error}
-  ;; два var'а различаются только регистром (Foo vs foo)
   :var-same-name-except-case            {:level :error}
 
-  ;; ─── :info → :warning ────────────────────────────────────────────────────
-
-  ;; var из ns использован через (:refer ...) вместо alias
   :aliased-referred-var                 {:level :warning}
-  ;; сообщение в (is ...) не строка
   :is-message-not-string                {:level :warning}
-  ;; #_:clj-kondo/ignore на код, у которого нет предупреждений
   :redundant-ignore                     {:level :warning}
-  ;; (str (str x)) и подобные вложенные вызовы
   :redundant-nested-call                {:level :warning}
-  ;; лишний примитивный cast (long (long x))
   :redundant-primitive-coercion         {:level :warning}
-  ;; (str something) когда something уже строка
   :redundant-str-call                   {:level :warning}
-  ;; символ в :exclude, которого нет в ns
   :unused-excluded-var                  {:level :warning}
 
-  ;; ─── babashka ────────────────────────────────────────────────────────────
   :bb.edn-cyclic-task-dependency        {:level :error}
   :bb.edn-undefined-task                {:level :error}
   :bb.edn-unexpected-key                {:level :error}}}

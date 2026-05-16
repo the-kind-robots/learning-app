@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Task runner starts on main-thread app boot
 The system SHALL start the task runner loop from the main-thread entry point (`main.cljs`) on `DOMContentLoaded`; it SHALL NOT start from the Service Worker `activate` event.

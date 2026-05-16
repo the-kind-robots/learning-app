@@ -10,6 +10,7 @@ The system SHALL restore focus to the German word input after a successful home 
 - **WHEN** a user successfully submits the home add-word form on a desktop-style pointer device
 - **THEN** the form is reset through the normal success flow
 - **AND** focus returns to the `#new-word-value` input
+- **AND** the focus restoration is implemented as a Replicant lifecycle hook, not an htmx event handler
 
 ### Requirement: Mobile submit does not force focus restoration
 The system SHALL avoid forcing focus restoration on touch-first/mobile devices after a successful home add-word submit.
