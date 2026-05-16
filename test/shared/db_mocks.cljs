@@ -1,6 +1,4 @@
-(ns shared.db-mocks
-  (:require
-   [promesa.core :as p]))
+(ns shared.db-mocks)
 
 
 (defn- match-condition
@@ -33,12 +31,10 @@
 
 (defn- sort-pairs
   [sort-spec]
-  (mapv (fn [entry]
-          (first entry))
-        sort-spec))
+  (mapv first sort-spec))
 
 
-(defn- comparator
+(defn- make-comparator
   [pairs]
   (fn [a b]
     (loop [[[key direction] & rest] pairs]
@@ -55,27 +51,27 @@
 (defn make
   []
   (let [db      (atom {:docs {} :id-seq 0})
-        next-id #(str "doc-" (:id-seq (swap! db update :id-seq inc)))]
+        next-id (fn [] (str "doc-" (:id-seq (swap! db update :id-seq inc))))]
     {:db     db
      :insert (fn [_ doc]
                (let [doc-id (or (:_id doc) (next-id))
                      doc    (assoc doc :_id doc-id)]
                  (swap! db update :docs assoc doc-id doc)
-                 (p/resolved {:id doc-id :rev "1"})))
+                 (js/Promise.resolve {:id doc-id :rev "1"})))
      :find   (fn [_ {:keys [selector sort limit skip]}]
                (let [docs       (vals (:docs @db))
                      docs       (filter #(match-selector? % selector) docs)
                      sort-pairs (when (seq sort) (sort-pairs sort))
                      docs       (if sort-pairs
-                                  (sort (comparator sort-pairs) docs)
+                                  (sort (make-comparator sort-pairs) docs)
                                   docs)
                      docs       (cond->> docs
                                   skip  (drop skip)
                                   limit (take limit))]
-                 (p/resolved {:docs (vec docs)})))
+                 (js/Promise.resolve {:docs (vec docs)})))
      :get    (fn [_ doc-id]
-               (p/resolved (get-in @db [:docs doc-id])))
+               (js/Promise.resolve (get-in @db [:docs doc-id])))
      :remove (fn [_ doc]
                (swap! db update :docs dissoc (:_id doc))
-               (p/resolved true))
+               (js/Promise.resolve true))
      :use    (constantly @db)}))

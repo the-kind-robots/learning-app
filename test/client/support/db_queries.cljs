@@ -1,12 +1,11 @@
 (ns client.support.db-queries
   (:require
-   [db :as db]
-   [promesa.core :as p]))
+   [db :as db]))
 
 
-(defn fetch-by-type
+(defn ^:async fetch-by-type
   [db doc-type]
-  (p/let [{:keys [docs]} (db/find db {:selector {:type doc-type}})]
+  (let [{:keys [docs]} (await (db/find db {:selector {:type doc-type}}))]
     docs))
 
 

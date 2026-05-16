@@ -1,15 +1,15 @@
 (ns client.presenter.vocabulary-test
   (:require
    [cljs.test :refer-macros [deftest is testing]]
-   [presenter.vocabulary :as sut]))
+   [pages.words.presenter :as sut]))
 
 
 (deftest word-item-props-builds-view-model
   (testing "maps retrieval row into view props"
     (let [props (sut/word-item-props
-                 {:_id             "word-1"
-                  :value           "der Hund"
-                  :translation     [{:lang "ru" :value "пёс"}]
+                 {:_id         "word-1"
+                  :value       "der Hund"
+                  :translation [{:lang "ru" :value "пёс"}]
                   :retention-level 42.5})]
       (is (= "word-1" (:id props)))
       (is (= "der Hund" (:value props)))
