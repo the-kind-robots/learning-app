@@ -133,7 +133,8 @@
 (defn init!
   []
   (when (nil? (:worker @worker-state))
-    (let [worker (js/Worker. "/js/sqlite3-worker.js?sqlite3.dir=/js")]
+    (let [worker (js/Worker. (str "/js/sqlite3-worker.js?sqlite3.dir=/js"
+                                  (when js/goog.DEBUG "&telemetry=1")))]
       (..
        worker
        (addEventListener
@@ -142,6 +143,13 @@
           (case (.. e -data -type)
             "ready" (swap! worker-state assoc :ready? true)
             "error" (log/error :dbs/sqlite3-worker-error {:message (.. e -data -message)})
+            "phase" (let [d   (.. e -data)
+                          ph  (.-phase d)
+                          ms  (.-durationMs d)
+                          ok? (= "ok" (.-status d))]
+                      (if ok?
+                        (log/info (keyword "dict-worker" ph) {:duration-ms ms})
+                        (log/error (keyword "dict-worker" ph) {:duration-ms ms :reason (.-reason d)})))
             nil))))
       (..
        worker
