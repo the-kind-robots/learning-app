@@ -11,8 +11,8 @@
 /target/
 
 # Settings
-/.clj-kondo/**
-/.lsp/
+**/.clj-kondo/**
+**/.lsp/**
 **/.nrepl-port
 
 # Client tools and artifacts
