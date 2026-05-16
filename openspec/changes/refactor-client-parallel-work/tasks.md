@@ -5,16 +5,19 @@
 - [ ] 1.3 Change `register-system->state!` usage to extract `@(:store system)`.
 - [ ] 1.4 Change shared `:effect/save` to write to `(:store system)`.
 - [ ] 1.5 Add Nexus interceptor that exposes `:deps` in effect context from `[:system :deps]`.
-- [ ] 1.6 Preserve current boot order: migrations, task runner, dictionary worker, service worker registration, router start.
+- [ ] 1.6 Add tiny data-driven lifecycle manager that validates dependency keys, rejects cycles, starts in topological order, awaits async starts, and stops in reverse order.
+- [ ] 1.7 Ensure startup failure stops already-started components in reverse order.
+- [ ] 1.8 Preserve boot order: store, progress storage, migrations, task queue/runner, dictionary handle, deps, Nexus, render binding, service worker registration, router last.
+- [ ] 1.9 Make dictionary handle available before router start while allowing dictionary data readiness to complete asynchronously after router start.
 
 ## 2. Ports and Adapters
 
-- [ ] 2.1 Add minimal `ports/progress_store.cljs` capability for vocabulary, reviews, examples, and lesson persistence used by current use cases.
-- [ ] 2.2 Add minimal `ports/dictionary.cljs` capability for readiness and completions.
+- [ ] 2.1 Add minimal `ports/progress_store.cljs` capability for migrated PouchDB-backed vocabulary, reviews, examples, tasks, and lesson persistence used by current use cases.
+- [ ] 2.2 Add minimal `ports/dictionary.cljs` capability for `ready?` and completions where completions are safe before data readiness.
 - [ ] 2.3 Add minimal `ports/task_queue.cljs` capability for enqueue/run-now behavior used by examples/tasks.
 - [ ] 2.4 Add minimal `ports/navigation.cljs` capability for navigate and replace navigation.
 - [ ] 2.5 Add minimal `ports/telemetry.cljs` and `ports/clock.cljs` capabilities wrapping existing log/time behavior.
-- [ ] 2.6 Add adapters that wrap current `dbs`, dictionary worker proxy, `tasks`, `reitit.frontend.easy`, logging, and `utils` without changing behavior.
+- [ ] 2.6 Add adapters that wrap current progress storage/`dbs`, dictionary worker handle, `tasks`, `reitit.frontend.easy`, logging, and `utils` without changing behavior.
 
 ## 3. Feature Slice Migration
 
@@ -28,7 +31,7 @@
 
 - [ ] 4.1 Add use-case tests with fake deps for at least one home/vocabulary path.
 - [ ] 4.2 Add use-case tests with fake deps for at least one lesson path.
-- [ ] 4.3 Add focused runtime/system test for deps injection and app-state extraction.
+- [ ] 4.3 Add focused runtime/system tests for dependency ordering, async startup, reverse stop, failed-start cleanup, deps injection, and app-state extraction.
 - [ ] 4.4 Keep adapter tests explicit when they require PouchDB, SQLite worker proxy, browser navigation, or scheduler internals.
 - [ ] 4.5 Add or document code-search checks proving page effects no longer call `dbs/dbs` directly for feature logic.
 

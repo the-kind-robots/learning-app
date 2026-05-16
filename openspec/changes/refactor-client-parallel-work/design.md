@@ -66,13 +66,74 @@ Adapters should expose startup that returns a public value and cleanup function.
 
 Migrations run as part of storage adapter/runtime startup before storage capability is exposed. Slow background work remains task-queue work, not startup-blocking migration.
 
-### 6. Refactor in dependency order
+Router startup is a lifecycle component too, but it must start last because `rfe/start!` applies the current route controllers and triggers the first page load effect. By that moment the app must already have a stable deps map and safe port handles.
+
+### 6. Lifecycle manager is small and data-driven
+
+Clojure community prior art points to the same core model:
+
+- Component: explicit lifecycle, dependency injection, start in dependency order, stop in reverse order.
+- Integrant: data-driven config, references between keys, `init` / `halt!`, dependency order, reverse shutdown, idempotent halt.
+- Mount: convenient global `defstate`, but order is inferred from namespace requires and state is var/global oriented.
+- Clip and donut.system: data-driven component definitions with references and explicit start/stop signals.
+
+For this browser client, we should not adopt a full backend-style component framework yet. We mostly need:
+
+```clojure
+{:app/store          {:start (fn [_] app-state*)}
+ :adapter/progress   {:start start-progress-store! :stop stop-progress-store!}
+ :app/migrations     {:deps [:adapter/progress] :start run-migrations!}
+ :adapter/task-queue {:deps [:adapter/progress :app/migrations]
+                      :start start-task-queue!
+                      :stop stop-task-queue!}
+ :adapter/dictionary {:start start-dictionary-handle! :stop stop-dictionary!}
+ :app/deps           {:deps [:adapter/progress :adapter/task-queue :adapter/dictionary]
+                      :start build-deps}
+ :app/nexus          {:deps [:app/store :app/deps] :start start-nexus!}
+ :app/render         {:deps [:app/store :app/nexus] :start start-render! :stop stop-render!}
+ :app/service-worker {:deps [:app/nexus] :start register-service-worker!}
+ :app/router         {:deps [:app/nexus :app/render] :start start-router! :stop stop-router!}}
+```
+
+Runtime manager responsibilities:
+
+- validate missing dependency keys
+- reject dependency cycles
+- start components in topological dependency order
+- await Promise-returning starts
+- stop already-started components in reverse order if startup fails
+- stop all components in reverse order on normal shutdown
+- make stop functions idempotent / best-effort
+- return both component instances and the public runtime system
+
+Boot order semantics:
+
+1. create app store
+2. open progress storage / DB handles
+3. run blocking migrations
+4. start task queue / task runner after migrated storage exists
+5. create dictionary port handle
+6. build deps map
+7. install Nexus dispatch, system->state, and deps interceptor
+8. install Replicant render/watch binding
+9. register service worker if available
+10. start frontend router last
+
+Dictionary has two readiness phases. The dictionary handle must exist before the router starts so page effects can safely call `dictionary/ready?` and `dictionary/completions`. The dictionary data may become ready later after manifest fetch, download/import into OPFS, and SQLite open. Before data readiness, completions should return an empty result (or otherwise no-op safely), not block page startup and not expose a nil dependency.
+
+This is Integrant/Clip-inspired but local and tiny. It keeps the browser bundle and mental model small while preserving the important Clojure lifecycle lesson: declare dependencies as data, then let the manager order startup/shutdown.
+
+Alternative considered: add Integrant/Clip as a dependency. Rejected for first pass because current client only needs ordering and async resource cleanup, not profiles, namespace loading, custom signals, or EDN configuration.
+
+Alternative considered: use Mount-style globals. Rejected because global state conflicts with the goal of parallel-safe tests and explicit fake deps.
+
+### 7. Refactor in dependency order
 
 Do not rewrite every feature at once. Establish system/deps first, then port boundaries, then migrate page effects and use cases slice by slice.
 
 Suggested implementation order:
 1. Add `runtime/system.cljs` and adapt `main.cljs`/`application.cljs`.
-2. Add `ports/*` capability modules and initial adapters wrapping current `dbs`, dictionary worker, tasks, navigation, telemetry, and clock.
+2. Add `ports/*` capability modules and initial adapters wrapping current progress storage/`dbs`, dictionary worker handle, task queue/runner, navigation, telemetry, and clock.
 3. Migrate home effects/use cases to deps.
 4. Migrate words/vocabulary effects/use cases to deps.
 5. Migrate lesson/effects/use cases to deps.
@@ -99,6 +160,6 @@ Rollback: revert the refactor branch/PR before merge. No production data changes
 
 ## Open Questions
 
-- Should `:navigation` wrap only `rfe/navigate`/`replace-state`, or also route/controller startup?
+- Should `:navigation` wrap only page navigation calls while router startup stays lifecycle-only? Current plan says yes.
 - Should examples get their own `:examples` capability or stay under `:progress-store` in first pass?
 - Should telemetry be console/log-only now, or reserve shape for backend event delivery later?

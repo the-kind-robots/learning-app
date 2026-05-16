@@ -27,6 +27,46 @@ Adapters that manage external resources MUST expose uniform lifecycle boundaries
 - **THEN** it returns the same public value shape
 - **AND** its cleanup function is a no-op
 
+### Requirement: Runtime manager resolves dependency order
+The client runtime MUST start dependencies in declared order and stop them in reverse order.
+
+#### Scenario: Dependencies start before dependents
+- **WHEN** runtime startup receives component definitions with dependency keys
+- **THEN** it validates referenced dependency keys
+- **AND** rejects dependency cycles
+- **AND** starts each component only after its declared dependencies are ready
+- **AND** awaits asynchronous component startup before dependent components start
+
+#### Scenario: Router starts after runtime dependencies
+- **WHEN** the frontend router starts
+- **THEN** app store, migrated progress storage, task queue, dictionary handle, deps map, Nexus dispatch, and rendering are already initialized
+- **AND** route controller effects can read deps safely during the first page transition
+
+#### Scenario: Startup failure cleans up partial system
+- **WHEN** a component fails during startup after other components already started
+- **THEN** runtime startup stops already-started components in reverse startup order
+- **AND** reports the startup failure
+
+#### Scenario: Shutdown runs in reverse order
+- **WHEN** runtime shutdown is requested
+- **THEN** cleanup functions run in reverse startup order
+- **AND** cleanup is best-effort/idempotent so one cleanup failure does not prevent later cleanup attempts
+
+### Requirement: Dictionary handle is ready before dictionary data
+The dictionary port MUST expose a stable handle before the dictionary data is fully ready.
+
+#### Scenario: Autocomplete before dictionary data is ready
+- **WHEN** the router has started and the dictionary worker is still fetching, importing, or opening dictionary data
+- **THEN** the dictionary capability exists in deps
+- **AND** `ready?` reports false
+- **AND** completions return an empty result or otherwise no-op safely
+- **AND** page startup is not blocked by dictionary data readiness
+
+#### Scenario: Autocomplete after dictionary data is ready
+- **WHEN** the dictionary worker has opened the current SQLite dictionary
+- **THEN** `ready?` reports true
+- **AND** completions query the dictionary worker normally
+
 ### Requirement: Public dependencies are small capabilities
 The deps map MUST expose small app capabilities instead of implementation-specific globals.
 
