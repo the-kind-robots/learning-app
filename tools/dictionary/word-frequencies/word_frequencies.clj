@@ -37,11 +37,11 @@
 
 (def ^:private word-header "Word")
 
+
 ;; SUBTLEX-DE also offers ZipfSUBTLEX (log10 scale) and Google-corpus columns
 ;; (Google00pm, ZipfGoogle). We deliberately choose the linear per-million
 ;; SUBTLEX value — see ns docstring for the rationale.
 (def ^:private count-header "SUBTLEX")
-
 
 
 (defn- header-indices
@@ -60,7 +60,8 @@
     {:word word-idx :count cnt-idx}))
 
 
-(defn- xml-reader ^XMLStreamReader
+(defn- xml-reader
+  ^XMLStreamReader
   [stream]
   (.createXMLStreamReader (XMLInputFactory/newFactory) stream))
 
@@ -113,7 +114,7 @@
               (vreset! current nil))))
         @strings
         (finally
-          (.close reader))))))
+         (.close reader))))))
 
 
 (defn- cell-value
@@ -191,7 +192,7 @@
               (vreset! row nil))))
         (persistent! rows)
         (finally
-          (.close reader))))))
+         (.close reader))))))
 
 
 (defn normalize-xlsx
@@ -215,7 +216,8 @@
 
 
 (defn generate
-  [{:keys [input output]}]
+  [{:keys [input output]
+    :or   {output "../../resources/dictionary/frequency.tsv"}}]
   (let [rows (normalize-xlsx input)]
     (write-frequency-tsv! output rows)
     (println (format "Wrote %,d SUBTLEX-DE frequency rows to %s" (count rows) output))))
@@ -226,7 +228,7 @@
   (loop [remaining args
          opts      {}]
     (case (first remaining)
-      nil opts
+      nil        opts
       "--input"  (recur (nnext remaining) (assoc opts :input (second remaining)))
       "--output" (recur (nnext remaining) (assoc opts :output (second remaining)))
       (throw (ex-info (str "Unexpected argument: " (first remaining))

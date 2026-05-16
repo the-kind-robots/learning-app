@@ -1,16 +1,16 @@
 (ns db
   (:refer-clojure :exclude [find get remove use])
-  #?(:cljs (:require-macros [db :refer [with-couch-op]]))
+  #?(:cljs (:require-macros [db-macros :refer [with-couch-op]]))
   (:require
    #?(:clj [cheshire.core :as cheshire])
    #?(:clj [clojure.core :as clojure])
    #?(:clj [clojure.walk :as walk])
    #?(:clj [org.httpkit.client :as client])
+   #?(:clj [promesa.core :as p])
    ;; PouchDB's browser bundle depends on the npm "events" package.
    #?(:cljs ["pouchdb" :as PouchDB])
    #?(:cljs ["pouchdb-find" :as PouchFind])
-   [clojure.string :as str]
-   [promesa.core :as p]))
+   [clojure.string :as str]))
 
 
 #?(:cljs (.plugin PouchDB PouchFind))
@@ -224,9 +224,10 @@
      (or (:conn db) conn)))
 
 
-(defmacro with-couch-op
-  [_op-id body]
-  `(p/-> ~body couch->clj))
+#?(:clj
+   (defmacro with-couch-op
+     [_op-id body]
+     `(p/-> ~body couch->clj)))
 
 
 #?(:clj
@@ -332,14 +333,18 @@
   ([db docname]
    (get db docname {}))
   ([db docname params]
-   (p/catch
-     (with-couch-op :couch/get
-       #?(:clj (request (db-conn db)
-                        {:method :get :url (str (:name db) "/" docname) :query-params (clj->couch params)})
-          :cljs (.get ^js db docname (clj->couch params))))
-     (fn [error]
-       (when-not (not-found? error)
-         (throw error))))))
+   #?(:clj  (p/catch
+               (with-couch-op :couch/get
+                 (request (db-conn db)
+                          {:method :get :url (str (:name db) "/" docname) :query-params (clj->couch params)}))
+               (fn [error]
+                 (when-not (not-found? error)
+                   (throw error))))
+      :cljs (-> (with-couch-op :couch/get
+                  (.get ^js db docname (clj->couch params)))
+                (.catch (fn [error]
+                          (when-not (not-found? error)
+                            (throw error))))))))
 
 
 (defn find
@@ -382,15 +387,19 @@
    - `execution-stats` (*object*) – Execution statistics.
    - `bookmark` (*string*) – An opaque string used for paging. See the bookmark field in the request (above) for usage details."
   [db query]
-  (p/catch
-    (with-couch-op :couch/find
-      #?(:clj (request (db-conn db)
-                       {:method :get :url (str (:name db) "/_find") :body (clj->couch query)})
-         :cljs (.find ^js db (clj->couch query))))
-    (fn [error]
-      #?(:cljs (js/console.log :error error))
-      (when-not (not-found? error)
-        (throw error)))))
+  #?(:clj  (p/catch
+              (with-couch-op :couch/find
+                (request (db-conn db)
+                         {:method :get :url (str (:name db) "/_find") :body (clj->couch query)}))
+              (fn [error]
+                (when-not (not-found? error)
+                  (throw error))))
+     :cljs (-> (with-couch-op :couch/find
+                 (.find ^js db (clj->couch query)))
+               (.catch (fn [error]
+                         (js/console.log :error error)
+                         (when-not (not-found? error)
+                           (throw error)))))))
 
 
 (defn find-all
@@ -403,10 +412,15 @@
    Any incoming `:limit`/`:skip` in `query` is ignored."
   ([db query]
    (let [base-query (dissoc query :limit :skip)]
-     (p/let [{:keys [doc-count]} (info db)]
-       (if (zero? doc-count)
-         {:docs []}
-         (find db (assoc base-query :limit doc-count)))))))
+     #?(:clj  (p/let [{:keys [doc-count]} (info db)]
+                 (if (zero? doc-count)
+                   {:docs []}
+                   (find db (assoc base-query :limit doc-count))))
+        :cljs ((fn ^:async f []
+                 (let [{:keys [doc-count]} (await (info db))]
+                   (if (zero? doc-count)
+                     {:docs []}
+                     (await (find db (assoc base-query :limit doc-count)))))))))))
 
 
 (defn create-index
@@ -530,53 +544,3 @@
                      batches-limit      (doto (aset "batches_limit" batches-limit))
                      (some? checkpoint) (doto (aset "checkpoint" checkpoint)))]
         (.replicate PouchDB remote dbname opts)))))
-
-
-(comment
-
-  #?(:cljs
-     (require '[cljs.pprint :refer [pprint]]))
-
-  (def user-1-db (use "userdb-1"))
-  (def test-clients (use "clients"))
-
-  #?(:cljs
-     (p/catch
-       (p/-> (.createIndex (use "userdb-1") (clj->js {:index {:fields ["type"]}})) pprint)
-       pprint))
-
-  #?(:cljs
-     (p/-> (all-docs (use "userdb-1")) pprint))
-
-  #?(:cljs
-     (p/-> (.find (use "userdb-1") (clj->js {:selector {:type "vocab"}})) pprint))
-
-  #?(:cljs
-     (p/-> (insert
-            (use "app-db")
-            {:type        "vocab"
-             :value       "der Hund"
-             :translation [{:lang "ru" :value "пёс"}]})
-           pprint))
-
-  #?(:cljs
-     (p/catch
-       (p/let [clients-info (info test-clients)]
-         (prn clients-info))
-       (fn [e] (js/console.error "Bulk operation error" e))))
-
-  #?(:cljs
-     (p/let [clients-docs (all-docs test-clients)]
-       (pprint clients-docs)))
-
-  #?(:cljs
-     (p/let [user-data (get test-clients "user-data")]
-       (pprint user-data)))
-
-  #?(:cljs
-     (p/do
-       ;; (insert user-1-db {:test "Hello, world"} "my-third-doc")
-       (p/let [doc (get user-1-db "my-third-doc" {})]
-         (prn doc))))
-
-  (sync user-1-db))

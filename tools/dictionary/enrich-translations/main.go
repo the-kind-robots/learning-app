@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	_ "modernc.org/sqlite"
 )
 
 const (
@@ -44,21 +46,106 @@ var posLabels = map[string]string{
 }
 
 var labelMap = map[string]string{
+	// Register / style
 	"разг.": "colloquial", "разг": "colloquial",
-	"книжн.": "bookish", "книжн": "bookish",
-	"перен.": "figurative", "перен": "figurative",
-	"устар.": "archaic", "устар": "archaic",
-	"тех.": "technical", "тех": "technical", "техническое": "technical", "технический": "technical",
-	"юр.": "legal", "юр": "legal", "юрид.": "legal", "юрид": "legal", "юридическое": "legal",
+	"вульг.": "vulgar", "вульг": "vulgar",
+	"груб.": "rude", "груб": "rude",
+	"жарг.": "slang", "жарг": "slang",
+	"пренебр.": "pejorative", "пренебр": "pejorative",
+	"неодобр.": "pejorative", "неодобр": "pejorative",
+	"бран.": "expressive", "бран": "expressive",
+	"ирон.": "ironic", "ирон": "ironic",
+	"шутл.": "ironic", "шутл": "ironic",
+	"высок.": "elevated", "высок": "elevated",
+	"книжн.": "elevated", "книжн": "elevated",
 	"офиц.": "formal", "офиц": "formal",
 	"поэт.": "poetic", "поэт": "poetic",
+	"перен.": "figurative", "перен": "figurative",
 	"спец.": "specialized", "спец": "specialized",
-	"мед.": "medical", "мед": "medical",
+	"редк.": "rare", "редк": "rare",
+	"уст.": "archaic", "уст": "archaic",
+	"устар.": "archaic", "устар": "archaic",
+	// Technical
+	"тех.": "technical", "тех": "technical", "техническое": "technical", "технический": "technical",
+	// Regional
+	"австр.": "austrian", "австр": "austrian",
+	"швейц.": "swiss", "швейц": "swiss",
+	"сев.-нем.": "northern-german",
+	"северонем.": "northern-german",
+	"северогерм.": "northern-german",
+	"юж.-нем.": "southern-german",
+	"ю.-нем.": "southern-german",
+	"южн.": "southern-german", "южн": "southern-german",
+	"бавар.": "bavarian", "бавар": "bavarian",
+	"бав.": "bavarian", "бав": "bavarian",
+	"шваб.": "swabian", "шваб": "swabian",
+	"диал.": "dialectal", "диал": "dialectal",
+	// Domain
+	"юр.": "law", "юр": "law", "юрид.": "law", "юрид": "law", "юридическое": "law",
+	"мед.": "medicine", "мед": "medicine",
+	"ист.": "historical", "ист": "historical",
+	"истор.": "historical", "истор": "historical",
+	"рел.": "religion", "рел": "religion",
+	"религ.": "religion", "религ": "religion",
+	"лингв.": "linguistics", "лингв": "linguistics",
+	"инф.": "computing", "инф": "computing",
+	"информ.": "computing", "информ": "computing",
+	"комп.": "computing", "комп": "computing",
+	"воен.": "military", "воен": "military",
+	"бот.": "botany", "бот": "botany",
+	"зоол.": "zoology", "зоол": "zoology",
+	"биол.": "biology", "биол": "biology",
+	"хим.": "chemistry", "хим": "chemistry",
+	"физ.": "physics", "физ": "physics",
+	"мат.": "mathematics", "мат": "mathematics",
+	"геом.": "mathematics", "геом": "mathematics",
+	"геогр.": "geography", "геогр": "geography",
+	"геол.": "geology", "геол": "geology",
+	"муз.": "music", "муз": "music",
+	"спорт.": "sports", "спорт": "sports",
+	"архит.": "architecture", "архит": "architecture",
+	"фин.": "finance", "фин": "finance",
+	"экон.": "finance", "экон": "finance",
+	"филос.": "philosophy", "филос": "philosophy",
+	"мор.": "nautical", "мор": "nautical",
+	"кулин.": "culinary", "кулин": "culinary",
+	"шахм.": "chess", "шахм": "chess",
+	"церк.": "church", "церк": "church",
+	"анат.": "anatomy", "анат": "anatomy",
+	"полит.": "political", "полит": "political",
+	"рег.": "regional", "рег": "regional",
+	"регион.": "regional", "регион": "regional",
+	"психол.": "psychology", "психол": "psychology",
+	"псих.": "psychology", "псих": "psychology",
+	"горн.": "mining", "горн": "mining",
+	"лит.": "literature", "лит": "literature",
+	"иск.": "art", "иск": "art",
+	"миф.": "mythology", "миф": "mythology",
+	"строит.": "construction", "строит": "construction",
+	"астрон.": "astronomy", "астрон": "astronomy",
+	"авто.": "automotive", "авто": "automotive",
+	"с.-х.": "agricultural",
+	"театр.": "theater", "театр": "theater",
+	"фото.": "photography", "фото": "photography",
+	"охот.": "hunting", "охот": "hunting",
+	"физиол.": "physiology", "физиол": "physiology",
+	"библ.": "biblical", "библ": "biblical",
+	"авиац.": "aviation", "авиац": "aviation",
+	"метеор.": "meteorology", "метеор": "meteorology",
+	"ж.-д.": "railway",
+	"вет.": "veterinary", "вет": "veterinary",
+	"геральд.": "heraldry", "геральд": "heraldry",
+	"этн.": "ethnographic", "этн": "ethnographic",
+	"карт.": "card-games", "карт": "card-games",
+	"фон.": "phonetics", "фон": "phonetics",
+	"полигр.": "printing", "полигр": "printing",
+	"археол.": "archaeology", "археол": "archaeology",
 }
 
 type config struct {
 	input                    string
 	output                   string
+	enrichmentOutput         string
 	limit                    int
 	batch                    int
 	minRank                  int
@@ -85,7 +172,7 @@ type config struct {
 	models                   []string
 }
 
-type entry map[string]any
+type lemma map[string]any
 
 type state struct {
 	Version             int      `json:"version"`
@@ -257,6 +344,7 @@ func parseFlags() config {
 	binDir := executableDir()
 	flag.StringVar(&cfg.input, "input", "", "")
 	flag.StringVar(&cfg.output, "output", "", "")
+	flag.StringVar(&cfg.enrichmentOutput, "enrichment-output", "", "")
 	flag.IntVar(&cfg.limit, "limit", 0, "")
 	flag.IntVar(&cfg.batch, "batch", 8, "")
 	flag.IntVar(&cfg.minRank, "min-rank", 0, "")
@@ -327,21 +415,44 @@ func splitCSV(raw string) []string {
 }
 
 func run(cfg config, updates chan<- snapshot) (int, error) {
+	sideFileMode := cfg.enrichmentOutput != ""
 	source := cfg.input
-	if cfg.output != cfg.input && fileExists(cfg.output) {
+	if !sideFileMode && cfg.output != cfg.input && fileExists(cfg.output) {
 		source = cfg.output
 	}
-	entries, err := loadEntries(source)
+	isSQLite := strings.HasSuffix(source, ".sqlite")
+	var lemmas []lemma
+	var err error
+	if isSQLite {
+		lemmas, err = loadLemmasFromSQLite(source)
+	} else {
+		lemmas, err = loadLemmas(source)
+	}
 	if err != nil {
 		return 2, err
 	}
+
+	sideFileUpdates := map[string][]map[string]any{}
+	if sideFileMode {
+		existing, err := loadTranslationSideFile(cfg.enrichmentOutput)
+		if err != nil {
+			return 2, err
+		}
+		sideFileUpdates = existing
+		for _, item := range lemmas {
+			if trans, ok := existing[stringField(item, "id")]; ok {
+				item["translation"] = trans
+			}
+		}
+	}
+
 	st, err := loadState(cfg.checkpoint, cfg.input, cfg.output)
 	if err != nil {
 		return 2, err
 	}
 
 	totalMissing := 0
-	for _, item := range entries {
+	for _, item := range lemmas {
 		if needsTranslation(item) {
 			totalMissing++
 		}
@@ -349,32 +460,40 @@ func run(cfg config, updates chan<- snapshot) (int, error) {
 	if st.InitialMissing == 0 {
 		st.InitialMissing = totalMissing + st.EntriesEnriched
 	}
-	candidates := selectCandidates(entries, cfg)
+	candidates := selectCandidates(lemmas, cfg)
 	if cfg.limit > 0 && len(candidates) > cfg.limit {
 		candidates = candidates[:cfg.limit]
 	}
 	if len(candidates) == 0 {
-		if !cfg.dryRun {
-			if err := refreshManifestForEntries(manifestRefreshTarget(cfg, source)); err != nil {
-				return 2, err
+		if !cfg.dryRun && !sideFileMode {
+			target := manifestRefreshTarget(cfg, source)
+			var refreshErr error
+			if isSQLite {
+				refreshErr = refreshManifestForSQLite(target)
+			} else {
+				refreshErr = refreshManifestForEntries(target)
+			}
+			if refreshErr != nil {
+				return 2, refreshErr
 			}
 		}
 		updates <- snapshot{Status: "nothing to do", Done: true}
 		return 0, nil
 	}
 
-	entryByID := map[string]entry{}
-	for _, item := range entries {
-		entryByID[stringField(item, "_id")] = item
+	lemmaByID := map[string]lemma{}
+	for _, item := range lemmas {
+		lemmaByID[stringField(item, "id")] = item
 	}
 	batches := makeBatches(candidates, cfg.batch)
 	started := time.Now()
 	delay := cfg.delay
 	recent := make([]recentRow, 0, cfg.recentLimit)
 	lastRequest := time.Time{}
+	batchSQLiteUpdates := map[string][]map[string]any{}
 
 	snap := snapshot{
-		Mode: "live", Total: len(entries), Missing: totalMissing, InitialMissing: st.InitialMissing, Selected: len(candidates),
+		Mode: "live", Total: len(lemmas), Missing: totalMissing, InitialMissing: st.InitialMissing, Selected: len(candidates),
 		Output: cfg.output, Remaining: len(candidates), Requests: st.Requests,
 		Enriched: st.EntriesEnriched, Failed: st.EntriesFailed, Batches: st.BatchesCompleted,
 		Batch: fmt.Sprintf("0/%d", len(batches)), Model: cfg.model, Delay: formatSeconds(delay),
@@ -410,10 +529,16 @@ func run(cfg config, updates chan<- snapshot) (int, error) {
 		if parsed != nil {
 			failedEntries = nil
 			for _, item := range batch {
-				found := parsed[stringField(item, "_id")]
+				found := parsed[stringField(item, "id")]
 				if len(found) > 0 {
-					entryByID[stringField(item, "_id")]["translation"] = found
+					lemmaByID[stringField(item, "id")]["translation"] = found
 					enrichedNow++
+					if isSQLite {
+						batchSQLiteUpdates[stringField(item, "id")] = found
+					}
+					if sideFileMode {
+						sideFileUpdates[stringField(item, "id")] = found
+					}
 				} else {
 					failedEntries = append(failedEntries, item)
 					failedNow++
@@ -440,19 +565,33 @@ func run(cfg config, updates chan<- snapshot) (int, error) {
 			st.BatchesCompleted++
 			st.EntriesEnriched += enrichedNow
 			st.EntriesFailed += failedNow
-			st.LastBatchIDs = entryIDs(batch)
-			st.LastBatchWords = entryWords(batch)
+			st.LastBatchIDs = lemmaIDs(batch)
+			st.LastBatchWords = lemmaWords(batch)
 			st.LastError = snap.LastError
 			st.LastResponseSnippet = snap.LastResponse
 			st.LastModel = snap.Model
 			st.Remaining = max(0, snap.Remaining-len(batch))
 			snap.Missing = max(0, snap.Missing-enrichedNow)
 			if enrichedNow > 0 {
-				if err := writeEntries(cfg.output, entries); err != nil {
-					return 2, err
-				}
-				if err := refreshManifestForEntries(cfg.output); err != nil {
-					return 2, err
+				if sideFileMode {
+					if err := writeTranslationSideFile(cfg.enrichmentOutput, sideFileUpdates); err != nil {
+						return 2, err
+					}
+				} else if isSQLite {
+					if err := writeTranslationsToSQLite(cfg.output, batchSQLiteUpdates); err != nil {
+						return 2, err
+					}
+					if err := refreshManifestForSQLite(cfg.output); err != nil {
+						return 2, err
+					}
+					batchSQLiteUpdates = map[string][]map[string]any{}
+				} else {
+					if err := writeLemmas(cfg.output, lemmas); err != nil {
+						return 2, err
+					}
+					if err := refreshManifestForEntries(cfg.output); err != nil {
+						return 2, err
+					}
 				}
 			}
 			for _, item := range failedEntries {
@@ -475,8 +614,15 @@ func run(cfg config, updates chan<- snapshot) (int, error) {
 			return 2, nil
 		}
 	}
-	if !cfg.dryRun {
-		if err := refreshManifestForEntries(manifestRefreshTarget(cfg, source)); err != nil {
+	if !cfg.dryRun && !sideFileMode {
+		target := manifestRefreshTarget(cfg, source)
+		var finalRefreshErr error
+		if isSQLite {
+			finalRefreshErr = refreshManifestForSQLite(target)
+		} else {
+			finalRefreshErr = refreshManifestForEntries(target)
+		}
+		if err := finalRefreshErr; err != nil {
 			return 2, err
 		}
 	}
@@ -490,7 +636,7 @@ func manifestRefreshTarget(cfg config, source string) string {
 	return source
 }
 
-func runBatch(cfg config, batch []entry, snap *snapshot, delay *time.Duration, updates chan<- snapshot, started time.Time) (map[string][]map[string]any, *apiResult) {
+func runBatch(cfg config, batch []lemma, snap *snapshot, delay *time.Duration, updates chan<- snapshot, started time.Time) (map[string][]map[string]any, *apiResult) {
 	if cfg.dryRun {
 		snap.LastResponse = buildPrompt(batch)
 		return map[string][]map[string]any{}, nil
@@ -588,7 +734,7 @@ func runBatch(cfg config, batch []entry, snap *snapshot, delay *time.Duration, u
 	return nil, nil
 }
 
-func callOpenRouter(cfg config, batch []entry, spec modelSpec) apiResult {
+func callOpenRouter(cfg config, batch []lemma, spec modelSpec) apiResult {
 	payload := requestPayload(cfg, batch, spec)
 	body, _ := json.Marshal(payload)
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.requestTimeout)
@@ -639,7 +785,7 @@ func callOpenRouter(cfg config, batch []entry, spec modelSpec) apiResult {
 	return apiResult{OK: true, Body: content, Status: resp.StatusCode, ModelLabel: spec.Label, Retryable: true}
 }
 
-func requestPayload(cfg config, batch []entry, spec modelSpec) map[string]any {
+func requestPayload(cfg config, batch []lemma, spec modelSpec) map[string]any {
 	return map[string]any{
 		"model": spec.Model,
 		"messages": []map[string]string{
@@ -714,7 +860,7 @@ func decodeResponse(raw []byte) (string, error) {
 	}
 }
 
-func buildPrompt(batch []entry) string {
+func buildPrompt(batch []lemma) string {
 	var lines []string
 	for i, item := range batch {
 		pos := stringField(item, "pos")
@@ -760,7 +906,7 @@ func buildPrompt(batch []entry) string {
 %s`, strings.Join(lines, "\n"))
 }
 
-func parseResponse(body string, batch []entry) (map[string][]map[string]any, error) {
+func parseResponse(body string, batch []lemma) (map[string][]map[string]any, error) {
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(extractJSONObject(body)), &payload); err != nil {
 		return nil, err
@@ -769,7 +915,7 @@ func parseResponse(body string, batch []entry) (map[string][]map[string]any, err
 	if !ok {
 		return nil, errors.New("response missing items array")
 	}
-	byIndex := map[int]entry{}
+	byIndex := map[int]lemma{}
 	for i, item := range batch {
 		byIndex[i+1] = item
 	}
@@ -803,7 +949,7 @@ func parseResponse(body string, batch []entry) (map[string][]map[string]any, err
 			cleaned = append(cleaned, tr)
 		}
 		if len(cleaned) > 0 {
-			parsed[stringField(target, "_id")] = cleaned
+			parsed[stringField(target, "id")] = cleaned
 		}
 	}
 	return parsed, nil
@@ -862,7 +1008,7 @@ func parseTranslationItem(raw string) map[string]any {
 	return result
 }
 
-func validTranslationForPOS(item entry, tr map[string]any) bool {
+func validTranslationForPOS(item lemma, tr map[string]any) bool {
 	value, _ := tr["value"].(string)
 	if strings.TrimSpace(value) == "" {
 		return false
@@ -899,13 +1045,13 @@ func looksLikeRUInfinitive(value string) bool {
 	return strings.HasSuffix(word, "ть") || strings.HasSuffix(word, "ти") || strings.HasSuffix(word, "чь") || strings.HasSuffix(word, "ться") || strings.HasSuffix(word, "тись")
 }
 
-func loadEntries(path string) ([]entry, error) {
+func loadLemmas(path string) ([]lemma, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	var entries []entry
+	var lemmas []lemma
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 1024), 10*1024*1024)
 	for scanner.Scan() {
@@ -913,16 +1059,16 @@ func loadEntries(path string) ([]entry, error) {
 		if line == "" {
 			continue
 		}
-		var item entry
+		var item lemma
 		if err := json.Unmarshal([]byte(line), &item); err != nil {
 			return nil, err
 		}
-		entries = append(entries, item)
+		lemmas = append(lemmas, item)
 	}
-	return entries, scanner.Err()
+	return lemmas, scanner.Err()
 }
 
-func writeEntries(path string, entries []entry) error {
+func writeLemmas(path string, lemmas []lemma) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil && filepath.Dir(path) != "." {
 		return err
 	}
@@ -932,7 +1078,7 @@ func writeEntries(path string, entries []entry) error {
 	}
 	tmpPath := tmp.Name()
 	writer := bufio.NewWriter(tmp)
-	for _, item := range entries {
+	for _, item := range lemmas {
 		line, err := json.Marshal(item)
 		if err != nil {
 			_ = tmp.Close()
@@ -957,6 +1103,260 @@ func writeEntries(path string, entries []entry) error {
 	return os.Rename(tmpPath, path)
 }
 
+func loadTranslationSideFile(path string) (map[string][]map[string]any, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string][]map[string]any{}, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+	result := map[string][]map[string]any{}
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 1024), 10*1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var row map[string]any
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
+			return nil, err
+		}
+		id, _ := row["id"].(string)
+		if id == "" {
+			continue
+		}
+		if raw, ok := row["translation"].([]any); ok {
+			trans := make([]map[string]any, 0, len(raw))
+			for _, t := range raw {
+				if m, ok := t.(map[string]any); ok {
+					trans = append(trans, m)
+				}
+			}
+			result[id] = trans
+		}
+	}
+	return result, scanner.Err()
+}
+
+func writeTranslationSideFile(path string, updates map[string][]map[string]any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil && filepath.Dir(path) != "." {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".enrich-side-*.jsonl")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	writer := bufio.NewWriter(tmp)
+	for id, trans := range updates {
+		row := map[string]any{"id": id, "translation": trans}
+		line, err := json.Marshal(row)
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+			return err
+		}
+		if _, err := writer.Write(append(line, '\n')); err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+			return err
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
+
+func loadEnrichmentMeta(path string) (map[string]map[string]any, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]map[string]any{}, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+	result := map[string]map[string]any{}
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 1024), 10*1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var row map[string]any
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
+			return nil, err
+		}
+		if id, _ := row["id"].(string); id != "" {
+			result[id] = row
+		}
+	}
+	return result, scanner.Err()
+}
+
+func loadLemmasFromSQLite(dbPath string) ([]lemma, error) {
+	metaPath := filepath.Join(filepath.Dir(dbPath), "enrichment-meta.jsonl")
+	metaByID, err := loadEnrichmentMeta(metaPath)
+	if err != nil {
+		return nil, fmt.Errorf("loading enrichment-meta.jsonl: %w", err)
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(`
+		SELECT l.text_id, l.value, l.pos, l.rank
+		FROM lemmas l
+		WHERE NOT EXISTS (SELECT 1 FROM translations t WHERE t.lemma_id = l.id)
+		ORDER BY l.rank DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var lemmas []lemma
+	for rows.Next() {
+		var textID, value, pos string
+		var rank int64
+		if err := rows.Scan(&textID, &value, &pos, &rank); err != nil {
+			return nil, err
+		}
+		l := lemma{
+			"id":   textID,
+			"value": value,
+			"pos":   pos,
+			"rank":  rank,
+		}
+		if meta, ok := metaByID[textID]; ok {
+			l["forms_count"] = meta["forms_count"]
+			l["meta"] = meta["meta"]
+		}
+		lemmas = append(lemmas, l)
+	}
+	return lemmas, rows.Err()
+}
+
+func writeTranslationsToSQLite(dbPath string, updates map[string][]map[string]any) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	del, err := tx.Prepare("DELETE FROM translations WHERE lemma_id = ?")
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer del.Close()
+	ins, err := tx.Prepare("INSERT INTO translations (lemma_id, seq, value, labels_json) VALUES (?, ?, ?, ?)")
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer ins.Close()
+	for id, trs := range updates {
+		if _, err := del.Exec(id); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		for seq, tr := range trs {
+			v, _ := tr["value"].(string)
+			var labelsJSON any
+			if meta, ok := tr["meta"].(map[string]any); ok {
+				if labels, ok := meta["labels"].([]any); ok && len(labels) > 0 {
+					b, _ := json.Marshal(labels)
+					labelsJSON = string(b)
+				}
+			}
+			if _, err := ins.Exec(id, seq+1, v, labelsJSON); err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
+func refreshManifestForSQLite(dbPath string) error {
+	manifestPath := filepath.Join(filepath.Dir(dbPath), "manifest.edn")
+	raw, err := os.ReadFile(manifestPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	text := string(raw)
+	key := "\"dictionary-raw.sqlite\""
+	start := strings.Index(text, key)
+	if start == -1 {
+		return nil // manifest doesn't reference dictionary-raw.sqlite yet
+	}
+	info, err := os.Stat(dbPath)
+	if err != nil {
+		return err
+	}
+	mapStart := strings.Index(text[start:], "{")
+	if mapStart == -1 {
+		return fmt.Errorf("manifest dict.sqlite entry has no stats map: %s", manifestPath)
+	}
+	mapStart += start
+	depth, mapEnd := 0, -1
+	for i := mapStart; i < len(text); i++ {
+		switch text[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				mapEnd = i + 1
+				i = len(text)
+			}
+		}
+	}
+	if mapEnd == -1 {
+		return fmt.Errorf("manifest dict.sqlite stats map is not closed: %s", manifestPath)
+	}
+	existingMap := text[mapStart:mapEnd]
+	count := 0
+	if i := strings.Index(existingMap, ":count"); i >= 0 {
+		fmt.Sscanf(strings.TrimSpace(existingMap[i+6:]), "%d", &count)
+	}
+	newStats := fmt.Sprintf("{:count %d, :bytes %d}", count, info.Size())
+	updated := text[:mapStart] + newStats + text[mapEnd:]
+	now := utcNow()
+	if strings.Contains(updated, ":enriched-at") {
+		updated = replaceEDNStringValue(updated, ":enriched-at", now)
+	} else {
+		generatedAt := ednExistingGeneratedAt(updated)
+		if generatedAt != "" {
+			updated = strings.Replace(updated, fmt.Sprintf(":generated-at %q", generatedAt), fmt.Sprintf(":generated-at %q, :enriched-at %q", generatedAt, now), 1)
+		}
+	}
+	return atomicWriteText(manifestPath, strings.TrimRight(updated, "\n")+"\n")
+}
+
 func refreshManifestForEntries(entriesPath string) error {
 	manifestPath := filepath.Join(filepath.Dir(entriesPath), "manifest.edn")
 	raw, err := os.ReadFile(manifestPath)
@@ -970,7 +1370,7 @@ func refreshManifestForEntries(entriesPath string) error {
 	if err != nil {
 		return err
 	}
-	entry := fmt.Sprintf("\"dictionary-entries.jsonl\" {:count %d, :bytes %d, :sha256 \"%s\"}", stats.Count, stats.Bytes, stats.SHA256)
+	replacement := fmt.Sprintf("\"dictionary-entries.jsonl\" {:count %d, :bytes %d, :sha256 \"%s\"}", stats.Count, stats.Bytes, stats.SHA256)
 	text := string(raw)
 	start := strings.Index(text, "\"dictionary-entries.jsonl\"")
 	if start == -1 {
@@ -998,7 +1398,7 @@ func refreshManifestForEntries(entriesPath string) error {
 	if mapEnd == -1 {
 		return fmt.Errorf("manifest dictionary-entries.jsonl stats map is not closed: %s", manifestPath)
 	}
-	updated := text[:start] + entry + text[mapEnd:]
+	updated := text[:start] + replacement + text[mapEnd:]
 	now := utcNow()
 	if strings.Contains(updated, ":enriched-at") {
 		updated = replaceEDNStringValue(updated, ":enriched-at", now)
@@ -1186,7 +1586,7 @@ func logCrash(path string, err error) error {
 	})
 }
 
-func needsTranslation(item entry) bool {
+func needsTranslation(item lemma) bool {
 	for _, raw := range anySlice(item["translation"]) {
 		tr, _ := raw.(map[string]any)
 		if tr["lang"] == "ru" {
@@ -1196,9 +1596,9 @@ func needsTranslation(item entry) bool {
 	return true
 }
 
-func selectCandidates(entries []entry, cfg config) []entry {
-	var candidates []entry
-	for _, item := range entries {
+func selectCandidates(lemmas []lemma, cfg config) []lemma {
+	var candidates []lemma
+	for _, item := range lemmas {
 		if needsTranslation(item) && intField(item, "rank") >= cfg.minRank {
 			candidates = append(candidates, item)
 		}
@@ -1223,12 +1623,12 @@ func selectCandidates(entries []entry, cfg config) []entry {
 	return candidates
 }
 
-func corePriority(item entry) int {
+func corePriority(item lemma) int {
 	meta := mapField(item, "meta")
 	cefr, _ := meta["cefr_level"].(string)
 	score := map[string]int{"a1": 300000, "a2": 200000, "b1": 100000}[cefr]
 	senseCount := intFromAny(meta["sense_count"])
-	formsCount := len(anySlice(item["forms"]))
+	formsCount := intFromAny(item["forms_count"])
 	posScore := map[string]int{"verb": 800, "noun": 700, "adj": 400, "adv": 300, "phrase": 100}[stringField(item, "pos")]
 	return score + min(senseCount, 20)*1500 + min(formsCount, 30)*80 + posScore - wordComplexity(stringField(item, "value"))
 }
@@ -1249,7 +1649,7 @@ func bareWord(value string) string {
 	return value
 }
 
-func sensePrompt(item entry) string {
+func sensePrompt(item lemma) string {
 	var lines []string
 	for idx, raw := range anySlice(mapField(item, "meta")["senses"]) {
 		if idx >= 4 {
@@ -1273,7 +1673,7 @@ func sensePrompt(item entry) string {
 	return "\n" + strings.Join(lines, "\n")
 }
 
-func senseSummary(item entry) string {
+func senseSummary(item lemma) string {
 	var parts []string
 	for idx, raw := range anySlice(mapField(item, "meta")["senses"]) {
 		if idx >= 2 {
@@ -1739,13 +2139,13 @@ func padCell(text string, width int) string {
 	return text + strings.Repeat(" ", padding)
 }
 
-func recentRows(batch []entry, parsed map[string][]map[string]any, model string, batchIndex int) []recentRow {
+func recentRows(batch []lemma, parsed map[string][]map[string]any, model string, batchIndex int) []recentRow {
 	rows := make([]recentRow, 0, len(batch))
 	for _, item := range batch {
 		translations := "no parse"
 		status := "fail"
 		if parsed != nil {
-			if found := parsed[stringField(item, "_id")]; len(found) > 0 {
+			if found := parsed[stringField(item, "id")]; len(found) > 0 {
 				translations = translationSummary(found)
 				status = "ok"
 			}
@@ -1768,8 +2168,8 @@ func translationSummary(items []map[string]any) string {
 	return or(shorten(strings.Join(values, ", "), 120), "-")
 }
 
-func makeBatches(items []entry, size int) [][]entry {
-	var batches [][]entry
+func makeBatches(items []lemma, size int) [][]lemma {
+	var batches [][]lemma
 	for start := 0; start < len(items); start += size {
 		end := min(start+size, len(items))
 		batches = append(batches, items[start:end])
@@ -1777,11 +2177,11 @@ func makeBatches(items []entry, size int) [][]entry {
 	return batches
 }
 
-func batchWords(batch []entry) string {
-	return shorten(strings.Join(entryWords(batch), ", "), 120)
+func batchWords(batch []lemma) string {
+	return shorten(strings.Join(lemmaWords(batch), ", "), 120)
 }
 
-func entryWords(batch []entry) []string {
+func lemmaWords(batch []lemma) []string {
 	out := make([]string, 0, len(batch))
 	for _, item := range batch {
 		out = append(out, stringField(item, "value"))
@@ -1789,19 +2189,19 @@ func entryWords(batch []entry) []string {
 	return out
 }
 
-func entryIDs(batch []entry) []string {
+func lemmaIDs(batch []lemma) []string {
 	out := make([]string, 0, len(batch))
 	for _, item := range batch {
-		out = append(out, stringField(item, "_id"))
+		out = append(out, stringField(item, "id"))
 	}
 	return out
 }
 
-func failPayload(item entry, batchIndex int, batch []entry, snap snapshot) map[string]any {
+func failPayload(item lemma, batchIndex int, batch []lemma, snap snapshot) map[string]any {
 	return map[string]any{
-		"ts": utcNow(), "id": stringField(item, "_id"), "word": stringField(item, "value"),
+		"ts": utcNow(), "id": stringField(item, "id"), "word": stringField(item, "value"),
 		"pos": stringField(item, "pos"), "rank": intField(item, "rank"), "batch_index": batchIndex,
-		"batch_words": entryWords(batch), "error": snap.LastError, "response_snippet": snap.LastResponse,
+		"batch_words": lemmaWords(batch), "error": snap.LastError, "response_snippet": snap.LastResponse,
 	}
 }
 

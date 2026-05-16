@@ -1,13 +1,13 @@
 (ns client.retention-test
-  (:require
-   [cljs.test :refer-macros [deftest is testing use-fixtures]]
-   [client.support.db-fixtures :as db-fixtures]
-   [db :as db]
-   [promesa.core :as p]
-   [retention :as sut]
-   [utils :as utils])
   (:require-macros
-   [client.support.test :refer [async-testing]]))
+   [client.support.test :refer [async-testing]])
+  (:require
+   [client.support.db-fixtures :as db-fixtures]
+   [cljs.test :refer-macros [deftest is testing use-fixtures]]
+   [db :as db]
+   [domain.retention :as domain]
+   [repo.retention :as sut]
+   [utils :as utils]))
 
 
 (def user-db-name (db-fixtures/db-name "client.retention-test.user"))
@@ -29,7 +29,7 @@
     (let [reviews [{:created-at "2024-08-20T10:00:00.000Z" :retained true}
                    {:created-at "2024-08-20T10:05:00.000Z" :retained true}]
           now-ms  (utils/iso->ms "2024-08-20T10:10:00.000Z")
-          level   (sut/retention-level reviews now-ms)]
+          level   (domain/retention-level reviews now-ms)]
       (is (number? level))
       (is (> level 0))
       (is (<= level 100)))))
@@ -41,57 +41,55 @@
                        {:created-at "2024-08-20T10:05:00.000Z" :retained true}]
           soon-ms     (utils/iso->ms "2024-08-20T10:10:00.000Z")
           later-ms    (utils/iso->ms "2024-08-21T10:00:00.000Z")
-          level-soon  (sut/retention-level reviews soon-ms)
-          level-later (sut/retention-level reviews later-ms)]
+          level-soon  (domain/retention-level reviews soon-ms)
+          level-later (domain/retention-level reviews later-ms)]
       (is (> level-soon level-later)))))
 
 
 (deftest levels-returns-row-per-requested-word
   (async-testing "`levels` returns rows for all requested word ids"
     (with-test-dbs
-     (fn [dbs]
+     (^:async fn [dbs]
        (let [user-db (:user/db dbs)]
-         (p/do
-           (db/insert user-db
-                      {:_id        "review-1"
-                       :type       "review"
-                       :word-id    "word-1"
-                       :retained   true
-                       :created-at "2024-08-20T10:00:00.000Z"})
-           (db/insert user-db
-                      {:_id        "review-2"
-                       :type       "review"
-                       :word-id    "word-1"
-                       :retained   true
-                       :created-at "2024-08-20T10:05:00.000Z"})
-           (p/let [rows (sut/levels dbs
-                                    ["word-1" "word-2"]
-                                    (utils/iso->ms "2024-08-20T10:10:00.000Z"))]
-             (is (= 2 (count rows)))
-             (is (= ["word-1" "word-2"] (mapv :word-id rows)))
-             (is (number? (:retention-level (first rows))))
-             (is (> (:retention-level (first rows)) 0))
-             (is (= 0 (:retention-level (second rows)))))))))))
+         (await (db/insert user-db
+                           {:_id        "review-1"
+                            :type       "review"
+                            :word-id    "word-1"
+                            :retained   true
+                            :created-at "2024-08-20T10:00:00.000Z"}))
+         (await (db/insert user-db
+                           {:_id        "review-2"
+                            :type       "review"
+                            :word-id    "word-1"
+                            :retained   true
+                            :created-at "2024-08-20T10:05:00.000Z"}))
+         (let [rows (await (sut/levels dbs
+                                       ["word-1" "word-2"]
+                                       (utils/iso->ms "2024-08-20T10:10:00.000Z")))]
+           (is (= 2 (count rows)))
+           (is (= ["word-1" "word-2"] (mapv :word-id rows)))
+           (is (number? (:retention-level (first rows))))
+           (is (> (:retention-level (first rows)) 0))
+           (is (= 0 (:retention-level (second rows))))))))))
 
 
 (deftest level-computes-from-reviews
   (async-testing "`level` computes retention from review documents"
     (with-test-dbs
-     (fn [dbs]
+     (^:async fn [dbs]
        (let [user-db (:user/db dbs)]
-         (p/do
-           (db/insert user-db
-                      {:_id        "review-1"
-                       :type       "review"
-                       :word-id    "word-1"
-                       :retained   true
-                       :created-at "2024-08-20T10:00:00.000Z"})
-           (db/insert user-db
-                      {:_id        "review-2"
-                       :type       "review"
-                       :word-id    "word-1"
-                       :retained   true
-                       :created-at "2024-08-20T10:05:00.000Z"})
-           (p/let [level (sut/level dbs "word-1" (utils/iso->ms "2024-08-20T10:10:00.000Z"))]
-             (is (number? level))
-             (is (> level 0)))))))))
+         (await (db/insert user-db
+                           {:_id        "review-1"
+                            :type       "review"
+                            :word-id    "word-1"
+                            :retained   true
+                            :created-at "2024-08-20T10:00:00.000Z"}))
+         (await (db/insert user-db
+                           {:_id        "review-2"
+                            :type       "review"
+                            :word-id    "word-1"
+                            :retained   true
+                            :created-at "2024-08-20T10:05:00.000Z"}))
+         (let [level (await (sut/level dbs "word-1" (utils/iso->ms "2024-08-20T10:10:00.000Z")))]
+           (is (number? level))
+           (is (> level 0))))))))

@@ -1,8 +1,12 @@
 {
+  "scripts": {
+    "fetch-sqlite": "curl -L https://sqlite.org/2026/sqlite-wasm-3530100.zip -o /tmp/sqlite-wasm.zip && unzip -j /tmp/sqlite-wasm.zip 'sqlite-wasm-3530100/jswasm/sqlite3.js' -d resources/public/js/ && unzip -j /tmp/sqlite-wasm.zip 'sqlite-wasm-3530100/jswasm/sqlite3.wasm' -d resources/public/js/"
+  },
   "devDependencies": {
-    "shadow-cljs": "^3.1.7"
+    "shadow-cljs": "3.4.9"
   },
   "dependencies": {
+    "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "@thi.ng/hiccup": "^5.3.15",
     "events": "^3.3.0",
     "pouchdb": "^9.0.0",

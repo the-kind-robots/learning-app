@@ -7,30 +7,27 @@
    [java.security MessageDigest]
    [java.io FileInputStream]))
 
-
-(defn doc->json-line
+(defn lemma->json-line
   "Transform kebab-case keys to snake_case, serialize as JSON string."
-  [doc]
-  (json/generate-string (utils/transform-keys doc)))
-
+  [lemma]
+  (json/generate-string (utils/transform-keys lemma)))
 
 (defn write-jsonl!
-  "Write seq of docs as JSONL to path. Returns {:count n :bytes b}."
-  [path docs]
+  "Write seq of lemmas as JSONL to path. Returns {:count n :bytes b}."
+  [path lemmas]
   (let [f (io/file path)
         _ (io/make-parents f)]
     (with-open [w (io/writer f)]
-      (loop [docs docs
-             n    0
-             b    0]
-        (if-let [doc (first docs)]
-          (let [line       (doc->json-line doc)
-                line-bytes (+ (count (.getBytes line "UTF-8")) 1)] ; +1 for newline
+      (loop [lemmas lemmas
+             n      0
+             b      0]
+        (if-let [lemma (first lemmas)]
+          (let [line       (lemma->json-line lemma)
+                line-bytes (+ (count (.getBytes line "UTF-8")) 1)]
             (.write w line)
             (.write w "\n")
-            (recur (rest docs) (inc n) (+ b line-bytes)))
+            (recur (rest lemmas) (inc n) (+ b line-bytes)))
           {:count n :bytes b})))))
-
 
 (defn sha256
   "Compute SHA-256 hex digest of a file."
@@ -45,7 +42,6 @@
             (recur)))))
     (let [hash-bytes (.digest digest)]
       (apply str (map #(format "%02x" %) hash-bytes)))))
-
 
 (defn write-manifest!
   "Write manifest.edn with counts, byte sizes, and SHA-256 hashes."

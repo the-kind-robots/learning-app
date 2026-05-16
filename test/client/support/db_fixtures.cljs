@@ -1,8 +1,7 @@
 (ns client.support.db-fixtures
   (:require
    [clojure.string :as str]
-   [db :as db]
-   [promesa.core :as p])
+   [db :as db])
   (:require-macros
    [cljs.test :refer [async]]))
 
@@ -39,11 +38,11 @@
     (str "target/pouch/" ns-name)))
 
 
-(defn destroy-test-db
+(defn ^:async destroy-test-db
   [db-name]
-  (p/catch
-    (db/destroy (db/use db-name))
-    (fn [_]
+  (try
+    (await (db/destroy (db/use db-name)))
+    (catch :default _
       nil)))
 
 
@@ -51,24 +50,20 @@
   [db-name]
   {:before (fn []
              (async done
-               (-> (destroy-test-db db-name)
-                   (p/finally done))))
+               (.finally (destroy-test-db db-name) done)))
    :after  (fn []
              (async done
-               (-> (destroy-test-db db-name)
-                   (p/finally done))))})
+               (.finally (destroy-test-db db-name) done)))})
 
 
 (defn db-fixture-multi
   [db-names]
   {:before (fn []
              (async done
-               (-> (p/all (map destroy-test-db db-names))
-                   (p/finally done))))
+               (.finally (js/Promise.all (into-array (map destroy-test-db db-names))) done)))
    :after  (fn []
              (async done
-               (-> (p/all (map destroy-test-db db-names))
-                   (p/finally done))))})
+               (.finally (js/Promise.all (into-array (map destroy-test-db db-names))) done)))})
 
 
 (defn with-test-db

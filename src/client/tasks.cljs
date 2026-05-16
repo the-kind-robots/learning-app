@@ -4,23 +4,12 @@
    [db :as db]
    [dbs :as dbs]
    [lambdaisland.glogi :as log]
-   [promesa.core :as p]
    [utils :as utils]))
-
-
-;; =============================================================================
-;; Configuration
-;; =============================================================================
 
 
 (def ^:private config
   {:max-backoff-ms 60000
    :max-concurrent 3})
-
-
-;; =============================================================================
-;; Task Documents
-;; =============================================================================
 
 
 (defn create-task
@@ -34,23 +23,9 @@
    :created-at now-iso})
 
 
-;; =============================================================================
-;; Task Execution
-;; =============================================================================
-
-
 (defmulti execute-task
   "Execute a task. Dispatches on :task-type.
-
-   Arguments:
-     task - the task document (map with :task-type, :data, etc.)
-     dbs  - standard dbs map with :user/db, :device/db, etc.
-
-   Returns a promise that resolves to:
-     - truthy  -> task succeeded, will be removed
-     - falsy   -> task failed, will be retried with exponential backoff
-     - {:retry-after-ms n} -> task failed, will be retried after the suggested delay
-     - ::unknown-task -> unknown task type, will be dead-lettered"
+   Returns a promise resolving to truthy (success), falsy (retry), or ::unknown-task."
   (fn [task _dbs] (:task-type task)))
 
 
@@ -58,11 +33,6 @@
   [task _dbs]
   (log/warn :tasks/unknown-type {:task-type (:task-type task)})
   ::unknown-task)
-
-
-;; =============================================================================
-;; Core Runner
-;; =============================================================================
 
 
 (defn- online?
@@ -81,32 +51,29 @@
 
 (defn- ensure-task-index!
   [dbs]
-  (p/catch
-    (db/create-index
-     (dbs/db-for dbs "task")
-     [:type :run-at :created-at]
-     {:name "by-type-run-at-created-at"
-      :ddoc "by-type-run-at-created-at"})
-    (fn [err]
-      (log/error :tasks/index-error {:error (str err)}))))
+  (-> (db/create-index
+       (dbs/db-for dbs "task")
+       [:type :run-at :created-at]
+       {:name "by-type-run-at-created-at"
+        :ddoc "by-type-run-at-created-at"})
+      (.catch (fn [err]
+                (log/error :tasks/index-error {:error (str err)})))))
 
 
-(defn- fetch-due-tasks
+(defn ^:async fetch-due-tasks
   [dbs now-iso]
-  (p/let [{:keys [docs]}
-          (dbs/find dbs
-                    {:selector  {:type       "task"
-                                 :run-at     {:$lte now-iso}
-                                 :created-at {:$exists true}
-                                 :$or        [{:status {:$exists false}}
-                                              {:status {:$ne "failed"}}]}
-
-                     ;; Every index field in selector must appear in sort
-                     :sort      [{:type :asc}
-                                 {:run-at :asc}
-                                 {:created-at :asc}]
-                     :limit     page-size
-                     :use-index "by-type-run-at-created-at"})]
+  (let [{:keys [docs]}
+        (await (dbs/find dbs
+                         {:selector  {:type       "task"
+                                      :run-at     {:$lte now-iso}
+                                      :created-at {:$exists true}
+                                      :$or        [{:status {:$exists false}}
+                                                   {:status {:$ne "failed"}}]}
+                          :sort      [{:type :asc}
+                                      {:run-at :asc}
+                                      {:created-at :asc}]
+                          :limit     page-size
+                          :use-index "by-type-run-at-created-at"}))]
     (vec docs)))
 
 
@@ -114,12 +81,11 @@
   ([dbs task]
    (mark-failed! dbs task nil))
   ([dbs task retry-after-ms]
-  (let [attempts    (inc (or (:attempts task) 0))
-        delay-ms    (or retry-after-ms
-                        (backoff-ms attempts))
-        next-run-ms (+ (utils/now-ms) delay-ms)
-        next-run    (utils/ms->iso next-run-ms)]
-    (dbs/insert dbs (assoc task :attempts attempts :run-at next-run)))))
+   (let [attempts    (inc (or (:attempts task) 0))
+         delay-ms    (or retry-after-ms (backoff-ms attempts))
+         next-run-ms (+ (utils/now-ms) delay-ms)
+         next-run    (utils/ms->iso next-run-ms)]
+     (dbs/insert dbs (assoc task :attempts attempts :run-at next-run)))))
 
 
 (defn- dead-letter!
@@ -135,78 +101,70 @@
 
 (defn- remove-with-latest-rev!
   [dbs task]
-  (p/catch
-    (dbs/remove dbs task)
-    (fn [err]
-      (let [status (or (:status err) (get-in err [:body :status]))]
-        (cond
-          (= status 404) true
-          (= status 409) (p/let [fresh (dbs/get dbs "task" (:_id task))]
-                           (if fresh
-                             (dbs/remove dbs fresh)
-                             true))
-          :else          true)))))
+  (-> (dbs/remove dbs task)
+      (.catch (fn ^:async f [err]
+                (let [status (or (:status err) (get-in err [:body :status]))]
+                  (cond
+                    (= status 404) true
+                    (= status 409) (let [fresh (await (dbs/get dbs "task" (:_id task)))]
+                                     (if fresh
+                                       (await (dbs/remove dbs fresh))
+                                       true))
+                    :else          true))))))
 
 
 (defn- run-task!
   [dbs task]
-  (p/catch
-    (p/let [result (execute-task task dbs)]
-      (cond
-        (= result ::unknown-task)
-        (do
-          (log/warn :tasks/dead-letter {:id (:_id task) :reason :unknown-task})
-          (dead-letter! dbs task "unknown-task-type"))
+  (-> ((fn ^:async f []
+         (let [result (await (execute-task task dbs))]
+           (cond
+             (= result ::unknown-task)
+             (do
+               (log/warn :tasks/dead-letter {:id (:_id task) :reason :unknown-task})
+               (await (dead-letter! dbs task "unknown-task-type")))
 
-        (:retry-after-ms result)
-        (do
-          (log/debug :tasks/retrying-with-hint {:id (:_id task)
-                                                :retry-after-ms (:retry-after-ms result)})
-          (mark-failed! dbs task (:retry-after-ms result)))
+             (:retry-after-ms result)
+             (do
+               (log/debug :tasks/retrying-with-hint
+                          {:id (:_id task)
+                           :retry-after-ms (:retry-after-ms result)})
+               (await (mark-failed! dbs task (:retry-after-ms result))))
 
-        result
-        (do
-          (log/debug :tasks/completed {:id (:_id task)})
-          (remove-with-latest-rev! dbs task))
+             result
+             (do
+               (log/debug :tasks/completed {:id (:_id task)})
+               (await (remove-with-latest-rev! dbs task)))
 
-        :else
-        (do
-          (log/debug :tasks/failed {:id (:_id task)})
-          (mark-failed! dbs task))))
-
-    (fn [err]
-      (log/error :tasks/error {:id (:_id task) :error (str err)})
-      (mark-failed! dbs task))))
-
-
-(defn- take-next-task!
-  [queue]
-  (let [result (atom nil)]
-    (swap! queue
-      (fn [tasks]
-        (if (seq tasks)
-          (do
-            (reset! result (first tasks))
-            (subvec tasks 1))
-          tasks)))
-    @result))
+             :else
+             (do
+               (log/debug :tasks/failed {:id (:_id task)})
+               (await (mark-failed! dbs task)))))))
+      (.catch (fn [err]
+                (log/error :tasks/error {:id (:_id task) :error (str err)})
+                (mark-failed! dbs task)))))
 
 
-(defn- run-worker!
+(defn ^:async run-worker!
   [dbs queue]
-  (p/loop []
-    (let [task (take-next-task! queue)]
-      (when task
-        (p/do
-          (run-task! dbs task)
-          (p/recur))))))
+  (let [running (atom true)]
+    (while @running
+      (if-let [task (let [result (atom nil)]
+                      (swap! queue
+                        (fn [tasks]
+                          (if (seq tasks)
+                            (do (reset! result (first tasks)) (subvec tasks 1))
+                            tasks)))
+                      @result)]
+        (await (run-task! dbs task))
+        (reset! running false)))))
 
 
-(defn- run-workers!
+(defn ^:async run-workers!
   [dbs tasks]
   (let [queue (atom (vec tasks))]
-    (p/all
-     (repeatedly (:max-concurrent config) #(run-worker! dbs queue)))))
+    (await (js/Promise.all
+            (into-array (repeatedly (:max-concurrent config)
+                                    #(run-worker! dbs queue)))))))
 
 
 (def ^:private state (atom {}))
@@ -216,77 +174,68 @@
 
 
 (defn- schedule-retry!
-  "Schedule a delayed flush after a failed task."
   [delay-ms]
   (js/setTimeout flush! delay-ms))
 
 
-(defn- nearest-retry-delay
-  "Returns ms until the earliest run-at among remaining tasks, or nil."
+(defn ^:async nearest-retry-delay
   [dbs]
-  (p/let [{:keys [docs]}
-          (dbs/find dbs
-                    {:selector  {:type       "task"
-                                 :run-at     {:$exists true}
-                                 :created-at {:$exists true}
-                                 :$or        [{:status {:$exists false}}
-                                              {:status {:$ne "failed"}}]}
-                     :sort      [{:type :asc}
-                                 {:run-at :asc}
-                                 {:created-at :asc}]
-                     :limit     1
-                     :use-index "by-type-run-at-created-at"})]
+  (let [{:keys [docs]}
+        (await (dbs/find dbs
+                         {:selector  {:type       "task"
+                                      :run-at     {:$exists true}
+                                      :created-at {:$exists true}
+                                      :$or        [{:status {:$exists false}}
+                                                   {:status {:$ne "failed"}}]}
+                          :sort      [{:type :asc}
+                                      {:run-at :asc}
+                                      {:created-at :asc}]
+                          :limit     1
+                          :use-index "by-type-run-at-created-at"}))]
     (when-let [task (first docs)]
       (max 0 (- (utils/iso->ms (:run-at task)) (utils/now-ms))))))
 
 
-(defn- run-cycle!
+(defn ^:async run-cycle!
   [dbs]
-  (p/do
-    (p/loop []
-      (when (and (online?) (:enabled? @state))
-        (p/let [tasks (fetch-due-tasks dbs (utils/now-iso))]
-          (log/debug :run-cycle/tasks tasks)
-          (when (seq tasks)
-            (p/do
-              (run-workers! dbs tasks)
-              (p/recur))))))
-    ;; After processing, check if any tasks remain for retry
-    (p/let [delay (nearest-retry-delay dbs)]
-      (when delay
-        (log/debug :tasks/scheduling-retry {:delay-ms delay})
-        (schedule-retry! delay)))))
-
-
-;; =============================================================================
-;; Public API
-;; =============================================================================
+  (let [running (atom true)]
+    (while (and (online?) (:enabled? @state) @running)
+      (let [tasks (await (fetch-due-tasks dbs (utils/now-iso)))]
+        (log/debug :run-cycle/tasks tasks)
+        (if (seq tasks)
+          (await (run-workers! dbs tasks))
+          (reset! running false)))))
+  (let [delay (await (nearest-retry-delay dbs))]
+    (when delay
+      (log/debug :tasks/scheduling-retry {:delay-ms delay})
+      (schedule-retry! delay))))
 
 
 (defn flush!
-  "Trigger a run cycle if enabled and online. Fire-and-forget: the promise
-   chain is a self-contained side effect (with its own error handling),
-   so callers never block on task execution."
+  "Trigger a run cycle if enabled and online. Fire-and-forget."
   []
   (when-let [{:keys [dbs enabled? running?]} @state]
     (when (and (some? dbs) enabled? (online?) (not running?))
       (swap! state assoc :running? true)
-      (-> (run-cycle! dbs)
-          (p/catch #(log/error :tasks/flush-error {:error (str %)}))
-          (p/finally #(swap! state assoc :running? false)))))
+      (-> ((fn ^:async f []
+             (try
+               (await (run-cycle! dbs))
+               (catch js/Error err
+                 (log/error :tasks/flush-error {:error (str err)}))
+               (finally
+                (swap! state assoc :running? false)))))
+          (.catch identity))))
   nil)
 
 
-(defn start!
+(defn ^:async start!
   "Start the task runner."
   []
   (let [task-dbs (dbs/dbs)]
     (reset! state {:enabled? true :dbs task-dbs})
-
     (log/info :tasks/starting config)
-    (p/do
-      (ensure-task-index! task-dbs)
-      (flush!))))
+    (await (ensure-task-index! task-dbs))
+    (flush!)))
 
 
 (defn stop!
@@ -301,9 +250,8 @@
   (flush!))
 
 
-(defn create-task!
+(defn ^:async create-task!
   [task-type data]
   (let [now-iso (utils/now-iso)]
-    (p/do
-      (dbs/insert (dbs/dbs) (create-task task-type data now-iso))
-      (flush!))))
+    (await (dbs/insert (dbs/dbs) (create-task task-type data now-iso)))
+    (flush!)))

@@ -13,12 +13,29 @@
 # Settings
 /.clj-kondo/**
 /.lsp/
-/.nrepl-port
+**/.nrepl-port
 
 # Client tools and artifacts
 /node_modules/
 /.shadow-cljs/
 /resources/public/js/app
+/resources/public/js/cljs-runtime/
+/resources/public/js/manifest.edn
+
+# CLJS self-host / dev checkout artifacts
+/META-INF/
+/brepl_client.js
+/cljs-logo-icon-32.png
+/cljs-logo.svg
+/cljs/
+/clojure/
+/data/
+/process/
+/replicant/
+/lite_test.edn
+/self_host_test.edn
+/self_parity_test.edn
+/test.edn
 
 # DB
 app.db
@@ -36,11 +53,11 @@ app.db
 /.clojure-mcp/scratch_pad.edn
 
 # Dictionary build data
-/data/
 /tools/dictionary/data/
-/resources/dictionary/import-metrics.json
-/resources/dictionary/*.jsonl
-/.enrich_*
+/resources/dictionary/**
+!/resources/dictionary/dictionary.sqlite
+!/resources/dictionary/enrichment-meta.jsonl
+!/resources/dictionary/enrichment-output.jsonl
 /tools/dictionary/enrich-translations/.enrich_*
 /tools/dictionary/enrich-translations/enrich-translations
 
@@ -51,3 +68,4 @@ app.db
 /.clojure-mcp/
 /opencode.json
 /.tmp/
+/src/client/sqlite3_cjs.js

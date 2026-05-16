@@ -7,9 +7,7 @@
   (let [done-sym (gensym "done")]
     `(cljs.test/async ~done-sym
        (cljs.test/testing ~label
-         (promesa.core/finally
-          (promesa.core/catch
-            (promesa.core/do ~@body)
-            (fn [error#]
-              (cljs.test/is false (str ~label " failed: " error#))))
-          ~done-sym)))))
+         (-> ((^:async fn [] ~@body))
+             (.catch (fn [error#]
+                       (cljs.test/is false (str ~label " failed: " error#))))
+             (.finally ~done-sym))))))

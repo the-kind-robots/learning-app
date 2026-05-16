@@ -3,6 +3,8 @@
   (:require
    [buddy.hashers :as hashers]
    [cheshire.core :as cheshire]
+   [clojure.edn :as edn]
+   [clojure.java.io :as io]
    [clojure.string :as str]
    [db :as db]
    [examples :as examples]
@@ -23,6 +25,7 @@
    [taoensso.telemere :as t]
    [utils :as utils])
   (:import
+   [java.security MessageDigest]
    [java.sql PreparedStatement ResultSetMetaData]
    [java.util HexFormat]
    [javax.crypto Mac]
@@ -59,31 +62,33 @@
 
 
 (def db-spec
-  {:dbtype "sqlite", :dbname "app.db"})
+  {:dbtype "sqlite" :dbname "app.db"})
 
 
 (defmacro on-connection
   [[sym connectable] & body]
-  `(jdbc/on-connection+options [~sym (-> (jdbc/get-connection ~connectable)
-                                         (jdbc/with-logging
-                                           (fn [_sym# sql-params#]
-                                             {:time (System/currentTimeMillis)
-                                              :query sql-params#})
-                                           (fn [_sym# state# result#]
-                                             (let [data# {:time (str (- (System/currentTimeMillis) (:time state#)) " ms")
-                                                          :query (:query state#)
-                                                          :result result#}
-                                                   log-level# (if (instance? Throwable result#)
-                                                                :error
-                                                                :debug)])))
-                                         (jdbc/with-options jdbc/unqualified-snake-kebab-opts))]
+  `(jdbc/on-connection+options [~sym
+                                (-> (jdbc/get-connection ~connectable)
+                                    (jdbc/with-logging
+                                     (fn [_sym# sql-params#]
+                                       {:time  (System/currentTimeMillis)
+                                        :query sql-params#})
+                                     (fn [_sym# state# result#]
+                                       (let [data#      {:time   (str (- (System/currentTimeMillis) (:time state#))
+                                                                      " ms")
+                                                         :query  (:query state#)
+                                                         :result result#}
+                                             log-level# (if (instance? Throwable result#)
+                                                          :error
+                                                          :debug)])))
+                                    (jdbc/with-options jdbc/unqualified-snake-kebab-opts))]
 
-     ;; Enable foreign key constraints in SQLite, as they are disabled by default.
-     ;; This constraint must be enabled separately for each connection.
-     ;; See https://www.sqlite.org/foreignkeys.html#fk_enable
-     (jdbc/execute! ~sym ["PRAGMA foreign_keys = on"])
+                               ;; Enable foreign key constraints in SQLite, as they are disabled by default.
+                               ;; This constraint must be enabled separately for each connection.
+                               ;; See https://www.sqlite.org/foreignkeys.html#fk_enable
+                               (jdbc/execute! ~sym ["PRAGMA foreign_keys = on"])
 
-     ~@body))
+                               ~@body))
 
 
 ;; This makes possible to pass clojure map or vector as a query parameter.
@@ -91,25 +96,25 @@
 (extend-protocol prepare/SettableParameter
   clojure.lang.IPersistentMap
   (set-parameter [m ^PreparedStatement ps idx]
-    (.setObject ps idx (cheshire/generate-string m)))
+                 (.setObject ps idx (cheshire/generate-string m)))
 
   clojure.lang.IPersistentVector
   (set-parameter [m ^PreparedStatement ps idx]
-    (.setObject ps idx (cheshire/generate-string m))))
+                 (.setObject ps idx (cheshire/generate-string m))))
 
 
 ;; This makes BLOB columns to be read as a JSON value.
 (extend-protocol result-set/ReadableColumn
   java.lang.String
   (read-column-by-label [v _]
-    v)
+                        v)
   (read-column-by-index [v ^ResultSetMetaData rsmeta idx]
-    (case (.getColumnTypeName rsmeta idx)
-      ;; It is not possible to declare "JSON" type in a table definition
-      ;; https://sqlite.org/json1.html#interface_overview
-      ;; I am going to use BLOB columns for JSON values only.
-      "BLOB" (cheshire/parse-string v true)
-      v)))
+                        (case (.getColumnTypeName rsmeta idx)
+                          ;; It is not possible to declare "JSON" type in a table definition
+                          ;; https://sqlite.org/json1.html#interface_overview
+                          ;; I am going to use BLOB columns for JSON values only.
+                          "BLOB" (cheshire/parse-string v true)
+                          v)))
 
 
 ;;
@@ -121,7 +126,8 @@
   [db user-name password]
   (when (and (utils/non-blank user-name)
              (utils/non-blank password))
-    (let [user (jdbc/execute-one! db ["SELECT id, password FROM users WHERE name = ?" user-name]
+    (let [user (jdbc/execute-one! db
+                                  ["SELECT id, password FROM users WHERE name = ?" user-name]
                                   {:builder-fn result-set/as-unqualified-maps})]
       (when (:valid (hashers/verify password (:password user)))
         (:id user)))))
@@ -131,13 +137,15 @@
   [db user-name password]
   ;; create user in SQLite DB
   (let [password-hash (hashers/derive password {:alg :argon2id})
-        {:keys [id]} (jdbc/execute-one! db ["INSERT INTO users (name, password) VALUES (?, ?) RETURNING id" user-name password-hash])
+        {:keys [id]}  (jdbc/execute-one! db
+                                         ["INSERT INTO users (name, password) VALUES (?, ?) RETURNING id" user-name
+                                          password-hash])
 
         ;; create user DB in CouchDB
-        couch-db (db/use (str "userdb-" id))]
+        couch-db      (db/use (str "userdb-" id))]
 
     ;; create user role in CouchDB
-    (db/secure couch-db {:members {:names [], :roles [(str "u:" id)]}})))
+    (db/secure couch-db {:members {:names [] :roles [(str "u:" id)]}})))
 
 
 (comment
@@ -154,17 +162,18 @@
 
 (deftype Sessions [db]
   store/SessionStore
-  (read-session [_ token]
-    (:value
-     (jdbc/execute-one! db ["SELECT value FROM sessions WHERE token = ?" token]
-                        {:builder-fn result-set/as-unqualified-maps})))
-  (write-session [_ token value]
-    (let [token (or token (str (random-uuid)))]
-      (jdbc/execute! db ["INSERT INTO sessions (token, value) VALUES (?, ?)" token value])
-      token))
-  (delete-session [_ token]
-    (jdbc/execute! db (sql/format {:delete-from :sessions, :where [:= :token token]}))
-    nil))
+    (read-session [_ token]
+      (:value
+       (jdbc/execute-one! db
+                          ["SELECT value FROM sessions WHERE token = ?" token]
+                          {:builder-fn result-set/as-unqualified-maps})))
+    (write-session [_ token value]
+      (let [token (or token (str (random-uuid)))]
+        (jdbc/execute! db ["INSERT INTO sessions (token, value) VALUES (?, ?)" token value])
+        token))
+    (delete-session [_ token]
+      (jdbc/execute! db (sql/format {:delete-from :sessions :where [:= :token token]}))
+      nil))
 
 
 (defn hmac-sign
@@ -185,9 +194,9 @@
   the current `:user-id`."
   [session]
   (if (seq session)
-    (let [user-name (-> session :user-id str)
+    (let [user-name  (-> session :user-id str)
           user-roles (str/join "," [(str "u:" user-name)])
-          token (hmac-sign user-name db-auth-secret)]
+          token      (hmac-sign user-name db-auth-secret)]
       (-> {:status 200}
           (response/header "X-Auth-UserName" user-name)
           (response/header "X-Auth-Roles" user-roles)
@@ -201,21 +210,55 @@
 
 
 (def session-interceptor
-  {:name ::session-interceptor
+  {:name  ::session-interceptor
    :enter (fn [ctx]
             (jdbc/on-connection [db db-spec]
-                                (let [opts {:store (->Sessions db)
-                                            :set-cookies? true
-                                            :cookie-name "ring-session"
-                                            :cookie-attrs {:path "/", :http-only true}}]
-                                  (update ctx :request session/session-request opts))))
+              (let [opts {:store        (->Sessions db)
+                          :set-cookies? true
+                          :cookie-name  "ring-session"
+                          :cookie-attrs {:path "/" :http-only true}}]
+                (update ctx :request session/session-request opts))))
    :leave (fn [ctx]
             (jdbc/on-connection [db db-spec]
-                                (let [opts {:store (->Sessions db)
-                                            :set-cookies? true
-                                            :cookie-name "ring-session"
-                                            :cookie-attrs {:path "/", :http-only true}}]
-                                  (update ctx :response session/session-response (:request ctx) opts))))})
+              (let [opts {:store        (->Sessions db)
+                          :set-cookies? true
+                          :cookie-name  "ring-session"
+                          :cookie-attrs {:path "/" :http-only true}}]
+                (update ctx :response session/session-response (:request ctx) opts))))})
+
+
+;;
+;; Dictionary
+;;
+
+
+(def ^:private dictionary-manifest
+  (some-> (io/resource "dictionary/manifest.edn")
+          slurp
+          edn/read-string))
+
+
+(defn- dictionary-handler
+  [{:keys [path-params]}]
+  (if-let [{:keys [sha256]} (get-in dictionary-manifest [:files "dictionary.sqlite"])]
+    (let [expected (str "dict." (subs sha256 0 12) ".sqlite")]
+      (if (= (:filename path-params) expected)
+        (-> (response/resource-response "dictionary/dictionary.sqlite")
+            (response/content-type "application/x-sqlite3")
+            (response/header "ETag" (str "\"" sha256 "\""))
+            (response/header "Content-Hash" sha256)
+            ;; Content-addressed — gzip compression delegated to the reverse proxy.
+            (response/header "Cache-Control" "public, max-age=31536000, immutable"))
+        {:status 404 :body ""}))
+    {:status 404 :body ""}))
+
+
+(defn- wasm-handler
+  [request]
+  (when (str/ends-with? (:uri request) ".wasm")
+    (some-> (response/resource-response (str "/public" (:uri request)))
+            (response/content-type "application/wasm")
+            (response/header "Cache-Control" "public, max-age=31536000, immutable"))))
 
 
 ;;
@@ -223,17 +266,34 @@
 ;;
 
 
+(defn- public-dir-hash
+  []
+  (let [digest (MessageDigest/getInstance "SHA-256")
+        dir    (io/file "resources/public")]
+    (doseq [^java.io.File f (sort (file-seq dir))
+            :when (.isFile f)]
+      (with-open [is (io/input-stream f)]
+        (let [buf (byte-array 8192)]
+          (loop []
+            (let [n (.read is buf)]
+              (when (pos? n)
+                (.update digest buf 0 n)
+                (recur)))))))
+    (subs (apply str (map #(format "%02x" (Byte/toUnsignedInt %)) (.digest digest))) 0 8)))
+
+
 (defn service-worker-handler
   [request]
   (when (= (:uri request) "/js/app/sw.js")
-    (-> (response/resource-response "/public/js/app/sw.js")
-        (response/content-type "text/javascript")
-        (response/header "Service-Worker-Allowed" "/"))))
+    (when-let [res (io/resource "public/js/sw.js")]
+      (-> (response/response (str "const SW_VERSION=\"" (public-dir-hash) "\";\n" (slurp res)))
+          (response/content-type "text/javascript")
+          (response/header "Service-Worker-Allowed" "/")))))
 
 
 (def resource-handler
   (ring/create-resource-handler
-   {:path "/"
+   {:path        "/"
     ;; Explicitly instruct handler not to serve any index files.
     ;; Without this, the handler may serve any index.html it finds on the classpath,
     ;; as happened once with the Datahike library.
@@ -244,7 +304,20 @@
   (http/ring-handler
    ;; Main handler
    (http/router
-    [["/auth/check"
+    [["/dictionary/:filename"
+      {:get (fn [{:keys [path-params] :as req}]
+              (if (= (:filename path-params) "manifest")
+                (if-let [{:keys [sha256]} (get-in dictionary-manifest [:files "dictionary.sqlite"])]
+                  (let [hash12 (subs sha256 0 12)]
+                    {:status  200
+                     :headers {"Content-Type"  "application/json"
+                               "Cache-Control" "no-cache"}
+                     :body    (cheshire/generate-string {:hash     sha256
+                                                         :filename (str "dict." hash12 ".sqlite")})})
+                  {:status 404 :body ""})
+                (dictionary-handler req)))}]
+
+     ["/auth/check"
       {:get
        (fn [{:keys [session] :as _request}]
          (auth-proxy-response session))}]
@@ -255,23 +328,23 @@
          (let [word (-> request :params (select-keys [:word :translation]))]
            (cond
              (not (utils/non-blank (:word word)))
-             {:status 400
+             {:status  400
               :headers {"Content-Type" "application/json"}
-              :body (cheshire/generate-string {:error "Missing 'word' parameter"})}
+              :body    (cheshire/generate-string {:error "Missing 'word' parameter"})}
 
              :else
              (let [result (examples/generate-one! word)]
                (if (examples/valid-example? result)
-                 {:status 200
+                 {:status  200
                   :headers {"Content-Type" "application/json"}
-                  :body (cheshire/generate-string result)}
-                 {:status (or (:status result) 502)
+                  :body    (cheshire/generate-string result)}
+                 {:status  (or (:status result) 502)
                   :headers (cond-> {"Content-Type" "application/json"}
                              (:retry-after-ms result)
                              (assoc "Retry-After"
                                     (str (max 1 (long (Math/ceil (/ (:retry-after-ms result) 1000.0)))))))
-                  :body (cheshire/generate-string
-                         {:error "Examples are temporarily unavailable"})})))))}]]
+                  :body    (cheshire/generate-string
+                            {:error "Examples are temporarily unavailable"})})))))}]]
 
     {:data {:interceptors [session-interceptor
                            (parameters/parameters-interceptor)
@@ -280,19 +353,24 @@
    ;; Default handler
    (fn [request]
      (hiccup/render-response
-      {:html/layout (fn layout
-                      [{:html/keys [body]}]
-                      [:html
-                       [:head
-                        [:meta {:charset "UTF-8"}]
-                        [:meta {:name "viewport" :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
-                        [:title "Sprecha"]
-                        [:link {:rel "icon" :href "/favicon.ico"}]
-                        [:link {:rel "manifest" :href "/manifest.json"}]]
-                       [:body
-                        body]])
-       :html/body [:<>
-                   [:style "
+      {:html/layout
+       (fn layout
+         [{:html/keys [body]}]
+         [:html
+          [:head
+           [:meta {:charset "UTF-8"}]
+           [:meta {:name "viewport" :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
+           [:title "Sprecha"]
+           [:link {:rel "icon" :href "/favicon.ico"}]
+           [:link {:rel "manifest" :href "/manifest.json"}]
+           [:link {:rel "stylesheet" :href "/css/styles.css"}]
+           [:script {:src "/js/app/main.js" :defer true}]]
+          [:body
+           body]])
+       :html/body
+       [:<>
+        [:style
+         "
                     .splash{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100dvh;margin:0;font-family:Nunito,system-ui,sans-serif}
                     .splash-title{font-size:2rem;font-weight:700;color:#222;margin-bottom:1.5rem}
                     .splash-face circle{transform-box:fill-box;transform-origin:center}
@@ -302,25 +380,29 @@
                     @keyframes flash{0%{opacity:0;transform:scale(.5)}5%{opacity:.65;transform:scale(1.3)}30%{opacity:.15;transform:scale(.8)}100%{opacity:0;transform:scale(.5)}}
                     .splash-sub{font-size:.95rem;color:#666;margin-top:2rem}
                   "]
-                   [:div.splash
-                    [:div.splash-title "Sprecha"]
-                    [:svg.splash-face {:viewBox "0 0 156 156" :width "156" :height "156"}
-                     [:circle.dot {:cx 55 :cy 32 :r 9 :fill "hsl(100 65% 72%)" :style "animation-delay:0s"}]
-                     [:circle.dot {:cx 101 :cy 32 :r 9 :fill "hsl(89 69% 71%)" :style "animation-delay:.15s"}]
-                     [:circle.dot {:cx 32 :cy 78 :r 9 :fill "hsl(78 73% 70%)" :style "animation-delay:.3s"}]
-                     [:circle.dot {:cx 124 :cy 78 :r 9 :fill "hsl(66 76% 69%)" :style "animation-delay:.45s"}]
-                     [:circle.dot {:cx 32 :cy 101 :r 9 :fill "hsl(55 80% 68%)" :style "animation-delay:.6s"}]
-                     [:circle.dot {:cx 124 :cy 101 :r 9 :fill "hsl(66 76% 69%)" :style "animation-delay:.75s"}]
-                     [:circle.dot {:cx 55 :cy 124 :r 9 :fill "hsl(78 73% 70%)" :style "animation-delay:.9s"}]
-                     [:circle.dot {:cx 78 :cy 124 :r 9 :fill "hsl(89 69% 71%)" :style "animation-delay:1.05s"}]
-                     [:circle.dot {:cx 101 :cy 124 :r 9 :fill "hsl(100 65% 72%)" :style "animation-delay:1.2s"}]
-                     [:circle.sparkle {:cx 25 :cy 18 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:2s;animation-duration:4s"}]
-                     [:circle.sparkle {:cx 133 :cy 48 :r 2.5 :fill "hsl(280 50% 65%)" :style "animation-delay:3.5s;animation-duration:5.5s"}]
-                     [:circle.sparkle {:cx 78 :cy 56 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:5s;animation-duration:6s"}]
-                     [:circle.sparkle {:cx 18 :cy 112 :r 2.5 :fill "hsl(280 50% 65%)" :style "animation-delay:1s;animation-duration:4.5s"}]
-                     [:circle.sparkle {:cx 142 :cy 128 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:4.2s;animation-duration:5s"}]]
-                    [:div.splash-sub "Загружаем..."]]
-                   [:script {:src "/js/sw-loader.js" :defer true}]]
+        [:div.splash
+         [:div.splash-title "Sprecha"]
+         [:svg.splash-face {:viewBox "0 0 156 156" :width "156" :height "156"}
+          [:circle.dot {:cx 55 :cy 32 :r 9 :fill "hsl(100 65% 72%)" :style "animation-delay:0s"}]
+          [:circle.dot {:cx 101 :cy 32 :r 9 :fill "hsl(89 69% 71%)" :style "animation-delay:.15s"}]
+          [:circle.dot {:cx 32 :cy 78 :r 9 :fill "hsl(78 73% 70%)" :style "animation-delay:.3s"}]
+          [:circle.dot {:cx 124 :cy 78 :r 9 :fill "hsl(66 76% 69%)" :style "animation-delay:.45s"}]
+          [:circle.dot {:cx 32 :cy 101 :r 9 :fill "hsl(55 80% 68%)" :style "animation-delay:.6s"}]
+          [:circle.dot {:cx 124 :cy 101 :r 9 :fill "hsl(66 76% 69%)" :style "animation-delay:.75s"}]
+          [:circle.dot {:cx 55 :cy 124 :r 9 :fill "hsl(78 73% 70%)" :style "animation-delay:.9s"}]
+          [:circle.dot {:cx 78 :cy 124 :r 9 :fill "hsl(89 69% 71%)" :style "animation-delay:1.05s"}]
+          [:circle.dot {:cx 101 :cy 124 :r 9 :fill "hsl(100 65% 72%)" :style "animation-delay:1.2s"}]
+          [:circle.sparkle
+           {:cx 25 :cy 18 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:2s;animation-duration:4s"}]
+          [:circle.sparkle
+           {:cx 133 :cy 48 :r 2.5 :fill "hsl(280 50% 65%)" :style "animation-delay:3.5s;animation-duration:5.5s"}]
+          [:circle.sparkle
+           {:cx 78 :cy 56 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:5s;animation-duration:6s"}]
+          [:circle.sparkle
+           {:cx 18 :cy 112 :r 2.5 :fill "hsl(280 50% 65%)" :style "animation-delay:1s;animation-duration:4.5s"}]
+          [:circle.sparkle
+           {:cx 142 :cy 128 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:4.2s;animation-duration:5s"}]]
+         [:div.splash-sub "Загружаем..."]]]
        :status 200}
       request))
 
@@ -328,9 +410,8 @@
    {:executor sieppari/executor}))
 
 
-
 (def ring-handler
-  (let [ring-handler #(ring/routes service-worker-handler resource-handler app-handler)]
+  (let [ring-handler #(ring/routes service-worker-handler wasm-handler resource-handler app-handler)]
     (if dev-mode?
       (ring/reloading-ring-handler ring-handler)
       (ring-handler))))
@@ -342,10 +423,12 @@
 (defn start-server!
   [app port]
   (ensure-log-handler!)
-  (reset! server (server/run-server app {:port port, :legacy-return-value? false})))
+  (reset! server (server/run-server app {:port port :legacy-return-value? false})))
 
 
 #_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
+
+
 (defn stop-server!
   []
   (when (some? @server)
@@ -373,4 +456,4 @@
 (comment
   ;; Clear sessions
   (jdbc/on-connection [db db-spec]
-                      (jdbc/execute! db (sql/format {:delete-from :sessions}))))
+    (jdbc/execute! db (sql/format {:delete-from :sessions}))))
