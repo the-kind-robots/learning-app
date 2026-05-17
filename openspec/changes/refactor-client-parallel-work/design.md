@@ -58,6 +58,8 @@ This avoids turning `deps` into a deep service locator while keeping effect code
 
 Start with simple maps of functions for ports (`:progress-store`, `:dictionary`, `:task-queue`, `:navigation`, `:telemetry`, `:clock`). Prefer minimal shape over protocol machinery until the contracts stabilize.
 
+Component keys describe the role in this app (`:port/dictionary`, `:sqlite/dictionary-db`, `:app/router`). Adapter implementation choice lives in the component definition, not in feature code.
+
 Alternative considered: protocols. Rejected for first pass because this is a refactor for boundaries and tests, not polymorphism complexity.
 
 ### 5. Adapter lifecycle is uniform
@@ -77,49 +79,88 @@ Clojure community prior art points to the same core model:
 - Mount: convenient global `defstate`, but order is inferred from namespace requires and state is var/global oriented.
 - Clip and donut.system: data-driven component definitions with references and explicit start/stop signals.
 
-For this browser client, we should not adopt a full backend-style component framework yet. We mostly need:
+For this browser client, we should not adopt a full backend-style component framework yet. We mostly need component definitions whose dependency wiring is explicit:
 
 ```clojure
-{:app/store          {:start (fn [_] app-state*)}
- :adapter/progress   {:start start-progress-store! :stop stop-progress-store!}
- :app/migrations     {:deps [:adapter/progress] :start run-migrations!}
- :adapter/task-queue {:deps [:adapter/progress :app/migrations]
-                      :start start-task-queue!
-                      :stop stop-task-queue!}
- :adapter/dictionary {:start start-dictionary-handle! :stop stop-dictionary!}
- :app/deps           {:deps [:adapter/progress :adapter/task-queue :adapter/dictionary]
-                      :start build-deps}
- :app/nexus          {:deps [:app/store :app/deps] :start start-nexus!}
- :app/render         {:deps [:app/store :app/nexus] :start start-render! :stop stop-render!}
- :app/service-worker {:deps [:app/nexus] :start register-service-worker!}
- :app/router         {:deps [:app/nexus :app/render] :start start-router! :stop stop-router!}}
+{:app/store
+ {:start (fn [_] (lifecycle/started app-state*))}
+
+ :port/progress-store
+ {:start progress-pouch/start!} ; opens PouchDB handles and runs blocking migrations
+
+ :port/task-queue
+ {:requires {:progress-store :port/progress-store
+             :clock          :port/clock
+             :telemetry      :port/telemetry}
+  :start task-queue-pouch/start!}
+
+ :sqlite/dictionary-db
+ {:requires {:telemetry :port/telemetry}
+  :start sqlite-worker/start-dictionary-db!}
+
+ :port/dictionary
+ {:requires {:db :sqlite/dictionary-db}
+  :start dictionary-sql/start!}
+
+ :app/deps
+ {:requires {:progress-store :port/progress-store
+             :dictionary     :port/dictionary
+             :task-queue     :port/task-queue
+             :navigation     :port/navigation
+             :clock          :port/clock
+             :telemetry      :port/telemetry}
+  :start build-deps}
+
+ :app/nexus
+ {:requires {:store :app/store
+             :deps  :app/deps}
+  :start start-nexus!}
+
+ :app/render
+ {:requires {:store :app/store
+             :nexus :app/nexus}
+  :start start-render!}
+
+ :app/service-worker
+ {:requires {:nexus :app/nexus}
+  :start register-service-worker!}
+
+ :app/router
+ {:requires {:nexus :app/nexus
+             :render :app/render
+             :deps :app/deps}
+  :start start-router!}}
 ```
 
 Runtime manager responsibilities:
 
-- validate missing dependency keys
+- validate missing dependency keys from `:requires` values
 - reject dependency cycles
-- start components in topological dependency order
+- resolve dependency layers from component keys
+- compile layers to `[key component-definition]` entries using `find`
+- start components in topological layer order
 - await Promise-returning starts
 - stop already-started components in reverse order if startup fails
 - stop all components in reverse order on normal shutdown
 - make stop functions idempotent / best-effort
+- pass each start function a local dependency map shaped by `:requires` keys
 - return both component instances and the public runtime system
 
 Boot order semantics:
 
 1. create app store
-2. open progress storage / DB handles
-3. run blocking migrations
-4. start task queue / task runner after migrated storage exists
-5. create dictionary port handle
-6. build deps map
+2. start `:port/progress-store` (open progress storage and run blocking migrations)
+3. start task queue / task runner after migrated storage exists
+4. start dictionary SQLite handle and dictionary port handle
+5. build deps map
 7. install Nexus dispatch, system->state, and deps interceptor
 8. install Replicant render/watch binding
 9. register service worker if available
 10. start frontend router last
 
-Dictionary has two readiness phases. The dictionary handle must exist before the router starts so page effects can safely call `dictionary/ready?` and `dictionary/completions`. The dictionary data may become ready later after manifest fetch, download/import into OPFS, and SQLite open. Before data readiness, completions should return an empty result (or otherwise no-op safely), not block page startup and not expose a nil dependency.
+Dictionary has two readiness phases. The dictionary port handle must exist before the router starts so page effects can safely call `dictionary/ready?` and `dictionary/completions`. The underlying SQLite component may become ready later after manifest fetch, download/import into OPFS, and SQLite open. Before data readiness, completions should return an empty result (or otherwise no-op safely), not block page startup and not expose a nil dependency.
+
+Adapter functions do not hard-code global graph keys. Component definitions bind local names to component keys through `:requires`, e.g. `{:requires {:db :sqlite/dictionary-db}}`. Start functions receive only those local names, e.g. `(fn [{:keys [db]}] ...)`. This keeps the system wiring visible in `runtime/system.cljs` instead of hidden inside adapters.
 
 This is Integrant/Clip-inspired but local and tiny. It keeps the browser bundle and mental model small while preserving the important Clojure lifecycle lesson: declare dependencies as data, then let the manager order startup/shutdown.
 
@@ -133,7 +174,7 @@ Do not rewrite every feature at once. Establish system/deps first, then port bou
 
 Suggested implementation order:
 1. Add `runtime/system.cljs` and adapt `main.cljs`/`application.cljs`.
-2. Add `ports/*` capability modules and initial adapters wrapping current progress storage/`dbs`, dictionary worker handle, task queue/runner, navigation, telemetry, and clock.
+2. Add `ports/*` capability modules and component definitions that select adapters for progress storage/`dbs`, dictionary SQLite handle, dictionary port, task queue/runner, navigation, telemetry, and clock.
 3. Migrate home effects/use cases to deps.
 4. Migrate words/vocabulary effects/use cases to deps.
 5. Migrate lesson/effects/use cases to deps.

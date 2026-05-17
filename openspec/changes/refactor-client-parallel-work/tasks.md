@@ -5,9 +5,9 @@
 - [ ] 1.3 Change `register-system->state!` usage to extract `@(:store system)`.
 - [ ] 1.4 Change shared `:effect/save` to write to `(:store system)`.
 - [ ] 1.5 Add Nexus interceptor that exposes `:deps` in effect context from `[:system :deps]`.
-- [ ] 1.6 Add tiny data-driven lifecycle manager that validates dependency keys, rejects cycles, starts in topological order, awaits async starts, and stops in reverse order.
+- [ ] 1.6 Add tiny data-driven lifecycle manager that resolves dependency layers from `:requires` values, compiles layers with `[key component-definition]` entries, starts layers with accumulated local dependency args, awaits async starts, and stops in reverse order.
 - [ ] 1.7 Ensure startup failure stops already-started components in reverse order.
-- [ ] 1.8 Preserve boot order: store, progress storage, migrations, task queue/runner, dictionary handle, deps, Nexus, render binding, service worker registration, router last.
+- [ ] 1.8 Preserve boot order: store, progress-store port with migrations complete, task queue/runner, dictionary SQLite handle, dictionary port handle, deps, Nexus, render binding, service worker registration, router last.
 - [ ] 1.9 Make dictionary handle available before router start while allowing dictionary data readiness to complete asynchronously after router start.
 
 ## 2. Ports and Adapters
@@ -17,7 +17,7 @@
 - [ ] 2.3 Add minimal `ports/task_queue.cljs` capability for enqueue/run-now behavior used by examples/tasks.
 - [ ] 2.4 Add minimal `ports/navigation.cljs` capability for navigate and replace navigation.
 - [ ] 2.5 Add minimal `ports/telemetry.cljs` and `ports/clock.cljs` capabilities wrapping existing log/time behavior.
-- [ ] 2.6 Add adapters that wrap current progress storage/`dbs`, dictionary worker handle, `tasks`, `reitit.frontend.easy`, logging, and `utils` without changing behavior.
+- [ ] 2.6 Add component definitions that bind local `:requires` names to chosen implementations for progress storage/`dbs`, dictionary SQLite handle, dictionary port, `tasks`, `reitit.frontend.easy`, logging, and `utils` without changing behavior.
 
 ## 3. Feature Slice Migration
 

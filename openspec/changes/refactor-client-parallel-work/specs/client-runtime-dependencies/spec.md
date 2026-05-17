@@ -31,15 +31,21 @@ Adapters that manage external resources MUST expose uniform lifecycle boundaries
 The client runtime MUST start dependencies in declared order and stop them in reverse order.
 
 #### Scenario: Dependencies start before dependents
-- **WHEN** runtime startup receives component definitions with dependency keys
-- **THEN** it validates referenced dependency keys
+- **WHEN** runtime startup receives component definitions with `:requires` bindings
+- **THEN** it validates referenced dependency keys from `:requires` values
 - **AND** rejects dependency cycles
+- **AND** resolves dependency layers from component keys
 - **AND** starts each component only after its declared dependencies are ready
 - **AND** awaits asynchronous component startup before dependent components start
 
+#### Scenario: Start functions receive local dependency names
+- **WHEN** a component definition declares `:requires {:db :sqlite/dictionary-db}`
+- **THEN** its start function receives a map containing `{:db <started-sqlite-value>}`
+- **AND** the adapter start function does not hard-code the global `:sqlite/dictionary-db` key
+
 #### Scenario: Router starts after runtime dependencies
 - **WHEN** the frontend router starts
-- **THEN** app store, migrated progress storage, task queue, dictionary handle, deps map, Nexus dispatch, and rendering are already initialized
+- **THEN** app store, migrated progress-store port, task queue, dictionary port handle, deps map, Nexus dispatch, and rendering are already initialized
 - **AND** route controller effects can read deps safely during the first page transition
 
 #### Scenario: Startup failure cleans up partial system
