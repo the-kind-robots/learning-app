@@ -1,4 +1,4 @@
-schema: spec-driven
+schema: spec-driven-with-adr
 
 context: |
   Product: offline-first language learning app; no user data collection.
