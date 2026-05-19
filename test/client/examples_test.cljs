@@ -2,12 +2,13 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [adapters.examples :as sut]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.fetch-mocks :as fetch-mocks]
+   [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
-   [repo.examples :as sut]
    [tasks :as tasks]))
 
 
@@ -18,6 +19,18 @@
 
 
 (use-fixtures :each (db-fixtures/db-fixture-multi [test-device-db-name test-user-db-name]))
+
+
+(defn- test-clock
+  []
+  {:clock/now-iso time/now-iso
+   :clock/now-ms  time/now-ms})
+
+
+(defn- task-env
+  [dbs]
+  {:dbs   dbs
+   :clock (test-clock)})
 
 
 (defn- with-test-db
@@ -39,7 +52,7 @@
           original-fetch js/fetch]
       (set! js/fetch (fetch-mocks/mock-fetch-success example))
       (try
-        (let [result (await (sut/fetch-one "Hund"))]
+        (let [result (await (sut/fetch-one "Hund" []))]
           (is (= "Ich habe einen Hund" (:value result)))
           (is (= "I have a dog" (:translation result))))
         (finally
@@ -55,7 +68,7 @@
              {:error "Examples are temporarily unavailable"}))
       (try
         (try
-          (await (sut/fetch-one "Hund"))
+          (await (sut/fetch-one "Hund" []))
           (is false "Should have rejected")
           (catch :default error
             (is (= "Examples are temporarily unavailable" (ex-message error)))
@@ -74,7 +87,7 @@
              {"Retry-After" "2"}))
       (try
         (try
-          (await (sut/fetch-one "Hund"))
+          (await (sut/fetch-one "Hund" []))
           (is false "Should have rejected")
           (catch :default error
             (is (= 429 (:status (ex-data error))))
@@ -89,7 +102,7 @@
       (set! js/fetch (fetch-mocks/mock-fetch-success {:value "Der Hund läuft"}))
       (try
         (try
-          (await (sut/fetch-one "Hund"))
+          (await (sut/fetch-one "Hund" []))
           (is false "Should have rejected")
           (catch :default error
             (is (= sut/invalid-response-message (ex-message error)))
@@ -105,7 +118,7 @@
       (set! js/fetch (fetch-mocks/mock-fetch-success-invalid-json))
       (try
         (try
-          (await (sut/fetch-one "Hund"))
+          (await (sut/fetch-one "Hund" []))
           (is false "Should have rejected")
           (catch :default error
             (is (= sut/invalid-response-message (ex-message error)))
@@ -121,7 +134,7 @@
       (set! js/fetch (fetch-mocks/mock-fetch-network-error))
       (try
         (try
-          (await (sut/fetch-one "Hund"))
+          (await (sut/fetch-one "Hund" []))
           (is false "Should have rejected")
           (catch :default error
             (is (= "Network error" (.-message error)))))
@@ -136,7 +149,7 @@
        [db]
        (let [example {:value "Der Hund" :translation "The dog" :structure []}
              dbs     {:device/db db}]
-         (await (sut/save-example! dbs "word-123" "Hund" example))
+         (await (sut/save-example! dbs (test-clock) "word-123" "Hund" example))
          (let [docs  (await (db-queries/fetch-examples db))
                saved (first docs)]
            (is (= 1 (count docs)))
@@ -150,14 +163,14 @@
   (let [example {:translation "The dog"}]
     (is (thrown-with-msg? js/Error
                           #"missing required fields"
-                          (sut/save-example! nil "word-123" "Hund" example)))))
+                          (sut/save-example! nil nil "word-123" "Hund" example)))))
 
 
 (deftest save-example-throws-on-missing-translation
   (let [example {:value "Der Hund"}]
     (is (thrown-with-msg? js/Error
                           #"missing required fields"
-                          (sut/save-example! nil "word-123" "Hund" example)))))
+                          (sut/save-example! nil nil "word-123" "Hund" example)))))
 
 
 (deftest find-returns-example-when-exists
@@ -209,7 +222,7 @@
       (let [result (await (tasks/execute-task
                            {:task-type "example-fetch"
                             :data      {:word-id "deleted-word"}}
-                           dbs))]
+                           (task-env dbs)))]
         (is (true? result)))))))
 
 
@@ -235,7 +248,7 @@
            (let [result (await (tasks/execute-task
                                 {:task-type "example-fetch"
                                  :data      {:word-id "word-123"}}
-                                dbs))]
+                                (task-env dbs)))]
              (is (true? result))
              (is (= "/api/examples?word=Hund&translation=%D1%81%D0%BE%D0%B1%D0%B0%D0%BA%D0%B0"
                     @requested-url))
@@ -269,7 +282,7 @@
            (await (tasks/execute-task
                    {:task-type "example-fetch"
                     :data      {:word-id "word-bank"}}
-                   dbs))
+                   (task-env dbs)))
            (is
             (=
              "/api/examples?word=Bank&translation=%D0%B1%D0%B0%D0%BD%D0%BA&translation=%D1%81%D0%BA%D0%B0%D0%BC%D0%B5%D0%B9%D0%BA%D0%B0"
@@ -291,7 +304,7 @@
            (let [result (await (tasks/execute-task
                                 {:task-type "example-fetch"
                                  :data      {:word-id "word-123"}}
-                                dbs))]
+                                (task-env dbs)))]
              (is (false? result))))))
         (finally
          (set! js/fetch original-fetch))))))
@@ -314,7 +327,7 @@
            (let [result (await (tasks/execute-task
                                 {:task-type "example-fetch"
                                  :data      {:word-id "word-123"}}
-                                dbs))]
+                                (task-env dbs)))]
              (is (= {:retry-after-ms 3000} result))))))
         (finally
          (set! js/fetch original-fetch))))))
@@ -333,7 +346,7 @@
            (let [result   (await (tasks/execute-task
                                   {:task-type "example-fetch"
                                    :data      {:word-id "word-123"}}
-                                  dbs))
+                                  (task-env dbs)))
                  examples (await (db-queries/fetch-examples (:device/db dbs)))]
              (is (false? result))
              (is (empty? examples))))))

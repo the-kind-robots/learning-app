@@ -1,7 +1,22 @@
 (ns application
   (:require
+   [install-guide.view :as install-guide]
    [nexus.registry :as nxr]
-   [reitit.frontend.easy :as rfe]))
+   [pages.home.view :as pages.home.view]
+   [pages.lesson.view :as pages.lesson.view]
+   [pages.words.view :as pages.words.view]
+   [replicant.dom :as r]))
+
+
+;;
+;; Interceptors
+;;
+
+
+(nxr/register-interceptor!
+  :before-effect
+  (fn [{:keys [system] :as ctx}]
+    (assoc ctx :capabilities (:capabilities system))))
 
 
 ;;
@@ -11,13 +26,14 @@
 
 (nxr/register-effect! :effect/save
   ^:nexus/batch
-  (fn save [_ store ms]
-    (swap! store #(reduce merge % (map first ms)))))
+  (fn save [_ system ms]
+    (swap! (:store system) #(reduce merge % (map first ms)))))
 
 
 (nxr/register-effect! :effect/navigate
-  (fn navigate [_ _ page]
-    (rfe/navigate page)))
+  (fn navigate-effect [{:keys [capabilities]} _ page]
+    (when-let [navigate! (get-in capabilities [:navigation :navigation/navigate])]
+      (navigate! page))))
 
 
 (nxr/register-effect! :effect/show-modal
@@ -129,3 +145,47 @@
   (fn submit-if-ctrl-enter [_ {:keys [key ctrl?]}]
     (when (and (= "Enter" key) ctrl?)
       [[:effect/request-submit]])))
+
+
+;;
+;; Render
+;;
+
+
+(defn sync-virtual-keyboard!
+  []
+  (when (js-in "virtualKeyboard" js/navigator)
+    (when-let [vk (.-virtualKeyboard js/navigator)]
+      (set! (.-overlaysContent vk)
+            (boolean (js/document.querySelector "[data-vk-overlay]"))))))
+
+
+(defn- render
+  [state]
+  (list
+   [:a.app-shell__logo {:href "/home"} "Sprecha"]
+   (install-guide/render state)
+   (case (:app/page state)
+     :page/home   (pages.home.view/page state)
+     :page/words  (pages.words.view/page state)
+     :page/lesson (pages.lesson.view/page state)
+     [:div.app-loading "Загружаем..."])))
+
+
+(defn render!
+  [state]
+  (r/render js/document.body (render state))
+  (sync-virtual-keyboard!))
+
+
+(defn routes
+  [dispatch]
+  [["/home"
+    {:name        :page/home
+     :controllers [{:start #(dispatch [[:effect/load-home]])}]}]
+   ["/words"
+    {:name        :page/words
+     :controllers [{:start #(dispatch [[:effect/load-words]])}]}]
+   ["/lesson"
+    {:name        :page/lesson
+     :controllers [{:start #(dispatch [[:effect/load-lesson]])}]}]])

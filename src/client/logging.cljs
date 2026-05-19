@@ -9,7 +9,7 @@
   ^boolean js/goog.DEBUG)
 
 
-(defonce ^:private initialized?
+(defonce initialized?
   (do
     (when debug-mode?
       (glogi-console/install!))

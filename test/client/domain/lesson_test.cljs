@@ -1,7 +1,7 @@
 (ns client.domain.lesson-test
   (:require
-   [cljs.test :refer-macros [deftest is testing]]
    [client.support.fixtures :as fixtures]
+   [cljs.test :refer-macros [deftest is testing]]
    [domain.lesson :as sut]))
 
 
@@ -79,11 +79,9 @@
     (let [state (sut/initial-state
                  fixtures/lesson-words
                  fixtures/lesson-examples
-                 :first
-                 "2024-08-20T10:00:00.000Z")]
+                 :first)]
       (is (= "lesson" (:_id state)))
       (is (= "lesson" (:type state)))
-      (is (= "2024-08-20T10:00:00.000Z" (:started-at state)))
       (is (= 3 (count (:trials state))))
       (is (= 3 (count (:remaining-trials state))))
       (is (some? (:current-trial state)))
@@ -95,8 +93,7 @@
     (let [state (sut/initial-state
                  fixtures/lesson-words
                  fixtures/lesson-examples
-                 :first
-                 "2024-08-20T10:00:00.000Z")]
+                 :first)]
       (is (not (contains? state :words))))))
 
 
@@ -105,18 +102,16 @@
     (let [state (sut/initial-state
                  fixtures/lesson-words
                  fixtures/lesson-examples
-                 :first
-                 "2024-08-20T10:00:00.000Z")]
+                 :first)]
       (is (= (first (:trials state)) (:current-trial state))))))
 
 
 (deftest initial-state-keeps-example-trials-locked
   (testing "example trials are present but locked at lesson start"
-    (let [state          (sut/initial-state
-                          fixtures/lesson-words
-                          fixtures/lesson-examples
-                          :first
-                          "2024-08-20T10:00:00.000Z")
+    (let [state (sut/initial-state
+                 fixtures/lesson-words
+                 fixtures/lesson-examples
+                 :first)
           example-trials (filter sut/example-trial? (:remaining-trials state))]
       (is (= 1 (count example-trials)))
       (is (every? :locked? example-trials)))))
@@ -131,28 +126,37 @@
   (let [state (sut/initial-state
                fixtures/lesson-words
                []
-               :first
-               "2024-08-20T10:00:00.000Z")]
+               :first)]
     (is (= "der Hund" (sut/expected-answer state)))))
 
 
 (deftest answer-segments-builds-annotated-and-plain-words
   (testing "example answer segments use wordIndex to annotate matching words"
-    (let [trial {:type      "example"
-                 :word-id   "word-1"
-                 :answer    "Der Hund schlaeft."
-                 :structure [{:usedForm "Hund"
-                              :dictionaryForm "der Hund"
-                              :translation "пёс"
-                              :wordIndex 1}
-                             {:usedForm "schlaeft"
-                              :dictionaryForm "schlafen"
-                              :translation "спать"
-                              :wordIndex 2}]}
+    (let [trial    {:type      "example"
+                    :word-id   "word-1"
+                    :answer    "Der Hund schlaeft."
+                    :structure [{:usedForm       "Hund"
+                                 :dictionaryForm "der Hund"
+                                 :translation    "пёс"
+                                 :wordIndex      1}
+                                {:usedForm       "schlaeft"
+                                 :dictionaryForm "schlafen"
+                                 :translation    "спать"
+                                 :wordIndex      2}]}
           segments (sut/answer-segments trial)]
       (is (= [{:type :plain-word :text "Der" :word-index 0}
-              {:type :annotated-word :text "Hund" :used-form "Hund" :dictionary-form "der Hund" :translation "пёс" :word-index 1}
-              {:type :annotated-word :text "schlaeft." :used-form "schlaeft" :dictionary-form "schlafen" :translation "спать" :word-index 2}]
+              {:type        :annotated-word
+               :text        "Hund"
+               :used-form   "Hund"
+               :dictionary-form "der Hund"
+               :translation "пёс"
+               :word-index  1}
+              {:type        :annotated-word
+               :text        "schlaeft."
+               :used-form   "schlaeft"
+               :dictionary-form "schlafen"
+               :translation "спать"
+               :word-index  2}]
              segments)))))
 
 
@@ -187,8 +191,7 @@
     (let [state (sut/initial-state
                  fixtures/lesson-words
                  []
-                 :first
-                 "2024-08-20T10:00:00.000Z")
+                 :first)
           state (sut/check-answer state "der Hund")]
       (is (true? (:correct? (sut/last-result state))))
       (is (= 1 (count (:remaining-trials state)))))))
@@ -199,8 +202,7 @@
     (let [state         (sut/initial-state
                          fixtures/lesson-words
                          fixtures/lesson-examples
-                         :first
-                         "2024-08-20T10:00:00.000Z")
+                         :first)
           updated-state (sut/check-answer state "der Hund")
           example-trial (first (filter sut/example-trial? (:remaining-trials updated-state)))]
       (is (some? example-trial))
@@ -212,8 +214,7 @@
     (let [state (sut/initial-state
                  fixtures/lesson-words
                  []
-                 :first
-                 "2024-08-20T10:00:00.000Z")
+                 :first)
           state (sut/check-answer state "DER HUND")]
       (is (true? (:correct? (sut/last-result state)))))))
 
@@ -228,8 +229,7 @@
     (let [state (sut/initial-state
                  fixtures/lesson-words
                  []
-                 :first
-                 "2024-08-20T10:00:00.000Z")
+                 :first)
           state (sut/check-answer state "wrong answer")]
       (is (false? (:correct? (sut/last-result state))))
       (is (= 2 (count (:remaining-trials state)))))))
@@ -240,8 +240,7 @@
     (let [state         (sut/initial-state
                          fixtures/lesson-words
                          fixtures/lesson-examples
-                         :first
-                         "2024-08-20T10:00:00.000Z")
+                         :first)
           updated-state (sut/check-answer state "wrong answer")
           example-trial (first (filter sut/example-trial? (:remaining-trials updated-state)))]
       (is (some? example-trial))
@@ -258,8 +257,7 @@
     (let [state     (sut/initial-state
                      fixtures/lesson-words
                      []
-                     :first
-                     "2024-08-20T10:00:00.000Z")
+                     :first)
           new-state (sut/check-answer state "der Hund")]
       (is (= (keys state) (keys new-state))))))
 
@@ -269,8 +267,7 @@
     (let [state (sut/initial-state
                  fixtures/lesson-words
                  []
-                 :first
-                 "2024-08-20T10:00:00.000Z")
+                 :first)
           state (sut/check-answer state "my answer")]
       (is (= "my answer" (:answer (sut/last-result state)))))))
 
@@ -285,8 +282,7 @@
     (let [state (sut/initial-state
                  [{:_id "w1" :value "der Hund" :translation [{:lang "en" :value "dog"}]}]
                  []
-                 :first
-                 "2024-08-20T10:00:00.000Z")
+                 :first)
           state (sut/check-answer state "der Hund")]
       (is (true? (sut/finished? state)))
       (is (empty? (:remaining-trials state))))))
@@ -297,8 +293,7 @@
     (let [state (sut/initial-state
                  fixtures/lesson-words
                  []
-                 :first
-                 "2024-08-20T10:00:00.000Z")
+                 :first)
           state (sut/check-answer state "der Hund")]
       (is (false? (sut/finished? state))))))
 
@@ -313,8 +308,7 @@
     (let [state      (sut/initial-state
                       fixtures/lesson-words
                       []
-                      :first
-                      "2024-08-20T10:00:00.000Z")
+                      :first)
           next-state (sut/advance state)]
       ;; With 2 trials and :first selector, advance excludes current and picks from remaining
       ;; Current is first trial, so next should be the second trial
@@ -327,8 +321,7 @@
     (let [state      (sut/initial-state
                       fixtures/lesson-words
                       []
-                      :first
-                      "2024-08-20T10:00:00.000Z")
+                      :first)
           state      (sut/check-answer state "der Hund")
           next-state (sut/advance state)]
       (is (some? (sut/last-result state)))
@@ -340,8 +333,7 @@
     (let [state      (sut/initial-state
                       fixtures/lesson-words
                       fixtures/lesson-examples
-                      :first
-                      "2024-08-20T10:00:00.000Z")
+                      :first)
           next-state (sut/advance state)]
       (is (sut/word-trial? (:current-trial next-state)))
       (is (not (:locked? (:current-trial next-state)))))))
@@ -352,8 +344,7 @@
     (let [state      (sut/initial-state
                       fixtures/lesson-words
                       fixtures/lesson-examples
-                      :first
-                      "2024-08-20T10:00:00.000Z")
+                      :first)
           state      (sut/check-answer state "der Hund")
           next-state (sut/advance state)]
       (is (= "word-2" (:word-id (:current-trial next-state))))
@@ -365,8 +356,7 @@
     (let [state (sut/initial-state
                  [{:_id "w1" :value "der Hund" :translation [{:lang "en" :value "dog"}]}]
                  []
-                 :first
-                 "2024-08-20T10:00:00.000Z")
+                 :first)
           state (sut/check-answer state "der Hund")]
       (is (nil? (sut/advance state))))))
 
@@ -376,8 +366,7 @@
     (let [state      (sut/initial-state
                       fixtures/lesson-words
                       []
-                      :first
-                      "2024-08-20T10:00:00.000Z")
+                      :first)
           next-state (sut/advance state)]
       ;; Just verify it returns a state with a current-trial
       (is (some? next-state))
@@ -394,8 +383,7 @@
     (let [state        (sut/initial-state
                         fixtures/lesson-words
                         fixtures/lesson-examples
-                        :first
-                        "2024-08-20T10:00:00.000Z")
+                        :first)
           trials-count (count (:remaining-trials state))]
       ;; Start with 3 trials
       (is (= 3 trials-count))

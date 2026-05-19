@@ -1,8 +1,8 @@
-(ns repo.examples
+(ns adapters.examples
   "Client module for fetching example sentences from the backend."
   (:refer-clojure :exclude [list find])
   (:require
-   [dbs :as dbs]
+   [db.pouch :as dbs]
    [lambdaisland.glogi :as log]
    [tasks :as tasks]
    [utils :as utils]))
@@ -36,44 +36,42 @@
 (defn ^:async fetch-one
   "Fetches an example sentence for the given German word from the backend.
    Returns a promise resolving to the example map."
-  ([word]
-   (fetch-one word []))
-  ([word translations]
-   (let [url      (->> translations
-                       (filter utils/non-blank)
-                       (map #(str "&translation=" (js/encodeURIComponent %)))
-                       (reduce str (str "/api/examples?word=" (js/encodeURIComponent word))))
-         response (await (js/fetch url))]
-     (if (.-ok response)
-       (let [json (try
-                    (await (.json response))
-                    (catch js/Error _ ::invalid-json))]
-         (if (= ::invalid-json json)
-           (throw (ex-info invalid-response-message
-                           {:word word :status 502 :error-kind :invalid-json}))
-           (let [example (js->clj json :keywordize-keys true)]
-             (if (and (:value example) (:translation example))
-               example
-               (throw (ex-info invalid-response-message
-                               {:word       word
-                                :status     502
-                                :error-kind :invalid-response
-                                :example    example}))))))
-       (let [error-body (try (js->clj (await (.json response)) :keywordize-keys true)
-                             (catch js/Error _ nil))
-             status     (.-status response)
-             retry-ms   (retry-after-ms response)
-             message    (or (:error error-body) "Server error fetching example")]
-         (throw (ex-info message
-                         {:word           word
-                          :status         status
-                          :retry-after-ms retry-ms
-                          :error-body     error-body})))))))
+  [word translations]
+  (let [url      (->> translations
+                      (filter utils/non-blank)
+                      (map #(str "&translation=" (js/encodeURIComponent %)))
+                      (reduce str (str "/api/examples?word=" (js/encodeURIComponent word))))
+        response (await (js/fetch url))]
+    (if (.-ok response)
+      (let [json (try
+                   (await (.json response))
+                   (catch js/Error _ ::invalid-json))]
+        (if (= ::invalid-json json)
+          (throw (ex-info invalid-response-message
+                          {:word word :status 502 :error-kind :invalid-json}))
+          (let [example (js->clj json :keywordize-keys true)]
+            (if (and (:value example) (:translation example))
+              example
+              (throw (ex-info invalid-response-message
+                              {:word       word
+                               :status     502
+                               :error-kind :invalid-response
+                               :example    example}))))))
+      (let [error-body (try (js->clj (await (.json response)) :keywordize-keys true)
+                            (catch js/Error _ nil))
+            status     (.-status response)
+            retry-ms   (retry-after-ms response)
+            message    (or (:error error-body) "Server error fetching example")]
+        (throw (ex-info message
+                        {:word           word
+                         :status         status
+                         :retry-after-ms retry-ms
+                         :error-body     error-body}))))))
 
 
 (defn save-example!
   "Saves an example document for a vocabulary word."
-  [dbs word-id word example]
+  [dbs clock word-id word example]
   (when-not (and (:value example) (:translation example))
     (throw (ex-info "Invalid example: missing required fields"
                     {:word-id word-id :example example})))
@@ -83,7 +81,7 @@
                      :value       (:value example)
                      :translation (:translation example)
                      :structure   (:structure example)
-                     :created-at  (utils/now-iso)}]
+                     :created-at  ((:clock/now-iso clock))}]
     (dbs/insert dbs example-doc)))
 
 
@@ -109,16 +107,16 @@
       (await (dbs/remove dbs example)))))
 
 
-(defn create-fetch-task!
-  "Creates a task to fetch an example for the given word-id."
-  [word-id]
-  (tasks/create-task! "example-fetch" {:word-id word-id}))
+(defn request!
+  [dbs clock word-id]
+  (tasks/create-task! dbs clock "example-fetch" {:word-id word-id}))
 
 
 (defmethod tasks/execute-task "example-fetch"
-  [{:keys [data]} dbs]
+  [{:keys [data]} {:keys [clock dbs]}]
   (let [{:keys [word-id]} data]
-    ((fn ^:async f []
+    ((fn ^:async f
+       []
        (let [word-doc (await (dbs/get dbs "vocab" word-id))]
          (if-not word-doc
            (do
@@ -127,7 +125,7 @@
            (try
              (let [example (await (fetch-one (:value word-doc)
                                              (russian-translations word-doc)))]
-               (await (save-example! dbs word-id (:value word-doc) example))
+               (await (save-example! dbs clock word-id (:value word-doc) example))
                true)
              (catch js/Error err
                (log/warn :example-fetch/failed {:word-id word-id :error (ex-message err)})
