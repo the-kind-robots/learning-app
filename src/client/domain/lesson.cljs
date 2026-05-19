@@ -89,11 +89,10 @@
 
 
 (defn initial-state
-  [words examples trial-selector started-at]
+  [words examples trial-selector]
   (let [trials (generate-trials words examples)]
     {:_id           lesson-id
      :type          "lesson"
-     :started-at    started-at
      :options       {:trial-selector trial-selector}
      :trials        trials
      :remaining-trials trials

@@ -1,7 +1,7 @@
-(ns repo.dictionary
+(ns adapters.dictionary
   (:require
    [clojure.string :as str]
-   [dbs :as dbs]
+   [db.sqlite :as sqlite]
    [utils :as utils]))
 
 
@@ -23,29 +23,30 @@
    LIMIT 10")
 
 
-(defn ready? [] (dbs/dictionary-ready?))
+(defn ready?
+  [db]
+  (sqlite/ready? db))
 
 
 (defn ^:async completions
   "Returns a vec of completion maps {:lemma :translation :exact?} from SQLite."
-  [dbs prefix]
-  (when-let [db (:dictionary/db dbs)]
+  [db prefix]
+  (if (ready? db)
     (let [prefix-start (utils/normalize-german (or prefix ""))]
       (if (empty? prefix-start)
         []
-        (let [;;appending \z it makes the upper bound
-              ;; cover every possible suffix, turning the range into a prefix scan
-              prefix-end (str prefix-start \z)
+        (let [prefix-end (str prefix-start \z)
               rows       (js->clj
                           (await
-                           (.exec db
-                                  #js {:sql         completions-sql
-                                       :bind        #js [prefix-start prefix-start prefix-end]
-                                       :returnValue "resultRows"
-                                       :rowMode     "object"}))
+                           (sqlite/exec db
+                                        #js {:sql         completions-sql
+                                             :bind        #js [prefix-start prefix-start prefix-end]
+                                             :returnValue "resultRows"
+                                             :rowMode     "object"}))
                           :keywordize-keys
                           true)]
           (for [{:keys [lemma translations has_exact]} rows]
             {:lemma        lemma
              :translations (str/split (or translations "") #",")
-             :exact?       (pos? has_exact)}))))))
+             :exact?       (pos? has_exact)}))))
+    []))

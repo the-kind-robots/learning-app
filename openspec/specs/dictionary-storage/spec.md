@@ -102,8 +102,8 @@ The active home autocomplete flow SHALL query SQLite through the worker proxy an
 
 #### Scenario: Completion query resolves via Worker
 - **WHEN** the home suggest effect receives a non-empty German prefix and the dictionary worker is ready
-- **THEN** it calls `repo.dictionary/completions`
-- **AND** SQL is executed through the `:dictionary/db` worker proxy
+- **THEN** it calls the dictionary port completions function
+- **AND** SQL is executed through the SQLite worker proxy
 - **AND** the result contains ranked completion maps with lemma text, translations, and exact-match flag
 
 #### Scenario: Worker not ready returns no completions
@@ -121,7 +121,7 @@ The system SHALL keep PouchDB user/device databases in place for user progress. 
 #### Scenario: Legacy lookup is not on active autocomplete path
 - **WHEN** the home autocomplete path is inspected
 - **THEN** it calls the SQLite worker-backed repo
-- **AND** it does not call `repo.dictionary-legacy/suggest` or `attach-translations`
+- **AND** it does not call the legacy PouchDB suggestion path
 
 ### Requirement: Dictionary worker telemetry is emitted
 The system SHALL emit telemetry for the dictionary worker lifecycle once telemetry infrastructure exists.
@@ -130,4 +130,3 @@ The system SHALL emit telemetry for the dictionary worker lifecycle once telemet
 - **WHEN** the dictionary worker initialises, downloads/imports SQLite, and opens OPFS
 - **THEN** telemetry records duration and success/failure for each phase
 - **AND** the SQLite download event includes byte size when available
-

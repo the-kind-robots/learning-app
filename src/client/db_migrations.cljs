@@ -1,9 +1,25 @@
 (ns db-migrations
   (:require
    [db :as db]
-   [dbs :as dbs]
    [lambdaisland.glogi :as log]
    [utils :as utils]))
+
+
+(defn local-db [] (db/use "local-db"))
+
+
+(defn user-db [] (db/use "user-db"))
+
+
+(defn device-db [] (db/use "device-db"))
+
+
+(def ^:private doc-type->db
+  {"example" :device/db
+   "lesson"  :device/db
+   "review"  :user/db
+   "task"    :device/db
+   "vocab"   :user/db})
 
 
 (def ^:private migration-id "migration:local-db-split")
@@ -45,27 +61,26 @@
 
 (defn ^:async run-local-db-split!
   []
-  (let [device-db (dbs/device-db)]
-    (let [marker (await (db/get device-db migration-id))]
-      (if marker
-        (do
-          (log/info :db-migrations/already-complete {:id migration-id})
-          :already-complete)
-        (let [local-db (dbs/local-db)
-              all-dbs  {:user/db (dbs/user-db) :device/db device-db}]
-          (log/info :db-migrations/start {:id migration-id})
-          (doseq [[doc-type db-key] dbs/doc-type->db]
-            (await (copy-type! local-db (all-dbs db-key) doc-type)))
-          (await (db/insert
-                  device-db
-                  {:_id          migration-id
-                   :type         "migration"
-                   :migration-id "local-db-split"
-                   :source       "local-db"
-                   :targets      ["user-db" "device-db"]
-                   :created-at   (utils/now-iso)}))
-          (log/info :db-migrations/complete {:id migration-id})
-          :complete)))))
+  (let [device-db (device-db)]
+    (if (await (db/get device-db migration-id))
+      (do
+        (log/info :db-migrations/already-complete {:id migration-id})
+        :already-complete)
+      (let [local-db (local-db)
+            all-dbs  {:user/db (user-db) :device/db device-db}]
+        (log/info :db-migrations/start {:id migration-id})
+        (doseq [[doc-type db-key] doc-type->db]
+          (await (copy-type! local-db (all-dbs db-key) doc-type)))
+        (await (db/insert
+                device-db
+                {:_id          migration-id
+                 :type         "migration"
+                 :migration-id "local-db-split"
+                 :source       "local-db"
+                 :targets      ["user-db" "device-db"]
+                 :created-at   (utils/now-iso)}))
+        (log/info :db-migrations/complete {:id migration-id})
+        :complete))))
 
 
 (def ^:private task-data-migration-id "migration:task-data-payload")
@@ -73,36 +88,45 @@
 
 (defn ^:async run-task-data-payload!
   []
-  (let [device-db (dbs/device-db)]
-    (let [marker (await (db/get device-db task-data-migration-id))]
-      (if marker
-        (do
-          (log/info :db-migrations/already-complete {:id task-data-migration-id})
-          :already-complete)
-        (do
-          (let [{:keys [docs]} (await (db/find device-db
-                                               {:selector {:type    "task"
-                                                           :word-id {:$exists true}
-                                                           :data    {:$exists false}}}))]
-            (doseq [task docs]
-              (await (db/insert device-db
-                                (-> task
-                                    (assoc :data {:word-id (:word-id task)})
-                                    (dissoc :word-id))))))
-          (await (db/insert device-db
-                            {:_id          task-data-migration-id
-                             :type         "migration"
-                             :migration-id "task-data-payload"
-                             :created-at   (utils/now-iso)}))
-          (log/info :db-migrations/complete {:id task-data-migration-id})
-          :complete)))))
+  (let [device-db (device-db)]
+    (if (await (db/get device-db task-data-migration-id))
+      (do
+        (log/info :db-migrations/already-complete {:id task-data-migration-id})
+        :already-complete)
+      (do
+        (let [{:keys [docs]} (await (db/find device-db
+                                             {:selector {:type    "task"
+                                                         :word-id {:$exists true}
+                                                         :data    {:$exists false}}}))]
+          (doseq [task docs]
+            (await (db/insert device-db
+                              (-> task
+                                  (assoc :data {:word-id (:word-id task)})
+                                  (dissoc :word-id))))))
+        (await (db/insert device-db
+                          {:_id          task-data-migration-id
+                           :type         "migration"
+                           :migration-id "task-data-payload"
+                           :created-at   (utils/now-iso)}))
+        (log/info :db-migrations/complete {:id task-data-migration-id})
+        :complete))))
+
+
+(defn- run-local-db-split-migration!
+  []
+  (run-local-db-split!))
+
+
+(defn- run-task-data-payload-migration!
+  []
+  (run-task-data-payload!))
 
 
 (def ^:private migrations
   [{:id  "migration:local-db-split"
-    :run #(run-local-db-split!)}
+    :run run-local-db-split-migration!}
    {:id  "migration:task-data-payload"
-    :run #(run-task-data-payload!)}])
+    :run run-task-data-payload-migration!}])
 
 
 (def ^:private migration-state

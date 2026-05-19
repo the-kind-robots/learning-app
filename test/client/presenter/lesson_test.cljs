@@ -10,8 +10,7 @@
     (let [state (domain/initial-state
                  [{:id "word-1" :value "der Hund" :translation "пёс"}]
                  []
-                 :first
-                 "2024-08-20T10:00:00.000Z")]
+                 :first)]
       (is (nil? (sut/footer-props state))))))
 
 
@@ -66,8 +65,7 @@
     (let [state (domain/initial-state
                  [{:id "word-1" :value "der Hund" :translation "пёс"}]
                  []
-                 :first
-                 "2024-08-20T10:00:00.000Z")
+                 :first)
           state (domain/check-answer state "die Katze")
           props (sut/footer-props state)]
       (is (= :error (:variant props)))

@@ -1,16 +1,13 @@
 (ns use-cases.lesson
   (:require
-   [dbs :as dbs]
    [domain.lesson :as domain]
    [lambdaisland.glogi :as log]
-   [repo.examples :as examples]
-   [use-cases.vocabulary :as vocabulary]
-   [utils :as utils]))
+   [use-cases.vocabulary :as vocabulary]))
 
 
 (defn- state
-  [dbs]
-  (dbs/get dbs "lesson" domain/lesson-id))
+  [progress-store]
+  ((:progress-store/get-lesson progress-store)))
 
 
 (def max-answer-length
@@ -33,47 +30,45 @@
 
 
 (defn ^:async start!
-  "Start a new lesson. Returns {:lesson-state ...} or {:error ...}."
-  ([dbs]
-   (start! dbs {}))
-  ([dbs
-    {:keys [words-per-lesson trial-selector]
-     :or   {words-per-lesson domain/default-words-per-lesson}}]
-   (try
-     (let [{selected-words :words} (await (vocabulary/list dbs {:order :asc :limit words-per-lesson}))]
-       (if-not (seq selected-words)
-         {:error :no-words-available}
-         (let [lesson-words    (mapv lesson-word selected-words)
-               word-ids        (mapv :id lesson-words)
-               lesson-examples (await (examples/list dbs word-ids))
-               lesson-state    (domain/initial-state lesson-words lesson-examples trial-selector (utils/now-iso))
-               {:keys [rev]}   (await (dbs/insert dbs lesson-state))]
-           {:lesson-state (assoc lesson-state :_rev rev)})))
-     (catch js/Error err
-       (log/error :lesson/start-failed {:error (ex-message err)})
-       {:error :lesson-start-failed}))))
+  "Start a new lesson. Returns {:lesson-state ...} or {:error ...}.
+
+   opts:
+     :words-per-lesson  — how many vocabulary words to include (default 3)
+     :trial-selector    — strategy for picking the next trial (:first or :random, default nil → random)"
+  [{:keys [examples progress-store] :as capabilities}
+   {:keys [words-per-lesson trial-selector]
+    :or   {words-per-lesson domain/default-words-per-lesson}}]
+  (try
+    (let [{selected-words :words} (await (vocabulary/list capabilities {:order :asc :limit words-per-lesson}))]
+      (if-not (seq selected-words)
+        {:error :no-words-available}
+        (let [lesson-words    (mapv lesson-word selected-words)
+              word-ids        (mapv :id lesson-words)
+              lesson-examples (await ((:examples/list examples) word-ids))
+              lesson-state    (domain/initial-state lesson-words lesson-examples trial-selector)
+              {:keys [rev]}   (await ((:progress-store/save-lesson! progress-store) lesson-state))]
+          {:lesson-state (assoc lesson-state :_rev rev)})))
+    (catch js/Error err
+      (log/error :lesson/start-failed {:error (ex-message err)})
+      {:error :lesson-start-failed})))
 
 
 (defn ^:async finish!
-  [dbs]
-  (let [existing (await (state dbs))]
-    (when existing
-      (await (dbs/remove dbs existing)))))
+  [{:keys [progress-store]}]
+  (await ((:progress-store/remove-lesson! progress-store))))
 
 
 (defn ^:async restart!
   "Always starts a fresh lesson session by removing any persisted lesson first."
-  ([dbs]
-   (restart! dbs {}))
-  ([dbs opts]
-   (await (finish! dbs))
-   (await (start! dbs opts))))
+  [capabilities]
+  (await (finish! capabilities))
+  (await (start! capabilities {})))
 
 
 (defn ^:async check-answer!
   "Check the user's answer. Returns {:lesson-state ...}."
-  [dbs answer]
-  (let [current-state (await (state dbs))
+  [{:keys [progress-store] :as capabilities} answer]
+  (let [current-state (await (state progress-store))
         answer        (clamp-answer answer)]
     (if-not current-state
       (do
@@ -84,11 +79,11 @@
         (try
           (when (domain/word-trial? current-trial)
             (await (vocabulary/add-review
-                    dbs
+                    capabilities
                     (:word-id current-trial)
                     (-> lesson-state domain/last-result :correct?)
                     (:prompt current-trial))))
-          (let [{:keys [rev]} (await (dbs/insert dbs lesson-state))]
+          (let [{:keys [rev]} (await ((:progress-store/save-lesson! progress-store) lesson-state))]
             {:lesson-state (assoc lesson-state :_rev rev)})
           (catch js/Error err
             (log/error :lesson/check-answer-save-failed {:error (ex-message err)})
@@ -97,15 +92,15 @@
 
 (defn ^:async advance!
   "Select the next trial. Returns {:lesson-state ...} or {:error ...}."
-  [dbs]
-  (let [lesson-state (await (state dbs))]
+  [{:keys [progress-store]}]
+  (let [lesson-state (await (state progress-store))]
     (if-not lesson-state
       (do
         (log/warn :advance-lesson/missing-state {})
         {:error :lesson-not-found})
       (when-let [next-state (domain/advance lesson-state)]
         (try
-          (let [{:keys [rev]} (await (dbs/insert dbs next-state))]
+          (let [{:keys [rev]} (await ((:progress-store/save-lesson! progress-store) next-state))]
             {:lesson-state (assoc next-state :_rev rev)})
           (catch js/Error err
             (log/error :advance-lesson/save-failed {:error (ex-message err)})
@@ -127,8 +122,8 @@
 
 (defn ^:async token-info
   "Return token info for lesson answer annotation card."
-  [dbs dictionary-form translation]
-  (let [existing (await (vocabulary/find-duplicate-by-value dbs dictionary-form))]
+  [capabilities dictionary-form translation]
+  (let [existing (await (vocabulary/find-duplicate-by-value capabilities dictionary-form))]
     {:dictionary-form dictionary-form
      :translation translation
      :state       (token-state existing translation)}))
@@ -136,8 +131,8 @@
 
 (defn ^:async add-word-from-structure!
   "Add dictionary form + translation from lesson example structure into vocabulary."
-  [dbs dictionary-form translation]
-  (let [result (await (vocabulary/add! dbs dictionary-form translation))]
+  [{:keys [examples] :as capabilities} dictionary-form translation]
+  (let [result (await (vocabulary/add! capabilities dictionary-form translation))]
     (when (:created? result)
-      (examples/create-fetch-task! (:word-id result)))
+      ((:examples/request! examples) (:word-id result)))
     result))

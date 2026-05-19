@@ -1,6 +1,5 @@
 (ns pages.words.effects
   (:require
-   [dbs :as dbs]
    [goog.functions :as gfn]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
@@ -10,9 +9,9 @@
 (def ^:private search!
   (gfn/debounce
    (fn ^:async search!
-     [dispatch search]
+     [dispatch capabilities search]
      (try
-       (let [{:keys [words total]} (await (vocabulary/list (dbs/dbs)
+       (let [{:keys [words total]} (await (vocabulary/list capabilities
                                                            {:order  :asc
                                                             :search search}))]
          (dispatch [[:action/show-words {:words words :total total :search search}]]))
@@ -27,9 +26,10 @@
 
 
 (nxr/register-effect! :effect/load-words
-  (fn ^:async load-words [{:keys [dispatch]} _ search]
+  (fn ^:async load-words
+    [{:keys [capabilities dispatch]} _ search]
     (try
-      (let [{:keys [words total]} (await (vocabulary/list (dbs/dbs)
+      (let [{:keys [words total]} (await (vocabulary/list capabilities
                                                           {:order  :asc
                                                            :search search}))]
         (dispatch [[:action/show-words {:words words :total total :search search}]]))
@@ -39,15 +39,16 @@
 
 (nxr/register-effect! :effect/set-words-search
   (fn set-words-search
-    [{:keys [dispatch]} _ search]
-    (search! dispatch search)))
+    [{:keys [capabilities dispatch]} _ search]
+    (search! dispatch capabilities search)))
 
 
 (nxr/register-effect! :effect/update-word
-  (fn ^:async update-word [{:keys [dispatch]} _ {:keys [id translation search]}]
+  (fn ^:async update-word
+    [{:keys [capabilities dispatch]} _ {:keys [id translation search]}]
     (try
-      (await (vocabulary/update! (dbs/dbs) id translation))
-      (let [{:keys [words total]} (await (vocabulary/list (dbs/dbs)
+      (await (vocabulary/update! capabilities id translation))
+      (let [{:keys [words total]} (await (vocabulary/list capabilities
                                                           {:order  :asc
                                                            :search search}))]
         (dispatch [[:action/show-words {:words words :total total :search search}]]))
@@ -56,11 +57,12 @@
 
 
 (nxr/register-effect! :effect/delete-word
-  (fn ^:async delete-word [{:keys [dispatch]} _ {:keys [id value search]}]
+  (fn ^:async delete-word
+    [{:keys [capabilities dispatch]} _ {:keys [id value search]}]
     (when (js/confirm (str "Удалить «" value "»?"))
       (try
-        (await (vocabulary/delete! (dbs/dbs) id))
-        (let [{:keys [words total]} (await (vocabulary/list (dbs/dbs)
+        (await (vocabulary/delete! capabilities id))
+        (let [{:keys [words total]} (await (vocabulary/list capabilities
                                                             {:order  :asc
                                                              :search search}))]
           (dispatch [[:action/show-words {:words words :total total :search search}]]))
