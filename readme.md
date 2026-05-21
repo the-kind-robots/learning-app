@@ -1,5 +1,19 @@
 # Learning application
 
+German vocabulary learning PWA. Users do spaced-repetition lessons; words come from a
+pre-built offline dictionary stored in SQLite/OPFS on the client.
+
+## Project map
+
+| Area                                         | Guide                                                        |
+|----------------------------------------------|--------------------------------------------------------------|
+| Quick start                                  | this file                                                    |
+| Backend (HTTP server, SQLite, API)           | [src/backend/README.md](src/backend/README.md)               |
+| Client (CLJS SPA, Replicant/Nexus, OPFS)     | [src/client/README.md](src/client/README.md)                 |
+| Dictionary pipeline                          | [tools/dictionary/README.md](tools/dictionary/README.md)     |
+| Infrastructure (nginx, systemd, Debian pkg)  | [infra/README.md](infra/README.md)                           |
+| Developer docs (philosophy, UI, ops runbook) | [docs/](docs/)                                               |
+| Architecture decisions                       | [adr/](adr/)                                                 |
 
 ## Development
 

@@ -5,6 +5,8 @@
 - Be brief, direct, and technically precise.
 - When reporting verification, say clearly what was actually proven and what was not.
 
+- For project structure, start at [readme.md](readme.md). It links to focused README files.
+
 # Clojure REPL Evaluation
 
 The command `clj-nrepl-eval` is installed on your path for evaluating Clojure code via nREPL.
