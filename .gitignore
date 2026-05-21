@@ -3,6 +3,7 @@
 
 # Emacs files
 *.*#
+.#*
 *.el
 
 # Caches
@@ -62,6 +63,7 @@ app.db
 /tools/dictionary/enrich-translations/enrich-translations
 
 # Local agent/tool artifacts
+/.codex/skills
 /.claude/
 /.opencode/
 /.beads/

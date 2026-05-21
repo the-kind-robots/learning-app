@@ -66,10 +66,21 @@ Do not use this skill for:
 
 In this environment, Windows executables invoked from WSL are most reliable when the shell command is run with escalated permissions.
 
+Before any Windows Chrome/CDP operation, run the wrapper doctor once per session:
+
+```bash
+bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh doctor
+```
+
+If doctor reports missing `WSLInterop`, missing binfmt handler, or `cmd.exe` fails with `exec format error`, the whole WSL VM cannot launch Windows `.exe` files. Do not debug the app or the CDP wrapper first. Ask the user to run `wsl --shutdown` from Windows, reopen WSL, and rerun doctor. This is the known repair for stale WSL interop state.
+
 When running scripts from this skill, prefer `exec_command` with:
 
 - `sandbox_permissions: "require_escalated"`
 - a short justification mentioning Windows Chrome or CDP
+
+For scripted/non-interactive Service Worker or offline checks, prefer a committed test or
+purpose-built verifier owned by the repo. Do not rely on ad-hoc browser snippets for invariants.
 
 ## Files
 
