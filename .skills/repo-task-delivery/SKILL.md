@@ -68,6 +68,8 @@ In those cases, use the narrower workflow skill directly.
    - Run the relevant automated checks.
    - For UX or browser bugs, prefer a real browser validation pass, not only unit tests.
    - If the expected verification path depends on repo-owned tooling and that tooling is broken or flaky, fix the tooling first and record that fix in the current tracked work before trusting fallback verification.
+   - For Windows CDP/browser proof, run `learning_app_cdp.sh doctor` before debugging. If WSL interop is broken (`cmd.exe` exec format error or missing `WSLInterop` binfmt handler), tell the user to run `wsl --shutdown` from Windows and retry before treating the app as broken.
+   - For scripted Service Worker/PWA checks, prefer committed tests or purpose-built repo verifiers over ad-hoc CDP snippets.
    - For visual or layout-quality bugs, do not treat DOM shape, HTMX events, or end-state screenshots as sufficient by themselves.
    - When the question is whether UI is visually stable, anchored, centered correctly, or free of jumps, verify the actual rendered layout with precise visual instrumentation: frame-by-frame geometry, performance/layout traces, animation tooling, or an equivalent browser-level measurement.
    - Be explicit about what was and was not proven. If you only proved the DOM state or swap path, say that you did not yet prove visual stability.

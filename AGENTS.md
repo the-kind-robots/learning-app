@@ -23,3 +23,16 @@ With timeout (milliseconds)
 
 The REPL session persists between evaluations - namespaces and state are maintained.
 Always use `:reload` when requiring namespaces to pick up changes.
+
+# Browser / PWA Verification
+
+- For browser-runtime behavior, use real browser proof, not only code inspection.
+- Before Windows Chrome CDP, run `bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh doctor`.
+- If Windows interop is broken (`cmd.exe` gives `exec format error` or `WSLInterop` is missing), ask for `wsl --shutdown`, then retry.
+- For Service Worker offline reload checks, wait until `navigator.serviceWorker.controller` is true before switching offline.
+
+# Project Skills
+
+- Shared project skills source lives in `.skills/`.
+- Install/relink tool locations with `.skills/install.sh --force`.
+- Expected links: `.codex/skills -> ../.skills` and `.claude/skills -> ../.skills`.

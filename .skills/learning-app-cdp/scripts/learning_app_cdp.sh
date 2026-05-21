@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOW_LEVEL_SCRIPT="${HOME}/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh"
 LOW_LEVEL_SCRIPT_DIR="${HOME}/.codex/skills/windows-chrome-cdp/scripts"
+CHROME_PATH="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
 POWERSHELL_MONITOR_SCRIPT_WIN="$(wslpath -w "${LOW_LEVEL_SCRIPT_DIR}/cdp_monitor.ps1")"
 POWERSHELL_CAPTURE_SCRIPT_WIN="$(wslpath -w "${LOW_LEVEL_SCRIPT_DIR}/cdp_capture_console.ps1")"
 DEFAULT_PORT="9333"
@@ -630,9 +631,116 @@ stop_monitor() {
   bash "$LOW_LEVEL_SCRIPT" monitor-stop --session "${2:?missing session}"
 }
 
+
+doctor() {
+  local failures=0
+
+  echo "learning-app-cdp doctor"
+
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    echo "ok  WSL kernel detected"
+  else
+    echo "warn WSL kernel not detected"
+  fi
+
+  if [[ -n "${WSL_INTEROP:-}" && -S "${WSL_INTEROP:-}" ]]; then
+    echo "ok  WSL_INTEROP socket exists: ${WSL_INTEROP}"
+  else
+    echo "fail WSL_INTEROP socket missing"
+    failures=1
+  fi
+
+  if [[ -e /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    if grep -q '^enabled' /proc/sys/fs/binfmt_misc/WSLInterop 2>/dev/null; then
+      echo "ok  WSLInterop binfmt handler is enabled"
+    else
+      echo "fail WSLInterop binfmt handler exists but is disabled"
+      failures=1
+    fi
+  else
+    echo "fail WSLInterop binfmt handler is missing"
+    failures=1
+  fi
+
+  if [[ -f /mnt/c/WINDOWS/system32/cmd.exe ]]; then
+    echo "ok  Windows cmd.exe is visible"
+  else
+    echo "fail Windows cmd.exe is not visible at /mnt/c/WINDOWS/system32/cmd.exe"
+    failures=1
+  fi
+
+  local tmp_out tmp_err
+  tmp_out="$(mktemp)"
+  tmp_err="$(mktemp)"
+  if timeout 5s cmd.exe /c ver >"$tmp_out" 2>"$tmp_err"; then
+    echo "ok  Windows cmd.exe launch works"
+    sed -n '1,2p' "$tmp_out"
+  else
+    echo "fail Windows cmd.exe launch failed"
+    sed -n '1,4p' "$tmp_err"
+    failures=1
+  fi
+  rm -f "$tmp_out" "$tmp_err"
+
+  tmp_out="$(mktemp)"
+  tmp_err="$(mktemp)"
+  if timeout 5s powershell.exe -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' >"$tmp_out" 2>"$tmp_err"; then
+    echo "ok  Windows powershell.exe launch works"
+    sed -n '1,1p' "$tmp_out"
+  else
+    echo "fail Windows powershell.exe launch failed"
+    sed -n '1,4p' "$tmp_err"
+    failures=1
+  fi
+  rm -f "$tmp_out" "$tmp_err"
+
+  tmp_out="$(mktemp)"
+  tmp_err="$(mktemp)"
+  if (cd /mnt/c && timeout 5s cmd.exe /c curl.exe -fsS http://127.0.0.1:9 >"$tmp_out" 2>"$tmp_err"); then
+    echo "ok  Windows curl.exe launch works"
+  else
+    local curl_exit=$?
+    if [[ "$curl_exit" -eq 7 ]]; then
+      echo "ok  Windows curl.exe launch works"
+    else
+      echo "fail Windows curl.exe launch failed"
+      sed -n '1,4p' "$tmp_err"
+      failures=1
+    fi
+  fi
+  rm -f "$tmp_out" "$tmp_err"
+
+  if [[ -x "$CHROME_PATH" ]]; then
+    echo "ok  Windows Chrome is visible: $CHROME_PATH"
+  else
+    echo "fail Windows Chrome not found at $CHROME_PATH"
+    failures=1
+  fi
+
+  if [[ "$failures" -ne 0 ]]; then
+    cat <<'EOF'
+
+Diagnosis:
+  Windows CDP needs WSLInterop binfmt support so Linux can hand .exe launches
+  to /init. If the WSLInterop handler is missing or disabled, commands like
+  cmd.exe, powershell.exe, and Windows Chrome cannot run from this session.
+
+Repair:
+  Run `wsl --shutdown` from Windows, reopen WSL, then rerun this doctor.
+
+Fallback:
+  For scripted browser invariants, use committed repo tests or purpose-built
+  repo verifiers instead of ad-hoc CDP snippets.
+EOF
+  fi
+
+  return "$failures"
+}
+
 usage() {
   cat <<'EOF'
 Usage:
+  learning_app_cdp.sh doctor
   learning_app_cdp.sh start-local [--port PORT] [--path /route]
   learning_app_cdp.sh start-prod [--port PORT] [--path /route]
   learning_app_cdp.sh monitor-local [--port PORT] [--session NAME]
@@ -661,6 +769,9 @@ main() {
   shift
 
   case "$subcommand" in
+    doctor)
+      doctor
+      ;;
     start-local)
       start_env "local" "$LOCAL_BASE_URL" "$LOCAL_SUBSTRING" "$@"
       ;;
