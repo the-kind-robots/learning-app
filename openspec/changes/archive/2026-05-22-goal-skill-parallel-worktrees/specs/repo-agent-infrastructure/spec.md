@@ -1,8 +1,5 @@
-# repo-agent-infrastructure Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change keep-only-codex-agent-files. Update Purpose after archive.
-## Requirements
 ### Requirement: Repository-owned agent infrastructure is Codex-only
 The repository SHALL keep only Codex-related agent infrastructure files under version control.
 
@@ -16,13 +13,7 @@ The repository SHALL keep only Codex-related agent infrastructure files under ve
 - **THEN** git ignores those local artifacts
 - **AND** repository-owned Codex files remain visible for tracking and review
 
-### Requirement: Local non-Codex agent artifacts do not reappear as repo noise
-The repository SHALL ignore local non-Codex agent artifacts so they do not keep showing up as worktree noise.
-
-#### Scenario: A developer uses local Claude or OpenCode tooling
-- **WHEN** local non-Codex agent files are created in the working tree
-- **THEN** git ignores those local artifacts
-- **AND** repository-owned Codex files remain visible for tracking and review
+## ADDED Requirements
 
 ### Requirement: Backend port is overridable via environment variable
 The backend server SHALL read its listening port from the `LEARNING_APP_PORT` environment variable when set, falling back to 8083 when absent.
@@ -41,4 +32,3 @@ The repository SHALL ignore per-worktree server log and PID files so they do not
 #### Scenario: /goal creates backend log and PID files
 - **WHEN** the `/goal` skill starts a background backend process in a worktree
 - **THEN** `.worktree-backend.log` and `.worktree-backend.pid` are not shown by `git status`
-
