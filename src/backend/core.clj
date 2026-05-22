@@ -35,7 +35,7 @@
 (set! *warn-on-reflection* true)
 
 
-(def port 8083)
+(def port (or (some-> (System/getenv "LEARNING_APP_PORT") Integer/parseInt) 8083))
 
 
 (def ^:private console-log-handler-id :learning-app/console)
