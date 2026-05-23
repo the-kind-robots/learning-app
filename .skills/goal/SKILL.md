@@ -17,11 +17,22 @@ Do not ask about process, tooling, or preferences — those are fixed by this sk
 
 ## Phase 1 — Worktree setup
 
-Use `using-git-worktrees` to create (or detect) an isolated worktree for this task.
+**If already running inside a worktree** (i.e. `git rev-parse --show-toplevel` returns a path different from the main repo root — check via `git rev-parse --git-common-dir` returning `<root>/.git` vs just `.git`): skip creation, use current worktree.
 
-- Branch name: derive from the task description (e.g. `feature/add-theme-tags`)
-- If already running inside a worktree (current dir ≠ main repo root), skip creation and use current worktree
-- Announce: "Worktree ready: `<path>` on branch `<branch>`"
+**Otherwise, create the worktree:**
+
+1. Derive a slug from the task (e.g. `feature/add-theme-tags`).
+2. Create the worktree at `.worktrees/<slug>/` inside the main repo:
+   ```bash
+   mkdir -p .worktrees
+   git worktree add .worktrees/<slug> -b <branch-name>
+   cd .worktrees/<slug>
+   ```
+3. Verify `.worktrees/` is gitignored in the main repo (it should be — if not, add it).
+
+`.claude/settings.json` and `.claude/rules/` are committed to git, so the worktree inherits them automatically — no manual copy needed.
+
+Announce: "Worktree ready: `.worktrees/<slug>` on branch `<branch>`"
 
 ## Phase 2 — Port slot allocation
 

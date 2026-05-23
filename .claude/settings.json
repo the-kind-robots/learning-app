@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(clj *)",
+      "Bash(clojure *)",
+      "Bash(curl *)",
+      "Bash(openspec *)",
+      "Bash(npx shadow-cljs *)",
+      "Bash(npm *)",
+      "Bash(sqlite3 *)",
+      "Bash(clj-kondo *)",
+      "Bash(clojure-lsp *)",
+      "Bash(zprint *)",
+      "Bash(bash .skills/goal/scripts/claim-slot.sh *)",
+      "Bash(bash .skills/goal/scripts/release-slot.sh *)",
+      "Bash(bash .skills/goal/scripts/gen-nginx-slot.sh *)",
+      "Bash(bash .skills/install.sh *)",
+      "Bash(LEARNING_APP_PORT=* clj *)",
+      "Bash(OPENSPEC_TELEMETRY=0 openspec *)",
+      "Bash(GHWF_OWNER=* bash *)",
+      "Bash(bash .codex/skills/gh-project-workflow/scripts/*.sh *)",
+      "Bash(clj-nrepl-eval *)",
+      "Bash(mkdir *)",
+      "Bash(chmod *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(kill *)",
+      "WebSearch"
+    ]
+  }
+}

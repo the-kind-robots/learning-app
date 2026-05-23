@@ -8,14 +8,15 @@
 set -euo pipefail
 
 WORKTREE_PATH="${1:-$(pwd)}"
-REPO_ROOT=$(git -C "$WORKTREE_PATH" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel)
-SLOTS_DIR="${REPO_ROOT}/.git/worktree-slots"
-LOCK_FILE="${REPO_ROOT}/.git/worktree-slots.lock"
+GIT_COMMON_DIR=$(git -C "$WORKTREE_PATH" rev-parse --git-common-dir)
+MAIN_ROOT=$(git -C "$WORKTREE_PATH" rev-parse --git-common-dir | xargs dirname)
+SLOTS_DIR="${GIT_COMMON_DIR}/worktree-slots"
+LOCK_FILE="${GIT_COMMON_DIR}/worktree-slots.lock"
 
 mkdir -p "$SLOTS_DIR"
 
 _is_worktree_live() {
-  git -C "$REPO_ROOT" worktree list --porcelain 2>/dev/null | grep -q "^worktree ${1}$"
+  git -C "$MAIN_ROOT" worktree list --porcelain 2>/dev/null | grep -q "^worktree ${1}$"
 }
 
 (

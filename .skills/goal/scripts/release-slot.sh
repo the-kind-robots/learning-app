@@ -5,9 +5,9 @@
 set -euo pipefail
 
 SLOT="${1:?slot number required}"
-REPO_ROOT=$(git rev-parse --show-toplevel)
-SLOTS_DIR="${REPO_ROOT}/.git/worktree-slots"
-LOCK_FILE="${REPO_ROOT}/.git/worktree-slots.lock"
+GIT_COMMON_DIR=$(git rev-parse --git-common-dir)
+SLOTS_DIR="${GIT_COMMON_DIR}/worktree-slots"
+LOCK_FILE="${GIT_COMMON_DIR}/worktree-slots.lock"
 
 (
   flock 200
