@@ -37,3 +37,13 @@
 (nxr/register-action! :action/remove-word
   (fn remove-word [state {:keys [id value]}]
     [[:effect/delete-word {:id id :value value :search (:words/search state)}]]))
+
+
+(nxr/register-action! :action/open-more-menu
+  (fn open-more-menu [_]
+    [[:effect/save {:words/menu-open? true}]]))
+
+
+(nxr/register-action! :action/close-more-menu
+  (fn close-more-menu [_]
+    [[:effect/save {:words/menu-open? false}]]))

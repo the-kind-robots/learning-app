@@ -1,5 +1,6 @@
 (ns adapters.progress-store
   (:require
+   [adapters.data-export :as data-export]
    [clojure.core :as clojure]
    [db.pouch :as dbs]
    [domain.lesson :as lesson]
@@ -171,3 +172,13 @@
   [dbs]
   (when-let [lesson-state (await (get-lesson dbs))]
     (await (dbs/remove dbs lesson-state))))
+
+
+(defn export-data!
+  [dbs]
+  (data-export/export-data! dbs))
+
+
+(defn import-data!
+  [dbs payload]
+  (data-export/import-data! dbs payload))

@@ -49,34 +49,26 @@
 
 (defn render
   [state]
-  (list
-   [:button.app-shell__install-button
-    {:type       "button"
-     :aria-label "Install app"
-     ;; disabling Install button, until designing proper UI/UX for installation.
-     :hidden     true #_(not (:pwa/install-available? state))
-     :on         {:click [[:action/pwa-install-requested]]}}
-    "установить"]
-   [:div#app-install-guide.app-install-guide
-    {:hidden (not (:pwa/show-guide? state))
-     :on     {:click [[:action/dismiss-install-guide-backdrop [:event/self-click?]]]}}
-    [:div.app-install-guide__card
-     [:div.app-install-guide__header
-      [:h3 "Install Sprecha"]
-      [:button.app-install-guide__close
-       {:aria-label "Close"
-        :on {:click [[:action/dismiss-install-guide]]}}
-       "×"]]
-     [:div.app-install-guide__steps
-      [:div.app-install-guide__step
-       [:span.app-install-guide__step-number "1"]
-       [:span.app-install-guide__step-icon (share-svg)]
-       [:span.app-install-guide__step-text "Tap " [:strong "Share"] " in the toolbar"]]
-      [:div.app-install-guide__step
-       [:span.app-install-guide__step-number "2"]
-       [:span.app-install-guide__step-icon (add-square-svg)]
-       [:span.app-install-guide__step-text "Tap " [:strong "Add to Home Screen"]]]
-      [:div.app-install-guide__step
-       [:span.app-install-guide__step-number "3"]
-       [:span.app-install-guide__step-icon (checkmark-svg)]
-       [:span.app-install-guide__step-text "Tap " [:strong "Add"] " to confirm"]]]]]))
+  [:div#app-install-guide.app-install-guide
+   {:hidden (not (:pwa/show-guide? state))
+    :on     {:click [[:action/dismiss-install-guide-backdrop [:event/self-click?]]]}}
+   [:div.app-install-guide__card
+    [:div.app-install-guide__header
+     [:h3 "Install Sprecha"]
+     [:button.app-install-guide__close
+      {:aria-label "Close"
+       :on {:click [[:action/dismiss-install-guide]]}}
+      "×"]]
+    [:div.app-install-guide__steps
+     [:div.app-install-guide__step
+      [:span.app-install-guide__step-number "1"]
+      [:span.app-install-guide__step-icon (share-svg)]
+      [:span.app-install-guide__step-text "Tap " [:strong "Share"] " in the toolbar"]]
+     [:div.app-install-guide__step
+      [:span.app-install-guide__step-number "2"]
+      [:span.app-install-guide__step-icon (add-square-svg)]
+      [:span.app-install-guide__step-text "Tap " [:strong "Add to Home Screen"]]]
+     [:div.app-install-guide__step
+      [:span.app-install-guide__step-number "3"]
+      [:span.app-install-guide__step-icon (checkmark-svg)]
+      [:span.app-install-guide__step-text "Tap " [:strong "Add"] " to confirm"]]]]])

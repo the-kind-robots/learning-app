@@ -132,29 +132,3 @@
   font-weight: 700;
 }
 
-/* PWA Install Warning Icon - Top Right */
-
-.pwa-install-warn {
-  position: fixed;
-  top: 14px;
-  right: 16px;
-  z-index: 21;
-  background: none;
-  border: none;
-  font-size: 22px;
-  cursor: pointer;
-  color: #f59e0b;
-  line-height: 1;
-  padding: 4px;
-  transition: color 0.2s;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.pwa-install-warn:active {
-  color: #d97706;
-}
-
-.pwa-install-warn:hover {
-  color: #d97706;
-}

@@ -28,7 +28,8 @@
    [reitit.frontend.controllers :as rfc]
    [reitit.frontend.easy :as rfe]
    [replicant.dom :as r]
-   [runtime.system :as system]))
+   [runtime.system :as system]
+   [sync]))
 
 
 (defn ^:async init
@@ -49,7 +50,14 @@
                             application/sync-virtual-keyboard!)}
 
     :db/sqlite           {:start sqlite/init!}
-    :db/pouch            {:start pouch/init!}
+    :identity/recovery   {:start sync/check-incoming-auth!}
+
+    :db/pouch            {:after [:identity/recovery]
+                          :start pouch/init!}
+
+    :sync/identity       {:requires {:db :db/pouch}
+                          :start    sync/start!
+                          :stop     sync/stop!}
 
     :port/clock          {:start clock/start!}
 

@@ -78,3 +78,12 @@ CREATE TABLE IF NOT EXISTS reviews
 );
 
 
+CREATE TABLE IF NOT EXISTS recovery_tokens
+(
+    sha256     TEXT    PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    created_at INTEGER DEFAULT (UNIXEPOCH()),
+    expires_at INTEGER NOT NULL
+);
+
+

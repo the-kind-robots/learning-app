@@ -134,18 +134,46 @@
 
 
 (defn add-user
-  [db user-name password]
-  ;; create user in SQLite DB
-  (let [password-hash (hashers/derive password {:alg :argon2id})
-        {:keys [id]}  (jdbc/execute-one! db
-                                         ["INSERT INTO users (name, password) VALUES (?, ?) RETURNING id" user-name
-                                          password-hash])
+  "Creates user in SQLite and provisions a CouchDB userdb.
+   Returns {:id int :secret plaintext-password}."
+  ([db]
+   (add-user db (str (random-uuid)) (str (random-uuid) (random-uuid))))
+  ([db user-name password]
+   (let [password-hash (hashers/derive password {:alg :argon2id})
+         {:keys [id]}  (jdbc/execute-one! db
+                                          ["INSERT INTO users (name, password) VALUES (?, ?) RETURNING id"
+                                           user-name password-hash])
+         couch-db      (db/use (str "userdb-" id))]
+     (db/secure couch-db {:members {:names [] :roles [(str "u:" id)]}})
+     {:id id :secret password})))
 
-        ;; create user DB in CouchDB
-        couch-db      (db/use (str "userdb-" id))]
 
-    ;; create user role in CouchDB
-    (db/secure couch-db {:members {:names [] :roles [(str "u:" id)]}})))
+(defn- identity-user-id
+  "Returns integer user-id when id+secret are valid, nil otherwise."
+  [db id secret]
+  (when (and (some? id) (utils/non-blank secret))
+    (let [user (jdbc/execute-one! db
+                                  ["SELECT id, password FROM users WHERE id = ?" id]
+                                  {:builder-fn result-set/as-unqualified-maps})]
+      (when (:valid (hashers/verify secret (or (:password user) "")))
+        (:id user)))))
+
+
+(defn- identity-secret-reset!
+  "Generates a new secret for user-id, updates the stored hash, returns plaintext secret."
+  [db user-id]
+  (let [secret (str (random-uuid) (random-uuid))
+        hash   (hashers/derive secret {:alg :argon2id})]
+    (jdbc/execute! db ["UPDATE users SET password = ? WHERE id = ?" hash user-id])
+    secret))
+
+
+(defn- sha256-hex
+  [^String s]
+  (.formatHex
+   (HexFormat/of)
+   (.digest (doto (MessageDigest/getInstance "SHA-256")
+              (.update (.getBytes s "UTF-8"))))))
 
 
 (comment
@@ -347,7 +375,67 @@
                              (assoc "Retry-After"
                                     (str (max 1 (long (Math/ceil (/ (:retry-after-ms result) 1000.0)))))))
                   :body    (cheshire/generate-string
-                            {:error "Examples are temporarily unavailable"})})))))}]]
+                            {:error "Examples are temporarily unavailable"})})))))}]
+
+     ["/api/identity/claim"
+      {:post
+       (fn [_request]
+         (on-connection [db db-spec]
+                        (let [{:keys [id secret]} (add-user db)]
+                          (-> {:status  200
+                               :headers {"Content-Type" "application/json"}
+                               :body    (cheshire/generate-string {:id id :secret secret})}
+                              (assoc :session {:user-id id})))))}]
+
+     ["/api/identity/auth"
+      {:post
+       (fn [request]
+         (on-connection [db db-spec]
+                        (let [{:keys [id secret]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
+                          (if-let [uid (identity-user-id db id secret)]
+                            (-> {:status 200}
+                                (assoc :session {:user-id uid}))
+                            {:status 401 :body ""}))))}]
+
+     ["/api/identity/recovery-token"
+      {:post
+       (fn [{:keys [session]}]
+         (if-let [uid (:user-id session)]
+           (on-connection [db db-spec]
+                          (let [token      (str (random-uuid) (random-uuid))
+                                token-hash (sha256-hex token)
+                                expires-at (+ (System/currentTimeMillis) (* 30 24 60 60 1000))]
+                            (jdbc/execute! db
+                                           ["INSERT INTO recovery_tokens (sha256, user_id, expires_at) VALUES (?, ?, ?)"
+                                            token-hash uid expires-at])
+                            {:status  200
+                             :headers {"Content-Type" "application/json"}
+                             :body    (cheshire/generate-string {:token token})}))
+           {:status 401 :body ""}))}]
+
+     ["/api/identity/redeem"
+      {:post
+       (fn [request]
+         (on-connection [db db-spec]
+                        (let [{:keys [token]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
+                          (if (utils/non-blank token)
+                            (let [token-hash (sha256-hex token)
+                                  now        (System/currentTimeMillis)
+                                  row        (jdbc/execute-one!
+                                              db
+                                              ["SELECT user_id FROM recovery_tokens WHERE sha256 = ? AND expires_at > ?"
+                                               token-hash now]
+                                              {:builder-fn result-set/as-unqualified-maps})]
+                              (if row
+                                (let [uid        (:user-id row)
+                                      new-secret (identity-secret-reset! db uid)]
+                                  (jdbc/execute! db ["DELETE FROM recovery_tokens WHERE sha256 = ?" token-hash])
+                                  (-> {:status  200
+                                       :headers {"Content-Type" "application/json"}
+                                       :body    (cheshire/generate-string {:id uid :secret new-secret})}
+                                      (assoc :session {:user-id uid})))
+                                {:status 401 :body ""}))
+                            {:status 400 :body ""}))))}]]
 
     {:data {:interceptors [#_session-interceptor
                            (parameters/parameters-interceptor)

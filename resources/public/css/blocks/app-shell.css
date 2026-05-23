@@ -96,41 +96,35 @@
 }
 
 
-.app-shell__install-button {
+.app-shell__menu-button {
   align-items: center;
   background: none;
   border: none;
-  border-radius: 0;
-  color: rgb(var(--color-kiwi));
+  border-radius: 8px;
+  color: rgb(var(--color-wolf));
   cursor: pointer;
   display: inline-flex;
-  font-family: Nunito, sans-serif;
-  font-size: 11px;
-  font-weight: 800;
-  height: 28px;
-  letter-spacing: 0.03em;
+  font-size: 22px;
+  height: 32px;
+  justify-content: center;
   line-height: 1;
   min-height: auto;
-  padding: 0;
+  padding: 0 6px;
   position: fixed;
   right: 56px;
   top: 16px;
-  text-transform: none;
-  transition: color 0.15s, opacity 0.15s;
+  transition: color 0.15s, background-color 0.15s;
   z-index: 20;
 }
 
 @media (hover: hover) {
-  .app-shell__install-button:hover {
+  .app-shell__menu-button:hover {
+    background: rgb(var(--color-polar));
     color: rgb(var(--color-owl));
   }
 }
 
-.app-shell__install-button:active {
+.app-shell__menu-button:active {
+  background: rgb(var(--color-polar));
   color: rgb(var(--color-owl));
-  opacity: 0.9;
-}
-
-.app-shell__install-button[hidden] {
-  display: none;
 }

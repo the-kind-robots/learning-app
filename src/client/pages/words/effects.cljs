@@ -64,3 +64,39 @@
             (dispatch [[:action/show-words {:words words :total total :search search}]]))
           (catch js/Error err
             (log/error :effect/delete-word {:error (str err)})))))))
+
+
+(nxr/register-effect! :effect/export-data
+  (fn ^:async export-data
+    [{:keys [capabilities]} _]
+    (try
+      (let [data (await (vocabulary/export! capabilities))
+            json (js/JSON.stringify (clj->js data) nil 2)
+            blob (js/Blob. #js [json] #js {:type "application/json"})
+            url  (js/URL.createObjectURL blob)
+            a    (doto (js/document.createElement "a")
+                   (aset "href" url)
+                   (aset "download"
+                         (str "sprecha-"
+                              (.slice (.toISOString (js/Date.)) 0 10)
+                              ".json")))]
+        (.click a)
+        (js/URL.revokeObjectURL url))
+      (catch js/Error err
+        (log/error :effect/export-data {:error (str err)})))))
+
+
+(nxr/register-effect! :effect/import-file
+  (fn ^:async import-file
+    [{:keys [capabilities dispatch dispatch-data]} _]
+    (let [file (some-> dispatch-data :replicant/dom-event .-target .-files (aget 0))]
+      (when file
+        (try
+          (let [text    (await (.text file))
+                payload (js->clj (js/JSON.parse text) :keywordize-keys true)]
+            (await (vocabulary/import! capabilities payload))
+            (let [{:keys [words total]} (await (vocabulary/list capabilities {:order :asc}))]
+              (dispatch [[:action/show-words {:words words :total total :search nil}]
+                         [:action/close-more-menu]])))
+          (catch js/Error err
+            (log/error :effect/import-file {:error (str err)})))))))

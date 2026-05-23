@@ -34,4 +34,9 @@
                                     (adapter/save-review! db clock word-id retained translation))
    :progress-store/save-word!     (fn save-word!
                                     [word]
-                                    (adapter/save-word! db clock word))})
+                                    (adapter/save-word! db clock word))
+   :progress-store/export-data!   (fn export-data! []
+                                    (adapter/export-data! db))
+   :progress-store/import-data!   (fn import-data!
+                                    [payload]
+                                    (adapter/import-data! db payload))})
