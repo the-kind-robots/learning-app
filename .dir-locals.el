@@ -1,4 +1,7 @@
-((clojure-mode
+((nil . ((local/clj-dir  . "src/backend")
+         (local/cljs-dir . "src/client")))
+
+ (clojure-mode
   (cider-preferred-build-tool . clojure-cli)
   (cider-clojure-cli-aliases . "dev")
   (cider-clojure-cli-parameters . "--port 7888"))
