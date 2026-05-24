@@ -160,10 +160,27 @@
             (boolean (js/document.querySelector "[data-vk-overlay]"))))))
 
 
+(defn- collections-icon
+  []
+  [:button.app-shell__collections-icon
+   {:type       "button"
+    :aria-label "Открыть наборы"
+    :title      "Наборы"}
+   [:svg.app-shell__collections-icon-svg
+    {:viewBox "0 0 16 16" :aria-hidden "true"}
+    [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
+    [:rect {:x 10 :y 2 :width 4 :height 4 :rx 1}]
+    [:rect {:x 2 :y 10 :width 4 :height 4 :rx 1}]
+    [:rect {:x 10 :y 10 :width 4 :height 4 :rx 1}]]])
+
+
 (defn- render
   [state]
   (list
    [:a.app-shell__logo {:href "/home"} "Sprecha"]
+   (case (:app/page state)
+     :page/home (collections-icon)
+     nil)
    (install-guide/render state)
    (case (:app/page state)
      :page/home   (pages.home.view/page state)
