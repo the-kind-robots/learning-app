@@ -68,7 +68,8 @@ app.db
 
 # Local agent/tool artifacts
 /.codex/skills
-/.claude/
+/.claude/projects/
+/.claude/settings.local.json
 /.opencode/
 /.beads/
 /.clojure-mcp/
