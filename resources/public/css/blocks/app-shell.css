@@ -64,18 +64,15 @@
 }
 
 
-.app-shell__collections-icon {
+.app-shell__corner-icon {
   align-items: center;
-  background: none;
-  border: none;
   color: rgb(var(--color-black-text));
-  cursor: pointer;
   display: inline-flex;
   height: 28px;
   justify-content: center;
-  padding: 0;
   position: fixed;
   right: 16px;
+  text-decoration: none;
   top: 16px;
   transition: opacity 0.15s, transform 0.15s;
   width: 28px;
@@ -83,16 +80,16 @@
 }
 
 @media (hover: hover) {
-  .app-shell__collections-icon:hover {
+  .app-shell__corner-icon:hover {
     opacity: 0.65;
   }
 }
 
-.app-shell__collections-icon:active {
+.app-shell__corner-icon:active {
   transform: scale(0.92);
 }
 
-.app-shell__collections-icon-svg {
+.app-shell__corner-icon-svg {
   fill: currentcolor;
   height: 22px;
   width: 22px;

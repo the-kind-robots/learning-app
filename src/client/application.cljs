@@ -2,6 +2,7 @@
   (:require
    [install-guide.view :as install-guide]
    [nexus.registry :as nxr]
+   [pages.collections.view :as pages.collections.view]
    [pages.home.view :as pages.home.view]
    [pages.lesson.view :as pages.lesson.view]
    [pages.words.view :as pages.words.view]
@@ -63,6 +64,16 @@
       (.setSelectionRange node (.-length (.-value node)) (.-length (.-value node))))))
 
 
+(nxr/register-effect! :effect/select-all
+  (fn select-all [{:keys [dispatch-data]} _]
+    (some-> dispatch-data :replicant/node .select)))
+
+
+(nxr/register-effect! :effect/blur-target
+  (fn blur-target [{:keys [dispatch-data]} _]
+    (some-> dispatch-data :replicant/dom-event .-target .blur)))
+
+
 (nxr/register-effect! :effect/prevent-default
   (fn prevent-default [{:keys [dispatch-data]} _]
     (some-> dispatch-data :replicant/dom-event .preventDefault)))
@@ -103,6 +114,11 @@
 (nxr/register-action! :action/move-cursor-to-end
   (fn move-cursor-to-end [_]
     [[:effect/cursor-to-end]]))
+
+
+(nxr/register-action! :action/select-all
+  (fn select-all [_]
+    [[:effect/select-all]]))
 
 
 ;;
@@ -162,11 +178,11 @@
 
 (defn- collections-icon
   []
-  [:button.app-shell__collections-icon
-   {:type       "button"
+  [:a.app-shell__corner-icon
+   {:href       "/collections"
     :aria-label "Открыть наборы"
     :title      "Наборы"}
-   [:svg.app-shell__collections-icon-svg
+   [:svg.app-shell__corner-icon-svg
     {:viewBox "0 0 16 16" :aria-hidden "true"}
     [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
     [:rect {:x 10 :y 2 :width 4 :height 4 :rx 1}]
@@ -174,18 +190,35 @@
     [:rect {:x 10 :y 10 :width 4 :height 4 :rx 1}]]])
 
 
+(defn- close-icon
+  []
+  [:a.app-shell__corner-icon
+   {:href       "/home"
+    :aria-label "Закрыть"
+    :title      "Закрыть"}
+   [:svg.app-shell__corner-icon-svg
+    {:viewBox "0 0 16 16" :aria-hidden "true"}
+    [:path
+     {:d "M4 4 L12 12 M12 4 L4 12"
+      :stroke "currentColor"
+      :stroke-width 2
+      :stroke-linecap "round"}]]])
+
+
 (defn- render
   [state]
   (list
    [:a.app-shell__logo {:href "/home"} "Sprecha"]
    (case (:app/page state)
-     :page/home (collections-icon)
-     nil)
+     :page/home        (collections-icon)
+     :page/collections (close-icon)
+     (list))
    (install-guide/render state)
    (case (:app/page state)
-     :page/home   (pages.home.view/page state)
-     :page/words  (pages.words.view/page state)
-     :page/lesson (pages.lesson.view/page state)
+     :page/collections (pages.collections.view/page state)
+     :page/home        (pages.home.view/page state)
+     :page/lesson      (pages.lesson.view/page state)
+     :page/words       (pages.words.view/page state)
      [:div.app-loading "Загружаем..."])))
 
 
@@ -205,4 +238,7 @@
      :controllers [{:start #(dispatch [[:effect/load-words]])}]}]
    ["/lesson"
     {:name        :page/lesson
-     :controllers [{:start #(dispatch [[:effect/load-lesson]])}]}]])
+     :controllers [{:start #(dispatch [[:effect/load-lesson]])}]}]
+   ["/collections"
+    {:name        :page/collections
+     :controllers [{:start #(dispatch [[:effect/load-collections]])}]}]])

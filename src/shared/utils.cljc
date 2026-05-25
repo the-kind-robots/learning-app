@@ -6,7 +6,7 @@
 
 
 (def ^:private encode-url-params
-  #?(:clj  codec/form-encode
+  #?(:clj codec/form-encode
      :cljs #(-> % clj->js js/URLSearchParams.)))
 
 
@@ -68,8 +68,8 @@
 (defn parse-int
   ([s] (parse-int s nil))
   ([s default]
-   #?(:clj  (try (Long/parseLong (str s))
-                  (catch Exception _ default))
+   #?(:clj (try (Long/parseLong (str s))
+                (catch Exception _ default))
       :cljs (let [n (js/parseInt s)]
               (if (js/isNaN n) default n)))))
 
@@ -85,6 +85,14 @@
   (->> coll
        (reduce (fn [m x] (if (contains? m (f x)) m (assoc m (f x) x))) {})
        vals))
+
+
+(defn index-by
+  "Build a map of (f x) -> x from coll. Like group-by but assumes f produces
+   unique keys; later items overwrite earlier ones on collision."
+  [f coll]
+  (persistent!
+   (reduce (fn [m x] (assoc! m (f x) x)) (transient {}) coll)))
 
 
 (defn kebab->snake
@@ -127,6 +135,7 @@
 ;; =============================================================================
 ;; Time - Conversions (all use milliseconds as base unit)
 ;; =============================================================================
+
 
 (defn ms->secs
   [ms]

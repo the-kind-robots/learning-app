@@ -17,11 +17,12 @@
 
 (def doc-type->db
   "Maps PouchDB :type string to the dbs-map key for its owning database."
-  {"vocab"   :user/db
-   "review"  :user/db
-   "example" :device/db
-   "task"    :device/db
-   "lesson"  :device/db})
+  {"collection" :user/db
+   "example"    :device/db
+   "lesson"     :device/db
+   "review"     :user/db
+   "task"       :device/db
+   "vocab"      :user/db})
 
 
 (defn db-for

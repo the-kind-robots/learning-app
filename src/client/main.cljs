@@ -8,6 +8,9 @@
    [logging]
    [nexus.action-log :as action-log]
    [nexus.registry :as nxr]
+   [pages.collections.actions]
+   [pages.collections.effects]
+   [pages.collections.view]
    [pages.home.actions]
    [pages.home.effects]
    [pages.lesson.actions]
@@ -15,6 +18,7 @@
    [pages.words.actions]
    [pages.words.effects]
    [ports.clock :as clock]
+   [ports.collections :as collections]
    [ports.dictionary :as dictionary]
    [ports.examples :as examples]
    [ports.navigation :as navigation]
@@ -33,75 +37,80 @@
     (action-log/inspect))
 
   (system/start!
-   {:app/store          {:start (fn [_] (atom {:app/page :page/loading}))}
+   {:app/store           {:start (fn [_] (atom {:app/page :page/loading}))}
 
     :worker/service-worker {:start
                             #(when (js-in "serviceWorker" js/navigator)
                                (js/navigator.serviceWorker.register "/js/app/sw.js" #js {:scope "/"}))}
 
-    :document/listeners {:start
-                         (fn [_]
-                           (js/window.addEventListener "pageshow" application/sync-virtual-keyboard!)
-                           application/sync-virtual-keyboard!)}
+    :document/listeners  {:start
+                          (fn [_]
+                            (js/window.addEventListener "pageshow" application/sync-virtual-keyboard!)
+                            application/sync-virtual-keyboard!)}
 
-    :db/sqlite          {:start sqlite/init!}
-    :db/pouch           {:start pouch/init!}
+    :db/sqlite           {:start sqlite/init!}
+    :db/pouch            {:start pouch/init!}
 
-    :port/clock         {:start clock/start!}
+    :port/clock          {:start clock/start!}
 
-    :worker/task-runner {:requires {:db    :db/pouch
-                                    :clock :port/clock}
-                         :start    task-queue/start!
-                         :stop     task-queue/stop!}
+    :worker/task-runner  {:requires {:db    :db/pouch
+                                     :clock :port/clock}
+                          :start    task-queue/start!
+                          :stop     task-queue/stop!}
 
-    :port/dictionary    {:requires {:db :db/sqlite}
-                         :start    dictionary/start!}
+    :port/dictionary     {:requires {:db :db/sqlite}
+                          :start    dictionary/start!}
 
     :port/progress-store {:requires {:db    :db/pouch
                                      :clock :port/clock}
                           :start    progress-store/start!}
 
-    :port/examples      {:requires {:clock :port/clock
-                                    :db    :db/pouch}
-                         :start    examples/start!}
+    :port/examples       {:requires {:clock :port/clock
+                                     :db    :db/pouch}
+                          :start    examples/start!}
 
-    :port/navigation    {:start navigation/start!}
+    :port/navigation     {:start navigation/start!}
 
-    :app/capabilities   {:requires {:dictionary     :port/dictionary
-                                    :examples       :port/examples
-                                    :navigation     :port/navigation
-                                    :progress-store :port/progress-store}
-                         :start    identity}
+    :port/collections    {:requires {:clock :port/clock
+                                     :db    :db/pouch}
+                          :start    collections/start!}
 
-    :app/render         {:requires {:capabilities :app/capabilities
-                                    :store        :app/store}
-                         :start    (fn [{:keys [store] :as system}]
-                                     (let [dispatch (fn [dispatch-data actions]
-                                                      (nxr/dispatch system dispatch-data actions))]
-                                       (nxr/register-system->state! #(-> % :store deref))
-                                       (r/set-dispatch! dispatch)
-                                       (add-watch store ::render #(application/render! %4))
-                                       {:dispatch #(dispatch {} %)}))}
+    :app/capabilities    {:requires {:collections    :port/collections
+                                     :dictionary     :port/dictionary
+                                     :examples       :port/examples
+                                     :navigation     :port/navigation
+                                     :progress-store :port/progress-store}
+                          :start    identity}
 
-    :pwa/init           {:requires {:render :app/render}
-                         :start    (fn [{:keys [render]}]
-                                     (let [dispatch (:dispatch render)]
-                                       (dispatch [[:effect/pwa-init]])))}
+    :app/render          {:requires {:capabilities :app/capabilities
+                                     :store        :app/store}
+                          :start    (fn [{:keys [store] :as system}]
+                                      (let [dispatch (fn [dispatch-data actions]
+                                                       (nxr/dispatch system dispatch-data actions))]
+                                        (nxr/register-system->state! #(-> % :store deref))
+                                        (r/set-dispatch! dispatch)
+                                        (add-watch store ::render #(application/render! %4))
+                                        {:dispatch #(dispatch {} %)}))}
 
-    :app/router         {:requires {:render :app/render}
-                         :after    [:worker/service-worker
-                                    :document/listeners]
-                         :start    (fn [{:keys [render]}]
-                                     (let [dispatch    (:dispatch render)
-                                           controllers (atom nil)]
-                                       (rfe/start!
-                                        (rf/router
-                                         (application/routes dispatch))
-                                        (fn [match _history]
-                                          (if match
-                                            (reset! controllers (rfc/apply-controllers @controllers match))
-                                            (rfe/navigate :page/home)))
-                                        {:use-fragment false})))}}))
+    :pwa/init            {:requires {:render :app/render}
+                          :start    (fn [{:keys [render]}]
+                                      (let [dispatch (:dispatch render)]
+                                        (dispatch [[:effect/pwa-init]])))}
+
+    :app/router          {:requires {:render :app/render}
+                          :after    [:worker/service-worker
+                                     :document/listeners]
+                          :start    (fn [{:keys [render]}]
+                                      (let [dispatch    (:dispatch render)
+                                            controllers (atom nil)]
+                                        (rfe/start!
+                                         (rf/router
+                                          (application/routes dispatch))
+                                         (fn [match _history]
+                                           (if match
+                                             (reset! controllers (rfc/apply-controllers @controllers match))
+                                             (rfe/navigate :page/home)))
+                                         {:use-fragment false})))}}))
 
 
 (defn ^:async ^:export start
