@@ -40,3 +40,10 @@
         (dispatch [[:action/show-collections data]]))
       (catch js/Error err
         (log/error :effect/load-collections {:error (str err)})))))
+
+
+(nxr/register-effect! :effect/switch-active-collection
+  (fn switch-active-collection
+    [{:keys [capabilities dispatch]} _ collection-id]
+    ((:collections/set-active! (:collections capabilities)) collection-id)
+    (dispatch [[:action/go-to-home]])))

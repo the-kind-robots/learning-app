@@ -6,5 +6,6 @@
 
 (defn start!
   [{:keys [db]}]
-  {:collections/active-id active-collection/active-collection-id
-   :collections/list      (fn list [] (collections/list-collections db))})
+  {:collections/active-id   active-collection/active-collection-id
+   :collections/set-active! active-collection/set-active-collection!
+   :collections/list        (fn list [] (collections/list-collections db))})

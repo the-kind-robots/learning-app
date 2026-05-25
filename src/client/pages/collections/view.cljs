@@ -44,7 +44,8 @@
   [{:keys [preview-words]} active-id]
   [:div.tab-card
    {:replicant/key "main"
-    :class (when (nil? active-id) "tab-card--active")}
+    :class (when (nil? active-id) "tab-card--active")
+    :on    {:click [[:effect/switch-active-collection]]}}
    (card-preview {:name "Всё подряд" :preview-words preview-words})])
 
 
