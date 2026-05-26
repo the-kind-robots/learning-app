@@ -37,6 +37,13 @@
   (db/insert (db-for dbs (:type doc)) doc))
 
 
+(defn bulk-docs
+  "Atomically writes multiple docs to the database that owns `doc-type`.
+   All docs must belong to that same database — caller groups by db."
+  [dbs doc-type docs]
+  (db/bulk-docs (db-for dbs doc-type) docs))
+
+
 (defn get
   "Fetches a document by id from the database that owns the given type string."
   [dbs type-str doc-id]

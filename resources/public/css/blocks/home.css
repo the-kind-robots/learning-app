@@ -25,7 +25,6 @@
     ),
     env(keyboard-inset-height, 0px)
   );
-  transition: padding-bottom 180ms ease;
   width: 100%;
 }
 

@@ -1,6 +1,10 @@
 (ns pages.collections.presenter)
 
 
+(def ^:private preview-word-limit
+  14)
+
+
 (defn- translation-text
   [translation]
   (->> translation
@@ -17,13 +21,17 @@
    :value       value})
 
 
-(defn- item-props
-  [item]
-  (update item :preview-words #(mapv preview-word-props %)))
+(defn- preview-words
+  [words]
+  (->> words
+       (take preview-word-limit)
+       (mapv preview-word-props)))
 
 
 (defn page-props
   [state]
   {:active-id  (:collections/active-id state)
    :editing-id (:collections/editing-id state)
-   :items      (mapv item-props (:collections/items state))})
+   :main       {:preview-words (preview-words (:words (:collections/main state)))}
+   :items      (mapv #(assoc % :preview-words (preview-words (:words %)))
+                     (:collections/items state))})

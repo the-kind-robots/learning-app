@@ -13,14 +13,26 @@
 
 
 (nxr/register-action! :action/show-home
-  (fn show-home [_ total]
+  (fn show-home [_ {:keys [active-id active-name total]}]
     [[:effect/save
-      {:app/page          :page/home
-       :home/empty-vocab? (zero? total)
-       :home/word         ""
-       :home/translation  ""
-       :home/suggestions  empty-suggestions
-       :home/add-error    nil}]]))
+      {:app/page            :page/home
+       :home/active-coll-id active-id
+       :home/active-coll-name active-name
+       :home/add-error      nil
+       :home/empty-vocab?   (zero? total)
+       :home/suggestions    empty-suggestions
+       :home/translation    ""
+       :home/word           ""}]]))
+
+
+(nxr/register-action! :action/handle-collection-rename-keydown
+  (fn handle-collection-rename-keydown [state key]
+    (cond
+      (= key "Enter")  [[:effect/prevent-default]
+                        [:effect/blur-target]]
+      (= key "Escape") [[:effect/prevent-default]
+                        [:effect/set-target-text (:home/active-coll-name state)]
+                        [:effect/blur-target]])))
 
 
 (defn- suggestions

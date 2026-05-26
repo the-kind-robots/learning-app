@@ -60,8 +60,10 @@
 
 (nxr/register-effect! :effect/cursor-to-end
   (fn cursor-to-end [{:keys [dispatch-data]} _]
-    (let [node (:replicant/node dispatch-data)]
-      (.setSelectionRange node (.-length (.-value node)) (.-length (.-value node))))))
+    (let [node (:replicant/node dispatch-data)
+          len  (.-length (.-value node))]
+      (.focus node)
+      (.setSelectionRange node len len))))
 
 
 (nxr/register-effect! :effect/select-all
@@ -74,9 +76,20 @@
     (some-> dispatch-data :replicant/dom-event .-target .blur)))
 
 
+(nxr/register-effect! :effect/set-target-text
+  (fn set-target-text [{:keys [dispatch-data]} _ text]
+    (when-let [target (some-> dispatch-data :replicant/dom-event .-target)]
+      (set! (.-textContent target) (or text "")))))
+
+
 (nxr/register-effect! :effect/prevent-default
   (fn prevent-default [{:keys [dispatch-data]} _]
     (some-> dispatch-data :replicant/dom-event .preventDefault)))
+
+
+(nxr/register-effect! :effect/stop-propagation
+  (fn stop-propagation [{:keys [dispatch-data]} _]
+    (some-> dispatch-data :replicant/dom-event .stopPropagation)))
 
 
 (nxr/register-effect! :effect/request-submit
@@ -129,6 +142,11 @@
 (nxr/register-placeholder! :event.target/value
   (fn [dispatch-data]
     (some-> (:replicant/dom-event dispatch-data) .-target .-value)))
+
+
+(nxr/register-placeholder! :event.target/text-content
+  (fn [dispatch-data]
+    (some-> (:replicant/dom-event dispatch-data) .-target .-textContent)))
 
 
 (nxr/register-placeholder! :event.form.field/value
