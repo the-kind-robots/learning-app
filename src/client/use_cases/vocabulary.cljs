@@ -11,29 +11,33 @@
 
 
 (defn ^:async add!
-  "Adds a new vocabulary word with an initial review.
-   If a duplicate exists (case-insensitive, article-stripped), merges translations.
+  "Adds a new vocabulary word with an initial review and queues a
+   collection-scoped example fetch. If a duplicate exists (case-insensitive,
+   article-stripped), merges translations and does not re-fetch examples.
    Returns {:word-id id :created? true/false}."
-  [{:keys [collections progress-store] :as capabilities} value translation]
+  [{:keys [collections examples progress-store] :as capabilities} value translation]
   (let [parsed     (domain/parse-translations translation)
         normalized (domain/normalize-value value)]
     (if (empty? parsed)
       {:error :empty-translations}
       (let [existing (await (find-duplicate capabilities normalized))]
         (if existing
-          (let [merged    (domain/merge-translations (:translation existing) parsed)
-                updated   (assoc existing :translation merged)
-                active-id ((:collections/active-id collections))]
+          (let [merged        (domain/merge-translations (:translation existing) parsed)
+                updated       (assoc existing :translation merged)
+                collection-id ((:collections/active-id collections))]
             (await ((:progress-store/save-word! progress-store) updated))
-            (when active-id
-              (await ((:collections/add-word! collections) (:_id existing) active-id)))
+            (when collection-id
+              (await ((:collections/add-word! collections) (:_id existing) collection-id)))
             {:word-id (:_id existing) :created? false})
-          (let [word         (domain/new-word value parsed)
+          (let [word (domain/new-word value parsed)
                 {:keys [id]} (await ((:progress-store/save-word! progress-store) word))
-                active-id    ((:collections/active-id collections))]
+                collection-id ((:collections/active-id collections))
+                collection-name (when collection-id
+                                  (:name (await ((:collections/get collections) collection-id))))]
             (await ((:progress-store/save-review! progress-store) id true translation))
-            (when active-id
-              (await ((:collections/add-word! collections) id active-id)))
+            (when collection-id
+              (await ((:collections/add-word! collections) id collection-id)))
+            ((:examples/request! examples) id collection-id collection-name)
             {:word-id id :created? true}))))))
 
 

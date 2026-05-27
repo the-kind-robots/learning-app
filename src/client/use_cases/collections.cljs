@@ -43,10 +43,12 @@
 
 
 (defn ^:async delete!
-  "Deletes a collection. If it was the active one, the active pointer is
-   cleared (the implicit main card becomes active)."
-  [{:keys [collections]} coll-id]
+  "Deletes a collection, cascading to its examples in device-db so they
+   don't linger as orphans. If the deleted collection was active, the
+   active pointer is cleared (the implicit main card becomes active)."
+  [{:keys [collections examples]} coll-id]
   (let [active-id ((:collections/active-id collections))]
+    (await ((:examples/purge-by-collection! examples) coll-id))
     (await ((:collections/delete! collections) coll-id))
     (when (= active-id coll-id)
       ((:collections/set-active! collections) nil))))

@@ -36,11 +36,15 @@
 (defn ^:async fetch-one
   "Fetches an example sentence for the given German word from the backend.
    Returns a promise resolving to the example map."
-  [word translations]
-  (let [url      (->> translations
+  [word translations collection-name]
+  (let [base     (str "/api/examples?word=" (js/encodeURIComponent word))
+        url      (->> translations
                       (filter utils/non-blank)
                       (map #(str "&translation=" (js/encodeURIComponent %)))
-                      (reduce str (str "/api/examples?word=" (js/encodeURIComponent word))))
+                      (reduce str base))
+        url      (if (utils/non-blank collection-name)
+                   (str url "&context=" (js/encodeURIComponent collection-name))
+                   url)
         response (await (js/fetch url))]
     (if (.-ok response)
       (let [json (try
@@ -70,32 +74,47 @@
 
 
 (defn save-example!
-  "Saves an example document for a vocabulary word."
-  [dbs clock word-id word example]
+  "Saves an example document for a vocabulary word. When collection-id is
+   nil the field is omitted — the doc belongs to the implicit main card."
+  [dbs clock word-id word collection-id example]
   (when-not (and (:value example) (:translation example))
     (throw (ex-info "Invalid example: missing required fields"
                     {:word-id word-id :example example})))
-  (let [example-doc {:type        "example"
-                     :word-id     word-id
-                     :word        word
-                     :value       (:value example)
-                     :translation (:translation example)
-                     :structure   (:structure example)
-                     :created-at  ((:clock/now-iso clock))}]
+  (let [example-doc (cond-> {:created-at  ((:clock/now-iso clock))
+                             :structure   (:structure example)
+                             :translation (:translation example)
+                             :type        "example"
+                             :value       (:value example)
+                             :word        word
+                             :word-id     word-id}
+                      collection-id (assoc :collection-id collection-id))]
     (dbs/insert dbs example-doc)))
 
 
+(defn- collection-selector
+  "Selector clause matching a specific collection-id, or — when nil —
+   docs without a :collection-id (the implicit main card)."
+  [collection-id]
+  (if collection-id
+    {:collection-id collection-id}
+    {:collection-id {:$exists false}}))
+
+
 (defn ^:async find
-  "Retrieves the example document for a given word-id, or nil if none exists."
-  [dbs word-id]
-  (let [{examples :docs} (await (dbs/find dbs {:selector {:type "example" :word-id word-id}}))]
+  "Retrieves the example document for a given word-id and collection-id, or nil."
+  [dbs word-id collection-id]
+  (let [selector (merge {:type "example" :word-id word-id}
+                        (collection-selector collection-id))
+        {examples :docs} (await (dbs/find dbs {:selector selector}))]
     (first examples)))
 
 
 (defn ^:async list
-  "Retrieves example documents for the given word-ids."
-  [dbs word-ids]
-  (let [{examples :docs} (await (dbs/find dbs {:selector {:type "example" :word-id {:$in word-ids}}}))]
+  "Retrieves example documents for the given word-ids and collection-id."
+  [dbs word-ids collection-id]
+  (let [selector (merge {:type "example" :word-id {:$in word-ids}}
+                        (collection-selector collection-id))
+        {examples :docs} (await (dbs/find dbs {:selector selector}))]
     examples))
 
 
@@ -107,14 +126,31 @@
       (await (dbs/remove dbs example)))))
 
 
+(defn ^:async purge-by-collection!
+  "Tombstones every example doc bound to `collection-id` in one atomic
+   device-db bulk write. Called when a collection is deleted to keep
+   example storage from accumulating orphans."
+  [dbs collection-id]
+  (let [{examples :docs} (await (dbs/find dbs
+                                          {:selector {:type "example"
+                                                      :collection-id collection-id}}))]
+    (when (seq examples)
+      (await (dbs/bulk-docs dbs "example" (mapv #(assoc % :_deleted true) examples))))))
+
+
 (defn request!
-  [dbs clock word-id]
-  (tasks/create-task! dbs clock "example-fetch" {:word-id word-id}))
+  [dbs clock word-id collection-id collection-name]
+  (tasks/create-task! dbs
+                      clock
+                      "example-fetch"
+                      {:collection-id   collection-id
+                       :collection-name collection-name
+                       :word-id         word-id}))
 
 
 (defmethod tasks/execute-task "example-fetch"
   [{:keys [data]} {:keys [clock dbs]}]
-  (let [{:keys [word-id]} data]
+  (let [{:keys [collection-id collection-name word-id]} data]
     ((fn ^:async f
        []
        (let [word-doc (await (dbs/get dbs "vocab" word-id))]
@@ -124,8 +160,9 @@
              true)
            (try
              (let [example (await (fetch-one (:value word-doc)
-                                             (russian-translations word-doc)))]
-               (await (save-example! dbs clock word-id (:value word-doc) example))
+                                             (russian-translations word-doc)
+                                             collection-name))]
+               (await (save-example! dbs clock word-id (:value word-doc) collection-id example))
                true)
              (catch js/Error err
                (log/warn :example-fetch/failed {:word-id word-id :error (ex-message err)})

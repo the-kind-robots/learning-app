@@ -325,15 +325,18 @@
      ["/api/examples"
       {:get
        (fn [request]
-         (let [word (-> request :params (select-keys [:word :translation]))]
+         (let [{:keys [context word translation]} (:params request)
+               context (utils/non-blank context)]
            (cond
-             (not (utils/non-blank (:word word)))
+             (str/blank? word)
              {:status  400
               :headers {"Content-Type" "application/json"}
               :body    (cheshire/generate-string {:error "Missing 'word' parameter"})}
 
              :else
-             (let [result (examples/generate-one! word)]
+             (let [result (examples/generate-one! {:context     context
+                                                   :translation translation
+                                                   :word        word})]
                (if (examples/valid-example? result)
                  {:status  200
                   :headers {"Content-Type" "application/json"}
@@ -346,7 +349,7 @@
                   :body    (cheshire/generate-string
                             {:error "Examples are temporarily unavailable"})})))))}]]
 
-    {:data {:interceptors [session-interceptor
+    {:data {:interceptors [#_session-interceptor
                            (parameters/parameters-interceptor)
                            (keyword-parameters/keyword-parameters-interceptor)]}})
 

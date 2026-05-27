@@ -130,18 +130,3 @@
     {:dictionary-form dictionary-form
      :translation translation
      :state       (token-state existing translation)}))
-
-
-(defn ^:async add-word-from-structure!
-  "Add dictionary form + translation from lesson example structure into vocabulary."
-  [{:keys [collections examples] :as capabilities} dictionary-form translation]
-  (let [result      (await (vocabulary/add! capabilities dictionary-form translation))
-        active-id   ((:collections/active-id collections))
-        active-name (when active-id
-                      (:name (await ((:collections/get collections) active-id))))]
-    (when (:created? result)
-      ((:examples/request! examples)
-       (:word-id result)
-       active-id
-       active-name))
-    result))
