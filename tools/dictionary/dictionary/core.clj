@@ -27,7 +27,7 @@
                            (:form_of s) (assoc :form_of (:form_of s))))
                        (:senses entry))
    :translations (filterv #(= "ru" (:lang_code %)) (:translations entry))
-   :forms        (filterv :form (mapv #(select-keys % [:form :article]) (:forms entry)))})
+   :forms        (filterv :form (mapv #(select-keys % [:form :article :tags :raw_tags]) (:forms entry)))})
 
 
 (defn merge-dump-entries
@@ -46,9 +46,10 @@
       (let [entry (json/parse-string line true)]
         (if (and (kaikki/german-entry? entry) (kaikki/lemma-entry? entry))
           (let [pos       (str/lower-case (:pos entry "unknown"))
-                entry-key [(str/lower-case (:word entry)) pos (if (= "noun" pos)
-                                                                (kaikki/extract-article entry)
-                                                                (kaikki/entry-discriminant entry pos))]]
+                entry-key [(str/lower-case (:word entry)) pos
+                           (if (= "noun" pos)
+                             (kaikki/extract-article entry)
+                             (kaikki/entry-discriminant entry pos))]]
             [:ok entry-key (slim-entry entry)])
           [:skip]))
       (catch Exception _ [:parse-error]))))
@@ -60,12 +61,13 @@
                          (when (zero? (mod (:total-lines acc) 10000))
                            (print (format "\r  Lines read: %,d " (:total-lines acc)))
                            (flush))
-                         (let [acc            (update acc :total-lines inc)
+                         (let [acc (update acc :total-lines inc)
                                [tag key slim] (classify-line line)]
                            (case tag
                              :skip        acc
                              :parse-error (update acc :parse-errors inc)
-                             :ok          (update acc :dump-entries
+                             :ok          (update acc
+                                                  :dump-entries
                                                   (fn [dump-entries]
                                                     (if-let [existing (get dump-entries key)]
                                                       (assoc dump-entries key (merge-dump-entries existing slim))
@@ -108,18 +110,18 @@
   (println "Building dictionary artifacts...")
   (let [;; Obtain lemmas
         {:keys [dump-entries total-lines]} (load-dump-entries kaikki-path)
-        _                                  (println "  Building lemmas...")
-        [lemmas skip-count]                (build-lemmas dump-entries goethe-index frequency-index)
-        _                                  (println (format "  Lemmas: %,d (skipped: %,d)" (count lemmas) skip-count))
+        _ (println "  Building lemmas...")
+        [lemmas skip-count] (build-lemmas dump-entries goethe-index frequency-index)
+        _ (println (format "  Lemmas: %,d (skipped: %,d)" (count lemmas) skip-count))
 
         ;; Write dictionary
-        _                                  (println "  Writing dictionary.sqlite...")
-        stats                              (sqlite/write-dictionary! output-dir lemmas)
-        _                                  (println (format "  dictionary.sqlite: %,d bytes" (:bytes stats)))
+        _ (println "  Writing dictionary.sqlite...")
+        stats (sqlite/write-dictionary! output-dir lemmas)
+        _ (println (format "  dictionary.sqlite: %,d bytes" (:bytes stats)))
 
         ;; Write data metadata useful for enrichment
-        _                                  (println "  Writing enrichment-meta.jsonl...")
-        meta-stats                         (sqlite/emit-enrichment-meta! output-dir lemmas)]
+        _ (println "  Writing enrichment-meta.jsonl...")
+        meta-stats (sqlite/emit-enrichment-meta! output-dir lemmas)]
 
     (println (format "  enrichment-meta.jsonl: %,d bytes" (:bytes meta-stats)))
     (println "  Writing manifest...")
@@ -156,20 +158,20 @@
   (let [frequency-file  (or frequency-file (str data-dir "/frequency.tsv"))
         timestamp       (utils/now-iso)
         ;; Downloading source data
-        _               (println "Dictionary ingestion starting at" timestamp)
-        _               (.mkdirs (io/file data-dir))
-        _               (.mkdirs (io/file output-dir))
+        _ (println "Dictionary ingestion starting at" timestamp)
+        _ (.mkdirs (io/file data-dir))
+        _ (.mkdirs (io/file output-dir))
         paths           (download/download-sources! data-dir)
 
         ;; Building word importance indexes
-        _               (println "Building Goethe CEFR index...")
+        _ (println "Building Goethe CEFR index...")
         goethe-index    (goethe/stem-level-index (:goethe paths))
-        _               (println (format "  Goethe stems loaded: %,d" (count goethe-index)))
+        _ (println (format "  Goethe stems loaded: %,d" (count goethe-index)))
 
         frequency-index (frequency/read-frequency-file frequency-file)
-        _               (println (format "  Frequency entries loaded: %,d" (count frequency-index)))
+        _ (println (format "  Frequency entries loaded: %,d" (count frequency-index)))
 
         ;; Building the dictionary
-        _               (build-artifacts! (:kaikki paths) goethe-index frequency-index timestamp output-dir)
-        _               (println "Done.")]
+        _ (build-artifacts! (:kaikki paths) goethe-index frequency-index timestamp output-dir)
+        _ (println "Done.")]
     (shutdown-agents)))

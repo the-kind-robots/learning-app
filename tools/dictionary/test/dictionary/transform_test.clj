@@ -8,7 +8,7 @@
 (def ^:private compute-rank #'transform/compute-rank)
 
 
-(def ^:private entry-value #'transform/entry-value)
+(def ^:private lemma-value #'transform/lemma-value)
 
 
 (def ^:private bare-word #'transform/bare-word)
@@ -63,28 +63,58 @@
 
 
 ;; ---------------------------------------------------------------------------
-;; entry-value (private)
+;; lemma-value (private)
 ;; ---------------------------------------------------------------------------
 
 
-(deftest entry-value-noun-with-gender
+(deftest lemma-value-noun-with-gender
   (testing "noun with gender prepends article"
-    (is (= "der Hund" (entry-value "Hund" "noun" "der")))))
+    (is (= "der Hund"
+           (lemma-value {:word "Hund" :tags ["masculine"]} "noun")))))
 
 
-(deftest entry-value-noun-no-gender
+(deftest lemma-value-noun-no-gender
   (testing "noun without gender returns bare word"
-    (is (= "Tier" (entry-value "Tier" "noun" nil)))))
+    (is (= "Tier"
+           (lemma-value {:word "Tier"} "noun")))))
 
 
-(deftest entry-value-verb
+(deftest lemma-value-verb
   (testing "verb ignores gender, returns bare word"
-    (is (= "gehen" (entry-value "gehen" "verb" nil)))))
+    (is (= "gehen"
+           (lemma-value {:word "gehen"} "verb")))))
 
 
-(deftest entry-value-verb-with-gender-ignored
+(deftest lemma-value-verb-with-gender-ignored
   (testing "verb with gender still returns bare word (gender ignored for non-nouns)"
-    (is (= "laufen" (entry-value "laufen" "verb" "der")))))
+    (is (= "laufen"
+           (lemma-value {:word "laufen" :tags ["masculine"]} "verb")))))
+
+
+(deftest lemma-value-substantivized-adjective-uses-weak-form
+  (testing
+    "masculine substantivized adjective uses the weak-decl singular
+   form so we don't ship the ungrammatical 'der Angestellter'"
+    (is (= "der Angestellte"
+           (lemma-value
+            {:word  "Angestellter"
+             :tags  ["masculine"]
+             :forms [{:form     "der Angestellte"
+                      :tags     ["nominative" "singular"]
+                      :raw_tags ["schwache Deklination mit bestimmtem Artikel"]}]}
+            "noun")))))
+
+
+(deftest lemma-value-feminine-substantivized-adjective
+  (testing "feminine variant picks the matching weak-decl form"
+    (is (= "die Angestellte"
+           (lemma-value
+            {:word  "Angestellte"
+             :tags  ["feminine"]
+             :forms [{:form     "die Angestellte"
+                      :tags     ["nominative" "singular"]
+                      :raw_tags ["schwache Deklination mit bestimmtem Artikel"]}]}
+            "noun")))))
 
 
 ;; ---------------------------------------------------------------------------
@@ -136,7 +166,7 @@
                   :lang_code    "de"
                   :tags         ["masculine" "noun"]
                   :senses       [{:tags ["animal"] :glosses ["a dog"]}
-                                  {:tags ["insult"] :glosses ["an unpleasant person"]}]
+                                 {:tags ["insult"] :glosses ["an unpleasant person"]}]
                   :translations [{:lang_code "ru" :word "собака"}
                                  {:lang_code "en" :word "dog"}]
                   :forms        [{:form "Hundes"} {:form "Hunde"} {:form "Hunden"}]}
