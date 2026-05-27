@@ -32,6 +32,12 @@ async function init() {
   const hash12   = manifest.hash.slice(0, 12);
   const poolFile = `/dict.${hash12}.sqlite`;
 
+  // Unlink stale versions first so their handles become available for import.
+  for (const name of pool.getFileNames()) {
+    if (name !== poolFile && name.startsWith("/dict.") && name.endsWith(".sqlite"))
+      pool.unlink(name);
+  }
+
   if (!pool.getFileNames().includes(poolFile)) {
     const buffer = await measure("download",
       () => fetch(`/dictionary/${manifest.filename}`).then(r => r.arrayBuffer()),
@@ -41,13 +47,7 @@ async function init() {
     if (telemetry) self.postMessage({ type: "phase", phase: "cache-hit", status: "ok", durationMs: 0, hash12 });
   }
 
-  await measure("cleanup", async () => {
-    for (const name of pool.getFileNames()) {
-      if (name !== poolFile && name.startsWith("/dict.") && name.endsWith(".sqlite"))
-        pool.unlink(name);
-    }
-    await pool.reduceCapacity(1);
-  });
+  await measure("cleanup", () => pool.reduceCapacity(1));
 
   db = await measure("db-open", () =>
     new sqlite3.oo1.DB({ filename: poolFile, vfs: "opfs-sahpool" }));
