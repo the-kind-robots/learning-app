@@ -1,4 +1,4 @@
-{:paths ["." "word-frequencies" "../../src/shared"]
+{:paths ["." "word-frequencies"]
 
  :deps {org.clojure/clojure                    {:mvn/version "1.12.4"}
         org.clojure/data.csv                  {:mvn/version "1.1.1"}
@@ -8,13 +8,11 @@
         org.xerial/sqlite-jdbc                {:mvn/version "3.53.0.0"}
         ring/ring                             {:mvn/version "1.15.4"}}
 
- :aliases {:build {:deps       {dictionary/dictionary {:local/root "."}}
-                   :ns-default dictionary.core}
-
-           :word-frequencies {:deps       {dictionary/dictionary {:local/root "."}}
+ :aliases {:word-frequencies {:deps       {dictionary/dictionary {:local/root "."}}
                               :ns-default word-frequencies}
 
-           :test {:extra-deps {io.github.cognitect-labs/test-runner  {:git/tag "v0.5.1"
-                                                                      :git/sha "dfb30dd"}}
-                  :main-opts  ["-m" "cognitect.test-runner"
-                               "-d" "test"]}}}
+           :test {:extra-paths ["../../src/shared" "test"]
+                  :extra-deps  {io.github.cognitect-labs/test-runner  {:git/tag "v0.5.1"
+                                                                       :git/sha "dfb30dd"}}
+                  :main-opts   ["-m" "cognitect.test-runner"
+                                "-d" "test"]}}}

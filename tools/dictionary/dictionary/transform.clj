@@ -46,7 +46,7 @@
 (defn- lemma-value
   [kaikki-entry pos]
   (or (when (= "noun" pos)
-        (kaikki/canonical-noun-form kaikki-entry))
+        (:canonical-value kaikki-entry))
       (:word kaikki-entry)))
 
 
@@ -84,17 +84,19 @@
 
 (defn- compute-rank
   "Compute rank for an entry. Higher = more important."
-  [cefr-level sense-count translation-count frequency]
-  (if-let [freq-rank (:rank frequency)]
-    (max 1 (- frequency-base-rank freq-rank))
-    (if-let [base (cefr-base-rank cefr-level)]
-      (+ base (* sense-count 10) translation-count)
-      (min 5000 (+ (* sense-count 100) (* translation-count 10))))))
+  ([cefr-level sense-count translation-count]
+   (compute-rank cefr-level sense-count translation-count nil))
+  ([cefr-level sense-count translation-count frequency]
+   (if-let [freq-rank (:rank frequency)]
+     (max 1 (- frequency-base-rank freq-rank))
+     (if-let [base (cefr-base-rank cefr-level)]
+       (+ base (* sense-count 10) translation-count)
+       (min 5000 (+ (* sense-count 100) (* translation-count 10)))))))
 
 
 (defn lemma
   [kaikki-entry goethe-index frequency-index]
-  (let [pos (str/lower-case (:pos kaikki-entry "unknown"))]
+  (let [pos (str/lower-case (or (:pos kaikki-entry) "unknown"))]
     (when (allowed-pos pos)
       (let [word         (:word kaikki-entry)
             value        (lemma-value kaikki-entry pos)

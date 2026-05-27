@@ -9,21 +9,21 @@
 
 
 ;; ---------------------------------------------------------------------------
-;; doc->json-line
+;; lemma->json-line
 ;; ---------------------------------------------------------------------------
 
 
-(deftest doc->json-line-snake-case-output
+(deftest lemma->json-line-snake-case-output
   (testing "output JSON has snake_case keys"
-    (let [line (emit/doc->json-line {:foo-bar "baz" :baz-qux 1})]
+    (let [line (emit/lemma->json-line {:foo-bar "baz" :baz-qux 1})]
       (is (str/includes? line "foo_bar"))
       (is (str/includes? line "baz_qux")))))
 
 
-(deftest doc->json-line-roundtrip
+(deftest lemma->json-line-roundtrip
   (testing "JSON can be parsed back"
     (let [doc  {:_id "test" :value "hello" :count 42}
-          line (emit/doc->json-line doc)
+          line (emit/lemma->json-line doc)
           back (json/parse-string line true)]
       (is (= "test" (:_id back)))
       (is (= "hello" (:value back)))

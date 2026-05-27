@@ -1,14 +1,10 @@
 (ns dictionary.pipeline-test
   (:require
    [cheshire.core :as json]
-   [clojure.edn :as edn]
-   [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
    [dictionary.core :as core]
-   [dictionary.emit :as emit]
-   [dictionary.goethe :as goethe]
-   [dictionary.transform :as transform]))
+   [dictionary.goethe :as goethe]))
 
 
 (defn- write-temp-csv!
@@ -16,7 +12,7 @@
   [rows]
   (let [f (java.io.File/createTempFile "goethe-pipeline" ".csv")]
     (.deleteOnExit f)
-    (with-open [w (io/writer f)]
+    (with-open [w (clojure.java.io/writer f)]
       (doseq [row rows]
         (.write w (str/join "," row))
         (.write w "\n")))
@@ -24,7 +20,7 @@
 
 
 (deftest full-pure-pipeline-integration
-  (testing "merge → transform → emit → verify manifest with synthetic data"
+  (testing "entries-from-lines → build-lemmas with synthetic data"
     (let [;; Synthetic Kaikki lines
           hund-1       (json/generate-string
                         {:word         "Hund"
@@ -76,64 +72,31 @@
                                          ["geh" "a2"]
                                          ["katz" "b1"]])
           goethe-index (goethe/stem-level-index goethe-path)
-          timestamp    "2026-01-30T12:00:00Z"
 
           ;; Step 1: merge
-          merge-result (core/merge-entries-from-lines lines)]
+          merge-result (core/entries-from-lines lines)]
 
       ;; Verify merge
       (is (= 6 (:total-lines merge-result)))
       (is (= 1 (:parse-errors merge-result)))
       ;; 3 entries: Hund (merged), gehen, Katze — English filtered at regex level
-      (is (= 3 (count (:entries merge-result))))
+      (is (= 3 (count (:dump-entries merge-result))))
 
-      ;; Step 2: transform
-      (let [transform-result (core/transform-entries (:entries merge-result) goethe-index timestamp)]
-        ;; Hund + gehen + Katze = 3 docs (Katze has empty translation, will be enriched later)
-        (is (= 3 (:entry-count transform-result)))
-        (is (= 3 (count (:docs transform-result))))
-        (is (= 0 (:skip-count transform-result)))
+      ;; Step 2: build lemmas
+      (let [[lemmas skip-count] (core/build-lemmas (:dump-entries merge-result) goethe-index {})]
+        ;; Hund + gehen + Katze all have allowed POS → 0 skipped
+        (is (= 3 (count lemmas)))
+        (is (= 0 skip-count))
 
-        ;; Step 3: emit to temp dir
-        (let [tmp-dir      (str (System/getProperty "java.io.tmpdir")
-                                "/pipeline-test-"
-                                (System/currentTimeMillis))
-              _ (.mkdirs (io/file tmp-dir))
-              entries-path (str tmp-dir "/dictionary-entries.jsonl")
-              entry-stats  (emit/write-jsonl! entries-path (:docs transform-result))
-              sf-docs      (transform/surface-form-documents (:sf-index transform-result))
-              sf-path      (str tmp-dir "/surface-forms.jsonl")
-              sf-stats     (emit/write-jsonl! sf-path sf-docs)
-              manifest     (emit/write-manifest! tmp-dir
-                                                 {"dictionary-entries.jsonl" entry-stats
-                                                  "surface-forms.jsonl"      sf-stats}
-                                                 timestamp)]
+        ;; Hund has merged translations from both entries
+        (let [hund-lemma (first (filter #(= "der Hund" (:value %)) lemmas))]
+          (is (some? hund-lemma))
+          (is (= 2 (count (:translations hund-lemma)))))
 
-          ;; Step 4: verify manifest
-          (is (= 3 (get-in manifest [:files "dictionary-entries.jsonl" :count])))
-          (is (pos? (get-in manifest [:files "dictionary-entries.jsonl" :bytes])))
-          (is (pos? (get-in manifest [:files "surface-forms.jsonl" :count])))
+        ;; text-ids have expected prefix
+        (is (every? #(str/starts-with? (:text-id %) "lemma:") lemmas))
 
-          ;; SHA in manifest matches actual file
-          (is (= (emit/sha256 entries-path)
-                 (get-in manifest [:files "dictionary-entries.jsonl" :sha256])))
-          (is (= (emit/sha256 sf-path)
-                 (get-in manifest [:files "surface-forms.jsonl" :sha256])))
-
-          ;; Roundtrip parse: first doc has correct _id prefix and required fields
-          (let [first-line (first (str/split-lines (slurp entries-path)))
-                doc        (json/parse-string first-line true)]
-            (is (str/starts-with? (:_id doc) "lemma:"))
-            (is (some? (:type doc)))
-            (is (some? (:value doc)))
-            (is (seq (:translation doc))))
-
-          ;; Manifest file is readable EDN
-          (let [manifest-data (edn/read-string (slurp (str tmp-dir "/manifest.edn")))]
-            (is (= timestamp (:generated-at manifest-data)))
-            (is (map? (:files manifest-data))))
-
-          ;; Cleanup
-          (doseq [f [entries-path sf-path (str tmp-dir "/manifest.edn")]]
-            (io/delete-file f true))
-          (io/delete-file tmp-dir true))))))
+        ;; CEFR-ranked entries have higher rank than unranked
+        (let [hund-rank  (:rank (first (filter #(= "der Hund" (:value %)) lemmas)))
+              katze-rank (:rank (first (filter #(= "die Katze" (:value %)) lemmas)))]
+          (is (> hund-rank katze-rank)))))))

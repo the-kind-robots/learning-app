@@ -18,16 +18,18 @@
 
 (defn slim-entry
   [entry]
-  {:word         (:word entry)
-   :pos          (:pos entry)
-   :tags         (:tags entry)
-   :senses       (mapv (fn [s]
-                         (cond-> {:tags    (vec (distinct (filter string? (:tags s))))
-                                  :glosses (vec (distinct (filter string? (:glosses s))))}
-                           (:form_of s) (assoc :form_of (:form_of s))))
-                       (:senses entry))
-   :translations (filterv #(= "ru" (:lang_code %)) (:translations entry))
-   :forms        (filterv :form (mapv #(select-keys % [:form :article :tags :raw_tags]) (:forms entry)))})
+  (let [pos (str/lower-case (:pos entry "unknown"))]
+    {:word         (:word entry)
+     :pos          (:pos entry)
+     :tags         (:tags entry)
+     :canonical-value (when (= "noun" pos) (kaikki/canonical-noun-form entry))
+     :senses       (mapv (fn [s]
+                           (cond-> {:tags    (vec (distinct (filter string? (:tags s))))
+                                    :glosses (vec (distinct (filter string? (:glosses s))))}
+                             (:form_of s) (assoc :form_of (:form_of s))))
+                         (:senses entry))
+     :translations (filterv #(= "ru" (:lang_code %)) (:translations entry))
+     :forms        (filterv :form (mapv #(select-keys % [:form :article]) (:forms entry)))}))
 
 
 (defn merge-dump-entries
@@ -80,7 +82,7 @@
 (defn- load-dump-entries
   [kaikki-path]
   (println "  Reading & merging Kaikki entries...")
-  (with-open [reader (kaikki/open-gz-reader kaikki-path)]
+  (with-open [^java.io.BufferedReader reader (kaikki/open-gz-reader kaikki-path)]
     (let [result (entries-from-lines (line-seq reader))]
       (println
        (format
