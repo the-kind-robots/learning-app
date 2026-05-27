@@ -92,12 +92,13 @@
 
 
 (defn- collection-selector
-  "Selector clause matching a specific collection-id, or — when nil —
-   docs without a :collection-id (the implicit main card)."
+  "Selector clause for example queries. Themed cards see only their own
+   collection-scoped examples. The main card (nil collection-id) acts as
+   a union view — no filter is applied, so any example for the word
+   surfaces regardless of which collection generated it."
   [collection-id]
-  (if collection-id
-    {:collection-id collection-id}
-    {:collection-id {:$exists false}}))
+  (when collection-id
+    {:collection-id collection-id}))
 
 
 (defn ^:async find

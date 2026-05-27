@@ -27,7 +27,10 @@
                 collection-id ((:collections/active-id collections))]
             (await ((:progress-store/save-word! progress-store) updated))
             (when collection-id
-              (await ((:collections/add-word! collections) (:_id existing) collection-id)))
+              (await ((:collections/add-word! collections) (:_id existing) collection-id))
+              (when-not (await ((:examples/find examples) (:_id existing) collection-id))
+                (let [collection-name (:name (await ((:collections/get collections) collection-id)))]
+                  ((:examples/request! examples) (:_id existing) collection-id collection-name))))
             {:word-id (:_id existing) :created? false})
           (let [word (domain/new-word value parsed)
                 {:keys [id]} (await ((:progress-store/save-word! progress-store) word))
