@@ -100,8 +100,9 @@
      {:data-vk-overlay true}
      [:header.home__intro
       [:h1.home__title "Главная"]
-      (when empty-vocab?
-        [:p.home__subtitle "Быстро добавляйте слова и учите немецкий даже без сети."])]
+      [:p.home__subtitle
+       {:style {:visibility (if empty-vocab? "visible" "hidden")}}
+       "Быстро добавляйте слова и учите немецкий даже без сети."]]
 
      [:div.home__heading-slot
       (when active-collection
