@@ -18,6 +18,36 @@ async function measure(phase, fn, extras) {
   }
 }
 
+// Hold the OPFS SAH pool lock for the worker's entire lifetime.
+// `ifAvailable: true` makes a second tab fail fast instead of hanging:
+// it gets null and we report a clear "another tab open" error.
+async function withSahPoolLock(initFn) {
+  return navigator.locks.request(
+    "sprecha-sqlite-opfs-sahpool",
+    { ifAvailable: true },
+    async (lock) => {
+      if (lock === null) {
+        self.postMessage({
+          type:    "error",
+          code:    "another-tab-open",
+          message: "Приложение уже открыто в другой вкладке. Закройте её и обновите страницу."
+        });
+        return;
+      }
+      try {
+        await initFn();
+        self.postMessage({ type: "ready" });
+      } catch (err) {
+        self.postMessage({ type: "error", message: String(err) });
+        return;
+      }
+      // Keep the lock alive for the rest of the worker's life;
+      // the browser releases it automatically when the worker terminates.
+      await new Promise(() => {});
+    });
+}
+
+
 async function init() {
   const params = new URL(self.location.href).searchParams;
   const dir = params.get("sqlite3.dir");
@@ -62,6 +92,4 @@ self.addEventListener("message", e => {
   }
 });
 
-measure("init", init)
-  .then(() => self.postMessage({ type: "ready" }))
-  .catch(err => self.postMessage({ type: "error", message: String(err) }));
+withSahPoolLock(() => measure("init", init));
