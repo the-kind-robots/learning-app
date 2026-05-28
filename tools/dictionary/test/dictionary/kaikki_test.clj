@@ -233,3 +233,31 @@
            (kaikki/inflected-forms
             {:word  "Haus"
              :forms [{:form "Häuser"}]})))))
+
+
+(deftest inflected-forms-excludes-feminine-cross-reference
+  (testing "drops forms tagged 'feminine' — those are cross-references, not inflections"
+    (is (= ["Vaters" "Väter"]
+           (kaikki/inflected-forms
+            {:word  "Vater"
+             :forms [{:form "Mutter" :tags ["feminine"]}
+                     {:form "Vaters" :tags ["genitive" "singular"]}
+                     {:form "Väter"  :tags ["nominative" "plural"]}]})))))
+
+
+(deftest inflected-forms-excludes-masculine-cross-reference
+  (testing "drops forms tagged 'masculine' — those are cross-references"
+    (is (= ["Schauspielerinnen"]
+           (kaikki/inflected-forms
+            {:word  "Schauspielerin"
+             :forms [{:form "Schauspieler"      :tags ["masculine"]}
+                     {:form "Schauspielerinnen" :tags ["nominative" "plural"]}]})))))
+
+
+(deftest inflected-forms-excludes-abbreviation-cross-reference
+  (testing "drops forms tagged 'abbreviation'"
+    (is (= ["Angestellte"]
+           (kaikki/inflected-forms
+            {:word  "Angestellter"
+             :forms [{:form "Angest."     :tags ["abbreviation"]}
+                     {:form "Angestellte" :tags ["nominative" "plural"]}]})))))

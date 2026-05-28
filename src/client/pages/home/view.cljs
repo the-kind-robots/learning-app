@@ -9,10 +9,13 @@
    {:role        "option"
     :data-active (when active? "")
     :data-exact  (when exact? "")
-    :on          {:click [[:action/select-suggestion
-                           {:lemma        lemma
-                            :translations translations
-                            :focus-id     "new-word-translation"}]]}}
+    :on          {:click       [[:action/select-suggestion
+                                 {:lemma        lemma
+                                  :translations translations
+                                  :focus-id     "new-word-translation"}]]
+                  ;; Keep input focus during the click so :blur on the input
+                  ;; doesn't fire and clear the suggestions before :click runs.
+                  :pointerdown [[:effect/prevent-default]]}}
    [:span {:lang "de"} lemma]])
 
 
@@ -48,7 +51,8 @@
           ;; keydown is only wired when suggestions are visible — skipping
           ;; the listener on key-repeat avoids a render that would reset
           ;; :value and cause cursor jitter under held backspace.
-          :on           {:input   [[:action/update-word [:event.target/value]]]
+          :on           {:blur    [[:action/dismiss-suggestions]]
+                         :input   [[:action/update-word [:event.target/value]]]
                          :keydown (when (seq items)
                                     [[:action/handler-word-keydown
                                       {:key      [:event.keyboard/key]

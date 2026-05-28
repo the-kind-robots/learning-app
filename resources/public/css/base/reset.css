@@ -11,6 +11,14 @@ textarea {
   outline: none;
 }
 
+/* Restore the browser-default focus ring for keyboard navigation only.
+   Mouse/touch focus stays unringed via the rule above. */
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: revert;
+}
+
 @media (min-width: 700px) {
   *,
   :after,

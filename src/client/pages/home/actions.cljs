@@ -56,6 +56,11 @@
     [[:effect/save {:home/add-error error}]]))
 
 
+(nxr/register-action! :action/dismiss-suggestions
+  (fn dismiss-suggestions [_]
+    [[:effect/save {:home/suggestions empty-suggestions}]]))
+
+
 (nxr/register-action! :action/update-word
   (fn update-word [_ value]
     [[:effect/save {:home/word value :home/translation "" :home/suggestions empty-suggestions}]
@@ -103,7 +108,7 @@
            [:effect/save {:home/suggestions (suggestions items new-idx)}]
            [:effect/scroll-nearest scroll-selector]])
 
-        (and (pos? n) (= key "Tab") (not shift?))
+        (and (pos? n) (or (= key "Enter") (and (= key "Tab") (not shift?))))
         (let [item (get (vec items) (or active-idx 0))]
           (when item
             (into [[:effect/prevent-default]] (select-item item focus-id))))
