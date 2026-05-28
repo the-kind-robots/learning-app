@@ -52,7 +52,7 @@
           original-fetch js/fetch]
       (set! js/fetch (fetch-mocks/mock-fetch-success example))
       (try
-        (let [result (await (sut/fetch-one "Hund" []))]
+        (let [result (await (sut/fetch-one "Hund" [] nil))]
           (is (= "Ich habe einen Hund" (:value result)))
           (is (= "I have a dog" (:translation result))))
         (finally
@@ -68,7 +68,7 @@
              {:error "Examples are temporarily unavailable"}))
       (try
         (try
-          (await (sut/fetch-one "Hund" []))
+          (await (sut/fetch-one "Hund" [] nil))
           (is false "Should have rejected")
           (catch :default error
             (is (= "Examples are temporarily unavailable" (ex-message error)))
@@ -87,7 +87,7 @@
              {"Retry-After" "2"}))
       (try
         (try
-          (await (sut/fetch-one "Hund" []))
+          (await (sut/fetch-one "Hund" [] nil))
           (is false "Should have rejected")
           (catch :default error
             (is (= 429 (:status (ex-data error))))
@@ -102,7 +102,7 @@
       (set! js/fetch (fetch-mocks/mock-fetch-success {:value "Der Hund läuft"}))
       (try
         (try
-          (await (sut/fetch-one "Hund" []))
+          (await (sut/fetch-one "Hund" [] nil))
           (is false "Should have rejected")
           (catch :default error
             (is (= sut/invalid-response-message (ex-message error)))
@@ -118,7 +118,7 @@
       (set! js/fetch (fetch-mocks/mock-fetch-success-invalid-json))
       (try
         (try
-          (await (sut/fetch-one "Hund" []))
+          (await (sut/fetch-one "Hund" [] nil))
           (is false "Should have rejected")
           (catch :default error
             (is (= sut/invalid-response-message (ex-message error)))
@@ -134,7 +134,7 @@
       (set! js/fetch (fetch-mocks/mock-fetch-network-error))
       (try
         (try
-          (await (sut/fetch-one "Hund" []))
+          (await (sut/fetch-one "Hund" [] nil))
           (is false "Should have rejected")
           (catch :default error
             (is (= "Network error" (.-message error)))))
@@ -149,7 +149,7 @@
        [db]
        (let [example {:value "Der Hund" :translation "The dog" :structure []}
              dbs     {:device/db db}]
-         (await (sut/save-example! dbs (test-clock) "word-123" "Hund" example))
+         (await (sut/save-example! dbs (test-clock) "word-123" "Hund" nil example))
          (let [docs  (await (db-queries/fetch-examples db))
                saved (first docs)]
            (is (= 1 (count docs)))
@@ -163,14 +163,14 @@
   (let [example {:translation "The dog"}]
     (is (thrown-with-msg? js/Error
                           #"missing required fields"
-                          (sut/save-example! nil nil "word-123" "Hund" example)))))
+                          (sut/save-example! nil nil "word-123" "Hund" nil example)))))
 
 
 (deftest save-example-throws-on-missing-translation
   (let [example {:value "Der Hund"}]
     (is (thrown-with-msg? js/Error
                           #"missing required fields"
-                          (sut/save-example! nil nil "word-123" "Hund" example)))))
+                          (sut/save-example! nil nil "word-123" "Hund" nil example)))))
 
 
 (deftest find-returns-example-when-exists
@@ -179,7 +179,7 @@
       (^:async fn
        [db]
        (await (db/insert db {:type "example" :word-id "word-123" :value "test"}))
-       (let [result (await (sut/find {:device/db db} "word-123"))]
+       (let [result (await (sut/find {:device/db db} "word-123" nil))]
          (is (some? result))
          (is (= "word-123" (:word-id result))))))))
 
@@ -189,7 +189,7 @@
     (with-test-db
       (^:async fn
        [db]
-       (let [result (await (sut/find {:device/db db} "nonexistent"))]
+       (let [result (await (sut/find {:device/db db} "nonexistent" nil))]
          (is (nil? result)))))))
 
 

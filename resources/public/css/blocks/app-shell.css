@@ -64,6 +64,38 @@
 }
 
 
+.app-shell__corner-icon {
+  align-items: center;
+  color: rgb(var(--color-black-text));
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  position: fixed;
+  right: 16px;
+  text-decoration: none;
+  top: 16px;
+  transition: opacity 0.15s, transform 0.15s;
+  width: 28px;
+  z-index: 20;
+}
+
+@media (hover: hover) {
+  .app-shell__corner-icon:hover {
+    opacity: 0.65;
+  }
+}
+
+.app-shell__corner-icon:active {
+  transform: scale(0.92);
+}
+
+.app-shell__corner-icon-svg {
+  fill: currentcolor;
+  height: 22px;
+  width: 22px;
+}
+
+
 .app-shell__install-button {
   align-items: center;
   background: none;
@@ -81,7 +113,7 @@
   min-height: auto;
   padding: 0;
   position: fixed;
-  right: 16px;
+  right: 56px;
   top: 16px;
   text-transform: none;
   transition: color 0.15s, opacity 0.15s;

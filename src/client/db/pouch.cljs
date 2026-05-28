@@ -17,11 +17,12 @@
 
 (def doc-type->db
   "Maps PouchDB :type string to the dbs-map key for its owning database."
-  {"vocab"   :user/db
-   "review"  :user/db
-   "example" :device/db
-   "task"    :device/db
-   "lesson"  :device/db})
+  {"collection" :user/db
+   "example"    :device/db
+   "lesson"     :device/db
+   "review"     :user/db
+   "task"       :device/db
+   "vocab"      :user/db})
 
 
 (defn db-for
@@ -34,6 +35,13 @@
   "Inserts doc into the database determined by its :type field."
   [dbs doc]
   (db/insert (db-for dbs (:type doc)) doc))
+
+
+(defn bulk-docs
+  "Atomically writes multiple docs to the database that owns `doc-type`.
+   All docs must belong to that same database — caller groups by db."
+  [dbs doc-type docs]
+  (db/bulk-docs (db-for dbs doc-type) docs))
 
 
 (defn get

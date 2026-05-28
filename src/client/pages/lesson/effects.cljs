@@ -2,7 +2,8 @@
   (:require
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
-   [use-cases.lesson :as lesson]))
+   [use-cases.lesson :as lesson]
+   [use-cases.vocabulary :as vocabulary]))
 
 
 (nxr/register-action! :action/go-to-lesson
@@ -69,7 +70,7 @@
   (fn ^:async add-token
     [{:keys [capabilities dispatch]} _ {:keys [dictionary-form translation]}]
     (try
-      (await (lesson/add-word-from-structure! capabilities dictionary-form translation))
+      (await (vocabulary/add! capabilities dictionary-form translation))
       (dispatch [[:action/open-modal
                   {:dictionary-form dictionary-form
                    :translation translation

@@ -18,6 +18,36 @@ async function measure(phase, fn, extras) {
   }
 }
 
+// Hold the OPFS SAH pool lock for the worker's entire lifetime.
+// `ifAvailable: true` makes a second tab fail fast instead of hanging:
+// it gets null and we report a clear "another tab open" error.
+async function withSahPoolLock(initFn) {
+  return navigator.locks.request(
+    "sprecha-sqlite-opfs-sahpool",
+    { ifAvailable: true },
+    async (lock) => {
+      if (lock === null) {
+        self.postMessage({
+          type:    "error",
+          code:    "another-tab-open",
+          message: "Приложение уже открыто в другой вкладке. Закройте её и обновите страницу."
+        });
+        return;
+      }
+      try {
+        await initFn();
+        self.postMessage({ type: "ready" });
+      } catch (err) {
+        self.postMessage({ type: "error", message: String(err) });
+        return;
+      }
+      // Keep the lock alive for the rest of the worker's life;
+      // the browser releases it automatically when the worker terminates.
+      await new Promise(() => {});
+    });
+}
+
+
 async function init() {
   const params = new URL(self.location.href).searchParams;
   const dir = params.get("sqlite3.dir");
@@ -32,6 +62,12 @@ async function init() {
   const hash12   = manifest.hash.slice(0, 12);
   const poolFile = `/dict.${hash12}.sqlite`;
 
+  // Unlink stale versions first so their handles become available for import.
+  for (const name of pool.getFileNames()) {
+    if (name !== poolFile && name.startsWith("/dict.") && name.endsWith(".sqlite"))
+      pool.unlink(name);
+  }
+
   if (!pool.getFileNames().includes(poolFile)) {
     const buffer = await measure("download",
       () => fetch(`/dictionary/${manifest.filename}`).then(r => r.arrayBuffer()),
@@ -41,13 +77,7 @@ async function init() {
     if (telemetry) self.postMessage({ type: "phase", phase: "cache-hit", status: "ok", durationMs: 0, hash12 });
   }
 
-  await measure("cleanup", async () => {
-    for (const name of pool.getFileNames()) {
-      if (name !== poolFile && name.startsWith("/dict.") && name.endsWith(".sqlite"))
-        pool.unlink(name);
-    }
-    await pool.reduceCapacity(1);
-  });
+  await measure("cleanup", () => pool.reduceCapacity(1));
 
   db = await measure("db-open", () =>
     new sqlite3.oo1.DB({ filename: poolFile, vfs: "opfs-sahpool" }));
@@ -62,6 +92,4 @@ self.addEventListener("message", e => {
   }
 });
 
-measure("init", init)
-  .then(() => self.postMessage({ type: "ready" }))
-  .catch(err => self.postMessage({ type: "error", message: String(err) }));
+withSahPoolLock(() => measure("init", init));

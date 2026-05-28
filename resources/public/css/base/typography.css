@@ -1,6 +1,6 @@
 /* nunito-200 - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: normal;
   font-weight: 200;
@@ -9,7 +9,7 @@
 
 /* nunito-200italic - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: italic;
   font-weight: 200;
@@ -18,7 +18,7 @@
 
 /* nunito-300 - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: normal;
   font-weight: 300;
@@ -27,7 +27,7 @@
 
 /* nunito-300italic - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: italic;
   font-weight: 300;
@@ -36,7 +36,7 @@
 
 /* nunito-regular - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: normal;
   font-weight: 400;
@@ -45,7 +45,7 @@
 
 /* nunito-italic - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: italic;
   font-weight: 400;
@@ -54,7 +54,7 @@
 
 /* nunito-500 - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: normal;
   font-weight: 500;
@@ -63,7 +63,7 @@
 
 /* nunito-500italic - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: italic;
   font-weight: 500;
@@ -72,7 +72,7 @@
 
 /* nunito-600 - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: normal;
   font-weight: 600;
@@ -81,7 +81,7 @@
 
 /* nunito-600italic - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: italic;
   font-weight: 600;
@@ -90,7 +90,7 @@
 
 /* nunito-700 - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: normal;
   font-weight: 700;
@@ -99,7 +99,7 @@
 
 /* nunito-700italic - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: italic;
   font-weight: 700;
@@ -108,7 +108,7 @@
 
 /* nunito-800 - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: normal;
   font-weight: 800;
@@ -117,7 +117,7 @@
 
 /* nunito-800italic - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: italic;
   font-weight: 800;
@@ -126,7 +126,7 @@
 
 /* nunito-900 - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: normal;
   font-weight: 900;
@@ -135,7 +135,7 @@
 
 /* nunito-900italic - cyrillic_latin */
 @font-face {
-  font-display: optional;
+  font-display: swap;
   font-family: "Nunito";
   font-style: italic;
   font-weight: 900;

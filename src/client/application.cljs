@@ -2,6 +2,7 @@
   (:require
    [install-guide.view :as install-guide]
    [nexus.registry :as nxr]
+   [pages.collections.view :as pages.collections.view]
    [pages.home.view :as pages.home.view]
    [pages.lesson.view :as pages.lesson.view]
    [pages.words.view :as pages.words.view]
@@ -59,13 +60,36 @@
 
 (nxr/register-effect! :effect/cursor-to-end
   (fn cursor-to-end [{:keys [dispatch-data]} _]
-    (let [node (:replicant/node dispatch-data)]
-      (.setSelectionRange node (.-length (.-value node)) (.-length (.-value node))))))
+    (let [node (:replicant/node dispatch-data)
+          len  (.-length (.-value node))]
+      (.focus node)
+      (.setSelectionRange node len len))))
+
+
+(nxr/register-effect! :effect/select-all
+  (fn select-all [{:keys [dispatch-data]} _]
+    (some-> dispatch-data :replicant/node .select)))
+
+
+(nxr/register-effect! :effect/blur-target
+  (fn blur-target [{:keys [dispatch-data]} _]
+    (some-> dispatch-data :replicant/dom-event .-target .blur)))
+
+
+(nxr/register-effect! :effect/set-target-text
+  (fn set-target-text [{:keys [dispatch-data]} _ text]
+    (when-let [target (some-> dispatch-data :replicant/dom-event .-target)]
+      (set! (.-textContent target) (or text "")))))
 
 
 (nxr/register-effect! :effect/prevent-default
   (fn prevent-default [{:keys [dispatch-data]} _]
     (some-> dispatch-data :replicant/dom-event .preventDefault)))
+
+
+(nxr/register-effect! :effect/stop-propagation
+  (fn stop-propagation [{:keys [dispatch-data]} _]
+    (some-> dispatch-data :replicant/dom-event .stopPropagation)))
 
 
 (nxr/register-effect! :effect/request-submit
@@ -105,6 +129,11 @@
     [[:effect/cursor-to-end]]))
 
 
+(nxr/register-action! :action/select-all
+  (fn select-all [_]
+    [[:effect/select-all]]))
+
+
 ;;
 ;; Placeholder
 ;;
@@ -113,6 +142,11 @@
 (nxr/register-placeholder! :event.target/value
   (fn [dispatch-data]
     (some-> (:replicant/dom-event dispatch-data) .-target .-value)))
+
+
+(nxr/register-placeholder! :event.target/text-content
+  (fn [dispatch-data]
+    (some-> (:replicant/dom-event dispatch-data) .-target .-textContent)))
 
 
 (nxr/register-placeholder! :event.form.field/value
@@ -160,15 +194,49 @@
             (boolean (js/document.querySelector "[data-vk-overlay]"))))))
 
 
+(defn- collections-icon
+  []
+  [:a.app-shell__corner-icon
+   {:href       "/collections"
+    :aria-label "Открыть наборы"
+    :title      "Наборы"}
+   [:svg.app-shell__corner-icon-svg
+    {:viewBox "0 0 16 16" :aria-hidden "true"}
+    [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
+    [:rect {:x 10 :y 2 :width 4 :height 4 :rx 1}]
+    [:rect {:x 2 :y 10 :width 4 :height 4 :rx 1}]
+    [:rect {:x 10 :y 10 :width 4 :height 4 :rx 1}]]])
+
+
+(defn- close-icon
+  []
+  [:a.app-shell__corner-icon
+   {:href       "/home"
+    :aria-label "Закрыть"
+    :title      "Закрыть"}
+   [:svg.app-shell__corner-icon-svg
+    {:viewBox "0 0 16 16" :aria-hidden "true"}
+    [:path
+     {:d "M4 4 L12 12 M12 4 L4 12"
+      :stroke "currentColor"
+      :stroke-width 2
+      :stroke-linecap "round"}]]])
+
+
 (defn- render
   [state]
   (list
    [:a.app-shell__logo {:href "/home"} "Sprecha"]
+   (case (:app/page state)
+     :page/home        (collections-icon)
+     :page/collections (close-icon)
+     (list))
    (install-guide/render state)
    (case (:app/page state)
-     :page/home   (pages.home.view/page state)
-     :page/words  (pages.words.view/page state)
-     :page/lesson (pages.lesson.view/page state)
+     :page/collections (pages.collections.view/page state)
+     :page/home        (pages.home.view/page state)
+     :page/lesson      (pages.lesson.view/page state)
+     :page/words       (pages.words.view/page state)
      [:div.app-loading "Загружаем..."])))
 
 
@@ -188,4 +256,7 @@
      :controllers [{:start #(dispatch [[:effect/load-words]])}]}]
    ["/lesson"
     {:name        :page/lesson
-     :controllers [{:start #(dispatch [[:effect/load-lesson]])}]}]])
+     :controllers [{:start #(dispatch [[:effect/load-lesson]])}]}]
+   ["/collections"
+    {:name        :page/collections
+     :controllers [{:start #(dispatch [[:effect/load-collections]])}]}]])

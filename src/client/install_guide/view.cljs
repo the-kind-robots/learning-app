@@ -53,7 +53,8 @@
    [:button.app-shell__install-button
     {:type       "button"
      :aria-label "Install app"
-     :hidden     (not (:pwa/install-available? state))
+     ;; disabling Install button, until designing proper UI/UX for installation.
+     :hidden     true #_(not (:pwa/install-available? state))
      :on         {:click [[:action/pwa-install-requested]]}}
     "установить"]
    [:div#app-install-guide.app-install-guide

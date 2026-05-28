@@ -1,4 +1,6 @@
-(ns pages.home.view)
+(ns pages.home.view
+  (:require
+   [pages.home.presenter :as presenter]))
 
 
 (defn- suggestion-item
@@ -15,8 +17,8 @@
 
 
 (defn- add-form
-  [{:home/keys [suggestions add-error word translation]}]
-  (let [{:suggestions/keys [items active]} suggestions]
+  [{:keys [add-error suggestions translation word]}]
+  (let [{:keys [items active]} suggestions]
     [:form.home__add-form
      {:id "home-add-form"
       :autocapitalize "none"
@@ -46,7 +48,7 @@
           ;; keydown is only wired when suggestions are visible — skipping
           ;; the listener on key-repeat avoids a render that would reset
           ;; :value and cause cursor jitter under held backspace.
-          :on           {:input [[:action/update-word [:event.target/value]]]
+          :on           {:input   [[:action/update-word [:event.target/value]]]
                          :keydown (when (seq items)
                                     [[:action/handler-word-keydown
                                       {:key      [:event.keyboard/key]
@@ -78,20 +80,39 @@
        {:type "submit"} "ДОБАВИТЬ"]]]))
 
 
+(defn- collection-heading
+  [collection-name]
+  [:h2.home__collection-heading
+   {:contenteditable "plaintext-only"
+    :spellcheck "false"
+    :replicant/key "collection-heading"
+    :on {:blur    [[:effect/rename-active-collection
+                    [:event.target/text-content]]]
+         :keydown [[:action/handle-collection-rename-keydown
+                    [:event.keyboard/key]]]}}
+   collection-name])
+
+
 (defn page
   [state]
-  (let [{:home/keys [empty-vocab?]} state]
+  (let [{:keys [active-collection empty-vocab? form]} (presenter/page-props state)]
     [:div.home
      {:data-vk-overlay true}
      [:header.home__intro
       [:h1.home__title "Главная"]
-      [:p.home__subtitle "Быстро добавляйте слова и учите немецкий даже без сети."]]
+      [:p.home__subtitle
+       {:style {:visibility (if empty-vocab? "visible" "hidden")}}
+       "Быстро добавляйте слова и учите немецкий даже без сети."]]
+
+     [:div.home__heading-slot
+      (when active-collection
+        (collection-heading (:name active-collection)))]
 
      [:main.home__content
       [:section#home-add-panel.home__add
        {:replicant/on-mount [[:action/focus-word-input "new-word-value"]]}
        [:header.home__add-header
-        [:h2.home__panel-title "Быстрое добавление"]
+        [:h2.home__panel-title "Добавить слово"]
         [:button#home-words-button.home__words-button
          {:type        "button"
           :class       (when empty-vocab? "home__words-button--hidden")
@@ -100,7 +121,7 @@
           :on          {:click [[:action/go-to-words]]}}
          "Список слов"]]
 
-       (add-form state)]]
+       (add-form form)]]
 
      [:footer#home-lesson-footer.home__footer.page-footer
       {:hidden empty-vocab?}

@@ -11,9 +11,7 @@
    (fn ^:async search!
      [dispatch capabilities search]
      (try
-       (let [{:keys [words total]} (await (vocabulary/list capabilities
-                                                           {:order  :asc
-                                                            :search search}))]
+       (let [{:keys [words total]} (await (vocabulary/list-active capabilities {:order :asc :search search}))]
          (dispatch [[:action/show-words {:words words :total total :search search}]]))
        (catch js/Error err
          (log/error :effect/set-words-search {:error (str err)}))))
@@ -29,9 +27,7 @@
   (fn ^:async load-words
     [{:keys [capabilities dispatch]} _ search]
     (try
-      (let [{:keys [words total]} (await (vocabulary/list capabilities
-                                                          {:order  :asc
-                                                           :search search}))]
+      (let [{:keys [words total]} (await (vocabulary/list-active capabilities {:order :asc :search search}))]
         (dispatch [[:action/show-words {:words words :total total :search search}]]))
       (catch js/Error err
         (log/error :effect/load-words {:error (str err)})))))
@@ -48,9 +44,7 @@
     [{:keys [capabilities dispatch]} _ {:keys [id translation search]}]
     (try
       (await (vocabulary/update! capabilities id translation))
-      (let [{:keys [words total]} (await (vocabulary/list capabilities
-                                                          {:order  :asc
-                                                           :search search}))]
+      (let [{:keys [words total]} (await (vocabulary/list-active capabilities {:order :asc :search search}))]
         (dispatch [[:action/show-words {:words words :total total :search search}]]))
       (catch js/Error err
         (log/error :effect/update-word {:error (str err)})))))
@@ -59,12 +53,14 @@
 (nxr/register-effect! :effect/delete-word
   (fn ^:async delete-word
     [{:keys [capabilities dispatch]} _ {:keys [id value search]}]
-    (when (js/confirm (str "Удалить «" value "»?"))
-      (try
-        (await (vocabulary/delete! capabilities id))
-        (let [{:keys [words total]} (await (vocabulary/list capabilities
-                                                            {:order  :asc
-                                                             :search search}))]
-          (dispatch [[:action/show-words {:words words :total total :search search}]]))
-        (catch js/Error err
-          (log/error :effect/delete-word {:error (str err)}))))))
+    (let [collection-id ((:collections/active-id (:collections capabilities)))
+          prompt        (if collection-id
+                          (str "Убрать «" value "» из набора?")
+                          (str "Удалить «" value "» окончательно?"))]
+      (when (js/confirm prompt)
+        (try
+          (await (vocabulary/remove-from-active! capabilities id))
+          (let [{:keys [words total]} (await (vocabulary/list-active capabilities {:order :asc :search search}))]
+            (dispatch [[:action/show-words {:words words :total total :search search}]]))
+          (catch js/Error err
+            (log/error :effect/delete-word {:error (str err)})))))))

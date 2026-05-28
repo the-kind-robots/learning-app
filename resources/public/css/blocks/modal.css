@@ -1,15 +1,17 @@
 .modal {
-  background: rgb(var(--color-polar));
+  background: rgb(255 255 255 / 0.96);
   border: 1px solid rgb(0 0 0 / 0.08);
   border-radius: 20px;
-  box-shadow: 0 18px 48px rgb(0 0 0 / 0.18);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.10);
   max-width: 560px;
   padding: 0;
   width: calc(100% - 32px);
 }
 
 .modal::backdrop {
-  background: rgb(0 0 0 / 0.32);
+  backdrop-filter: blur(6px);
+  background: rgb(0 0 0 / 0.10);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 @media (max-width: 600px) {

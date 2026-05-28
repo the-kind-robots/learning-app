@@ -37,12 +37,14 @@
 
 (defn- test-capabilities
   ([dbs]
-   (test-capabilities dbs (fn [_word-id] (js/Promise.resolve nil))))
+   (test-capabilities dbs (fn [_word-id _coll-id _coll-name] (js/Promise.resolve nil))))
   ([dbs request!]
    {:progress-store (progress-store/start! {:db    dbs
                                             :clock {:clock/now-iso time/now-iso
                                                     :clock/now-ms  time/now-ms}})
-    :examples       {:examples/list     (fn [word-ids] (examples/list dbs word-ids))
+    :collections    {:collections/active-id (fn [] nil)
+                     :collections/get       (fn [_] nil)}
+    :examples       {:examples/list     (fn [word-ids _coll-id] (examples/list dbs word-ids nil))
                      :examples/request! request!}}))
 
 
@@ -268,60 +270,6 @@
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "w" :value "die Bank" :translation "банк"}]))
       (let [info (await (sut/token-info (test-capabilities dbs) "die Bank" "скамейка"))]
         (is (= :known-missing-translation (:state info))))))))
-
-
-(deftest add-word-from-structure-appends-translation-to-existing-word
-  (async-testing "`add-word-from-structure!` merges a new translation into an existing word's set"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "w" :value "die Bank" :translation "банк"}]))
-      (let [fetch-tasks (atom [])
-            caps        (test-capabilities dbs
-                                           (fn [word-id]
-                                             (swap! fetch-tasks conj word-id)
-                                             (js/Promise.resolve nil)))
-            result      (await (sut/add-word-from-structure! caps "die Bank" "скамейка"))
-            word        (await (db/get (:user/db dbs) "w"))]
-        (is (false? (:created? result)))
-        (is (empty? @fetch-tasks))
-        (is (= ["банк" "скамейка"]
-               (mapv :value (:translation word)))))))))
-
-
-(deftest add-word-from-structure-creates-vocab-and-fetch-task
-  (async-testing "`add-word-from-structure!` adds vocab and schedules fetch task"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [fetch-tasks (atom [])
-            caps        (test-capabilities dbs
-                                           (fn [word-id]
-                                             (swap! fetch-tasks conj word-id)
-                                             (js/Promise.resolve nil)))
-            result      (await (sut/add-word-from-structure! caps "die Seele" "душа"))
-            words       (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
-        (is (true? (:created? result)))
-        (is (= ["die Seele"] (mapv :value words)))
-        (is (= [(:word-id result)] @fetch-tasks)))))))
-
-
-(deftest add-word-from-structure-skips-fetch-task-for-duplicate
-  (async-testing "`add-word-from-structure!` skips fetch task for duplicate"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [fetch-tasks (atom [])
-            caps        (test-capabilities dbs
-                                           (fn [word-id]
-                                             (swap! fetch-tasks conj word-id)
-                                             (js/Promise.resolve nil)))]
-        (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "die Seele" :translation "душа"}]))
-        (let [result (await (sut/add-word-from-structure! caps "die Seele" "душа"))
-              words  (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
-          (is (false? (:created? result)))
-          (is (= 1 (count words)))
-          (is (empty? @fetch-tasks))))))))
 
 
 (deftest check-answer-returns-error-when-no-lesson

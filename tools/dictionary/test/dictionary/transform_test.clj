@@ -8,7 +8,7 @@
 (def ^:private compute-rank #'transform/compute-rank)
 
 
-(def ^:private entry-value #'transform/entry-value)
+(def ^:private lemma-value #'transform/lemma-value)
 
 
 (def ^:private bare-word #'transform/bare-word)
@@ -21,12 +21,12 @@
 
 (deftest compute-rank-a1-base-plus-bonus
   (testing "A1 base rank 30000 + sense/translation bonus"
-    (is (= 30032 (compute-rank "a1" 3 2)))))
+    (is (= 30032 (compute-rank "a1" 3 2 nil)))))
 
 
 (deftest compute-rank-a2-base-plus-bonus
   (testing "A2 base rank 20000 + bonus"
-    (is (= 20021 (compute-rank "a2" 2 1)))))
+    (is (= 20021 (compute-rank "a2" 2 1 nil)))))
 
 
 (deftest compute-rank-b1-base-plus-bonus
@@ -63,28 +63,48 @@
 
 
 ;; ---------------------------------------------------------------------------
-;; entry-value (private)
+;; lemma-value (private)
 ;; ---------------------------------------------------------------------------
 
 
-(deftest entry-value-noun-with-gender
-  (testing "noun with gender prepends article"
-    (is (= "der Hund" (entry-value "Hund" "noun" "der")))))
+(deftest lemma-value-noun-with-canonical-value
+  (testing "noun uses pre-computed :canonical-value from slim-entry"
+    (is (= "der Hund"
+           (lemma-value {:word "Hund" :canonical-value "der Hund"} "noun")))))
 
 
-(deftest entry-value-noun-no-gender
-  (testing "noun without gender returns bare word"
-    (is (= "Tier" (entry-value "Tier" "noun" nil)))))
+(deftest lemma-value-noun-no-canonical-value
+  (testing "noun without :canonical-value falls back to bare word"
+    (is (= "Tier"
+           (lemma-value {:word "Tier"} "noun")))))
 
 
-(deftest entry-value-verb
-  (testing "verb ignores gender, returns bare word"
-    (is (= "gehen" (entry-value "gehen" "verb" nil)))))
+(deftest lemma-value-verb
+  (testing "verb returns bare word regardless of :canonical-value"
+    (is (= "gehen"
+           (lemma-value {:word "gehen"} "verb")))))
 
 
-(deftest entry-value-verb-with-gender-ignored
-  (testing "verb with gender still returns bare word (gender ignored for non-nouns)"
-    (is (= "laufen" (entry-value "laufen" "verb" "der")))))
+(deftest lemma-value-verb-canonical-value-ignored
+  (testing ":canonical-value is ignored for non-nouns"
+    (is (= "laufen"
+           (lemma-value {:word "laufen" :canonical-value "something"} "verb")))))
+
+
+(deftest lemma-value-substantivized-adjective-uses-canonical-value
+  (testing "substantivized adjective uses pre-computed :canonical-value"
+    (is (= "der Angestellte"
+           (lemma-value
+            {:word "Angestellter" :canonical-value "der Angestellte"}
+            "noun")))))
+
+
+(deftest lemma-value-feminine-substantivized-adjective
+  (testing "feminine substantivized adjective uses pre-computed :canonical-value"
+    (is (= "die Angestellte"
+           (lemma-value
+            {:word "Angestellte" :canonical-value "die Angestellte"}
+            "noun")))))
 
 
 ;; ---------------------------------------------------------------------------
@@ -118,7 +138,7 @@
 
 
 ;; ---------------------------------------------------------------------------
-;; dictionary-entry
+;; lemma (public)
 ;; ---------------------------------------------------------------------------
 
 
@@ -126,56 +146,49 @@
   [["hundefutter" "a1"] ["hund" "a1"] ["geh" "a2"] ["katz" "b1"]])
 
 
-(def ^:private sample-timestamp "2026-01-30T12:00:00Z")
-
-
-(deftest dictionary-entry-full-noun
-  (testing "full noun entry with gender, translations, forms"
-    (let [kentry {:word         "Hund"
+(deftest lemma-full-noun
+  (testing "full noun entry produces correct text-id, value, pos, translations, forms, enrichment"
+    (let [entry  {:word         "Hund"
                   :pos          "Noun"
-                  :lang_code    "de"
+                  :canonical-value "der Hund"
                   :tags         ["masculine" "noun"]
                   :senses       [{:tags ["animal"] :glosses ["a dog"]}
-                                  {:tags ["insult"] :glosses ["an unpleasant person"]}]
+                                 {:tags ["insult"] :glosses ["an unpleasant person"]}]
                   :translations [{:lang_code "ru" :word "собака"}
                                  {:lang_code "en" :word "dog"}]
                   :forms        [{:form "Hundes"} {:form "Hunde"} {:form "Hunden"}]}
-          result (transform/dictionary-entry kentry sample-goethe-index sample-timestamp)]
+          result (transform/lemma entry sample-goethe-index {})]
       (is (some? result))
       (is (= "der Hund" (:value result)))
       (is (= "noun" (:pos result)))
-      (is (= "lemma:der hund:noun" (:_id result)))
-      (is (= [{:lang "ru" :value "собака"}] (:translation result)))
+      (is (= "lemma:der hund:noun" (:text-id result)))
+      (is (= [{:lang "ru" :value "собака"}] (:translations result)))
       (is (= ["Hundes" "Hunde" "Hunden"] (:forms result)))
-      (is (= "a1" (get-in result [:meta :cefr-level])))
-      (is (= "der" (get-in result [:meta :gender])))
+      (is (= "a1" (get-in result [:enrichment :cefr-level])))
       (is (= [{:tags ["animal"] :glosses ["a dog"]}
               {:tags ["insult"] :glosses ["an unpleasant person"]}]
-             (get-in result [:meta :senses])))
+             (get-in result [:enrichment :senses])))
       (is (pos? (:rank result))))))
 
 
-(deftest dictionary-entry-stores-frequency-metadata
-  (testing "frequency data is copied to meta and drives rank"
-    (let [kentry {:word         "Hund"
+(deftest lemma-frequency-drives-rank
+  (testing "frequency data drives rank via frequency-base-rank formula"
+    (let [entry  {:word         "Hund"
                   :pos          "Noun"
-                  :lang_code    "de"
+                  :canonical-value "der Hund"
                   :tags         ["masculine"]
                   :senses       [{:tags ["animal"]}]
                   :translations [{:lang_code "ru" :word "собака"}]
                   :forms        []}
           freq   {"hund" {:source "subtitles" :rank 7 :count 12345.0}}
-          result (transform/dictionary-entry kentry sample-goethe-index sample-timestamp freq)]
-      (is (= {:source "subtitles" :rank 7 :count 12345.0 :matched "Hund"}
-             (get-in result [:meta :frequency])))
+          result (transform/lemma entry sample-goethe-index freq)]
       (is (= 999993 (:rank result))))))
 
 
-(deftest dictionary-entry-aggregates-frequency-from-forms
-  (testing "lemma rank uses the best matching surface form and sums matched counts"
-    (let [kentry {:word         "gehen"
+(deftest lemma-frequency-uses-best-form-match
+  (testing "rank uses the lemma's own frequency (frequency-candidates = value/bare/word)"
+    (let [entry  {:word         "gehen"
                   :pos          "Verb"
-                  :lang_code    "de"
                   :tags         []
                   :senses       [{:tags ["motion"]}]
                   :translations []
@@ -183,208 +196,98 @@
           freq   {"gehen"    {:source "subtlex-de" :rank 500 :count 100.0}
                   "ging"     {:source "subtlex-de" :rank 20 :count 1000.0}
                   "gegangen" {:source "subtlex-de" :rank 200 :count 300.0}}
-          result (transform/dictionary-entry kentry sample-goethe-index sample-timestamp freq)]
-      (is (= {:source "subtlex-de" :rank 20 :count 1400.0 :matched "ging"}
-             (get-in result [:meta :frequency])))
-      (is (= 999980 (:rank result))))))
+          result (transform/lemma entry sample-goethe-index freq)]
+      ;; candidates = ["gehen"] (value=bare=word for verb), matches rank 500
+      (is (= 999500 (:rank result))))))
 
 
-(deftest dictionary-entry-aggregates-noun-frequency-from-forms
-  (testing "noun frequency matches bare lemma and inflected forms, not only article value"
-    (let [kentry {:word         "Hund"
+(deftest lemma-noun-frequency-matches-bare-form
+  (testing "noun frequency lookup uses value and bare word (not inflected forms)"
+    (let [entry  {:word         "Hund"
                   :pos          "Noun"
-                  :lang_code    "de"
+                  :canonical-value "der Hund"
                   :tags         ["masculine"]
                   :senses       [{:tags ["animal"]}]
                   :translations []
                   :forms        [{:form "Hunde"} {:form "Hunden"}]}
           freq   {"hund"  {:source "subtlex-de" :rank 100 :count 100.0}
                   "hunde" {:source "subtlex-de" :rank 40 :count 300.0}}
-          result (transform/dictionary-entry kentry sample-goethe-index sample-timestamp freq)]
-      (is (= {:source "subtlex-de" :rank 40 :count 400.0 :matched "Hunde"}
-             (get-in result [:meta :frequency])))
-      (is (= 999960 (:rank result))))))
+          result (transform/lemma entry sample-goethe-index freq)]
+      ;; frequency-candidates checks value/bare-word/word — "hund" matches at rank 100
+      (is (= 999900 (:rank result))))))
 
 
-(deftest dictionary-entry-verb
-  (testing "verb entry without gender"
-    (let [kentry {:word         "gehen"
+(deftest lemma-verb
+  (testing "verb entry uses bare word as value"
+    (let [entry  {:word         "gehen"
                   :pos          "Verb"
-                  :lang_code    "de"
                   :tags         []
                   :senses       [{:tags ["motion"]}]
                   :translations [{:lang_code "ru" :word "идти"}]
                   :forms        [{:form "ging"} {:form "gegangen"}]}
-          result (transform/dictionary-entry kentry sample-goethe-index sample-timestamp)]
+          result (transform/lemma entry sample-goethe-index {})]
       (is (some? result))
       (is (= "gehen" (:value result)))
-      (is (= "verb" (:pos result)))
-      (is (nil? (get-in result [:meta :gender]))))))
+      (is (= "verb" (:pos result))))))
 
 
-(deftest dictionary-entry-empty-translation-when-no-russian
-  (testing "returns entry with empty translation when no Russian translations"
-    (let [kentry {:word         "Hund"
+(deftest lemma-empty-translations-when-no-russian
+  (testing "entry with no Russian translations produces empty :translations"
+    (let [entry  {:word         "Hund"
                   :pos          "Noun"
-                  :lang_code    "de"
+                  :canonical-value "der Hund"
                   :tags         ["masculine"]
                   :senses       [{:tags ["animal"]}]
                   :translations [{:lang_code "en" :word "dog"}]
                   :forms        []}
-          result (transform/dictionary-entry kentry sample-goethe-index sample-timestamp)]
+          result (transform/lemma entry sample-goethe-index {})]
       (is (some? result))
-      (is (= [] (:translation result))))))
+      (is (= [] (:translations result))))))
 
 
-(deftest dictionary-entry-nil-for-name-without-cefr
-  (testing "returns nil for name POS without CEFR level"
-    (let [kentry {:word         "Berlin"
-                  :pos          "Name"
-                  :lang_code    "de"
-                  :tags         []
-                  :senses       [{:tags []}]
-                  :translations [{:lang_code "ru" :word "Берлин"}]
-                  :forms        []}
-          ;; empty index = no CEFR
-          result (transform/dictionary-entry kentry [] sample-timestamp)]
-      (is (nil? result)))))
+(deftest lemma-nil-for-disallowed-pos
+  (testing "name POS is not in allowed-pos — returns nil"
+    (let [entry {:word         "Berlin"
+                 :pos          "Name"
+                 :tags         []
+                 :senses       [{:tags []}]
+                 :translations [{:lang_code "ru" :word "Берлин"}]
+                 :forms        []}]
+      (is (nil? (transform/lemma entry [] {})))
+      (is (nil? (transform/lemma entry [["berlin" "a1"]] {}))))))
 
 
-(deftest dictionary-entry-name-always-excluded
-  (testing "name POS is always excluded regardless of CEFR level"
-    (let [kentry {:word         "Berlin"
-                  :pos          "Name"
-                  :lang_code    "de"
-                  :tags         []
-                  :senses       [{:tags []}]
-                  :translations [{:lang_code "ru" :word "Берлин"}]
-                  :forms        []}
-          index  [["berlin" "a1"]]
-          result (transform/dictionary-entry kentry index sample-timestamp)]
-      (is (nil? result)))))
-
-
-(deftest dictionary-entry-id-format
-  (testing "_id keeps raw lemma identity while lookup metadata stays normalized"
-    (let [kentry {:word         "Größe"
+(deftest lemma-text-id-format
+  (testing "text-id uses lowercased value with pos suffix"
+    (let [entry  {:word         "Größe"
                   :pos          "Noun"
-                  :lang_code    "de"
+                  :canonical-value "die Größe"
                   :tags         ["feminine"]
                   :senses       [{:tags []}]
                   :translations [{:lang_code "ru" :word "размер"}]
                   :forms        []}
-          result (transform/dictionary-entry kentry [] sample-timestamp)]
-      (is (= "lemma:die größe:noun" (:_id result)))
-      (is (= "die groesse" (get-in result [:meta :normalized-value]))))))
+          result (transform/lemma entry [] {})]
+      (is (= "lemma:die größe:noun" (:text-id result))))))
 
 
-(deftest dictionary-entry-pos-lowercasing
-  (testing "POS is lowercased"
-    (let [kentry {:word         "gehen"
+(deftest lemma-pos-lowercasing
+  (testing "POS is lowercased in output"
+    (let [entry  {:word         "gehen"
                   :pos          "Verb"
-                  :lang_code    "de"
                   :tags         []
                   :senses       [{:tags []}]
                   :translations [{:lang_code "ru" :word "идти"}]
                   :forms        []}
-          result (transform/dictionary-entry kentry [] sample-timestamp)]
+          result (transform/lemma entry [] {})]
       (is (= "verb" (:pos result))))))
 
 
-(deftest dictionary-entry-nil-pos
-  (testing "nil POS is excluded (unknown not in allowed-pos)"
-    (let [kentry {:word         "hmm"
-                  :pos          nil
-                  :lang_code    "de"
-                  :tags         []
-                  :senses       [{:tags []}]
-                  :translations [{:lang_code "ru" :word "хмм"}]
-                  :forms        []}
-          result (transform/dictionary-entry kentry [] sample-timestamp)]
-      (is (nil? result)))))
-
-
-;; ---------------------------------------------------------------------------
-;; accumulate-surface-forms
-;; ---------------------------------------------------------------------------
-
-
-(deftest accumulate-surface-forms-value-bare-and-forms-indexed
-  (testing "value, bare word, and inflected forms are all indexed"
-    (let [entry {:_id   "lemma:der hund:noun"
-                 :value "der Hund"
-                 :rank  30000
-                 :forms ["Hundes" "Hunde"]}
-          idx   (transform/accumulate-surface-forms {} entry)]
-      ;; "der Hund" normalized, "Hund" normalized, "Hundes" normalized, "Hunde" normalized
-      (is (contains? idx "der hund"))
-      (is (contains? idx "hund"))
-      (is (contains? idx "hundes"))
-      (is (contains? idx "hunde")))))
-
-
-(deftest accumulate-surface-forms-verb-value-equals-bare
-  (testing "verb where value == bare word doesn't create duplicates in index entries"
-    (let [entry {:_id   "lemma:gehen:verb"
-                 :value "gehen"
-                 :rank  20000
-                 :forms ["ging" "gegangen"]}
-          idx   (transform/accumulate-surface-forms {} entry)]
-      ;; "gehen" should appear once in the index (value and bare are same)
-      (is (= 1 (count (get idx "gehen")))))))
-
-
-(deftest accumulate-surface-forms-accumulates-across-entries
-  (testing "accumulates entries for the same normalized form"
-    (let [entry1 {:_id   "lemma:der hund:noun"
-                  :value "der Hund"
-                  :rank  30000
-                  :forms ["Hunde"]}
-          entry2 {:_id   "lemma:hunde:noun"
-                  :value "Hunde"
-                  :rank  5000
-                  :forms []}
-          idx    (-> {}
-                     (transform/accumulate-surface-forms entry1)
-                     (transform/accumulate-surface-forms entry2))]
-      (is (= 2 (count (get idx "hunde")))))))
-
-
-;; ---------------------------------------------------------------------------
-;; surface-form-documents
-;; ---------------------------------------------------------------------------
-
-
-(deftest surface-form-documents-sorted-by-key
-  (testing "documents are sorted alphabetically by normalized form"
-    (let [idx  {"zebra" [{:lemma-id "z" :lemma "Zebra" :rank 100}]
-                "apfel" [{:lemma-id "a" :lemma "Apfel" :rank 200}]}
-          docs (transform/surface-form-documents idx)]
-      (is (= "sf:apfel" (:_id (first docs))))
-      (is (= "sf:zebra" (:_id (second docs)))))))
-
-
-(deftest surface-form-documents-entries-sorted-by-rank-desc
-  (testing "entries within a doc are sorted by rank descending"
-    (let [idx  {"hund" [{:lemma-id "a" :lemma "A" :rank 100}
-                        {:lemma-id "b" :lemma "B" :rank 5000}]}
-          docs (transform/surface-form-documents idx)
-          doc  (first docs)]
-      (is (= 5000 (:rank (first (:entries doc)))))
-      (is (= 100 (:rank (second (:entries doc))))))))
-
-
-(deftest surface-form-documents-sf-prefix
-  (testing "_id has sf: prefix"
-    (let [idx  {"test" [{:lemma-id "t" :lemma "Test" :rank 100}]}
-          docs (transform/surface-form-documents idx)]
-      (is (= "sf:test" (:_id (first docs)))))))
-
-
-(deftest surface-form-documents-dedup
-  (testing "duplicate entries for same form are deduplicated"
-    (let [entry {:lemma-id "a" :lemma "A" :rank 100}
-          idx   {"test" [entry entry]}
-          docs  (transform/surface-form-documents idx)
-          doc   (first docs)]
-      (is (= 1 (count (:entries doc)))))))
+(deftest lemma-nil-pos
+  (testing "nil POS maps to unknown and is excluded"
+    (let [entry {:word         "hmm"
+                 :pos          nil
+                 :tags         []
+                 :senses       [{:tags []}]
+                 :translations [{:lang_code "ru" :word "хмм"}]
+                 :forms        []}]
+      (is (nil? (transform/lemma entry [] {}))))))

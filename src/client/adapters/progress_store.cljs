@@ -92,26 +92,28 @@
 
 (defn ^:async list-words
   [dbs clock
-   {:keys [order limit offset search]
+   {:keys [order limit offset search word-ids]
     :or   {order :desc}}]
-  (let [{docs :docs} (await (find-all dbs "vocab"))
+  (let [{all-docs :docs} (await (find-all dbs "vocab"))
+        docs        (cond->> all-docs
+                      (some? word-ids) (filter #((set word-ids) (:_id %))))
+        total-count (clojure/count docs)
         retention-levels (await (word-retention-levels dbs (mapv :_id docs) (now-ms clock)))
-        total-count  (clojure/count docs)
         word-id->retention (->> retention-levels
                                 (map (juxt :word-id :retention-level))
                                 (into {}))
-        words        (cond->> docs
-                       (utils/non-blank search)
-                       (filter (fn [{:keys [value translation]}]
-                                 (or (utils/includes? value search)
-                                     (some #(utils/includes? (:value %) search) translation)))))
-        words        (->> words
-                          (map (fn [word]
-                                 (assoc word :retention-level (word-id->retention (:_id word) 0))))
-                          (sort-by :retention-level (if (= order :asc) < >)))
-        words        (cond->> words
-                       offset (drop offset)
-                       limit  (take limit))]
+        words       (cond->> docs
+                      (utils/non-blank search)
+                      (filter (fn [{:keys [value translation]}]
+                                (or (utils/includes? value search)
+                                    (some #(utils/includes? (:value %) search) translation)))))
+        words       (->> words
+                         (map (fn [word]
+                                (assoc word :retention-level (word-id->retention (:_id word) 0))))
+                         (sort-by :retention-level (if (= order :asc) < >)))
+        words       (cond->> words
+                      offset (drop offset)
+                      limit  (take limit))]
     {:total total-count
      :words (vec words)}))
 
@@ -133,13 +135,26 @@
 
 
 (defn ^:async delete-word!
+  "Atomically removes the word and its reviews from user-db, scrubbing the
+   word-id from every collection's :word-ids in the same bulk write. Examples
+   live in device-db and are deleted as a follow-up best-effort bulk write."
   [dbs word-id]
   (when-let [word (await (dbs/get dbs "vocab" word-id))]
     (let [{reviews :docs}  (await (find-all dbs word-id "review"))
-          {examples :docs} (await (find-all dbs word-id "example"))]
-      (await (js/Promise.all (into-array (map #(dbs/remove dbs %) reviews))))
-      (await (js/Promise.all (into-array (map #(dbs/remove dbs %) examples))))
-      (await (dbs/remove dbs word)))))
+          {examples :docs} (await (find-all dbs word-id "example"))
+          {collections :docs} (await (dbs/find dbs {:selector {:type "collection"}}))
+          tombstone        #(assoc % :_deleted true)
+          updated-collections (->> collections
+                                   (filter #(some #{word-id} (:word-ids %)))
+                                   (mapv #(update %
+                                                  :word-ids
+                                                  (partial filterv (complement #{word-id})))))
+          user-bulk        (-> [(tombstone word)]
+                               (into (map tombstone) reviews)
+                               (into updated-collections))]
+      (await (dbs/bulk-docs dbs "vocab" user-bulk))
+      (when (seq examples)
+        (await (dbs/bulk-docs dbs "example" (mapv tombstone examples)))))))
 
 
 (defn get-lesson

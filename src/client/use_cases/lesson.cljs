@@ -35,16 +35,19 @@
    opts:
      :words-per-lesson  — how many vocabulary words to include (default 3)
      :trial-selector    — strategy for picking the next trial (:first or :random, default nil → random)"
-  [{:keys [examples progress-store] :as capabilities}
+  [{:keys [collections examples progress-store] :as capabilities}
    {:keys [words-per-lesson trial-selector]
     :or   {words-per-lesson domain/default-words-per-lesson}}]
   (try
-    (let [{selected-words :words} (await (vocabulary/list capabilities {:order :asc :limit words-per-lesson}))]
+    (let [{selected-words :words} (await (vocabulary/list-active
+                                          capabilities
+                                          {:order :asc :limit words-per-lesson}))]
       (if-not (seq selected-words)
         {:error :no-words-available}
-        (let [lesson-words    (mapv lesson-word selected-words)
+        (let [collection-id   ((:collections/active-id collections))
+              lesson-words    (mapv lesson-word selected-words)
               word-ids        (mapv :id lesson-words)
-              lesson-examples (await ((:examples/list examples) word-ids))
+              lesson-examples (await ((:examples/list examples) word-ids collection-id))
               lesson-state    (domain/initial-state lesson-words lesson-examples trial-selector)
               {:keys [rev]}   (await ((:progress-store/save-lesson! progress-store) lesson-state))]
           {:lesson-state (assoc lesson-state :_rev rev)})))
@@ -127,12 +130,3 @@
     {:dictionary-form dictionary-form
      :translation translation
      :state       (token-state existing translation)}))
-
-
-(defn ^:async add-word-from-structure!
-  "Add dictionary form + translation from lesson example structure into vocabulary."
-  [{:keys [examples] :as capabilities} dictionary-form translation]
-  (let [result (await (vocabulary/add! capabilities dictionary-form translation))]
-    (when (:created? result)
-      ((:examples/request! examples) (:word-id result)))
-    result))

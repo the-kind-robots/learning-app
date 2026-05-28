@@ -53,6 +53,40 @@
      (-> entry :forms first :article #{"der" "die" "das"}))))
 
 
+(def ^:private weak-with-article-raw-tag
+  "schwache Deklination mit bestimmtem Artikel")
+
+
+(defn weak-decl-noun-form
+  "For a substantivized adjective (e.g. \"Angestellter\", \"Beamter\"),
+   returns the weak-declension nominative singular form with article —
+   e.g. \"der Angestellte\", \"die Beamte\". nil for regular nouns: the
+   form is unique to adjectival declension and absent from agentive
+   -er nouns like \"Lehrer\"."
+  [entry]
+  (->> (:forms entry)
+       (some (fn [{:keys [form tags raw_tags]}]
+               (let [tags     (set tags)
+                     raw-tags (set raw_tags)]
+                 (when (and form
+                            (tags "nominative")
+                            (tags "singular")
+                            (raw-tags weak-with-article-raw-tag))
+                   form))))))
+
+
+(defn canonical-noun-form
+  "Returns the canonical 'article + lemma' display form for a noun entry.
+   For substantivized adjectives uses the weak-decl singular (so
+   \"Angestellter\" + masculine becomes \"der Angestellte\", not the
+   ungrammatical \"der Angestellter\"). Otherwise falls back to
+   `(str article \" \" word)`. nil when no article can be determined."
+  [entry]
+  (or (weak-decl-noun-form entry)
+      (when-let [article (extract-article entry)]
+        (str article " " (:word entry)))))
+
+
 (defn entry-discriminant
   "Distinguishes homographs sharing (word, pos). Only meaningful for verbs:
    returns \"separable\" / \"inseparable\", or nil."

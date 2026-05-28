@@ -44,10 +44,10 @@
 
 
 (defn- lemma-value
-  [word pos article]
-  (if (and (= "noun" pos) article)
-    (str article " " word)
-    word))
+  [kaikki-entry pos]
+  (or (when (= "noun" pos)
+        (:canonical-value kaikki-entry))
+      (:word kaikki-entry)))
 
 
 (defn- lemma-id-value
@@ -84,31 +84,32 @@
 
 (defn- compute-rank
   "Compute rank for an entry. Higher = more important."
-  [cefr-level sense-count translation-count frequency]
-  (if-let [freq-rank (:rank frequency)]
-    (max 1 (- frequency-base-rank freq-rank))
-    (if-let [base (cefr-base-rank cefr-level)]
-      (+ base (* sense-count 10) translation-count)
-      (min 5000 (+ (* sense-count 100) (* translation-count 10))))))
+  ([cefr-level sense-count translation-count]
+   (compute-rank cefr-level sense-count translation-count nil))
+  ([cefr-level sense-count translation-count frequency]
+   (if-let [freq-rank (:rank frequency)]
+     (max 1 (- frequency-base-rank freq-rank))
+     (if-let [base (cefr-base-rank cefr-level)]
+       (+ base (* sense-count 10) translation-count)
+       (min 5000 (+ (* sense-count 100) (* translation-count 10)))))))
 
 
 (defn lemma
   [kaikki-entry goethe-index frequency-index]
-  (let [pos (str/lower-case (:pos kaikki-entry "unknown"))]
+  (let [pos (str/lower-case (or (:pos kaikki-entry) "unknown"))]
     (when (allowed-pos pos)
-      (let [word              (:word kaikki-entry)
-            article           (when (= "noun" pos) (kaikki/extract-article kaikki-entry))
-            value             (lemma-value word pos article)
-            discriminant      (kaikki/entry-discriminant kaikki-entry pos)
-            text-id           (cond-> (str "lemma:" (lemma-id-value value) ":" pos)
-                                discriminant (str ":" discriminant))
-            translations      (kaikki/russian-translations kaikki-entry)
-            senses            (:senses kaikki-entry)
-            sense-count       (count senses)
+      (let [word         (:word kaikki-entry)
+            value        (lemma-value kaikki-entry pos)
+            discriminant (kaikki/entry-discriminant kaikki-entry pos)
+            text-id      (cond-> (str "lemma:" (lemma-id-value value) ":" pos)
+                           discriminant (str ":" discriminant))
+            translations (kaikki/russian-translations kaikki-entry)
+            senses       (:senses kaikki-entry)
+            sense-count  (count senses)
             translation-count (count translations)
-            cefr              (goethe/cefr-level goethe-index word)
-            frequency         (frequency-for-entry frequency-index kaikki-entry value)
-            rank              (compute-rank cefr sense-count translation-count frequency)]
+            cefr         (goethe/cefr-level goethe-index word)
+            frequency    (frequency-for-entry frequency-index kaikki-entry value)
+            rank         (compute-rank cefr sense-count translation-count frequency)]
         {:text-id      text-id
          :value        value
          :pos          pos

@@ -38,17 +38,19 @@ Example:
 ```
 
 ### Requirement: Example documents are stored
-The system SHALL store example documents linked to vocabulary words with an ISO 8601 creation timestamp.
+The system SHALL store example documents linked to vocabulary words with an ISO 8601 creation timestamp. Example documents MAY carry a `collection-id` field that scopes the example to a named collection; absence of the field means the example was generated under All Words (see `specs/examples-schema/spec.md`).
 
 #### Scenario: Example document shape
 - **WHEN** an example is stored
 - **THEN** the document includes `type`, `word-id`, `word`, `value`, `translation`, `structure`, and `created-at`
+- **AND** the document optionally includes `collection-id` when generated under a named collection
 
 Example:
 ```json
 {
   "type": "example",
   "word-id": "<vocab-id>",
+  "collection-id": "collection-abc123",
   "word": "der Hund",
   "value": "Der Hund schlaeft unter dem Tisch.",
   "translation": "The dog sleeps under the table.",

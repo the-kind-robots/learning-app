@@ -1,0 +1,540 @@
+/* Sprecha — minimal, no-frills.
+   Top header is OUTSIDE the views; the same Sprecha brand sits at the
+   top of the shell whether you're on home or in the switcher. Views
+   live in the content area below. */
+:root {
+  /* Duolingo-ish palette — used ONLY for card borders, NEVER as backgrounds. */
+  --duo-green:  #58cc02;
+  --duo-green-d:#46a302;
+  --duo-blue:   #1cb0f6;
+  --duo-orange: #ff9600;
+  --duo-pink:   #ff86d0;
+  --duo-purple: #ce82ff;
+  --duo-yellow: #ffc800;
+  --duo-red:    #ff4b4b;
+  --duo-teal:   #00cd9c;
+
+  --ink:        #3c3c3c;
+  --eel:        #4b4b4b;
+  --wolf:       #777777;
+  --hare:       #afafaf;
+  --swan:       #e5e5e5;
+  --polar:      #f7f7f7;
+  --snow:       #ffffff;
+
+  /* Accent (tweakable) — used for primary "Начать урок" button. */
+  --accent:        var(--duo-green);
+  --accent-deep:   var(--duo-green-d);
+
+  --r-md: 16px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+
+  --font: "Nunito", system-ui, sans-serif;
+
+  --shell-max: 480px;
+  --header-h:  56px;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--polar);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body { min-height: 100vh; min-height: 100dvh; overflow: hidden; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; padding: 0; color: inherit; }
+input { font-family: inherit; }
+
+/* App shell ---------------------------------------------------------- */
+#root {
+  width: 100vw; height: 100vh; height: 100dvh;
+  display: flex; align-items: stretch; justify-content: center;
+  background: var(--polar);
+}
+.app-shell {
+  width: 100%;
+  max-width: var(--shell-max);
+  height: 100%;
+  background: var(--snow);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 30px 80px -30px rgba(0,0,0,.18);
+  overflow: hidden;
+}
+/* Tablet — keep mobile-shaped but pad with a card border */
+@media (min-width: 600px) and (max-width: 899px) {
+  .app-shell {
+    margin: 24px 0;
+    height: calc(100% - 48px);
+    border-radius: 24px;
+    border: 1px solid var(--swan);
+  }
+}
+/* Desktop overrides live at the END of this file. */
+
+/* Persistent top header (Sprecha + icon) ----------------------------- */
+.topbar {
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  background: var(--snow);
+}
+.brand {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.icon-btn {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  display: grid; place-items: center;
+  color: var(--eel);
+  transition: background .15s, transform .12s;
+}
+.icon-btn:hover { background: var(--polar); }
+.icon-btn:active { transform: scale(.92); }
+
+/* Morphing grid ↔ X icon (state is inline-styled by React to avoid
+   SVG-class quirks in some browsers). */
+.morph-icon {
+  position: relative; width: 22px; height: 22px;
+}
+
+/* Content area (below header) — both views live here ----------------- */
+.content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--snow);
+}
+
+/* HOME view --------------------------------------------------------- */
+.home {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.home-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  padding: 24px 22px 16px;
+  min-height: 0;
+}
+
+/* Big editable title — IS the name input. Looks like text by default,
+   reveals input affordance on hover/focus.
+   The disabled state (used on the main card, whose name is fixed
+   "Всё подряд") strips the hover/focus chrome so it reads as plain text. */
+.set-name {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font: inherit;
+  font-weight: 900;
+  font-size: clamp(32px, 7.5vw, 42px);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 6px 12px;
+  margin: 0 0 28px;
+  border-radius: 10px;
+  caret-color: var(--duo-blue);
+  transition: background .15s, box-shadow .15s;
+}
+.set-name::placeholder { color: var(--hare); font-weight: 800; }
+.set-name:hover:not(:focus):not(:disabled) { background: color-mix(in oklab, var(--ink) 4%, transparent); }
+.set-name:focus { background: var(--polar); box-shadow: inset 0 0 0 2px var(--duo-blue); }
+.set-name:disabled { color: var(--ink); -webkit-text-fill-color: var(--ink); cursor: default; }
+
+/* Add-word card — primary surface of the home view */
+.add-card {
+  background: var(--snow);
+  border: 2px solid var(--swan);
+  border-radius: var(--r-xl);
+  padding: 20px 18px 22px;
+  box-shadow: 0 2px 0 var(--swan);
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.section-head h2 {
+  margin: 0;
+  font-weight: 800;
+  font-size: 19px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.pill-btn {
+  border: 2px solid var(--swan);
+  border-bottom-width: 3px;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--eel);
+  background: var(--snow);
+  transition: background .12s, transform .08s;
+  white-space: nowrap;
+}
+.pill-btn:hover { background: var(--polar); }
+.pill-btn:active { transform: translateY(1px); border-bottom-width: 2px; }
+
+.word-row-form {
+  display: grid;
+  grid-template-columns: 1fr 22px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.word-row-form .arrow { text-align: center; color: var(--hare); font-weight: 700; font-size: 18px; }
+
+.t-input {
+  width: 100%; height: 52px;
+  padding: 0 16px;
+  border: 2px solid var(--swan);
+  border-radius: var(--r-md);
+  background: var(--polar);
+  font-size: 16px; font-weight: 600;
+  color: var(--ink);
+  outline: none;
+  transition: border-color .15s, background .15s;
+}
+.t-input::placeholder { color: var(--hare); font-weight: 500; }
+.t-input:focus {
+  border-color: var(--duo-blue);
+  background: var(--snow);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--duo-blue) 18%, transparent);
+}
+
+.duo-btn {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 16px 16px;
+  border-radius: var(--r-md);
+  font-family: var(--font);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--snow);
+  background: var(--duo-blue);
+  box-shadow: 0 4px 0 #1899d6;
+  transition: transform .08s, box-shadow .08s, filter .12s;
+}
+.duo-btn:hover { filter: brightness(1.04); }
+.duo-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #1899d6; }
+.duo-btn.primary {
+  background: var(--accent);
+  box-shadow: 0 4px 0 var(--accent-deep);
+}
+.duo-btn.primary:active { box-shadow: 0 1px 0 var(--accent-deep); }
+.duo-btn.lg { padding: 18px 16px; font-size: 16px; }
+
+.word-chips {
+  display: none; /* legacy; chips removed from home */
+}
+
+.home-footer {
+  flex-shrink: 0;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--swan);
+  background: var(--polar);
+}
+
+/* SWITCHER view ----------------------------------------------------- */
+.switcher {
+  position: absolute; inset: 0;
+  background: var(--polar);
+  overflow-y: auto;
+  padding: 18px 16px 24px;
+}
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+@media (min-width: 720px) {
+  .cards-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Tab card — just a scaled mirror of the home view inside a rounded
+   rect with a thin Duolingo-palette border. No band, no emoji. */
+.tab-card {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  border-radius: 20px;
+  background: var(--snow);
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid var(--card-border, var(--swan));
+  transition: transform .18s, box-shadow .18s, border-color .18s, border-width .12s;
+  box-shadow: 0 6px 16px -10px rgba(0,0,0,.12);
+}
+.tab-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 22px -12px rgba(0,0,0,.18);
+}
+.tab-card.active {
+  border-color: var(--card-border, var(--duo-green));
+  border-width: 3px;
+  box-shadow:
+    0 0 0 4px color-mix(in oklab, var(--card-border, var(--duo-green)) 22%, transparent),
+    0 0 18px -2px color-mix(in oklab, var(--card-border, var(--duo-green)) 55%, transparent),
+    0 6px 16px -10px rgba(0,0,0,.18);
+}
+.tab-card.editing {
+  /* subtle scale-up to acknowledge the long-press */
+  transform: scale(1.02);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--card-border, var(--swan)) 30%, transparent),
+    0 14px 28px -10px rgba(0,0,0,.22);
+}
+.tab-card.editing:hover { transform: scale(1.02); }
+
+/* X (delete) — pulse subtly so it reads as a destructive affordance */
+@keyframes closePulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.08); }
+}
+.tab-card.editing .close { animation: closePulse 1.6s ease-in-out infinite; }
+
+/* X to delete — only shown when card is in editing mode (long-press on
+   mobile, or hovered on devices that support hover). */
+.tab-card .close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.62);
+  color: white;
+  display: grid; place-items: center;
+  z-index: 4;
+  box-shadow: 0 2px 6px rgba(0,0,0,.2);
+  transform: scale(0);
+  opacity: 0;
+  transition: opacity .15s, transform .18s cubic-bezier(.5,1.5,.5,1);
+}
+.tab-card.editing .close {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Card preview — name as bold centered text (no frame), followed by a
+   word list with colored "unlearned" dots. */
+.tab-card .card-preview {
+  position: absolute;
+  inset: 0;
+  background: var(--snow);
+  padding: 14px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* Container queries let typography scale with card width. */
+  container-type: inline-size;
+  overflow: hidden;
+}
+
+/* Name — centered, bold, no border or background */
+.tab-card .cp-name {
+  flex-shrink: 0;
+  text-align: center;
+  font-weight: 900;
+  font-size: clamp(14px, 11cqw, 24px);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1.1;
+  padding: 4px 6px 8px;
+  /* Clamp to 2 lines so a long set name doesn't push word rows out */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.tab-card .cp-name.is-placeholder { color: var(--hare); font-weight: 800; }
+
+/* Word list */
+.tab-card .cp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.tab-card .cp-list li {
+  display: grid;
+  grid-template-columns: 8cqw 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 2px;
+  border-bottom: 1px solid color-mix(in oklab, var(--swan) 55%, transparent);
+  font-size: clamp(9px, 6cqw, 14px);
+  line-height: 1.1;
+}
+.tab-card .cp-list li:last-child { border-bottom: none; }
+.tab-card .cp-dot {
+  width: clamp(5px, 2.4cqw, 8px);
+  height: clamp(5px, 2.4cqw, 8px);
+  border-radius: 50%;
+  justify-self: center;
+}
+.tab-card .cp-de {
+  font-weight: 800;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.tab-card .cp-ru {
+  font-weight: 500;
+  color: var(--wolf);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  text-align: right;
+}
+
+/* Skeleton placeholder rows for empty cards */
+.tab-card .cp-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 4px;
+}
+.tab-card .cp-skel-row {
+  height: clamp(8px, 4cqw, 12px);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--swan) 75%, transparent);
+}
+.tab-card .cp-skel-row:nth-child(1) { width: 90%; }
+.tab-card .cp-skel-row:nth-child(2) { width: 65%; }
+.tab-card .cp-skel-row:nth-child(3) { width: 78%; }
+
+/* New-set card — dashed outline via SVG (so dashes stay long & even at
+   any size); pale-green plus glyph with no 3D button effect. */
+.tab-card.new {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  display: grid;
+  place-items: center;
+  position: relative;
+  cursor: pointer;
+  transition: background .18s;
+}
+.tab-card.new:hover { background: color-mix(in oklab, var(--duo-green) 5%, transparent); }
+.tab-card.new:hover .plus { color: color-mix(in oklab, var(--duo-green) 80%, var(--ink)); }
+.tab-card.new .dash-frame {
+  position: absolute; inset: 0;
+  pointer-events: none;
+}
+.tab-card.new .plus {
+  width: 64px; height: 64px;
+  display: grid; place-items: center;
+  color: color-mix(in oklab, var(--duo-green) 55%, var(--snow));
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transition: color .15s, transform .12s;
+}
+.tab-card.new:active .plus { transform: scale(.94); }
+
+/* View enter — intentionally instant (no opacity fade). The zoom
+   overlay handles the only meaningful transition between views. */
+.view-enter { }
+
+/* Zoom-into-card overlay — sits inside .content so it only fills the
+   space below the persistent header, never covers the header. */
+.zoom-overlay {
+  position: absolute;
+  z-index: 50;
+  overflow: hidden;
+  background: var(--snow);
+  pointer-events: none;
+  transition:
+    top    .42s cubic-bezier(.7,0,.2,1),
+    left   .42s cubic-bezier(.7,0,.2,1),
+    width  .42s cubic-bezier(.7,0,.2,1),
+    height .42s cubic-bezier(.7,0,.2,1),
+    border-radius .42s cubic-bezier(.7,0,.2,1),
+    border-width  .25s ease,
+    border-color  .25s ease,
+    opacity .25s ease .22s;
+  border-style: solid;
+}
+
+/* ===================================================================
+   Desktop overrides — end of file so they win the cascade.
+   At ≥900px the shell fills the viewport: brand & icon hug the edges,
+   home content stays in a centered column, switcher gets denser grid.
+   =================================================================== */
+@media (min-width: 900px) {
+  :root {
+    --card-min: 200px;
+    --card-gap: 20px;
+  }
+  .app-shell {
+    max-width: none;
+    box-shadow: none;
+  }
+  .topbar { padding: 0 32px; height: 64px; }
+  .home-scroll { padding: 40px 32px 24px; }
+  .home-footer { padding: 18px 32px 22px; }
+  /* Center the home column without changing the shell width */
+  .home .set-name,
+  .home .add-card {
+    width: 100%;
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .home .set-name { margin-bottom: 18px; font-size: 32px; }
+  .home-footer .duo-btn { max-width: 520px; margin-left: auto; margin-right: auto; }
+  /* Switcher: side padding equals one card width (+ gap) so the grid
+     sits visually centered with whitespace the size of a card on each
+     side. The grid auto-fills the inner column. */
+  .switcher {
+    padding-top: 24px;
+    padding-bottom: 32px;
+    padding-left:  calc(var(--card-min) + var(--card-gap));
+    padding-right: calc(var(--card-min) + var(--card-gap));
+  }
+  .cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
+    gap: var(--card-gap);
+  }
+}
+/* On narrower desktops (900–1199), one full card per side is overkill —
+   trim to half a card so the grid doesn't collapse. */
+@media (min-width: 900px) and (max-width: 1199px) {
+  .switcher {
+    padding-left:  calc((var(--card-min) + var(--card-gap)) * 0.5);
+    padding-right: calc((var(--card-min) + var(--card-gap)) * 0.5);
+  }
+}
