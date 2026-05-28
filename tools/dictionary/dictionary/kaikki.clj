@@ -125,13 +125,31 @@
   #{"haben" "sein" "werden"})
 
 
+(def ^:private cross-reference-tags
+  "Form-entry tags that signal a cross-reference (related lemma) rather than
+   an inflection of the current lemma. Indexing these as surface forms would
+   surface unrelated lemmas — e.g. \"Mutter\" tagged feminine on the \"Vater\"
+   entry would otherwise make \"mutter\" suggest \"der Vater\"."
+  #{"feminine" "masculine" "abbreviation"})
+
+
+(defn inflectional-form?
+  "True when a Kaikki form entry represents an actual inflection of the lemma
+   (not a cross-reference like a feminine/masculine counterpart or an
+   abbreviation)."
+  [{:keys [tags]}]
+  (not-any? cross-reference-tags tags))
+
+
 (defn inflected-forms
   "Extract forms[].form, deduplicate, exclude the lemma itself.
    Only keeps single words using standard German alphabet, at least 2 chars,
-   excluding auxiliary verb markers."
+   excluding auxiliary verb markers and cross-reference forms (feminine /
+   masculine / abbreviation)."
   [entry]
   (let [lemma (:word entry)]
     (->> (:forms entry)
+         (filter inflectional-form?)
          (keep :form)
          (filter #(re-matches german-word-re %))
          (remove #(< (count %) 2))

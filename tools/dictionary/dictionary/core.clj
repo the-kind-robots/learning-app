@@ -29,7 +29,10 @@
                              (:form_of s) (assoc :form_of (:form_of s))))
                          (:senses entry))
      :translations (filterv #(= "ru" (:lang_code %)) (:translations entry))
-     :forms        (filterv :form (mapv #(select-keys % [:form :article]) (:forms entry)))}))
+     :forms        (->> (:forms entry)
+                        (filter kaikki/inflectional-form?)
+                        (mapv #(select-keys % [:form :article]))
+                        (filterv :form))}))
 
 
 (defn merge-dump-entries
