@@ -178,5 +178,12 @@
 
         ;; Building the dictionary
         _ (build-artifacts! (:kaikki paths) goethe-index frequency-index timestamp output-dir)
+
+        ;; If an enrichment-output side-file is present in output-dir, apply it
+        ;; so the shipped dictionary has user-facing translations populated.
+        ;; The patch is idempotent and gap-fill only (see specs/dictionary-storage).
+        enrichment-file (io/file (str output-dir "/enrichment-output.jsonl"))
+        _ (when (.exists enrichment-file)
+            (apply-enrichment! {:output-dir output-dir}))
         _ (println "Done.")]
     (shutdown-agents)))
