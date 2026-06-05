@@ -79,10 +79,9 @@
     (nil? (:started-at lesson-state)) (assoc :started-at (now-iso clock))))
 
 
-(defn ^:async find-word-by-normalized-value
-  [dbs normalized]
-  (let [{docs :docs} (await (find-all dbs "vocab"))]
-    (first (filter #(= normalized (vocabulary/normalize-value (:value %))) docs))))
+(defn ^:async find-word-by-value
+  [dbs value]
+  (await (dbs/get dbs "vocab" (vocabulary/vocab-id value))))
 
 
 (defn ^:async get-word

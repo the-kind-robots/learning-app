@@ -2,6 +2,7 @@
   (:require
    [adapters.identity :as identity-api]
    [db :as db]
+   [domain.vocabulary :as domain]
    [lambdaisland.glogi :as log]))
 
 
@@ -48,35 +49,61 @@
     b))
 
 
+(defn- all!
+  "One promise for a sequence of promises."
+  [promises]
+  (js/Promise.all (into-array promises)))
+
+
+(defn- ^:async resolve-conflict!
+  "Collapses one document's conflicting revisions into a single one. Scalar
+   fields come from the last write; translations are unioned across every
+   revision, so the same word added on two devices keeps both meanings. The
+   revisions that lost are deleted, which is what makes the conflict gone
+   rather than merely resolved on this device."
+  [user-db doc]
+  ;; A revision at a time, on purpose. The scan hands over the revision it
+  ;; serves and the ids of the ones it hides, never their contents, so they have
+  ;; to be read. `bulkGet` would read them in one call, but it is built to save
+  ;; HTTP round trips during replication: against a local database it loops over
+  ;; the same reads and assembles a grouped answer on top, and measures slower
+  ;; than the reads alone — on IndexedDB some 30 ms against 20 for 200 revisions.
+  (let [conflicting (await (all! (map #(db/get user-db (:_id doc) {:rev %})
+                                      (:_conflicts doc))))
+        revisions   (cons doc conflicting)
+        winner      (reduce lww-winner revisions)
+        translation (reduce domain/merge-translations [] (map :translation revisions))
+        losers      (remove #(= (:_rev %) (:_rev winner)) revisions)]
+    (await (db/insert user-db (assoc winner :translation translation)))
+    (await (all! (map #(db/remove user-db %) losers)))))
+
+
+(def ^:private vocabulary-with-conflicts
+  "Vocabulary ids are content-addressed under a `vocab:` prefix (ADR-0008), so
+   the words can be read as a key range rather than by scanning every review,
+   collection and example in the database. `￰` sorts past anything an id
+   can carry, which makes the range the whole prefix.
+
+   `:conflicts` is what this whole query is for, and only `all-docs`, `get` and
+   `changes` honour it — `find` accepts the option and silently answers without
+   the conflicts, which would look like a database that never conflicts."
+  {:conflicts    true
+   :endkey       "vocab:￰"
+   :include-docs true
+   :startkey     "vocab:"})
+
+
 (defn ^:async resolve-vocab-conflicts!
-  "Finds conflicted vocab docs and resolves them via LWW on :modified-at."
+  "Resolves every conflicted vocab doc a replication pass left behind."
   [user-db]
   (try
-    (let [{rows :rows} (await (db/all-docs user-db {:include-docs true :conflicts true}))
-          conflicted   (filter (fn [{:keys [doc]}]
-                                 (and (= "vocab" (:type doc))
-                                      (seq (:_conflicts doc))))
-                               rows)]
+    (let [{rows :rows} (await (db/all-docs user-db vocabulary-with-conflicts))
+          conflicted   (->> rows
+                            (map :doc)
+                            (filter #(and (-> % :type #{"vocab"}) (-> % :_conflicts seq))))]
       (when (seq conflicted)
         (log/info :sync/resolving-conflicts {:count (count conflicted)}))
-      (await
-       (js/Promise.all
-        (into-array
-         (map (fn [{:keys [doc]}]
-                ((fn ^:async f []
-                   (let [conflict-revs (:_conflicts doc)
-                         candidates    (await
-                                        (js/Promise.all
-                                         (into-array
-                                          (map #(db/get user-db (:_id doc) {:rev %})
-                                               conflict-revs))))
-                         winner        (reduce lww-winner doc (vec candidates))
-                         loser-docs    (remove #(= (:_rev %) (:_rev winner))
-                                               (cons doc (vec candidates)))]
-                     (await
-                      (js/Promise.all
-                       (into-array (map #(db/remove user-db %) loser-docs))))))))
-              conflicted)))))
+      (await (all! (map #(resolve-conflict! user-db %) conflicted))))
     (catch js/Error err
       (log/warn :sync/conflict-resolution-failed {:error (ex-message err)}))))
 

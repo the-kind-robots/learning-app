@@ -24,11 +24,17 @@
           (remove #(seen (:value %)) new-translations))))
 
 
+(defn vocab-id
+  [value]
+  (str "vocab:" (normalize-value value)))
+
+
 (defn new-word
   [value translations]
-  {:type        "vocab"
-   :value       value
-   :translation translations})
+  {:_id         (vocab-id value)
+   :translation translations
+   :type        "vocab"
+   :value       value})
 
 
 (defn new-review
