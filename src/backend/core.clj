@@ -45,13 +45,21 @@
     (t/add-handler! console-log-handler-id (t/handler:console) {:async nil})))
 
 
-(def dev-mode? (or (System/getenv "LEARNING_APP__ENVIRONMENT") true))
+(def running-from-source?
+  "Whether this process runs from a checkout rather than from the packaged jar.
+   The jar carries compiled classes and resources but no `.clj`, so finding our
+   own source on the classpath answers the question — unlike an environment
+   variable, which is a promise about the environment that nothing enforces."
+  (some? (io/resource "core.clj")))
 
 
 (def db-auth-secret
-  (if dev-mode?
-    "secret"
-    (System/getenv "LEARNING_APP_DB_AUTH_SECRET")))
+  "Signs the proxy-auth headers `/auth/check` hands to CouchDB. A checkout may
+   fall back to a well-known value; a packaged app may not, and says so instead
+   of signing with something an attacker can guess."
+  (or (System/getenv "LEARNING_APP_DB_AUTH_SECRET")
+      (when running-from-source? "secret")
+      (throw (ex-info "LEARNING_APP_DB_AUTH_SECRET is required outside a source checkout" {}))))
 
 
 ;;
@@ -454,7 +462,7 @@
 
 (def ring-handler
   (let [ring-handler #(ring/routes service-worker-handler wasm-handler resource-handler app-handler)]
-    (if dev-mode?
+    (if running-from-source?
       (ring/reloading-ring-handler ring-handler)
       (ring-handler))))
 

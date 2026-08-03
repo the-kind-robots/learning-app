@@ -187,6 +187,13 @@ else
 fi
 write_credential "borg-passphrase" "Enter encryption password for BorgBackup" "${rotate_borg}"
 
+# Signs the proxy-auth headers the app hands to CouchDB. Nobody types this one,
+# so it is generated rather than asked for; the app refuses to start without it.
+if [ ! -f "${CRED_DIR}/db_auth_secret" ]; then
+  store_credential "db_auth_secret" "$(openssl rand -hex 32)"
+  info "Generated db_auth_secret"
+fi
+
 if ! id -u deployer >/dev/null 2>&1; then
   adduser --disabled-password --gecos "" deployer
 fi
