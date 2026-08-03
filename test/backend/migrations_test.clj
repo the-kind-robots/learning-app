@@ -110,7 +110,7 @@
       ;; statement of a file is what proves nothing was silently truncated.
       (let [tables (table-names db)]
         (is (contains? tables "reviews") "last table of the baseline")
-        (is (contains? tables "recovery_tokens") "last table of the file")))))
+        (is (contains? tables "grants") "last table of the identity migration")))))
 
 
 (deftest migrating-twice-changes-nothing
@@ -130,4 +130,27 @@
     (testing "the baseline is recognised as already applied, the rest runs"
       (is (= (set (sut/migrations)) (recorded-ids db))))
     (testing "the schema ends up where a fresh database would be"
-      (is (= (table-names db) (table-names (doto (temp-db-spec) migrate!)))))))
+      (let [tables (table-names db)]
+        (is (contains? tables "grants"))
+        (is (not (contains? tables "sessions")))
+        (is (not (contains? tables "recovery_tokens")))))))
+
+
+(deftest rebuilding-a-table-keeps-what-hangs-off-it
+  (let [db (temp-db-spec)]
+    (apply-by-hand! db "001-initial-schema.sql")
+    (jdbc/execute! db ["INSERT INTO users (id, name, created_at) VALUES (7, 'legacy', 111)"])
+    (jdbc/execute! db ["INSERT INTO user_settings (user_id, settings) VALUES (7, '{}')"])
+    (migrate! db)
+    (testing "the account survives with its id and its age"
+      (is (= [{:id 7 :created_at 111 :token_sha256 nil}]
+             (jdbc/execute! db
+               ["SELECT id, created_at, token_sha256 FROM users"]
+               {:builder-fn result-set/as-unqualified-maps}))))
+    (testing "and so do its children"
+      ;; A rebuild drops the old table, which runs an implicit DELETE FROM
+      ;; wherever foreign keys are enforced — cascading these away without a
+      ;; word. Migrations get a connection of their own for that reason; this
+      ;; asserts the outcome, not the mechanism, since SQLite leaves foreign
+      ;; keys off on a fresh connection anyway.
+      (is (= 1 (count (jdbc/execute! db ["SELECT * FROM user_settings"])))))))

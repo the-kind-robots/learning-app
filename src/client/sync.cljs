@@ -1,45 +1,10 @@
 (ns sync
   (:require
-   [adapters.identity :as identity-api]
+   [adapters.identity :as identity]
    [db :as db]
    [domain.vocabulary :as domain]
    [goog.functions :as gfn]
    [lambdaisland.glogi :as log]))
-
-
-(def ^:private identity-doc-id "identity:local")
-
-
-(defn- device-db [] (db/use "device-db"))
-
-
-(defn ^:async load-identity!
-  "Returns {:id :secret} from device-db, or nil if not stored."
-  []
-  (when-let [doc (await (db/get (device-db) identity-doc-id))]
-    {:id     (:user-id doc)
-     :secret (:secret doc)}))
-
-
-(defn ^:async save-identity!
-  "Persists {:id :secret} to device-db, updating _rev if the doc already exists."
-  [{:keys [id secret]}]
-  (let [existing (await (db/get (device-db) identity-doc-id))
-        doc      (cond-> {:_id     identity-doc-id
-                          :type    "identity"
-                          :user-id id
-                          :secret  secret}
-                   existing (assoc :_rev (:_rev existing)))]
-    (await (db/insert (device-db) doc))))
-
-
-(defn ^:async ensure-identity!
-  "Returns stored identity, or claims a new one from the server and stores it."
-  []
-  (or (await (load-identity!))
-      (let [identity (await (identity-api/claim!))]
-        (await (save-identity! identity))
-        identity)))
 
 
 (defn- lww-winner
@@ -133,57 +98,83 @@
 
 
 (defn ^:async start!
-  "Ensures identity and authenticates, then drives replication by triggers:
-   a throttled push on every local user-db change, plus a pull returned as
-   :sync/pull! for the UI to call on data-page entry. No permanent live feed."
+  "Drives replication by triggers when the device has an account: a throttled
+   push on every local user-db change, plus a pull returned as :sync/pull!
+   for the UI to call on data-page entry. Without a stored identity the device
+   is local-only — no network call, inert pull (ADR-0006)."
   [{:keys [db]}]
   (try
-    (let [{:keys [id secret]} (await (ensure-identity!))]
-      (await (identity-api/auth! {:id id :secret secret}))
-      (let [user-db    (:user/db db)
-            remote-url (str (.. js/globalThis -location -origin) "/db/userdb-" id)
-            pull!      #(when (.-onLine js/navigator) (sync-once! user-db remote-url))]
-        (..
-         ^js user-db
-         (changes #js {:since "now" :live true})
-         (on "change" (gfn/throttle pull! push-interval-ms)))
-        (log/info :sync/ready {:user-id id})
-        {:sync/pull! pull!}))
+    (if-let [{:keys [id] :as identity} (await (identity/load-identity!))]
+      (do
+        (identity/use-identity! identity)
+        (let [user-db    (:user/db db)
+              remote-url (str (.. js/globalThis -location -origin) "/db/userdb-" id)
+              pull!      #(when (.-onLine js/navigator) (sync-once! user-db remote-url))]
+          (..
+           ^js user-db
+           (changes #js {:since "now" :live true})
+           (on "change" (gfn/throttle pull! push-interval-ms)))
+          (log/info :sync/ready {:user-id id})
+          {:sync/account-id id
+           :sync/pull!      pull!}))
+      (do
+        (log/info :sync/local-only {})
+        {:sync/account-id nil
+         :sync/pull!      (constantly nil)}))
     (catch js/Error err
       (log/warn :sync/start-failed {:error (ex-message err)})
-      {:sync/pull! (constantly nil)})))
+      {:sync/account-id nil
+       :sync/pull!      (constantly nil)})))
+
+
+(defn- fragment-params
+  "The URL fragment as params. Credentials arrive there rather than in the
+   query string because a fragment is never part of the request: a query lands
+   in the server's access log and in Referer headers, a fragment does not."
+  []
+  (js/URLSearchParams. (.. js/window -location -hash (slice 1))))
 
 
 (defn ^:async check-incoming-auth!
-  "Checks URL for ?recover=TOKEN (burn-on-use) or ?id=ID&secret=SECRET (QR pair).
-   If found: saves identity, destroys user-db IndexedDB, clears URL params.
-   Must run before :db/pouch starts so the fresh PouchDB instance is empty.
-   Returns nil in all cases — called for side effects only."
-  [_]
-  (let [params  (js/URLSearchParams. (.. js/window -location -search))
-        recover (.get params "recover")
-        pair-id (.get params "id")
-        secret  (.get params "secret")]
-    (cond
-      (some? recover)
-      (try
-        (let [identity (await (identity-api/redeem! recover))]
-          (await (save-identity! identity))
-          (await (db/destroy (db/use "user-db")))
-          (js/history.replaceState nil "" "/")
-          (log/info :sync/redeemed {:user-id (:id identity)}))
-        (catch js/Error err
-          (log/warn :sync/redeem-failed {:error (ex-message err)})
-          (js/history.replaceState nil "" "/")))
+  "Handles an incoming credential: #key=TOKEN (QR pair, recovery, share) or
+   #invite=TOKEN (provision a new account, ADR-0006).
 
-      (and (some? pair-id) (some? secret))
+   A key is validated against the server before this device adopts it, and the
+   local user-db is destroyed only when the key turns out to belong to a
+   different account than the one stored — otherwise the local data stays and
+   merges. Must run before :db/pouch starts, so that a wipe leaves the fresh
+   PouchDB instance empty. The cookie is not written here: `start!` derives it
+   from the stored identity later in the same boot.
+
+   Returns nil — side effects only. The router drops the fragment when it
+   redirects the unmatched `/` to the home page."
+  [_]
+  (let [params (fragment-params)
+        token  (.get params "key")
+        invite (.get params "invite")]
+    (cond
+      (some? token)
       (try
-        (let [identity {:id (js/parseInt pair-id 10) :secret secret}]
-          (await (identity-api/auth! identity))
-          (await (save-identity! identity))
-          (await (db/destroy (db/use "user-db")))
-          (js/history.replaceState nil "" "/")
-          (log/info :sync/paired {:user-id (:id identity)}))
+        (if-let [account-id (await (identity/account-id! token))]
+          (do
+            (when-let [stored (await (identity/load-identity!))]
+              ;; Wiped through a throwaway handle, before :db/pouch opens its
+              ;; own: a handle that existed at destroy time never errors, it
+              ;; hangs on every later call.
+              (when (not= (:id stored) account-id)
+                (await (db/destroy (db/use "user-db")))))
+            (await (identity/save-identity! {:id account-id :token token}))
+            (log/info :sync/adopted {:user-id account-id}))
+          (log/warn :sync/invalid-key {}))
         (catch js/Error err
-          (log/warn :sync/pair-failed {:error (ex-message err)})
-          (js/history.replaceState nil "" "/"))))))
+          (log/warn :sync/adopt-failed {:error (ex-message err)})))
+
+      (some? invite)
+      (try
+        (if (await (identity/load-identity!))
+          (log/warn :sync/already-provisioned {})
+          (let [identity (await (identity/provision! invite))]
+            (await (identity/save-identity! identity))
+            (log/info :sync/provisioned {:user-id (:id identity)})))
+        (catch js/Error err
+          (log/warn :sync/provision-failed {:error (ex-message err)}))))))

@@ -65,37 +65,12 @@
       "Удалить"]]]])
 
 
-(defn- more-dialog
-  []
-  [:dialog.more-dialog.modal
-   {:replicant/on-mount [[:action/open-dialog]]
-    :on {:close [[:action/close-more-menu]]}}
-   [:div.more-dialog__content
-    [:button.more-dialog__item
-     {:type "button"
-      :on   {:click [[:effect/export-data]]}}
-     "Экспорт данных"]
-    [:label.more-dialog__item
-     {:role "button"}
-     [:input
-      {:type   "file"
-       :accept ".json,application/json"
-       :style  {:display "none"}
-       :on     {:change [[:effect/import-file]]}}]
-     "Импорт данных"]
-    [:button.more-dialog__item.more-dialog__item--cancel
-     {:type "button"
-      :on   {:click [[:action/close-more-menu]]}}
-     "Отмена"]]])
-
-
 (defn page
   [state]
-  (let [{:words/keys [items search editing menu-open?]} state]
+  (let [{:words/keys [items search editing]} state]
     [:div.vocabulary
      {:data-vk-overlay true}
      (when editing (edit-dialog editing))
-     (when menu-open? (more-dialog))
      (if (empty? items)
        [:div.vocabulary__list
         [:ul.word-list
@@ -112,12 +87,7 @@
          [:button.vocabulary__back
           {:on {:click [[:action/go-to-home]]}}
           "← Назад"]
-         [:h1.vocabulary__title "Мои слова"]
-         [:button.vocabulary__menu
-          {:type  "button"
-           :title "Дополнительно"
-           :on    {:click [[:action/open-more-menu]]}}
-          "⋮"]]
+         [:h1.vocabulary__title "Мои слова"]]
         [:form.vocabulary__search
          {:autocapitalize "none"
           :autocorrect "off"
@@ -152,4 +122,3 @@
           [:button.vocabulary__start.big-button.green-button
            {:on {:click [[:action/go-to-lesson]]}}
            "НАЧАТЬ УРОК"]]]))]))
-

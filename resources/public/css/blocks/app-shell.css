@@ -64,19 +64,28 @@
 }
 
 
+/* Shell actions sit in one row so any of them can be absent without
+   leaving a hole: install shows only when installable, sync only with
+   an account, the corner icon only on home/collections. */
+.app-shell__actions {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  position: fixed;
+  right: 16px;
+  top: 16px;
+  z-index: 20;
+}
+
 .app-shell__corner-icon {
   align-items: center;
   color: rgb(var(--color-black-text));
   display: inline-flex;
   height: 28px;
   justify-content: center;
-  position: fixed;
-  right: 16px;
   text-decoration: none;
-  top: 16px;
   transition: opacity 0.15s, transform 0.15s;
   width: 28px;
-  z-index: 20;
 }
 
 @media (hover: hover) {
@@ -96,7 +105,7 @@
 }
 
 
-.app-shell__menu-button {
+.app-shell__icon-button {
   align-items: center;
   background: none;
   border: none;
@@ -104,27 +113,27 @@
   color: rgb(var(--color-wolf));
   cursor: pointer;
   display: inline-flex;
-  font-size: 22px;
   height: 32px;
   justify-content: center;
   line-height: 1;
   min-height: auto;
   padding: 0 6px;
-  position: fixed;
-  right: 56px;
-  top: 16px;
   transition: color 0.15s, background-color 0.15s;
-  z-index: 20;
+}
+
+.app-shell__icon {
+  height: 20px;
+  width: 20px;
 }
 
 @media (hover: hover) {
-  .app-shell__menu-button:hover {
+  .app-shell__icon-button:hover {
     background: rgb(var(--color-polar));
     color: rgb(var(--color-owl));
   }
 }
 
-.app-shell__menu-button:active {
+.app-shell__icon-button:active {
   background: rgb(var(--color-polar));
   color: rgb(var(--color-owl));
 }

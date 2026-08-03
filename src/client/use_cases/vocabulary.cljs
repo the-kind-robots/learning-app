@@ -105,15 +105,3 @@
   "Creates a review document for a word and updates its retention model."
   [{:keys [progress-store]} word-id retained translation]
   ((:progress-store/save-review! progress-store) word-id retained translation))
-
-
-(defn export!
-  "Exports all vocab + reviews as a portable map."
-  [{:keys [progress-store]}]
-  ((:progress-store/export-data! progress-store)))
-
-
-(defn ^:async import!
-  "Merges a previously exported map into the local store."
-  [{:keys [progress-store]} payload]
-  (await ((:progress-store/import-data! progress-store) payload)))

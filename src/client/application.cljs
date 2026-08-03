@@ -1,7 +1,7 @@
 (ns application
   (:require
    ["qrcode" :as QRCode]
-   [adapters.identity :as identity-api]
+   [adapters.identity :as identity]
    [install-guide.view :as install-guide]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
@@ -9,8 +9,7 @@
    [pages.home.view :as pages.home.view]
    [pages.lesson.view :as pages.lesson.view]
    [pages.words.view :as pages.words.view]
-   [replicant.dom :as r]
-   [sync :as sync]))
+   [replicant.dom :as r]))
 
 
 ;;
@@ -52,6 +51,13 @@
   (fn reload-page [state]
     (when-let [load-effect (:page/load state)]
       [load-effect])))
+
+
+(nxr/register-effect! :effect/load-account
+  (fn load-account [{:keys [capabilities dispatch]} _]
+    (dispatch
+     [[:effect/save
+       {:app/account-id (get-in capabilities [:capabilities/sync :sync/account-id])}]])))
 
 
 (nxr/register-effect! :effect/show-modal
@@ -220,17 +226,25 @@
     [[:effect/save {:app/pairing nil}]]))
 
 
+(defn- account-key-url
+  "The QR/recovery URL a device opens to adopt this account. The token rides in
+   the fragment, which browsers never send to the server, keeping it out of
+   access logs and Referer headers (ADR-0006)."
+  [{:keys [token]}]
+  (str (.. js/window -location -origin) "/#key=" token))
+
+
 (nxr/register-effect! :effect/create-recovery-link
   (fn ^:async create-recovery-link
     [_ _]
     (try
-      (let [{:keys [token]} (await (identity-api/recovery-token!))
-            url (str (.. js/window -location -origin) "/?recover=" token)]
-        (if (exists? js/navigator.share)
-          (await (js/navigator.share #js {:title "Sprecha: восстановление доступа" :url url}))
-          (do
-            (await (.. js/navigator -clipboard (writeText url)))
-            (js/alert "Ссылка скопирована в буфер обмена"))))
+      (when-let [identity (await (identity/load-identity!))]
+        (let [url (account-key-url identity)]
+          (if (exists? js/navigator.share)
+            (await (js/navigator.share #js {:title "Sprecha: восстановление доступа" :url url}))
+            (do
+              (await (.. js/navigator -clipboard (writeText url)))
+              (js/alert "Ссылка скопирована в буфер обмена")))))
       (catch js/Error err
         (log/error :effect/create-recovery-link {:error (str err)})))))
 
@@ -239,8 +253,8 @@
   (fn ^:async open-pairing
     [{:keys [dispatch]} _]
     (try
-      (when-let [{:keys [id secret]} (await (sync/load-identity!))]
-        (let [pair-url (str (.. js/window -location -origin) "/?id=" id "&secret=" secret)
+      (when-let [identity (await (identity/load-identity!))]
+        (let [pair-url (account-key-url identity)
               qr-url   (await (.toDataURL QRCode pair-url))]
           (dispatch [[:action/show-pairing-dialog {:qr-url qr-url :pair-url pair-url}]])))
       (catch js/Error err
@@ -289,25 +303,52 @@
       :stroke-linecap "round"}]]])
 
 
+(defn- install-icon
+  []
+  [:svg.app-shell__icon
+   {:aria-hidden    "true"
+    :fill           "none"
+    :stroke         "currentColor"
+    :stroke-linecap "round"
+    :stroke-linejoin "round"
+    :stroke-width   "1.8"
+    :viewBox        "0 0 24 24"}
+   [:path {:d "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}]
+   [:polyline {:points "7 10 12 15 17 10"}]
+   [:line {:x1 "12" :y1 "15" :x2 "12" :y2 "3"}]])
+
+
+(defn- sync-icon
+  []
+  [:svg.app-shell__icon
+   {:aria-hidden    "true"
+    :fill           "none"
+    :stroke         "currentColor"
+    :stroke-linecap "round"
+    :stroke-linejoin "round"
+    :stroke-width   "1.8"
+    :viewBox        "0 0 24 24"}
+   [:polyline {:points "23 4 23 10 17 10"}]
+   [:polyline {:points "1 20 1 14 7 14"}]
+   [:path {:d "M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"}]])
+
+
 (defn- sync-menu-dialog
   [state]
   [:dialog.sync-menu-dialog.modal
    {:replicant/on-mount [[:action/open-dialog]]
     :on {:close [[:action/close-sync-menu]]}}
    [:div.sync-menu-dialog__content
-    (when (:pwa/install-available? state)
-      [:button.sync-menu-dialog__item
-       {:type "button"
-        :on   {:click [[:action/pwa-install-requested]]}}
-       "Установить приложение"])
-    [:button.sync-menu-dialog__item
-     {:type "button"
-      :on   {:click [[:effect/open-pairing]]}}
-     "Подключить устройство"]
-    [:button.sync-menu-dialog__item
-     {:type "button"
-      :on   {:click [[:effect/create-recovery-link]]}}
-     "Ссылка восстановления"]
+    (when (:app/account-id state)
+      (list
+       [:button.sync-menu-dialog__item
+        {:type "button"
+         :on   {:click [[:effect/open-pairing]]}}
+        "Подключить устройство"]
+       [:button.sync-menu-dialog__item
+        {:type "button"
+         :on   {:click [[:effect/create-recovery-link]]}}
+        "Ссылка восстановления"]))
     [:button.sync-menu-dialog__item.sync-menu-dialog__item--cancel
      {:type "button"
       :on   {:click [[:action/close-sync-menu]]}}
@@ -333,15 +374,28 @@
   [state]
   (list
    [:a.app-shell__logo {:href "/home"} "Sprecha"]
-   (case (:page/current state)
-     :page/home        (collections-icon)
-     :page/collections (close-icon)
-     nil)
-   [:button.app-shell__menu-button
-    {:type  "button"
-     :title "Меню"
-     :on    {:click [[:action/open-sync-menu]]}}
-    "⋮"]
+   [:div.app-shell__actions
+    ;; Install stands on its own — it is not a sync action, and it is offered
+    ;; before any account exists.
+    (when (:pwa/install-available? state)
+      [:button.app-shell__icon-button
+       {:type       "button"
+        :title      "Установить приложение"
+        :aria-label "Установить приложение"
+        :on         {:click [[:action/pwa-install-requested]]}}
+       (install-icon)])
+    ;; Sync actions are invite-gated (ADR-0006): no account, no entry point.
+    (when (:app/account-id state)
+      [:button.app-shell__icon-button
+       {:type       "button"
+        :title      "Синхронизация"
+        :aria-label "Синхронизация"
+        :on         {:click [[:action/open-sync-menu]]}}
+       (sync-icon)])
+    (case (:page/current state)
+      :page/home        (collections-icon)
+      :page/collections (close-icon)
+      nil)]
    (install-guide/render state)
    (when (:app/sync-menu-open? state)
      (sync-menu-dialog state))

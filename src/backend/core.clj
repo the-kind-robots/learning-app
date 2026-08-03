@@ -1,7 +1,6 @@
 (ns core
   (:gen-class)
   (:require
-   [buddy.hashers :as hashers]
    [cheshire.core :as cheshire]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
@@ -9,7 +8,6 @@
    [db :as db]
    [examples :as examples]
    [hiccup :as hiccup]
-   [honey.sql :as sql]
    [migrations :as migrations]
    [next.jdbc :as jdbc]
    [next.jdbc.prepare :as prepare]
@@ -20,13 +18,12 @@
    [reitit.http.interceptors.parameters :as parameters]
    [reitit.interceptor.sieppari :as sieppari]
    [reitit.ring :as ring]
-   [ring.middleware.session :as session]
-   [ring.middleware.session.store :as store]
+   [ring.middleware.cookies :as cookies]
    [ring.util.response :as response]
    [taoensso.telemere :as t]
    [utils :as utils])
   (:import
-   [java.security MessageDigest]
+   [java.security MessageDigest SecureRandom]
    [java.sql PreparedStatement ResultSetMetaData]
    [java.util HexFormat]
    [javax.crypto Mac]
@@ -127,52 +124,6 @@
 ;;
 
 
-(defn user-id
-  [db user-name password]
-  (when (and (utils/non-blank user-name)
-             (utils/non-blank password))
-    (let [user (jdbc/execute-one! db
-                 ["SELECT id, password FROM users WHERE name = ?" user-name]
-                 {:builder-fn result-set/as-unqualified-maps})]
-      (when (:valid (hashers/verify password (:password user)))
-        (:id user)))))
-
-
-(defn add-user
-  "Creates user in SQLite and provisions a CouchDB userdb.
-   Returns {:id int :secret plaintext-password}."
-  ([db]
-   (add-user db (str (random-uuid)) (str (random-uuid) (random-uuid))))
-  ([db user-name password]
-   (let [password-hash (hashers/derive password {:alg :argon2id})
-         {:keys [id]}  (jdbc/execute-one! db
-                         ["INSERT INTO users (name, password) VALUES (?, ?) RETURNING id"
-                          user-name password-hash])
-         couch-db      (db/use (str "userdb-" id))]
-     (db/secure couch-db {:members {:names [] :roles [(str "u:" id)]}})
-     {:id id :secret password})))
-
-
-(defn- identity-user-id
-  "Returns integer user-id when id+secret are valid, nil otherwise."
-  [db id secret]
-  (when (and (some? id) (utils/non-blank secret))
-    (let [user (jdbc/execute-one! db
-                 ["SELECT id, password FROM users WHERE id = ?" id]
-                 {:builder-fn result-set/as-unqualified-maps})]
-      (when (:valid (hashers/verify secret (or (:password user) "")))
-        (:id user)))))
-
-
-(defn- identity-secret-reset!
-  "Generates a new secret for user-id, updates the stored hash, returns plaintext secret."
-  [db user-id]
-  (let [secret (str (random-uuid) (random-uuid))
-        hash   (hashers/derive secret {:alg :argon2id})]
-    (jdbc/execute! db ["UPDATE users SET password = ? WHERE id = ?" hash user-id])
-    secret))
-
-
 (defn- sha256-hex
   [^String s]
   (.formatHex
@@ -181,32 +132,82 @@
               (.update (.getBytes s "UTF-8"))))))
 
 
+(def ^:private ^SecureRandom secure-random (SecureRandom.))
+
+
+(defn- random-token
+  "A 160-bit URL-safe bearer token (40 hex chars)."
+  []
+  (let [bytes (byte-array 20)]
+    (.nextBytes secure-random bytes)
+    (.formatHex (HexFormat/of) bytes)))
+
+
+(defn create-account!
+  "Mints a bearer token, creates the account row holding its sha256, and its
+   role-secured CouchDB userdb. Returns {:id int :token str} — the raw token
+   is the user's key, stored nowhere on the server."
+  [db]
+  (let [token        (random-token)
+        {:keys [id]} (jdbc/execute-one! db
+                       ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
+                        (sha256-hex token)])]
+    (db/secure (db/use (str "userdb-" id)) {:members {:names [] :roles [(str "u:" id)]}})
+    {:id id :token token}))
+
+
+(defn- authenticated-user-id
+  "Returns the account id a bearer token authenticates, or nil."
+  [db token]
+  (when (utils/non-blank token)
+    (:id (jdbc/execute-one! db
+           ["SELECT id FROM users WHERE token_sha256 = ?"
+            (sha256-hex token)]
+           {:builder-fn result-set/as-unqualified-maps}))))
+
+
+(defn mint-grant!
+  "Stores the sha256 of a fresh single-use grant token and returns the
+   plaintext token — shown once, REPL-only (ADR-0006 phase-1 invites)."
+  ([db]
+   (mint-grant! db (* 30 24 60 60 1000)))
+  ([db ttl-ms]
+   (let [token (random-token)]
+     (jdbc/execute! db
+       ["INSERT INTO grants (sha256, expires_at) VALUES (?, ?)"
+        (sha256-hex token) (+ (System/currentTimeMillis) ttl-ms)])
+     token)))
+
+
+(defn- burn-grant!
+  "Atomically burns an unused, unexpired grant. Returns true when burned."
+  [db token]
+  (some?
+   (jdbc/execute-one!
+     db
+     ["UPDATE grants SET used_at = UNIXEPOCH()
+      WHERE sha256 = ? AND used_at IS NULL AND expires_at > ?
+      RETURNING sha256"
+      (sha256-hex token) (System/currentTimeMillis)])))
+
+
 (comment
   (on-connection [db db-spec]
-    (add-user db "shundeevegor@gmail.com" "3434"))
-  (on-connection [db db-spec]
-    (user-id db "shundeevegor@gmail.com" "3434")))
+    (mint-grant! db)))
 
 
 ;;
-;; User Session
+;; Auth — bearer token in a cookie, validated per request (ADR-0006)
 ;;
 
 
-(deftype Sessions [db]
-  store/SessionStore
-    (read-session [_ token]
-      (:value
-       (jdbc/execute-one! db
-         ["SELECT value FROM sessions WHERE token = ?" token]
-         {:builder-fn result-set/as-unqualified-maps})))
-    (write-session [_ token value]
-      (let [token (or token (str (random-uuid)))]
-        (jdbc/execute! db ["INSERT INTO sessions (token, value) VALUES (?, ?)" token value])
-        token))
-    (delete-session [_ token]
-      (jdbc/execute! db (sql/format {:delete-from :sessions :where [:= :token token]}))
-      nil))
+(def ^:private token-cookie "sprecha-token")
+
+
+(defn- request-token
+  "Reads the bearer token from the parsed cookies, or nil."
+  [request]
+  (get-in request [:cookies token-cookie :value]))
 
 
 (defn hmac-sign
@@ -219,45 +220,17 @@
     (.getBytes user-name))))
 
 
-(defn auth-proxy-response
-  "Produce the `/auth/check` response map expected by the CouchDB proxy.
-
-  When the session is missing, or empty, a `401` response is returned.
-  Otherwise the response includes the proxy auth headers populated from
-  the current `:user-id`."
-  [session]
-  (if (seq session)
-    (let [user-name  (-> session :user-id str)
-          user-roles (str/join "," [(str "u:" user-name)])
-          token      (hmac-sign user-name db-auth-secret)]
-      (-> {:status 200}
-          (response/header "X-Auth-UserName" user-name)
-          (response/header "X-Auth-Roles" user-roles)
-          (response/header "X-Auth-Token" token)))
-    {:status 401}))
-
-
 ;;
 ;; Interceptors
 ;;
 
 
-(def session-interceptor
-  {:name  ::session-interceptor
+(def cookie-interceptor
+  "Parses the Cookie header into the request's :cookies map. The server only
+   reads the bearer token — the client sets it — so there is no response leg."
+  {:name  ::cookie-interceptor
    :enter (fn [ctx]
-            (jdbc/on-connection [db db-spec]
-              (let [opts {:store        (->Sessions db)
-                          :set-cookies? true
-                          :cookie-name  "ring-session"
-                          :cookie-attrs {:path "/" :http-only true}}]
-                (update ctx :request session/session-request opts))))
-   :leave (fn [ctx]
-            (jdbc/on-connection [db db-spec]
-              (let [opts {:store        (->Sessions db)
-                          :set-cookies? true
-                          :cookie-name  "ring-session"
-                          :cookie-attrs {:path "/" :http-only true}}]
-                (update ctx :response session/session-response (:request ctx) opts))))})
+            (update ctx :request cookies/cookies-request))})
 
 
 ;;
@@ -352,8 +325,15 @@
 
      ["/auth/check"
       {:get
-       (fn [{:keys [session] :as _request}]
-         (auth-proxy-response session))}]
+       (fn [request]
+         (on-connection [db db-spec]
+           (if-let [user-id (authenticated-user-id db (request-token request))]
+             ;; Tell the CouchDB proxy which account + role to act as.
+             (-> {:status 200}
+                 (response/header "X-Auth-UserName" user-id)
+                 (response/header "X-Auth-Roles" (str "u:" user-id))
+                 (response/header "X-Auth-Token" (hmac-sign (str user-id) db-auth-secret)))
+             {:status 401})))}]
 
      ["/api/examples"
       {:get
@@ -382,67 +362,33 @@
                   :body    (cheshire/generate-string
                             {:error "Examples are temporarily unavailable"})})))))}]
 
-     ["/api/identity/claim"
-      {:post
-       (fn [_request]
-         (on-connection [db db-spec]
-           (let [{:keys [id secret]} (add-user db)]
-             (-> {:status  200
-                  :headers {"Content-Type" "application/json"}
-                  :body    (cheshire/generate-string {:id id :secret secret})}
-                 (assoc :session {:user-id id})))))}]
-
-     ["/api/identity/auth"
+     ["/api/identity/provision"
       {:post
        (fn [request]
          (on-connection [db db-spec]
-           (let [{:keys [id secret]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
-             (if-let [uid (identity-user-id db id secret)]
-               (-> {:status 200}
-                   (assoc :session {:user-id uid}))
-               {:status 401 :body ""}))))}]
+           (let [{:keys [invite]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
+             (if (and (utils/non-blank invite) (burn-grant! db invite))
+               (let [{:keys [id token]} (create-account! db)]
+                 {:status  200
+                  :headers {"Content-Type" "application/json"}
+                  :body    (cheshire/generate-string {:id id :token token})})
+               {:status 403 :body ""}))))}]
 
-     ["/api/identity/recovery-token"
-      {:post
-       (fn [{:keys [session]}]
-         (if-let [uid (:user-id session)]
-           (on-connection [db db-spec]
-             (let [token      (str (random-uuid) (random-uuid))
-                   token-hash (sha256-hex token)
-                   expires-at (+ (System/currentTimeMillis) (* 30 24 60 60 1000))]
-               (jdbc/execute! db
-                 ["INSERT INTO recovery_tokens (sha256, user_id, expires_at) VALUES (?, ?, ?)"
-                  token-hash uid expires-at])
-               {:status  200
-                :headers {"Content-Type" "application/json"}
-                :body    (cheshire/generate-string {:token token})}))
-           {:status 401 :body ""}))}]
-
-     ["/api/identity/redeem"
+     ;; Adopting a key means holding a token and nothing else. The token comes
+     ;; in the body rather than the cookie so a device can find out whether it
+     ;; is valid, and whose it is, before making it this device's identity.
+     ["/api/identity/account"
       {:post
        (fn [request]
          (on-connection [db db-spec]
            (let [{:keys [token]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
-             (if (utils/non-blank token)
-               (let [token-hash (sha256-hex token)
-                     now        (System/currentTimeMillis)
-                     row        (jdbc/execute-one!
-                                  db
-                                  ["SELECT user_id FROM recovery_tokens WHERE sha256 = ? AND expires_at > ?"
-                                   token-hash now]
-                                  {:builder-fn result-set/as-unqualified-maps})]
-                 (if row
-                   (let [uid        (:user-id row)
-                         new-secret (identity-secret-reset! db uid)]
-                     (jdbc/execute! db ["DELETE FROM recovery_tokens WHERE sha256 = ?" token-hash])
-                     (-> {:status  200
-                          :headers {"Content-Type" "application/json"}
-                          :body    (cheshire/generate-string {:id uid :secret new-secret})}
-                         (assoc :session {:user-id uid})))
-                   {:status 401 :body ""}))
-               {:status 400 :body ""}))))}]]
+             (if-let [user-id (authenticated-user-id db token)]
+               {:status  200
+                :headers {"Content-Type" "application/json"}
+                :body    (cheshire/generate-string {:id user-id})}
+               {:status 401 :body ""}))))}]]
 
-    {:data {:interceptors [#_session-interceptor
+    {:data {:interceptors [cookie-interceptor
                            (parameters/parameters-interceptor)
                            (keyword-parameters/keyword-parameters-interceptor)]}})
 
@@ -546,13 +492,12 @@
   []
   (let [url (str "http://localhost:" port "/")]
     ;; Migrate before serving: the app never runs against an outdated schema.
-    (on-connection [db db-spec]
-      (migrations/ensure-migrated! db))
+    (migrations/ensure-migrated! db-spec)
     (restart-server! #'ring-handler port)
     (println "Serving" url)))
 
 
 (comment
-  ;; Clear sessions
-  (jdbc/on-connection [db db-spec]
-    (jdbc/execute! db (sql/format {:delete-from :sessions}))))
+  ;; Mint an operator invite (ADR-0006 phase-1)
+  (on-connection [db db-spec]
+    (mint-grant! db)))
