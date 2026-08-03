@@ -67,29 +67,33 @@
 
 
 (defmacro on-connection
+  "Runs body with a configured connection bound to sym and closes it afterwards.
+   `jdbc/on-connection+options` closes only connections it opened itself, so a
+   connection obtained here has to be released here — otherwise every call
+   leaves one behind for the life of the process."
   [[sym connectable] & body]
-  `(jdbc/on-connection+options [~sym
-                                (-> (jdbc/get-connection ~connectable)
-                                    (jdbc/with-logging
-                                     (fn [_sym# sql-params#]
-                                       {:time  (System/currentTimeMillis)
-                                        :query sql-params#})
-                                     (fn [_sym# state# result#]
-                                       (let [data#      {:time   (str (- (System/currentTimeMillis) (:time state#))
-                                                                      " ms")
-                                                         :query  (:query state#)
-                                                         :result result#}
-                                             log-level# (if (instance? Throwable result#)
-                                                          :error
-                                                          :debug)])))
-                                    (jdbc/with-options jdbc/unqualified-snake-kebab-opts))]
+  `(with-open [connection# (jdbc/get-connection ~connectable)]
+     (let [~sym (-> connection#
+                    (jdbc/with-logging
+                     (fn [_sym# sql-params#]
+                       {:time  (System/currentTimeMillis)
+                        :query sql-params#})
+                     (fn [_sym# state# result#]
+                       (let [data#      {:time   (str (- (System/currentTimeMillis) (:time state#))
+                                                      " ms")
+                                         :query  (:query state#)
+                                         :result result#}
+                             log-level# (if (instance? Throwable result#)
+                                          :error
+                                          :debug)])))
+                    (jdbc/with-options jdbc/unqualified-snake-kebab-opts))]
 
-     ;; Enable foreign key constraints in SQLite, as they are disabled by default.
-     ;; This constraint must be enabled separately for each connection.
-     ;; See https://www.sqlite.org/foreignkeys.html#fk_enable
-     (jdbc/execute! ~sym ["PRAGMA foreign_keys = on"])
+       ;; Enable foreign key constraints in SQLite, as they are disabled by default.
+       ;; This constraint must be enabled separately for each connection.
+       ;; See https://www.sqlite.org/foreignkeys.html#fk_enable
+       (jdbc/execute! ~sym ["PRAGMA foreign_keys = on"])
 
-     ~@body))
+       ~@body)))
 
 
 ;; This makes possible to pass clojure map or vector as a query parameter.
