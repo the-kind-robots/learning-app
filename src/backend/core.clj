@@ -83,12 +83,12 @@
                                                           :debug)])))
                                     (jdbc/with-options jdbc/unqualified-snake-kebab-opts))]
 
-                               ;; Enable foreign key constraints in SQLite, as they are disabled by default.
-                               ;; This constraint must be enabled separately for each connection.
-                               ;; See https://www.sqlite.org/foreignkeys.html#fk_enable
-                               (jdbc/execute! ~sym ["PRAGMA foreign_keys = on"])
+     ;; Enable foreign key constraints in SQLite, as they are disabled by default.
+     ;; This constraint must be enabled separately for each connection.
+     ;; See https://www.sqlite.org/foreignkeys.html#fk_enable
+     (jdbc/execute! ~sym ["PRAGMA foreign_keys = on"])
 
-                               ~@body))
+     ~@body))
 
 
 ;; This makes possible to pass clojure map or vector as a query parameter.
@@ -127,8 +127,8 @@
   (when (and (utils/non-blank user-name)
              (utils/non-blank password))
     (let [user (jdbc/execute-one! db
-                                  ["SELECT id, password FROM users WHERE name = ?" user-name]
-                                  {:builder-fn result-set/as-unqualified-maps})]
+                 ["SELECT id, password FROM users WHERE name = ?" user-name]
+                 {:builder-fn result-set/as-unqualified-maps})]
       (when (:valid (hashers/verify password (:password user)))
         (:id user)))))
 
@@ -141,8 +141,8 @@
   ([db user-name password]
    (let [password-hash (hashers/derive password {:alg :argon2id})
          {:keys [id]}  (jdbc/execute-one! db
-                                          ["INSERT INTO users (name, password) VALUES (?, ?) RETURNING id"
-                                           user-name password-hash])
+                         ["INSERT INTO users (name, password) VALUES (?, ?) RETURNING id"
+                          user-name password-hash])
          couch-db      (db/use (str "userdb-" id))]
      (db/secure couch-db {:members {:names [] :roles [(str "u:" id)]}})
      {:id id :secret password})))
@@ -153,8 +153,8 @@
   [db id secret]
   (when (and (some? id) (utils/non-blank secret))
     (let [user (jdbc/execute-one! db
-                                  ["SELECT id, password FROM users WHERE id = ?" id]
-                                  {:builder-fn result-set/as-unqualified-maps})]
+                 ["SELECT id, password FROM users WHERE id = ?" id]
+                 {:builder-fn result-set/as-unqualified-maps})]
       (when (:valid (hashers/verify secret (or (:password user) "")))
         (:id user)))))
 
@@ -178,9 +178,9 @@
 
 (comment
   (on-connection [db db-spec]
-                 (add-user db "shundeevegor@gmail.com" "3434"))
+    (add-user db "shundeevegor@gmail.com" "3434"))
   (on-connection [db db-spec]
-                 (user-id db "shundeevegor@gmail.com" "3434")))
+    (user-id db "shundeevegor@gmail.com" "3434")))
 
 
 ;;
@@ -193,8 +193,8 @@
     (read-session [_ token]
       (:value
        (jdbc/execute-one! db
-                          ["SELECT value FROM sessions WHERE token = ?" token]
-                          {:builder-fn result-set/as-unqualified-maps})))
+         ["SELECT value FROM sessions WHERE token = ?" token]
+         {:builder-fn result-set/as-unqualified-maps})))
     (write-session [_ token value]
       (let [token (or token (str (random-uuid)))]
         (jdbc/execute! db ["INSERT INTO sessions (token, value) VALUES (?, ?)" token value])
@@ -381,61 +381,61 @@
       {:post
        (fn [_request]
          (on-connection [db db-spec]
-                        (let [{:keys [id secret]} (add-user db)]
-                          (-> {:status  200
-                               :headers {"Content-Type" "application/json"}
-                               :body    (cheshire/generate-string {:id id :secret secret})}
-                              (assoc :session {:user-id id})))))}]
+           (let [{:keys [id secret]} (add-user db)]
+             (-> {:status  200
+                  :headers {"Content-Type" "application/json"}
+                  :body    (cheshire/generate-string {:id id :secret secret})}
+                 (assoc :session {:user-id id})))))}]
 
      ["/api/identity/auth"
       {:post
        (fn [request]
          (on-connection [db db-spec]
-                        (let [{:keys [id secret]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
-                          (if-let [uid (identity-user-id db id secret)]
-                            (-> {:status 200}
-                                (assoc :session {:user-id uid}))
-                            {:status 401 :body ""}))))}]
+           (let [{:keys [id secret]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
+             (if-let [uid (identity-user-id db id secret)]
+               (-> {:status 200}
+                   (assoc :session {:user-id uid}))
+               {:status 401 :body ""}))))}]
 
      ["/api/identity/recovery-token"
       {:post
        (fn [{:keys [session]}]
          (if-let [uid (:user-id session)]
            (on-connection [db db-spec]
-                          (let [token      (str (random-uuid) (random-uuid))
-                                token-hash (sha256-hex token)
-                                expires-at (+ (System/currentTimeMillis) (* 30 24 60 60 1000))]
-                            (jdbc/execute! db
-                                           ["INSERT INTO recovery_tokens (sha256, user_id, expires_at) VALUES (?, ?, ?)"
-                                            token-hash uid expires-at])
-                            {:status  200
-                             :headers {"Content-Type" "application/json"}
-                             :body    (cheshire/generate-string {:token token})}))
+             (let [token      (str (random-uuid) (random-uuid))
+                   token-hash (sha256-hex token)
+                   expires-at (+ (System/currentTimeMillis) (* 30 24 60 60 1000))]
+               (jdbc/execute! db
+                 ["INSERT INTO recovery_tokens (sha256, user_id, expires_at) VALUES (?, ?, ?)"
+                  token-hash uid expires-at])
+               {:status  200
+                :headers {"Content-Type" "application/json"}
+                :body    (cheshire/generate-string {:token token})}))
            {:status 401 :body ""}))}]
 
      ["/api/identity/redeem"
       {:post
        (fn [request]
          (on-connection [db db-spec]
-                        (let [{:keys [token]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
-                          (if (utils/non-blank token)
-                            (let [token-hash (sha256-hex token)
-                                  now        (System/currentTimeMillis)
-                                  row        (jdbc/execute-one!
-                                              db
-                                              ["SELECT user_id FROM recovery_tokens WHERE sha256 = ? AND expires_at > ?"
-                                               token-hash now]
-                                              {:builder-fn result-set/as-unqualified-maps})]
-                              (if row
-                                (let [uid        (:user-id row)
-                                      new-secret (identity-secret-reset! db uid)]
-                                  (jdbc/execute! db ["DELETE FROM recovery_tokens WHERE sha256 = ?" token-hash])
-                                  (-> {:status  200
-                                       :headers {"Content-Type" "application/json"}
-                                       :body    (cheshire/generate-string {:id uid :secret new-secret})}
-                                      (assoc :session {:user-id uid})))
-                                {:status 401 :body ""}))
-                            {:status 400 :body ""}))))}]]
+           (let [{:keys [token]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
+             (if (utils/non-blank token)
+               (let [token-hash (sha256-hex token)
+                     now        (System/currentTimeMillis)
+                     row        (jdbc/execute-one!
+                                  db
+                                  ["SELECT user_id FROM recovery_tokens WHERE sha256 = ? AND expires_at > ?"
+                                   token-hash now]
+                                  {:builder-fn result-set/as-unqualified-maps})]
+                 (if row
+                   (let [uid        (:user-id row)
+                         new-secret (identity-secret-reset! db uid)]
+                     (jdbc/execute! db ["DELETE FROM recovery_tokens WHERE sha256 = ?" token-hash])
+                     (-> {:status  200
+                          :headers {"Content-Type" "application/json"}
+                          :body    (cheshire/generate-string {:id uid :secret new-secret})}
+                         (assoc :session {:user-id uid})))
+                   {:status 401 :body ""}))
+               {:status 400 :body ""}))))}]]
 
     {:data {:interceptors [#_session-interceptor
                            (parameters/parameters-interceptor)

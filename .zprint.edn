@@ -47,7 +47,14 @@
            "async"         :arg1-body
            "async-testing" :arg1-body
            "extend-protocol" :arg1-body
+           ;; Macros whose first argument is a binding vector indent like `let`
            "jdbc/on-connection" :binding
+           "jdbc/on-connection+options" :binding
+           "jdbc/with-transaction" :binding
+           ;; Query fns: the connection stays on the first line, SQL indents by two
+           "jdbc/execute!" :arg1-body
+           "jdbc/execute-one!" :arg1-body
+           "on-connection" :binding
            "p/catch"       :none-body
            "p/do"          :none-body
            "p/finally"     :none-body
