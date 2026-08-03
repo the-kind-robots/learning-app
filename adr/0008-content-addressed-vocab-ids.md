@@ -1,6 +1,6 @@
 # 0008. Content-addressed vocab document ids
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-06-04
 
 ## Context
