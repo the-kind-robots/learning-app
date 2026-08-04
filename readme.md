@@ -22,7 +22,6 @@ Quick start (local, https://sprecha.local):
 2) Run:
 ```bash
 npm install
-sqlite3 app.db < initial-setup.sql
 COUCHDB_URL=http://localhost:5984 COUCHDB_PASS=<pass> clojure -X:dictionary-import
 npx shadow-cljs watch app  # terminal 1
 clj -M:dev -m core         # terminal 2

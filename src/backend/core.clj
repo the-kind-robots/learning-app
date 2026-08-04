@@ -10,6 +10,7 @@
    [examples :as examples]
    [hiccup :as hiccup]
    [honey.sql :as sql]
+   [migrations :as migrations]
    [next.jdbc :as jdbc]
    [next.jdbc.prepare :as prepare]
    [next.jdbc.result-set :as result-set]
@@ -540,6 +541,9 @@
 (defn -main
   []
   (let [url (str "http://localhost:" port "/")]
+    ;; Migrate before serving: the app never runs against an outdated schema.
+    (on-connection [db db-spec]
+      (migrations/ensure-migrated! db))
     (restart-server! #'ring-handler port)
     (println "Serving" url)))
 
