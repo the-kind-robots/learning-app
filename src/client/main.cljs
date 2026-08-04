@@ -65,7 +65,8 @@
                          :start pouch/init!}
 
     :sync/identity      {:requires {:db :db/pouch}
-                         :start    sync/start!}
+                         :start    sync/start!
+                         :stop     sync/stop!}
 
     :port/clock         {:start clock/start!}
 

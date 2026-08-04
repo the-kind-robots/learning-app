@@ -2,6 +2,7 @@
   (:require
    [adapters.identity :as identity]
    [db :as db]
+   [db.pouch :as pouch]
    [domain.vocabulary :as domain]
    [goog.functions :as gfn]
    [lambdaisland.glogi :as log]))
@@ -75,20 +76,18 @@
 
 
 (defn ^:async sync-once!
-  "Runs one bidirectional replication pass, resolves vocab conflicts, and
-   completes when the pass finishes. Never rejects — a failed pass logs and
-   resolves nil so callers can fire it freely on triggers."
-  [user-db remote-url]
-  (js/Promise.
-   (fn [resolve _reject]
-     (doto (db/sync user-db {:live false :remote-url remote-url})
-       (.on "complete"
-            (fn [_]
-              (resolve (resolve-vocab-conflicts! user-db))))
-       (.on "error"
-            (fn [err]
-              (log/warn :sync/pass-failed {:error (str err)})
-              (resolve nil)))))))
+  "Runs one replication pass and resolves the conflicts it may have brought
+   home. Never rejects, so callers can fire it freely on triggers."
+  [dbs account-id]
+  (when (await (pouch/sync-once! dbs :user/db account-id))
+    (await (resolve-vocab-conflicts! (:user/db dbs)))))
+
+
+(defn stop!
+  "Stops pushing on local writes. A pass already in flight finishes on its own."
+  [{:sync/keys [unwatch]}]
+  (when unwatch
+    (unwatch)))
 
 
 (def ^:private push-interval-ms
@@ -102,21 +101,17 @@
    push on every local user-db change, plus a pull returned as :sync/pull!
    for the UI to call on data-page entry. Without a stored identity the device
    is local-only — no network call, inert pull (ADR-0006)."
-  [{:keys [db]}]
+  [{dbs :db}]
   (try
     (if-let [{:keys [id] :as identity} (await (identity/load-identity!))]
       (do
         (identity/use-identity! identity)
-        (let [user-db    (:user/db db)
-              remote-url (str (.. js/globalThis -location -origin) "/db/userdb-" id)
-              pull!      #(when (.-onLine js/navigator) (sync-once! user-db remote-url))]
-          (..
-           ^js user-db
-           (changes #js {:since "now" :live true})
-           (on "change" (gfn/throttle pull! push-interval-ms)))
+        (let [pull!   #(when (.-onLine js/navigator) (sync-once! dbs id))
+              unwatch (pouch/on-change dbs :user/db (gfn/throttle pull! push-interval-ms))]
           (log/info :sync/ready {:user-id id})
           {:sync/account-id id
-           :sync/pull!      pull!}))
+           :sync/pull!      pull!
+           :sync/unwatch    unwatch}))
       (do
         (log/info :sync/local-only {})
         {:sync/account-id nil
