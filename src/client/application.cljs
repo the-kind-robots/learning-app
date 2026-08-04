@@ -5,6 +5,7 @@
    [application.presenter :as presenter]
    [install-guide.view :as install-guide]
    [lambdaisland.glogi :as log]
+   [nexus.batching :as batching]
    [nexus.registry :as nxr]
    [pages.collections.view :as pages.collections.view]
    [pages.home.view :as pages.home.view]
@@ -16,6 +17,14 @@
 ;;
 ;; Interceptors
 ;;
+
+
+;; Batching is opt-in since nexus 2026.06: the `^:nexus/batch` metadata alone
+;; became inert, and a batched handler then receives one effect argument where
+;; it expects a collection. It earns its keep here — `:effect/save` is what
+;; every action writes through, and without it each effect swaps the store
+;; separately, so one dispatch renders as many times as it has effects.
+(batching/install!)
 
 
 (nxr/register-interceptor!

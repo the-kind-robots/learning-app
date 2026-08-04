@@ -5,7 +5,7 @@
   [com.lambdaisland/glogi "1.4.177"]
   [metosin/reitit "0.10.1"]
   [no.cjohansen/dataspex "2026.06.3"]
-  [no.cjohansen/nexus "2025.11.1"]
+  [no.cjohansen/nexus "2026.07.1"]
   [no.cjohansen/replicant "2026.07.1"]
 
   [philoskim/debux "0.9.1"]
