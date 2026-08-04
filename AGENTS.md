@@ -26,6 +26,15 @@ With timeout (milliseconds)
 The REPL session persists between evaluations - namespaces and state are maintained.
 Always use `:reload` when requiring namespaces to pick up changes.
 
+# Branches and Worktrees
+
+- Create branches only with `gh issue develop <number> --checkout`, so the branch is linked to its issue on GitHub. Never `git checkout -b` for tracked work.
+- A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared, and a fresh checkout costs about a gigabyte here plus a cold shadow-cljs cache.
+  - **Main worktree** — anything needing the full stand: sync, dictionary, migrations, schema, anything talking to CouchDB or nginx.
+  - **Worktree** — work needing only the compiler and tests: refactors, style, docs, skills, tests, small UI fixes.
+- Worktrees come from the built-in mechanism (`EnterWorktree` / `ExitWorktree`), which keeps them in `.claude/worktrees/`. Do not create them by hand and do not invent other locations.
+- On merge, delete the branch and remove the worktree. Both accumulate silently otherwise.
+
 # Browser / PWA Verification
 
 - For browser-runtime behavior, use real browser proof, not only code inspection.
