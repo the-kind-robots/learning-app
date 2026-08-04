@@ -47,5 +47,5 @@
 - [x] 8.3 Auth: `/auth/check` with cookie → 200 + `X-Auth-*`; `/account` with cookie → `{id}`; both 401 on a bad/absent token
 - [x] 8.4 Seed-push: pre-provision local word (`vocab:tisch`, content-addressed) reached `userdb-N` on the next sync pass
 - [x] 8.5 Adopt: same-account `#key=` → merge, local data kept; cross-account `#key=` → local wipe + switch; cookie set client-side from JS each time
-- [ ] 8.6 Export round-trip: full dump includes collections; double import idempotent (no UI — verify via REPL or unit test)
+- [x] 8.6 Export round-trip: full dump includes collections, round-trips, double import is idempotent, vocab merges last-write-wins while other types insert-if-absent, schema 1 still imports
 - [x] 8.7 `npx shadow-cljs compile app` clean (0 warnings) and node tests green (130 tests / 305 assertions)
