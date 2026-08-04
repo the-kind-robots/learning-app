@@ -280,7 +280,16 @@
 ;;
 
 
+(def ^:private sw-version-resource
+  "Where the build leaves the service worker version. The name is repeated in
+   build.clj, which writes it — the one thing the two sides must agree on."
+  "sw-version")
+
+
 (defn- public-dir-hash
+  "Digest of the assets as they sit on disk. Only a source checkout can answer
+   this: walking a directory is exactly what a packaged run cannot do, since a
+   jar holds a flat list of entries and `resources/public` is not a path there."
   []
   (let [digest (MessageDigest/getInstance "SHA-256")
         dir    (io/file "resources/public")]
@@ -296,11 +305,22 @@
     (subs (apply str (map #(format "%02x" (Byte/toUnsignedInt %)) (.digest digest))) 0 8)))
 
 
+(defn- service-worker-version
+  "What tells a browser that the worker changed. The build writes it into the
+   artifact, where the assets were still files; a source checkout computes it
+   from disk on every request, so a rebuild during development is picked up."
+  []
+  (if-let [built (io/resource sw-version-resource)]
+    (str/trim (slurp built))
+    (public-dir-hash)))
+
+
 (defn service-worker-handler
   [request]
   (when (= (:uri request) "/js/app/sw.js")
     (when-let [res (io/resource "public/js/sw.js")]
-      (-> (response/response (str "const SW_VERSION=\"" (public-dir-hash) "\";\n" (slurp res)))
+      (-> (response/response
+           (str "const SW_VERSION=\"" (service-worker-version) "\";\n" (slurp res)))
           (response/content-type "text/javascript")
           (response/header "Service-Worker-Allowed" "/")))))
 
