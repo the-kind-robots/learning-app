@@ -63,8 +63,6 @@ app.db
 /tools/dictionary/enrich-translations/enrich-translations
 
 # Worktree server artifacts (created by /goal skill)
-.worktree-backend.log
-.worktree-backend.pid
 
 # Local agent/tool artifacts
 /.codex/skills
