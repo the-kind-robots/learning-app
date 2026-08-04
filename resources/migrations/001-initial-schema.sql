@@ -7,14 +7,13 @@ CREATE TABLE IF NOT EXISTS users
     password   TEXT,
     created_at INTEGER DEFAULT (UNIXEPOCH())
 );
-
+--;;
 CREATE TABLE IF NOT EXISTS user_settings
 (
     user_id  INTEGER PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
     settings BLOB DEFAULT '{}'
 );
-
-
+--;;
 CREATE TABLE IF NOT EXISTS sessions
 (
     id         INTEGER PRIMARY KEY,
@@ -23,8 +22,7 @@ CREATE TABLE IF NOT EXISTS sessions
     value      BLOB,
     created_at INTEGER DEFAULT (UNIXEPOCH())
 );
-
-
+--;;
 CREATE TABLE IF NOT EXISTS words
 (
     id          INTEGER PRIMARY KEY,
@@ -34,10 +32,9 @@ CREATE TABLE IF NOT EXISTS words
     created_at  INTEGER DEFAULT (UNIXEPOCH()),
     modified_at INTEGER
 );
-
-CREATE UNIQUE INDEX unique_user_word ON words (user_id, value);
-
-
+--;;
+CREATE UNIQUE INDEX IF NOT EXISTS unique_user_word ON words (user_id, value);
+--;;
 CREATE TABLE IF NOT EXISTS examples
 (
     id          INTEGER PRIMARY KEY,
@@ -49,16 +46,14 @@ CREATE TABLE IF NOT EXISTS examples
     created_at  INTEGER DEFAULT (UNIXEPOCH()),
     modified_at INTEGER
 );
-
-
+--;;
 CREATE TABLE IF NOT EXISTS lessons
 (
     id                   INTEGER PRIMARY KEY,
     user_id              INTEGER REFERENCES users (id) UNIQUE,
     current_challenge_id INTEGER
 );
-
-
+--;;
 CREATE TABLE IF NOT EXISTS challenges
 (
     id           INTEGER PRIMARY KEY,
@@ -67,8 +62,7 @@ CREATE TABLE IF NOT EXISTS challenges
     lesson_id    INTEGER REFERENCES lessons (id) ON DELETE CASCADE ON UPDATE CASCADE,
     passed       INTEGER DEFAULT (0)
 );
-
-
+--;;
 CREATE TABLE IF NOT EXISTS reviews
 (
     id          INTEGER PRIMARY KEY,
@@ -76,5 +70,11 @@ CREATE TABLE IF NOT EXISTS reviews
     retained    INTEGER,
     reviewed_at INTEGER DEFAULT (UNIXEPOCH())
 );
-
-
+--;;
+CREATE TABLE IF NOT EXISTS recovery_tokens
+(
+    sha256     TEXT    PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    created_at INTEGER DEFAULT (UNIXEPOCH()),
+    expires_at INTEGER NOT NULL
+);

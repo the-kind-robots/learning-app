@@ -257,7 +257,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "w" :value "die Seele" :translation "душа"}]))
+      (await (db-seed/seed-vocabulary! (:user/db dbs) [{:value "die Seele" :translation "душа"}]))
       (let [info (await (sut/token-info (test-capabilities dbs) "die Seele" "душа"))]
         (is (= :known-with-translation (:state info))))))))
 
@@ -267,7 +267,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "w" :value "die Bank" :translation "банк"}]))
+      (await (db-seed/seed-vocabulary! (:user/db dbs) [{:value "die Bank" :translation "банк"}]))
       (let [info (await (sut/token-info (test-capabilities dbs) "die Bank" "скамейка"))]
         (is (= :known-missing-translation (:state info))))))))
 

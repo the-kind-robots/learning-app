@@ -22,3 +22,4 @@
 @import url("./blocks/vocabulary.css") layer(blocks);
 @import url("./blocks/pwa-install.css") layer(blocks);
 @import url("./blocks/collections.css") layer(blocks);
+@import url("./blocks/sync-dialogs.css") layer(blocks);

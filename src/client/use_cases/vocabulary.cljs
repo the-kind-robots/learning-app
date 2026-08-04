@@ -5,9 +5,9 @@
 
 
 (defn ^:async find-duplicate
-  "Find an existing vocab doc whose normalized value matches `normalized`."
-  [{:keys [progress-store]} normalized]
-  (await ((:progress-store/find-word-by-normalized-value progress-store) normalized)))
+  "Find an existing vocab doc with the same value, or nil."
+  [{:keys [progress-store]} value]
+  (await ((:progress-store/find-word-by-value progress-store) value)))
 
 
 (defn ^:async add!
@@ -16,11 +16,10 @@
    article-stripped), merges translations and does not re-fetch examples.
    Returns {:word-id id :created? true/false}."
   [{:keys [collections examples progress-store] :as capabilities} value translation]
-  (let [parsed     (domain/parse-translations translation)
-        normalized (domain/normalize-value value)]
+  (let [parsed (domain/parse-translations translation)]
     (if (empty? parsed)
       {:error :empty-translations}
-      (let [existing (await (find-duplicate capabilities normalized))]
+      (let [existing (await (find-duplicate capabilities value))]
         (if existing
           (let [merged        (domain/merge-translations (:translation existing) parsed)
                 updated       (assoc existing :translation merged)
@@ -42,12 +41,6 @@
               (await ((:collections/add-word! collections) id collection-id)))
             ((:examples/request! examples) id collection-id collection-name)
             {:word-id id :created? true}))))))
-
-
-(defn find-duplicate-by-value
-  "Return existing vocab doc whose normalized value matches value."
-  [capabilities value]
-  (find-duplicate capabilities (domain/normalize-value value)))
 
 
 (defn ^:async get

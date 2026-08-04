@@ -7,7 +7,8 @@
 (nxr/register-action! :action/show-words
   (fn show-words [_ {:keys [words total search]}]
     [[:effect/save
-      {:app/page      :page/words
+      {:page/current  :page/words
+       :page/load     [:effect/load-words]
        :words/items   (presenter/word-list-props words)
        :words/total   total
        :words/search  search

@@ -1,5 +1,6 @@
 (ns adapters.progress-store
   (:require
+   [adapters.data-export :as data-export]
    [clojure.core :as clojure]
    [db.pouch :as dbs]
    [domain.lesson :as lesson]
@@ -78,10 +79,9 @@
     (nil? (:started-at lesson-state)) (assoc :started-at (now-iso clock))))
 
 
-(defn ^:async find-word-by-normalized-value
-  [dbs normalized]
-  (let [{docs :docs} (await (find-all dbs "vocab"))]
-    (first (filter #(= normalized (vocabulary/normalize-value (:value %))) docs))))
+(defn ^:async find-word-by-value
+  [dbs value]
+  (await (dbs/get dbs "vocab" (vocabulary/vocab-id value))))
 
 
 (defn ^:async get-word
@@ -171,3 +171,13 @@
   [dbs]
   (when-let [lesson-state (await (get-lesson dbs))]
     (await (dbs/remove dbs lesson-state))))
+
+
+(defn export-data!
+  [dbs]
+  (data-export/export-data! dbs))
+
+
+(defn import-data!
+  [dbs payload]
+  (data-export/import-data! dbs payload))

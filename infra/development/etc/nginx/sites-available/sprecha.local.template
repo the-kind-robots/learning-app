@@ -43,7 +43,11 @@ server {
         auth_request /auth/check;
 
         # 2. Take user/roles from the auth subrequest response headers
-        auth_request_set $couch_user  $upstream_http_x_auth_user;
+        #    nginx lowercases header names and replaces - with _ for $upstream_http_* vars.
+        #    X-Auth-UserName  → $upstream_http_x_auth_username
+        #    X-Auth-Roles     → $upstream_http_x_auth_roles
+        #    X-Auth-Token     → $upstream_http_x_auth_token
+        auth_request_set $couch_user  $upstream_http_x_auth_username;
         auth_request_set $couch_roles $upstream_http_x_auth_roles;
         auth_request_set $couch_token $upstream_http_x_auth_token;
 

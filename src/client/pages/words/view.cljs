@@ -121,5 +121,4 @@
          [:div.page-footer__action
           [:button.vocabulary__start.big-button.green-button
            {:on {:click [[:action/go-to-lesson]]}}
-           "НАЧАТЬ УРОК"]]]))])
-)
+           "НАЧАТЬ УРОК"]]]))]))

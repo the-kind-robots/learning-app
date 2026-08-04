@@ -10,13 +10,15 @@ LogsDirectory=learning-app
 StateDirectory=learning-app
 Restart=always
 RestartSec=10
-ExecStart=sh -c 'if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -n "${OPENROUTER_API_KEY_PATH:-}" ] && [ -f "${OPENROUTER_API_KEY_PATH}" ]; then export OPENROUTER_API_KEY="$(cat "${OPENROUTER_API_KEY_PATH}")"; fi; java -jar /opt/learning-app/learning-app.jar'
+ExecStart=sh -c 'if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -n "${OPENROUTER_API_KEY_PATH:-}" ] && [ -f "${OPENROUTER_API_KEY_PATH}" ]; then export OPENROUTER_API_KEY="$(cat "${OPENROUTER_API_KEY_PATH}")"; fi; if [ -z "${LEARNING_APP_DB_AUTH_SECRET:-}" ] && [ -n "${LEARNING_APP_DB_AUTH_SECRET_PATH:-}" ] && [ -f "${LEARNING_APP_DB_AUTH_SECRET_PATH}" ]; then export LEARNING_APP_DB_AUTH_SECRET="$(cat "${LEARNING_APP_DB_AUTH_SECRET_PATH}")"; fi; java -jar /opt/learning-app/learning-app.jar'
 
 # Environment
 EnvironmentFile=-/etc/learning-app/environment
 EnvironmentFile=-/etc/environment.d/learning-app.conf
 LoadCredentialEncrypted=openrouter_api_key:/etc/credstore.encrypted/openrouter_api_key
 Environment=OPENROUTER_API_KEY_PATH=%d/openrouter_api_key
+LoadCredentialEncrypted=db_auth_secret:/etc/credstore.encrypted/db_auth_secret
+Environment=LEARNING_APP_DB_AUTH_SECRET_PATH=%d/db_auth_secret
 
 # Security settings
 NoNewPrivileges=yes

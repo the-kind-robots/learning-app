@@ -1,0 +1,94 @@
+/* Sync menu dialog — sheet of action buttons */
+
+.sync-menu-dialog__content {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+}
+
+.sync-menu-dialog__item {
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: rgb(var(--color-black-text));
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  min-height: 52px;
+  padding: 14px 20px;
+  text-align: left;
+  transition: background-color 0.1s;
+  width: 100%;
+}
+
+@media (hover: hover) {
+  .sync-menu-dialog__item:hover {
+    background: rgb(var(--color-polar));
+  }
+}
+
+.sync-menu-dialog__item:active {
+  background: rgb(var(--color-polar));
+}
+
+.sync-menu-dialog__item--cancel {
+  color: rgb(var(--color-cardinal));
+  margin-top: 4px;
+}
+
+
+/* Pairing dialog — QR code for connecting a new device */
+
+.pairing-dialog__content {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 20px 20px;
+  text-align: center;
+}
+
+.pairing-dialog__title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.pairing-dialog__hint {
+  color: rgb(var(--color-wolf));
+  font-size: 14px;
+  margin: 0;
+}
+
+.pairing-dialog__qr {
+  border-radius: 12px;
+  display: block;
+  height: 220px;
+  width: 220px;
+}
+
+.pairing-dialog__close {
+  background: rgb(var(--color-polar));
+  border: none;
+  border-radius: 10px;
+  color: rgb(var(--color-black-text));
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  height: 44px;
+  margin-top: 4px;
+  padding: 0 28px;
+  transition: background-color 0.15s;
+}
+
+@media (hover: hover) {
+  .pairing-dialog__close:hover {
+    background: rgb(var(--color-swan));
+  }
+}
+
+.pairing-dialog__close:active {
+  background: rgb(var(--color-swan));
+}

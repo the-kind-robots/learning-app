@@ -10,6 +10,7 @@
     "@thi.ng/hiccup": "^5.3.15",
     "events": "^3.3.0",
     "pouchdb": "^9.0.0",
-    "pouchdb-find": "^9.0.0"
+    "pouchdb-find": "^9.0.0",
+    "qrcode": "^1.5.4"
   }
 }

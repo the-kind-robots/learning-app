@@ -29,3 +29,32 @@
       (is (true? (:retained review)))
       (is (= "пёс" (-> review :translation first :value)))
       (is (= "ru" (-> review :translation first :lang))))))
+
+
+(deftest normalize-value-is-a-frozen-contract
+  (testing "lowercase, umlaut fold, punctuation to space — changing this remaps ids"
+    (is (= "gross" (sut/normalize-value "GROSS")))
+    (is (= "fussball" (sut/normalize-value "Fußball")))
+    (is (= "tuer" (sut/normalize-value "Tür")))
+    (is (= "maedchen" (sut/normalize-value "Mädchen")))
+    (is (= "der hund" (sut/normalize-value "der Hund")))))
+
+
+(deftest new-word-is-content-addressed
+  (testing "vocab _id is the content-addressed id of its value"
+    (let [value "der Hund"]
+      (is (= (sut/vocab-id value)
+             (:_id (sut/new-word value [{:lang "ru" :value "пёс"}])))))))
+
+
+(deftest vocab-id-is-case-insensitive
+  (testing "the same word yields the same id regardless of case"
+    (is (= (sut/vocab-id "der Hund") (sut/vocab-id "DER HUND")))))
+
+
+(deftest merge-translations-unions-by-value
+  (testing "keeps existing translations and adds only unseen ones (conflict union)"
+    (is (= [{:lang "ru" :value "пёс"} {:lang "ru" :value "собака"}]
+           (sut/merge-translations [{:lang "ru" :value "пёс"}]
+                                   [{:lang "ru" :value "пёс"}
+                                    {:lang "ru" :value "собака"}])))))

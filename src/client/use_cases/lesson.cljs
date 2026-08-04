@@ -126,7 +126,7 @@
 (defn ^:async token-info
   "Return token info for lesson answer annotation card."
   [capabilities dictionary-form translation]
-  (let [existing (await (vocabulary/find-duplicate-by-value capabilities dictionary-form))]
+  (let [existing (await (vocabulary/find-duplicate capabilities dictionary-form))]
     {:dictionary-form dictionary-form
      :translation translation
      :state       (token-state existing translation)}))

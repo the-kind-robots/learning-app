@@ -6,7 +6,7 @@
   [metosin/reitit "0.10.1"]
   [no.cjohansen/dataspex "2026.04.1"]
   [no.cjohansen/nexus "2025.11.1"]
-  [no.cjohansen/replicant "2025.12.1"]
+  [no.cjohansen/replicant "2026.07.1"]
 
   [philoskim/debux "0.9.1"]
   [refactor-nrepl/refactor-nrepl "3.11.0"]

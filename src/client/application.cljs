@@ -1,6 +1,10 @@
 (ns application
   (:require
+   ["qrcode" :as QRCode]
+   [adapters.identity :as identity]
+   [application.presenter :as presenter]
    [install-guide.view :as install-guide]
+   [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
    [pages.collections.view :as pages.collections.view]
    [pages.home.view :as pages.home.view]
@@ -37,9 +41,34 @@
       (navigate! page))))
 
 
+(nxr/register-effect! :effect/sync-pull
+  (fn sync-pull [{:keys [capabilities dispatch]} _]
+    (when-let [pull! (get-in capabilities [:capabilities/sync :sync/pull!])]
+      (some-> (pull!)
+              (.then #(dispatch [[:action/reload-page]]))))))
+
+
+(nxr/register-action! :action/reload-page
+  (fn reload-page [state]
+    (when-let [load-effect (:page/load state)]
+      [load-effect])))
+
+
+(nxr/register-effect! :effect/load-account
+  (fn load-account [{:keys [capabilities dispatch]} _]
+    (dispatch
+     [[:effect/save
+       {:app/account-id (get-in capabilities [:capabilities/sync :sync/account-id])}]])))
+
+
 (nxr/register-effect! :effect/show-modal
   (fn show-modal [{:keys [dispatch-data]} _]
     (.showModal (:replicant/node dispatch-data))))
+
+
+(nxr/register-effect! :effect/close-modal
+  (fn close-modal [{:keys [dispatch-data]} _]
+    (.close (:replicant/node dispatch-data))))
 
 
 (nxr/register-effect! :effect/focus-child
@@ -124,6 +153,14 @@
     [[:effect/show-modal]]))
 
 
+(nxr/register-action! :action/dismiss-on-backdrop
+  (fn dismiss-on-backdrop [_ backdrop?]
+    ;; A native modal renders its backdrop as part of the dialog element, so a
+    ;; click that lands on the element itself came from outside the content.
+    (when backdrop?
+      [[:effect/close-modal]])))
+
+
 (nxr/register-action! :action/move-cursor-to-end
   (fn move-cursor-to-end [_]
     [[:effect/cursor-to-end]]))
@@ -181,6 +218,63 @@
       [[:effect/request-submit]])))
 
 
+(nxr/register-action! :action/open-sync-menu
+  (fn open-sync-menu [_]
+    [[:effect/save {:app/sync-menu-open? true}]]))
+
+
+(nxr/register-action! :action/close-sync-menu
+  (fn close-sync-menu [_]
+    [[:effect/save {:app/sync-menu-open? false}]]))
+
+
+(nxr/register-action! :action/show-pairing-dialog
+  (fn show-pairing-dialog [_ pairing]
+    [[:effect/save
+      {:app/sync-menu-open? false
+       :app/pairing pairing}]]))
+
+
+(nxr/register-action! :action/close-pairing-dialog
+  (fn close-pairing-dialog [_]
+    [[:effect/save {:app/pairing nil}]]))
+
+
+(defn- account-key-url
+  "The QR/recovery URL a device opens to adopt this account. The token rides in
+   the fragment, which browsers never send to the server, keeping it out of
+   access logs and Referer headers (ADR-0006)."
+  [{:keys [token]}]
+  (str (.. js/window -location -origin) "/#key=" token))
+
+
+(nxr/register-effect! :effect/create-recovery-link
+  (fn ^:async create-recovery-link
+    [_ _]
+    (try
+      (when-let [identity (await (identity/load-identity!))]
+        (let [url (account-key-url identity)]
+          (if (exists? js/navigator.share)
+            (await (js/navigator.share #js {:title "Sprecha: восстановление доступа" :url url}))
+            (do
+              (await (.. js/navigator -clipboard (writeText url)))
+              (js/alert "Ссылка скопирована в буфер обмена")))))
+      (catch js/Error err
+        (log/error :effect/create-recovery-link {:error (str err)})))))
+
+
+(nxr/register-effect! :effect/open-pairing
+  (fn ^:async open-pairing
+    [{:keys [dispatch]} _]
+    (try
+      (when-let [identity (await (identity/load-identity!))]
+        (let [pair-url (account-key-url identity)
+              qr-url   (await (.toDataURL QRCode pair-url))]
+          (dispatch [[:action/show-pairing-dialog {:qr-url qr-url :pair-url pair-url}]])))
+      (catch js/Error err
+        (log/error :effect/open-pairing {:error (str err)})))))
+
+
 ;;
 ;; Render
 ;;
@@ -223,21 +317,113 @@
       :stroke-linecap "round"}]]])
 
 
+(defn- install-icon
+  []
+  [:svg.app-shell__icon
+   {:aria-hidden    "true"
+    :fill           "none"
+    :stroke         "currentColor"
+    :stroke-linecap "round"
+    :stroke-linejoin "round"
+    :stroke-width   "1.8"
+    :viewBox        "0 0 24 24"}
+   [:path {:d "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}]
+   [:polyline {:points "7 10 12 15 17 10"}]
+   [:line {:x1 "12" :y1 "15" :x2 "12" :y2 "3"}]])
+
+
+(defn- sync-icon
+  []
+  [:svg.app-shell__icon
+   {:aria-hidden    "true"
+    :fill           "none"
+    :stroke         "currentColor"
+    :stroke-linecap "round"
+    :stroke-linejoin "round"
+    :stroke-width   "1.8"
+    :viewBox        "0 0 24 24"}
+   [:polyline {:points "23 4 23 10 17 10"}]
+   [:polyline {:points "1 20 1 14 7 14"}]
+   [:path {:d "M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"}]])
+
+
+(defn- sync-menu-dialog
+  [{:keys [show-account-actions?]}]
+  [:dialog.sync-menu-dialog.modal
+   {:replicant/on-mount [[:action/open-dialog]]
+    :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
+         :close [[:action/close-sync-menu]]}}
+   [:div.sync-menu-dialog__content
+    (when show-account-actions?
+      (list
+       [:button.sync-menu-dialog__item
+        {:type "button"
+         :on   {:click [[:effect/open-pairing]]}}
+        "Подключить устройство"]
+       [:button.sync-menu-dialog__item
+        {:type "button"
+         :on   {:click [[:effect/create-recovery-link]]}}
+        "Ссылка восстановления"]))
+    [:button.sync-menu-dialog__item.sync-menu-dialog__item--cancel
+     {:type "button"
+      :on   {:click [[:action/close-sync-menu]]}}
+     "Отмена"]]])
+
+
+(defn- pairing-dialog
+  [{:keys [qr-url pair-url]}]
+  [:dialog.pairing-dialog.modal
+   {:replicant/on-mount [[:action/open-dialog]]
+    :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
+         :close [[:action/close-pairing-dialog]]}}
+   [:div.pairing-dialog__content
+    [:h2.pairing-dialog__title "Подключить устройство"]
+    [:p.pairing-dialog__hint "Отсканируйте QR-код на новом устройстве"]
+    [:img.pairing-dialog__qr {:src qr-url :alt "QR-код для подключения устройства"}]
+    [:button.pairing-dialog__close
+     {:type "button"
+      :on   {:click [[:action/close-pairing-dialog]]}}
+     "Закрыть"]]])
+
+
 (defn- render
   [state]
-  (list
-   [:a.app-shell__logo {:href "/home"} "Sprecha"]
-   (case (:app/page state)
-     :page/home        (collections-icon)
-     :page/collections (close-icon)
-     (list))
-   (install-guide/render state)
-   (case (:app/page state)
-     :page/collections (pages.collections.view/page state)
-     :page/home        (pages.home.view/page state)
-     :page/lesson      (pages.lesson.view/page state)
-     :page/words       (pages.words.view/page state)
-     [:div.app-loading "Загружаем..."])))
+  (let [{:keys [menu-open? page pairing show-install? show-sync?]}
+        (presenter/shell-props state)]
+    (list
+     [:a.app-shell__logo {:href "/home"} "Sprecha"]
+     [:div.app-shell__actions
+      ;; Install stands on its own — it is not a sync action, and it is offered
+      ;; before any account exists.
+      (when show-install?
+        [:button.app-shell__icon-button
+         {:type       "button"
+          :title      "Установить приложение"
+          :aria-label "Установить приложение"
+          :on         {:click [[:action/pwa-install-requested]]}}
+         (install-icon)])
+      (when show-sync?
+        [:button.app-shell__icon-button
+         {:type       "button"
+          :title      "Синхронизация"
+          :aria-label "Синхронизация"
+          :on         {:click [[:action/open-sync-menu]]}}
+         (sync-icon)])
+      (case page
+        :page/home        (collections-icon)
+        :page/collections (close-icon)
+        nil)]
+     (install-guide/render state)
+     (when menu-open?
+       (sync-menu-dialog (presenter/sync-menu-props state)))
+     (when pairing
+       (pairing-dialog pairing))
+     (case page
+       :page/collections (pages.collections.view/page state)
+       :page/home        (pages.home.view/page state)
+       :page/lesson      (pages.lesson.view/page state)
+       :page/words       (pages.words.view/page state)
+       [:div.app-loading "Загружаем..."]))))
 
 
 (defn render!
@@ -253,10 +439,10 @@
      :controllers [{:start #(dispatch [[:effect/load-home]])}]}]
    ["/words"
     {:name        :page/words
-     :controllers [{:start #(dispatch [[:effect/load-words]])}]}]
+     :controllers [{:start #(dispatch [[:effect/load-words] [:effect/sync-pull]])}]}]
    ["/lesson"
     {:name        :page/lesson
-     :controllers [{:start #(dispatch [[:effect/load-lesson]])}]}]
+     :controllers [{:start #(dispatch [[:effect/load-lesson] [:effect/sync-pull]])}]}]
    ["/collections"
     {:name        :page/collections
-     :controllers [{:start #(dispatch [[:effect/load-collections]])}]}]])
+     :controllers [{:start #(dispatch [[:effect/load-collections] [:effect/sync-pull]])}]}]])

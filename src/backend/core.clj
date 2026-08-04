@@ -1,7 +1,6 @@
 (ns core
   (:gen-class)
   (:require
-   [buddy.hashers :as hashers]
    [cheshire.core :as cheshire]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
@@ -9,7 +8,7 @@
    [db :as db]
    [examples :as examples]
    [hiccup :as hiccup]
-   [honey.sql :as sql]
+   [migrations :as migrations]
    [next.jdbc :as jdbc]
    [next.jdbc.prepare :as prepare]
    [next.jdbc.result-set :as result-set]
@@ -19,13 +18,12 @@
    [reitit.http.interceptors.parameters :as parameters]
    [reitit.interceptor.sieppari :as sieppari]
    [reitit.ring :as ring]
-   [ring.middleware.session :as session]
-   [ring.middleware.session.store :as store]
+   [ring.middleware.cookies :as cookies]
    [ring.util.response :as response]
    [taoensso.telemere :as t]
    [utils :as utils])
   (:import
-   [java.security MessageDigest]
+   [java.security MessageDigest SecureRandom]
    [java.sql PreparedStatement ResultSetMetaData]
    [java.util HexFormat]
    [javax.crypto Mac]
@@ -47,13 +45,21 @@
     (t/add-handler! console-log-handler-id (t/handler:console) {:async nil})))
 
 
-(def dev-mode? (or (System/getenv "LEARNING_APP__ENVIRONMENT") true))
+(def running-from-source?
+  "Whether this process runs from a checkout rather than from the packaged jar.
+   The jar carries compiled classes and resources but no `.clj`, so finding our
+   own source on the classpath answers the question — unlike an environment
+   variable, which is a promise about the environment that nothing enforces."
+  (some? (io/resource "core.clj")))
 
 
 (def db-auth-secret
-  (if dev-mode?
-    "secret"
-    (System/getenv "LEARNING_APP_DB_AUTH_SECRET")))
+  "Signs the proxy-auth headers `/auth/check` hands to CouchDB. A checkout may
+   fall back to a well-known value; a packaged app may not, and says so instead
+   of signing with something an attacker can guess."
+  (or (System/getenv "LEARNING_APP_DB_AUTH_SECRET")
+      (when running-from-source? "secret")
+      (throw (ex-info "LEARNING_APP_DB_AUTH_SECRET is required outside a source checkout" {}))))
 
 
 ;;
@@ -66,29 +72,33 @@
 
 
 (defmacro on-connection
+  "Runs body with a configured connection bound to sym and closes it afterwards.
+   `jdbc/on-connection+options` closes only connections it opened itself, so a
+   connection obtained here has to be released here — otherwise every call
+   leaves one behind for the life of the process."
   [[sym connectable] & body]
-  `(jdbc/on-connection+options [~sym
-                                (-> (jdbc/get-connection ~connectable)
-                                    (jdbc/with-logging
-                                     (fn [_sym# sql-params#]
-                                       {:time  (System/currentTimeMillis)
-                                        :query sql-params#})
-                                     (fn [_sym# state# result#]
-                                       (let [data#      {:time   (str (- (System/currentTimeMillis) (:time state#))
-                                                                      " ms")
-                                                         :query  (:query state#)
-                                                         :result result#}
-                                             log-level# (if (instance? Throwable result#)
-                                                          :error
-                                                          :debug)])))
-                                    (jdbc/with-options jdbc/unqualified-snake-kebab-opts))]
+  `(with-open [connection# (jdbc/get-connection ~connectable)]
+     (let [~sym (-> connection#
+                    (jdbc/with-logging
+                     (fn [_sym# sql-params#]
+                       {:time  (System/currentTimeMillis)
+                        :query sql-params#})
+                     (fn [_sym# state# result#]
+                       (let [data#      {:time   (str (- (System/currentTimeMillis) (:time state#))
+                                                      " ms")
+                                         :query  (:query state#)
+                                         :result result#}
+                             log-level# (if (instance? Throwable result#)
+                                          :error
+                                          :debug)])))
+                    (jdbc/with-options jdbc/unqualified-snake-kebab-opts))]
 
-                               ;; Enable foreign key constraints in SQLite, as they are disabled by default.
-                               ;; This constraint must be enabled separately for each connection.
-                               ;; See https://www.sqlite.org/foreignkeys.html#fk_enable
-                               (jdbc/execute! ~sym ["PRAGMA foreign_keys = on"])
+       ;; Enable foreign key constraints in SQLite, as they are disabled by default.
+       ;; This constraint must be enabled separately for each connection.
+       ;; See https://www.sqlite.org/foreignkeys.html#fk_enable
+       (jdbc/execute! ~sym ["PRAGMA foreign_keys = on"])
 
-                               ~@body))
+       ~@body)))
 
 
 ;; This makes possible to pass clojure map or vector as a query parameter.
@@ -122,58 +132,90 @@
 ;;
 
 
-(defn user-id
-  [db user-name password]
-  (when (and (utils/non-blank user-name)
-             (utils/non-blank password))
-    (let [user (jdbc/execute-one! db
-                                  ["SELECT id, password FROM users WHERE name = ?" user-name]
-                                  {:builder-fn result-set/as-unqualified-maps})]
-      (when (:valid (hashers/verify password (:password user)))
-        (:id user)))))
+(defn- sha256-hex
+  [^String s]
+  (.formatHex
+   (HexFormat/of)
+   (.digest (doto (MessageDigest/getInstance "SHA-256")
+              (.update (.getBytes s "UTF-8"))))))
 
 
-(defn add-user
-  [db user-name password]
-  ;; create user in SQLite DB
-  (let [password-hash (hashers/derive password {:alg :argon2id})
-        {:keys [id]}  (jdbc/execute-one! db
-                                         ["INSERT INTO users (name, password) VALUES (?, ?) RETURNING id" user-name
-                                          password-hash])
+(def ^:private ^SecureRandom secure-random (SecureRandom.))
 
-        ;; create user DB in CouchDB
-        couch-db      (db/use (str "userdb-" id))]
 
-    ;; create user role in CouchDB
-    (db/secure couch-db {:members {:names [] :roles [(str "u:" id)]}})))
+(defn- random-token
+  "A 160-bit URL-safe bearer token (40 hex chars)."
+  []
+  (let [bytes (byte-array 20)]
+    (.nextBytes secure-random bytes)
+    (.formatHex (HexFormat/of) bytes)))
+
+
+(defn create-account!
+  "Mints a bearer token, creates the account row holding its sha256, and its
+   role-secured CouchDB userdb. Returns {:id int :token str} — the raw token
+   is the user's key, stored nowhere on the server."
+  [db]
+  (let [token        (random-token)
+        {:keys [id]} (jdbc/execute-one! db
+                       ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
+                        (sha256-hex token)])]
+    (db/secure (db/use (str "userdb-" id)) {:members {:names [] :roles [(str "u:" id)]}})
+    {:id id :token token}))
+
+
+(defn- authenticated-user-id
+  "Returns the account id a bearer token authenticates, or nil."
+  [db token]
+  (when (utils/non-blank token)
+    (:id (jdbc/execute-one! db
+           ["SELECT id FROM users WHERE token_sha256 = ?"
+            (sha256-hex token)]
+           {:builder-fn result-set/as-unqualified-maps}))))
+
+
+(defn mint-grant!
+  "Stores the sha256 of a fresh single-use grant token and returns the
+   plaintext token — shown once, REPL-only (ADR-0006 phase-1 invites)."
+  ([db]
+   (mint-grant! db (* 30 24 60 60 1000)))
+  ([db ttl-ms]
+   (let [token (random-token)]
+     (jdbc/execute! db
+       ["INSERT INTO grants (sha256, expires_at) VALUES (?, ?)"
+        (sha256-hex token) (+ (System/currentTimeMillis) ttl-ms)])
+     token)))
+
+
+(defn- burn-grant!
+  "Atomically burns an unused, unexpired grant. Returns true when burned."
+  [db token]
+  (some?
+   (jdbc/execute-one!
+     db
+     ["UPDATE grants SET used_at = UNIXEPOCH()
+      WHERE sha256 = ? AND used_at IS NULL AND expires_at > ?
+      RETURNING sha256"
+      (sha256-hex token) (System/currentTimeMillis)])))
 
 
 (comment
   (on-connection [db db-spec]
-                 (add-user db "shundeevegor@gmail.com" "3434"))
-  (on-connection [db db-spec]
-                 (user-id db "shundeevegor@gmail.com" "3434")))
+    (mint-grant! db)))
 
 
 ;;
-;; User Session
+;; Auth — bearer token in a cookie, validated per request (ADR-0006)
 ;;
 
 
-(deftype Sessions [db]
-  store/SessionStore
-    (read-session [_ token]
-      (:value
-       (jdbc/execute-one! db
-                          ["SELECT value FROM sessions WHERE token = ?" token]
-                          {:builder-fn result-set/as-unqualified-maps})))
-    (write-session [_ token value]
-      (let [token (or token (str (random-uuid)))]
-        (jdbc/execute! db ["INSERT INTO sessions (token, value) VALUES (?, ?)" token value])
-        token))
-    (delete-session [_ token]
-      (jdbc/execute! db (sql/format {:delete-from :sessions :where [:= :token token]}))
-      nil))
+(def ^:private token-cookie "sprecha-token")
+
+
+(defn- request-token
+  "Reads the bearer token from the parsed cookies, or nil."
+  [request]
+  (get-in request [:cookies token-cookie :value]))
 
 
 (defn hmac-sign
@@ -186,45 +228,17 @@
     (.getBytes user-name))))
 
 
-(defn auth-proxy-response
-  "Produce the `/auth/check` response map expected by the CouchDB proxy.
-
-  When the session is missing, or empty, a `401` response is returned.
-  Otherwise the response includes the proxy auth headers populated from
-  the current `:user-id`."
-  [session]
-  (if (seq session)
-    (let [user-name  (-> session :user-id str)
-          user-roles (str/join "," [(str "u:" user-name)])
-          token      (hmac-sign user-name db-auth-secret)]
-      (-> {:status 200}
-          (response/header "X-Auth-UserName" user-name)
-          (response/header "X-Auth-Roles" user-roles)
-          (response/header "X-Auth-Token" token)))
-    {:status 401}))
-
-
 ;;
 ;; Interceptors
 ;;
 
 
-(def session-interceptor
-  {:name  ::session-interceptor
+(def cookie-interceptor
+  "Parses the Cookie header into the request's :cookies map. The server only
+   reads the bearer token — the client sets it — so there is no response leg."
+  {:name  ::cookie-interceptor
    :enter (fn [ctx]
-            (jdbc/on-connection [db db-spec]
-              (let [opts {:store        (->Sessions db)
-                          :set-cookies? true
-                          :cookie-name  "ring-session"
-                          :cookie-attrs {:path "/" :http-only true}}]
-                (update ctx :request session/session-request opts))))
-   :leave (fn [ctx]
-            (jdbc/on-connection [db db-spec]
-              (let [opts {:store        (->Sessions db)
-                          :set-cookies? true
-                          :cookie-name  "ring-session"
-                          :cookie-attrs {:path "/" :http-only true}}]
-                (update ctx :response session/session-response (:request ctx) opts))))})
+            (update ctx :request cookies/cookies-request))})
 
 
 ;;
@@ -319,8 +333,15 @@
 
      ["/auth/check"
       {:get
-       (fn [{:keys [session] :as _request}]
-         (auth-proxy-response session))}]
+       (fn [request]
+         (on-connection [db db-spec]
+           (if-let [user-id (authenticated-user-id db (request-token request))]
+             ;; Tell the CouchDB proxy which account + role to act as.
+             (-> {:status 200}
+                 (response/header "X-Auth-UserName" user-id)
+                 (response/header "X-Auth-Roles" (str "u:" user-id))
+                 (response/header "X-Auth-Token" (hmac-sign (str user-id) db-auth-secret)))
+             {:status 401})))}]
 
      ["/api/examples"
       {:get
@@ -347,9 +368,35 @@
                              (assoc "Retry-After"
                                     (str (max 1 (long (Math/ceil (/ (:retry-after-ms result) 1000.0)))))))
                   :body    (cheshire/generate-string
-                            {:error "Examples are temporarily unavailable"})})))))}]]
+                            {:error "Examples are temporarily unavailable"})})))))}]
 
-    {:data {:interceptors [#_session-interceptor
+     ["/api/identity/provision"
+      {:post
+       (fn [request]
+         (on-connection [db db-spec]
+           (let [{:keys [invite]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
+             (if (and (utils/non-blank invite) (burn-grant! db invite))
+               (let [{:keys [id token]} (create-account! db)]
+                 {:status  200
+                  :headers {"Content-Type" "application/json"}
+                  :body    (cheshire/generate-string {:id id :token token})})
+               {:status 403 :body ""}))))}]
+
+     ;; Adopting a key means holding a token and nothing else. The token comes
+     ;; in the body rather than the cookie so a device can find out whether it
+     ;; is valid, and whose it is, before making it this device's identity.
+     ["/api/identity/account"
+      {:post
+       (fn [request]
+         (on-connection [db db-spec]
+           (let [{:keys [token]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
+             (if-let [user-id (authenticated-user-id db token)]
+               {:status  200
+                :headers {"Content-Type" "application/json"}
+                :body    (cheshire/generate-string {:id user-id})}
+               {:status 401 :body ""}))))}]]
+
+    {:data {:interceptors [cookie-interceptor
                            (parameters/parameters-interceptor)
                            (keyword-parameters/keyword-parameters-interceptor)]}})
 
@@ -415,7 +462,7 @@
 
 (def ring-handler
   (let [ring-handler #(ring/routes service-worker-handler wasm-handler resource-handler app-handler)]
-    (if dev-mode?
+    (if running-from-source?
       (ring/reloading-ring-handler ring-handler)
       (ring-handler))))
 
@@ -452,11 +499,13 @@
 (defn -main
   []
   (let [url (str "http://localhost:" port "/")]
+    ;; Migrate before serving: the app never runs against an outdated schema.
+    (migrations/ensure-migrated! db-spec)
     (restart-server! #'ring-handler port)
     (println "Serving" url)))
 
 
 (comment
-  ;; Clear sessions
-  (jdbc/on-connection [db db-spec]
-    (jdbc/execute! db (sql/format {:delete-from :sessions}))))
+  ;; Mint an operator invite (ADR-0006 phase-1)
+  (on-connection [db db-spec]
+    (mint-grant! db)))

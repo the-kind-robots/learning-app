@@ -44,7 +44,10 @@ See [readme.md](../../readme.md) for full dev setup (nginx, TLS, DB init).
 
 ## Database
 
-Server-side SQLite file: `app.db` (created by `initial-setup.sql`).
+Server-side SQLite file: `app.db`, built and kept current by the migrations in
+`resources/migrations/`, which `start-server!` applies before serving. The
+migration list in `migrations.clj` is the schema's single source of truth: add a
+new file for every change, never edit one that has shipped.
 Custom SQL functions registered at startup live in `sqlite/application_defined_functions.clj`.
 Queries built with HoneySQL; executed via next.jdbc.
 

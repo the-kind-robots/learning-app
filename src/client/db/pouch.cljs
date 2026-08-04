@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [get find remove])
   (:require
    [db :as db]
-   [db-migrations :as db-migrations]))
+   [db-migrations :as db-migrations]
+   [lambdaisland.glogi :as log]))
 
 
 (defn- user-db
@@ -29,6 +30,41 @@
   "Returns the database instance for a given doc type string."
   [dbs doc-type]
   (some-> doc-type doc-type->db dbs))
+
+
+(def ^:private db->remote-name
+  "Which databases have a copy on the server, and what that copy is called
+   there. device-db is absent on purpose: it holds what belongs to this device
+   alone and has nowhere to replicate to."
+  {:user/db #(str "userdb-" %)})
+
+
+(defn on-change
+  "Calls f after every local write to db-key. Returns a function that stops
+   watching."
+  [dbs db-key f]
+  (let [feed (.changes ^js (db-key dbs) #js {:live true :since "now"})]
+    (.on ^js feed "change" f)
+    #(.cancel ^js feed)))
+
+
+(defn sync-once!
+  "Runs one bidirectional replication pass of db-key against the account's copy
+   on the server. Resolves when the pass finishes and never rejects — a failed
+   pass resolves nil — so a caller can fire it on a trigger without guarding
+   every one."
+  [dbs db-key account-id]
+  (let [remote (str (.. js/globalThis -location -origin)
+                    "/db/"
+                    ((db->remote-name db-key) account-id))]
+    (js/Promise.
+     (fn [resolve _reject]
+       (doto (db/sync (db-key dbs) {:live false :remote-url remote})
+         (.on "complete" (fn [_] (resolve true)))
+         (.on "error"
+              (fn [err]
+                (log/warn :db/sync-failed {:db db-key :error (str err)})
+                (resolve nil))))))))
 
 
 (defn insert
