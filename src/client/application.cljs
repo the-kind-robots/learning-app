@@ -2,6 +2,7 @@
   (:require
    ["qrcode" :as QRCode]
    [adapters.identity :as identity]
+   [application.presenter :as presenter]
    [install-guide.view :as install-guide]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
@@ -347,13 +348,13 @@
 
 
 (defn- sync-menu-dialog
-  [state]
+  [{:keys [show-account-actions?]}]
   [:dialog.sync-menu-dialog.modal
    {:replicant/on-mount [[:action/open-dialog]]
     :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
          :close [[:action/close-sync-menu]]}}
    [:div.sync-menu-dialog__content
-    (when (:app/account-id state)
+    (when show-account-actions?
       (list
        [:button.sync-menu-dialog__item
         {:type "button"
@@ -387,41 +388,42 @@
 
 (defn- render
   [state]
-  (list
-   [:a.app-shell__logo {:href "/home"} "Sprecha"]
-   [:div.app-shell__actions
-    ;; Install stands on its own — it is not a sync action, and it is offered
-    ;; before any account exists.
-    (when (:pwa/install-available? state)
-      [:button.app-shell__icon-button
-       {:type       "button"
-        :title      "Установить приложение"
-        :aria-label "Установить приложение"
-        :on         {:click [[:action/pwa-install-requested]]}}
-       (install-icon)])
-    ;; Sync actions are invite-gated (ADR-0006): no account, no entry point.
-    (when (:app/account-id state)
-      [:button.app-shell__icon-button
-       {:type       "button"
-        :title      "Синхронизация"
-        :aria-label "Синхронизация"
-        :on         {:click [[:action/open-sync-menu]]}}
-       (sync-icon)])
-    (case (:page/current state)
-      :page/home        (collections-icon)
-      :page/collections (close-icon)
-      nil)]
-   (install-guide/render state)
-   (when (:app/sync-menu-open? state)
-     (sync-menu-dialog state))
-   (when (:app/pairing state)
-     (pairing-dialog (:app/pairing state)))
-   (case (:page/current state)
-     :page/collections (pages.collections.view/page state)
-     :page/home        (pages.home.view/page state)
-     :page/lesson      (pages.lesson.view/page state)
-     :page/words       (pages.words.view/page state)
-     [:div.app-loading "Загружаем..."])))
+  (let [{:keys [menu-open? page pairing show-install? show-sync?]}
+        (presenter/shell-props state)]
+    (list
+     [:a.app-shell__logo {:href "/home"} "Sprecha"]
+     [:div.app-shell__actions
+      ;; Install stands on its own — it is not a sync action, and it is offered
+      ;; before any account exists.
+      (when show-install?
+        [:button.app-shell__icon-button
+         {:type       "button"
+          :title      "Установить приложение"
+          :aria-label "Установить приложение"
+          :on         {:click [[:action/pwa-install-requested]]}}
+         (install-icon)])
+      (when show-sync?
+        [:button.app-shell__icon-button
+         {:type       "button"
+          :title      "Синхронизация"
+          :aria-label "Синхронизация"
+          :on         {:click [[:action/open-sync-menu]]}}
+         (sync-icon)])
+      (case page
+        :page/home        (collections-icon)
+        :page/collections (close-icon)
+        nil)]
+     (install-guide/render state)
+     (when menu-open?
+       (sync-menu-dialog (presenter/sync-menu-props state)))
+     (when pairing
+       (pairing-dialog pairing))
+     (case page
+       :page/collections (pages.collections.view/page state)
+       :page/home        (pages.home.view/page state)
+       :page/lesson      (pages.lesson.view/page state)
+       :page/words       (pages.words.view/page state)
+       [:div.app-loading "Загружаем..."]))))
 
 
 (defn render!
