@@ -1,5 +1,6 @@
 (ns backend.core-test
   (:require
+   [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
    [core :as sut]
    [migrations :as migrations]
@@ -68,3 +69,10 @@
   (let [db    (migrated-db)
         token (sut/mint-grant! db -1)]
     (is (false? (#'sut/burn-grant! db token)))))
+
+
+(deftest the-build-and-the-server-agree-on-where-the-version-lives
+  (testing "the name is the only thing the two sides share, and nothing else checks it"
+    (is (str/includes? (slurp "build.clj")
+                       (str "\"" @#'sut/sw-version-resource "\""))
+        "build.clj writes the service worker version under a different name than core.clj reads")))

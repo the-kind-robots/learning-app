@@ -1,7 +1,10 @@
 (ns build
   (:require
+   [clojure.java.io :as io]
    [clojure.string :as str]
-   [clojure.tools.build.api :as b]))
+   [clojure.tools.build.api :as b])
+  (:import
+   [java.security MessageDigest]))
 
 
 (def target-dir "target")
@@ -32,6 +35,32 @@
   (b/delete {:path "target"}))
 
 
+(defn- assets-digest
+  "sha256 over every file under `dir`, in path order.
+
+   This belongs to the build rather than to the server: it needs to walk a
+   directory, and inside a jar there is none — only a flat list of entries. The
+   server reads the answer back as a single named resource, which a jar does
+   serve."
+  [dir]
+  (let [digest (MessageDigest/getInstance "SHA-256")]
+    (doseq [^java.io.File file (sort (file-seq (io/file dir)))
+            :when (.isFile file)]
+      (with-open [stream (io/input-stream file)]
+        (let [buffer (byte-array 8192)]
+          (loop []
+            (let [n (.read stream buffer)]
+              (when (pos? n)
+                (.update digest buffer 0 n)
+                (recur)))))))
+    (subs (apply str (map #(format "%02x" (Byte/toUnsignedInt %)) (.digest digest))) 0 8)))
+
+
+(def sw-version-file
+  "Read back by `service-worker-handler` in core.clj under the same name."
+  "sw-version")
+
+
 (defn uber
   [_]
   (clean nil)
@@ -39,6 +68,11 @@
   (println "Copying resources...")
   (b/copy-dir {:src-dirs   ["resources"]
                :target-dir class-dir})
+
+  (println "Stamping the service worker version...")
+  (let [version (assets-digest (io/file class-dir "public"))]
+    (spit (io/file class-dir sw-version-file) version)
+    (println (format "Service worker version: %s" version)))
 
   (println "Compiling files...")
   (b/compile-clj {:basis      @basis
