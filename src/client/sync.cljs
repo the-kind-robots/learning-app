@@ -3,6 +3,7 @@
    [adapters.identity :as identity-api]
    [db :as db]
    [domain.vocabulary :as domain]
+   [goog.functions :as gfn]
    [lambdaisland.glogi :as log]))
 
 
@@ -42,7 +43,7 @@
 
 
 (defn- lww-winner
-  "Returns the doc with the lexicographically higher :modified-at, or a if equal."
+  "Returns the doc with the lexicographically higher :modified-at, or b if equal."
   [a b]
   (if (pos? (compare (:modified-at a) (:modified-at b)))
     a
@@ -108,32 +109,49 @@
       (log/warn :sync/conflict-resolution-failed {:error (ex-message err)}))))
 
 
+(defn ^:async sync-once!
+  "Runs one bidirectional replication pass, resolves vocab conflicts, and
+   completes when the pass finishes. Never rejects — a failed pass logs and
+   resolves nil so callers can fire it freely on triggers."
+  [user-db remote-url]
+  (js/Promise.
+   (fn [resolve _reject]
+     (doto (db/sync user-db {:live false :remote-url remote-url})
+       (.on "complete"
+            (fn [_]
+              (resolve (resolve-vocab-conflicts! user-db))))
+       (.on "error"
+            (fn [err]
+              (log/warn :sync/pass-failed {:error (str err)})
+              (resolve nil)))))))
+
+
+(def ^:private push-interval-ms
+  "Throttle window for write-driven pushes, so a burst of writes (a lesson's
+   reviews) coalesces into periodic passes. Placeholder; tune via battery todo."
+  3000)
+
+
 (defn ^:async start!
-  "Ensures identity, authenticates, starts live PouchDB↔CouchDB replication.
-   Returns the PouchDB sync object (cancel it via stop!)."
+  "Ensures identity and authenticates, then drives replication by triggers:
+   a throttled push on every local user-db change, plus a pull returned as
+   :sync/pull! for the UI to call on data-page entry. No permanent live feed."
   [{:keys [db]}]
   (try
     (let [{:keys [id secret]} (await (ensure-identity!))]
       (await (identity-api/auth! {:id id :secret secret}))
-      (let [user-db  (:user/db db)
-            origin   (.. js/globalThis -location -origin)
-            sync-obj (db/sync user-db
-                              {:live       true
-                               :retry      true
-                               :remote-url (str origin "/db/userdb-" id)})]
-        (log/info :sync/started {:user-id id})
-        (.on sync-obj "paused" (fn [_] (resolve-vocab-conflicts! user-db)))
-        sync-obj))
+      (let [user-db    (:user/db db)
+            remote-url (str (.. js/globalThis -location -origin) "/db/userdb-" id)
+            pull!      #(when (.-onLine js/navigator) (sync-once! user-db remote-url))]
+        (..
+         ^js user-db
+         (changes #js {:since "now" :live true})
+         (on "change" (gfn/throttle pull! push-interval-ms)))
+        (log/info :sync/ready {:user-id id})
+        {:sync/pull! pull!}))
     (catch js/Error err
       (log/warn :sync/start-failed {:error (ex-message err)})
-      nil)))
-
-
-(defn stop!
-  "Cancels an active sync object."
-  [sync-obj]
-  (when sync-obj
-    (try (.cancel sync-obj) (catch :default _ nil))))
+      {:sync/pull! (constantly nil)})))
 
 
 (defn ^:async check-incoming-auth!

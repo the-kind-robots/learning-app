@@ -6,7 +6,8 @@
 (nxr/register-action! :action/show-collections
   (fn show-collections [_ {:keys [active-id items main]}]
     [[:effect/save
-      {:app/page :page/collections
+      {:page/current :page/collections
+       :page/load [:effect/load-collections]
        :collections/active-id active-id
        :collections/editing-id nil
        :collections/items items

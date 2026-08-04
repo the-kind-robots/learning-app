@@ -38,7 +38,7 @@
     (action-log/inspect))
 
   (system/start!
-   {:app/store           {:start (fn [_] (atom {:app/page :page/loading}))}
+   {:app/store           {:start (fn [_] (atom {:page/current :page/loading}))}
 
     :worker/service-worker {:start
                             #(when (js-in "serviceWorker" js/navigator)
@@ -56,8 +56,7 @@
                           :start pouch/init!}
 
     :sync/identity       {:requires {:db :db/pouch}
-                          :start    sync/start!
-                          :stop     sync/stop!}
+                          :start    sync/start!}
 
     :port/clock          {:start clock/start!}
 
@@ -83,11 +82,12 @@
                                      :db    :db/pouch}
                           :start    collections/start!}
 
-    :app/capabilities    {:requires {:collections    :port/collections
-                                     :dictionary     :port/dictionary
-                                     :examples       :port/examples
-                                     :navigation     :port/navigation
-                                     :progress-store :port/progress-store}
+    :app/capabilities    {:requires {:capabilities/sync :sync/identity
+                                     :collections       :port/collections
+                                     :dictionary        :port/dictionary
+                                     :examples          :port/examples
+                                     :navigation        :port/navigation
+                                     :progress-store    :port/progress-store}
                           :start    identity}
 
     :app/render          {:requires {:capabilities :app/capabilities
@@ -104,6 +104,13 @@
                           :start    (fn [{:keys [render]}]
                                       (let [dispatch (:dispatch render)]
                                         (dispatch [[:effect/pwa-init]])))}
+
+    :app/sync            {:requires {:render :app/render}
+                          :start    (fn [{:keys [render]}]
+                                      (let [dispatch (:dispatch render)]
+                                        (js/window.addEventListener
+                                         "online"
+                                         #(dispatch [[:effect/sync-pull]]))))}
 
     :app/router          {:requires {:render :app/render}
                           :after    [:worker/service-worker

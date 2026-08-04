@@ -6,7 +6,8 @@
 (nxr/register-action! :action/show-lesson
   (fn show-lesson [_ {:keys [lesson-state error]}]
     [[:effect/save
-      {:app/page      :page/lesson
+      {:page/current  :page/lesson
+       :page/load     nil
        :lesson/empty? (boolean error)
        :lesson/state  (when-not error lesson-state)}]]))
 

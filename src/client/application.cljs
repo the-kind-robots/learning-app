@@ -41,6 +41,19 @@
       (navigate! page))))
 
 
+(nxr/register-effect! :effect/sync-pull
+  (fn sync-pull [{:keys [capabilities dispatch]} _]
+    (when-let [pull! (get-in capabilities [:capabilities/sync :sync/pull!])]
+      (some-> (pull!)
+              (.then #(dispatch [[:action/reload-page]]))))))
+
+
+(nxr/register-action! :action/reload-page
+  (fn reload-page [state]
+    (when-let [load-effect (:page/load state)]
+      [load-effect])))
+
+
 (nxr/register-effect! :effect/show-modal
   (fn show-modal [{:keys [dispatch-data]} _]
     (.showModal (:replicant/node dispatch-data))))
@@ -320,19 +333,21 @@
   [state]
   (list
    [:a.app-shell__logo {:href "/home"} "Sprecha"]
-   (case (:app/page state)
+   (case (:page/current state)
      :page/home        (collections-icon)
      :page/collections (close-icon)
-     (list))
+     nil)
    [:button.app-shell__menu-button
     {:type  "button"
      :title "Меню"
      :on    {:click [[:action/open-sync-menu]]}}
     "⋮"]
    (install-guide/render state)
-   (when (:app/sync-menu-open? state) (sync-menu-dialog state))
-   (when (:app/pairing state) (pairing-dialog (:app/pairing state)))
-   (case (:app/page state)
+   (when (:app/sync-menu-open? state)
+     (sync-menu-dialog state))
+   (when (:app/pairing state)
+     (pairing-dialog (:app/pairing state)))
+   (case (:page/current state)
      :page/collections (pages.collections.view/page state)
      :page/home        (pages.home.view/page state)
      :page/lesson      (pages.lesson.view/page state)
@@ -353,10 +368,10 @@
      :controllers [{:start #(dispatch [[:effect/load-home]])}]}]
    ["/words"
     {:name        :page/words
-     :controllers [{:start #(dispatch [[:effect/load-words]])}]}]
+     :controllers [{:start #(dispatch [[:effect/load-words] [:effect/sync-pull]])}]}]
    ["/lesson"
     {:name        :page/lesson
-     :controllers [{:start #(dispatch [[:effect/load-lesson]])}]}]
+     :controllers [{:start #(dispatch [[:effect/load-lesson] [:effect/sync-pull]])}]}]
    ["/collections"
     {:name        :page/collections
-     :controllers [{:start #(dispatch [[:effect/load-collections]])}]}]])
+     :controllers [{:start #(dispatch [[:effect/load-collections] [:effect/sync-pull]])}]}]])

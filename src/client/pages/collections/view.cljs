@@ -75,7 +75,7 @@
        :tabindex   (when-not editing? "-1")
        :on         {:pointerdown [[:effect/stop-propagation]]
                     :click       [[:effect/stop-propagation]
-                                  [:effect/delete-collection! {:id coll-id}]]}}
+                                  [:effect/delete-collection {:id coll-id}]]}}
       (close-icon)]
      (card-preview item)]))
 

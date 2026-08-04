@@ -82,13 +82,13 @@
         (log/error :effect/prompt-create-collection {:error (str err)})))))
 
 
-(nxr/register-effect! :effect/delete-collection!
+(nxr/register-effect! :effect/delete-collection
   (fn ^:async delete-collection!
     [{:keys [capabilities dispatch]} _ {:keys [id]}]
     (try
       (await (collections/delete! capabilities id))
       (catch js/Error err
-        (log/error :effect/delete-collection! {:error (str err)}))
+        (log/error :effect/delete-collection {:error (str err)}))
       (finally
        (dispatch [[:effect/load-collections]])))))
 

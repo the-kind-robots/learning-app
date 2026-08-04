@@ -15,7 +15,8 @@
 (nxr/register-action! :action/show-home
   (fn show-home [_ {:keys [active-id active-name total]}]
     [[:effect/save
-      {:app/page            :page/home
+      {:page/current        :page/home
+       :page/load           nil
        :home/active-coll-id active-id
        :home/active-coll-name active-name
        :home/add-error      nil
