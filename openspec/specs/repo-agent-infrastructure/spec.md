@@ -35,10 +35,14 @@ The backend server SHALL read its listening port from the `LEARNING_APP_PORT` en
 - **WHEN** `LEARNING_APP_PORT=8183` is set in the environment
 - **THEN** the backend listens on port 8183
 
-### Requirement: Worktree server artifacts are gitignored
-The repository SHALL ignore per-worktree server log and PID files so they do not appear as untracked noise.
+### Requirement: Worktrees live where the agent tool puts them
+Worktrees SHALL be created only through the agent's built-in mechanism, which keeps them under `.claude/worktrees/`. The repository SHALL NOT define a second location for them, and SHALL NOT carry permissions or ignore rules for locations of its own.
 
-#### Scenario: /goal creates backend log and PID files
-- **WHEN** the `/goal` skill starts a background backend process in a worktree
-- **THEN** `.worktree-backend.log` and `.worktree-backend.pid` are not shown by `git status`
+#### Scenario: Work needs isolation
+- **WHEN** a task is isolated in a worktree
+- **THEN** it is created by the built-in mechanism, and no worktree directory appears inside the repository tree
+
+#### Scenario: Work needs the full stand
+- **WHEN** a task touches sync, the dictionary, migrations, schema, or anything served through CouchDB or nginx
+- **THEN** it runs in the main worktree, because a worktree isolates files while ports, CouchDB and nginx stay shared
 
