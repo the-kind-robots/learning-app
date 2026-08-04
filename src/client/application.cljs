@@ -65,6 +65,11 @@
     (.showModal (:replicant/node dispatch-data))))
 
 
+(nxr/register-effect! :effect/close-modal
+  (fn close-modal [{:keys [dispatch-data]} _]
+    (.close (:replicant/node dispatch-data))))
+
+
 (nxr/register-effect! :effect/focus-child
   (fn focus-child [{:keys [dispatch-data]} _ selector]
     (some-> (.querySelector (:replicant/node dispatch-data) selector) .focus)))
@@ -145,6 +150,14 @@
 (nxr/register-action! :action/open-dialog
   (fn open-dialog [_]
     [[:effect/show-modal]]))
+
+
+(nxr/register-action! :action/dismiss-on-backdrop
+  (fn dismiss-on-backdrop [_ backdrop?]
+    ;; A native modal renders its backdrop as part of the dialog element, so a
+    ;; click that lands on the element itself came from outside the content.
+    (when backdrop?
+      [[:effect/close-modal]])))
 
 
 (nxr/register-action! :action/move-cursor-to-end
@@ -337,7 +350,8 @@
   [state]
   [:dialog.sync-menu-dialog.modal
    {:replicant/on-mount [[:action/open-dialog]]
-    :on {:close [[:action/close-sync-menu]]}}
+    :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
+         :close [[:action/close-sync-menu]]}}
    [:div.sync-menu-dialog__content
     (when (:app/account-id state)
       (list
@@ -359,7 +373,8 @@
   [{:keys [qr-url pair-url]}]
   [:dialog.pairing-dialog.modal
    {:replicant/on-mount [[:action/open-dialog]]
-    :on {:close [[:action/close-pairing-dialog]]}}
+    :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
+         :close [[:action/close-pairing-dialog]]}}
    [:div.pairing-dialog__content
     [:h2.pairing-dialog__title "Подключить устройство"]
     [:p.pairing-dialog__hint "Отсканируйте QR-код на новом устройстве"]
