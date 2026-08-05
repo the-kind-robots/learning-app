@@ -104,6 +104,7 @@ OPENSPEC_TELEMETRY=0 openspec ...
      - Disagreements: never silently "fix" — reply with the argument, leave the thread unresolved; the owner decides.
      - ```suggestion blocks may be applied verbatim.
      - The round ends with every thread either resolved-with-commit or answered-and-open; report the split to the owner.
+   - Delete branches only after confirming the PR state is MERGED — a failed merge followed by unconditional cleanup deletes the branch and closes the PR unmerged, which has already happened once.
    - Clean up as part of the merge, not later: switch back to `master` and pull, delete the branch locally and on the remote, and leave the worktree with `ExitWorktree` (`remove`) if the work happened in one. Left alone these pile up — 43 local and 28 remote branches had to be deleted by hand once.
 
 8. Reset task boundary after delivery.
