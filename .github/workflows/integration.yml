@@ -2,17 +2,6 @@ name: Integration
 on:
   pull_request:
     branches: [master]
-    paths:
-      - 'src/**'
-      - 'resources/**'
-      - '.codex/**'
-      - 'codex/**'
-      - '.gitignore'
-      - 'shadow-cljs.edn'
-      - 'deps.edn'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/**'
   push:
     branches: [master]
     paths:
@@ -27,14 +16,38 @@ on:
       - 'package-lock.json'
       - '.github/workflows/**'
 
-concurrency:
-  group: integration-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
+  # A required check that never reports blocks the merge forever, and a path
+  # filter on the trigger is exactly how a check never reports (#204). So the
+  # workflow fires on every PR and decides here: a skipped job satisfies
+  # branch protection, a never-started workflow does not.
+  changes:
+    name: Detect relevant changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.codex/|codex/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
   client-tests:
     name: Client Tests
     runs-on: ubuntu-latest
+    needs: changes
+    # not cancelled(): on push the changes job is skipped, and a job whose
+    # needs were skipped is skipped too unless told otherwise.
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.relevant == 'true') }}
     steps:
       - uses: actions/checkout@v7.0.1
 
