@@ -97,6 +97,13 @@ OPENSPEC_TELEMETRY=0 openspec ...
    - If branch protection blocks merge, inspect checks first rather than forcing admin overrides.
    - Never push directly to `master`; use PRs for feature work and closeout work.
    - Opening the PR moves the issue to **In review** — that is the owner's signal to look (`finish_issue_flow.sh --no-merge` does it, or set the status directly). The merge moves it to **Done**.
+   - The owner reviews in the diff (Start a review → Submit review). A pending review is invisible to the API — if the owner says they reviewed and nothing shows, ask whether they submitted, do not conclude there were no comments.
+   - When the owner says the review round is done, process **every** thread on every open PR of theirs:
+     - Fetch threads with `gh api repos/<owner>/<repo>/pulls/<n>/comments` — each carries `path`, `line`, `diff_hunk`, `body`, `in_reply_to_id`.
+     - Agreed items: fix, push to the same branch, reply in the thread naming the commit, resolve the thread (GraphQL: query `pullRequest.reviewThreads` for ids, then `resolveReviewThread(input: {threadId})`).
+     - Disagreements: never silently "fix" — reply with the argument, leave the thread unresolved; the owner decides.
+     - ```suggestion blocks may be applied verbatim.
+     - The round ends with every thread either resolved-with-commit or answered-and-open; report the split to the owner.
    - Clean up as part of the merge, not later: switch back to `master` and pull, delete the branch locally and on the remote, and leave the worktree with `ExitWorktree` (`remove`) if the work happened in one. Left alone these pile up — 43 local and 28 remote branches had to be deleted by hand once.
 
 8. Reset task boundary after delivery.
