@@ -12,7 +12,7 @@ on:
       - 'deps.edn'
       - 'package.json'
       - 'package-lock.json'
-      - '.github/workflows/integration.yml'
+      - '.github/workflows/**'
   push:
     branches: [master]
     paths:
@@ -25,7 +25,7 @@ on:
       - 'deps.edn'
       - 'package.json'
       - 'package-lock.json'
-      - '.github/workflows/integration.yml'
+      - '.github/workflows/**'
 
 concurrency:
   group: integration-${{ github.workflow }}-${{ github.ref }}
