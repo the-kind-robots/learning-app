@@ -4,3 +4,43 @@ Description=Renew Let's Encrypt certificates for Sprecha
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/certbot renew --quiet --deploy-hook "systemctl reload nginx"
+
+# Security settings
+#
+# What this service actually needs: root certbot doing ACME over HTTPS, the
+# nginx authenticator rewriting nginx config during the challenge, the deploy
+# hook installing certs into /etc/nginx/ssl (chown via install) and reloading
+# nginx over D-Bus. /var/{lib,log}/letsencrypt stay writable under "full".
+#
+# Already root; no setuid transitions involved.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+# "full" makes /usr, /boot and /etc read-only except ReadWritePaths below.
+# "strict" deliberately not used: certbot's full write surface under /var and
+# /run is not enumerable with confidence.
+ProtectSystem=full
+# certbot owns /etc/letsencrypt; the nginx plugin edits config during the
+# http-01 challenge and the deploy hook writes /etc/nginx/ssl.
+ReadWritePaths=/etc/letsencrypt /etc/nginx
+# Kernel interfaces read-only or unreachable.
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# No setuid/setgid files, namespaces, realtime, or personality changes.
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+# ACME over TCP; AF_UNIX for D-Bus (systemctl reload) and journald.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Native-ABI syscalls only, filtered to the standard service set.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# CapabilityBoundingSet deliberately not narrowed: certbot and its deploy hook
+# chown/chmod cert files as root; the minimal capability set is unverified.
+# MemoryDenyWriteExecute stays OFF: certbot is Python with cffi (cryptography)
+# — libffi closure trampolines need writable+executable pages.

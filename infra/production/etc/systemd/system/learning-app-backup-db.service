@@ -17,5 +17,41 @@ Environment=BORG_PASSPHRASE_PATH=%d/borg-passphrase
 Environment=LEARNING_APP_DB_BACKUP_PATH=/var/backups/learning-app/db.sqlite
 
 # Security settings
+#
+# What this service actually needs: sqlite3 .backup of the app database into
+# /var/backups/learning-app, then borg over ssh to the remote repository.
+# Borg keeps its cache/config in the dbmaintainer home (/var/lib/dbmaintainer,
+# not under /home, so ProtectHome does not block it).
+#
+# No privilege gain on execve; nothing here elevates.
 NoNewPrivileges=yes
 PrivateTmp=yes
+ProtectHome=yes
+# Filesystem read-only except ReadWritePaths below. StateDirectory keeps
+# /var/lib/learning-app writable under strict — sqlite3 needs write access to
+# the source -wal/-shm files even when only reading a WAL database.
+ProtectSystem=strict
+# Local backup target plus borg cache/config/ssh state in the home directory.
+ReadWritePaths=/var/backups/learning-app /var/lib/dbmaintainer
+PrivateDevices=yes
+# Kernel interfaces read-only or unreachable.
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# No setuid/setgid files, namespaces, realtime, or personality changes.
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+# ssh to the borg repository; AF_UNIX for journald and NSS lookups.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Unprivileged user: zero capabilities needed.
+CapabilityBoundingSet=
+# Native-ABI syscalls only, filtered to the standard service set.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# MemoryDenyWriteExecute stays OFF: borg is Python with cffi — libffi closure
+# trampolines need writable+executable pages.
