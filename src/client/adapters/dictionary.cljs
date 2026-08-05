@@ -6,6 +6,18 @@
 
 
 (def ^:private completions-sql
+  "Top ten lemmas for a prefix range, cheap on short prefixes too.
+
+   Shape matters here. The inner SELECT DISTINCT collapses surface forms to
+   lemma ids before anything else: one lemma owns many in-range forms (Fenster,
+   Fensters, Fenstern...), and LIMIT counts rows, so without the collapse ten
+   rows would mean ten forms of maybe three lemmas. Rank then picks the winners
+   while the query still carries only (id, value, pos, rank) — no translations
+   joined, nothing concatenated. has_exact and translations are point lookups
+   for the surviving ten alone. The previous shape joined and GROUP_CONCATed
+   every in-range lemma — thousands on a one-letter prefix — and discarded all
+   but ten after sorting, which is why short prefixes cost ~100x more.
+   Measured in #179: prefix f 95-119 ms -> 20-27 ms."
   "WITH top AS (
      SELECT l.id, l.value, l.pos, l.rank
      FROM (SELECT DISTINCT lemma_id
