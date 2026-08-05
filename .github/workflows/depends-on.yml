@@ -1,0 +1,80 @@
+# Turns `Depends-on: #N` lines in a PR body into a merge gate: the check fails
+# while any referenced issue or PR is open, and branch protection does the
+# enforcing. The companion job re-runs the check on open dependents after a
+# push to master, so they go green without a manual poke. One blind spot: an
+# issue closed *without* a push (by hand) leaves dependents red until the next
+# event — re-run manually via workflow_dispatch.
+name: Depends-on
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # This job name is the required-check context in branch protection.
+    name: Depends-on
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read
+      pull-requests: read
+    env:
+      # The body is attacker-controlled on a public repo: it enters through
+      # env, never through template interpolation into the script.
+      BODY: ${{ github.event.pull_request.body }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Fail while any Depends-on reference is open
+        run: |
+          set -euo pipefail
+          refs=$(printf '%s' "$BODY" | tr -d '\r' | grep -iE '^depends-on:' | grep -oE '#[0-9]+' | tr -d '#' | sort -un) || true
+          if [ -z "${refs:-}" ]; then
+            echo "No Depends-on references — nothing gates this PR."
+            exit 0
+          fi
+          failed=0
+          for n in $refs; do
+            if ! state=$(gh api "repos/$REPO/issues/$n" --jq .state 2>/dev/null); then
+              echo "::error::Depends-on #$n does not exist — typo?"
+              failed=1
+            elif [ "$state" = "open" ]; then
+              echo "::error::Blocked by #$n — still open."
+              failed=1
+            else
+              echo "#$n is $state — satisfied."
+            fi
+          done
+          exit "$failed"
+
+  rerun-dependents:
+    name: Re-run dependents after merge
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Re-run the check on open PRs that declare dependencies
+        run: |
+          set -euo pipefail
+          gh pr list -R "$REPO" --state open --json body,headRefName \
+            --jq '.[] | select(.body | test("(?i)^depends-on:"; "m")) | .headRefName' |
+          while read -r branch; do
+            id=$(gh run list -R "$REPO" -w "Depends-on" -b "$branch" -L 1 --json databaseId --jq '.[0].databaseId // empty')
+            if [ -n "$id" ]; then
+              gh run rerun "$id" -R "$REPO" && echo "re-ran $branch (run $id)"
+            else
+              echo "no prior run for $branch — the check fires on its next PR event"
+            fi
+          done
