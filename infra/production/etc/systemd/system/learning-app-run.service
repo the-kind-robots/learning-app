@@ -21,9 +21,50 @@ LoadCredentialEncrypted=db_auth_secret:/etc/credstore.encrypted/db_auth_secret
 Environment=LEARNING_APP_DB_AUTH_SECRET_PATH=%d/db_auth_secret
 
 # Security settings
+#
+# What this service actually needs: JVM as user webapp, listens on
+# localhost:8083, outbound HTTP to CouchDB 127.0.0.1:5984 and HTTPS to
+# OpenRouter, writes SQLite app.db (+ -wal/-shm) in the working directory,
+# reads decrypted credentials from %d. Everything else is locked down.
+# Note: systemd comments must be full lines; inline comments break parsing.
+#
+# No privilege gain on execve; nothing here elevates.
 NoNewPrivileges=yes
+# Own /tmp, invisible to and from other services.
 PrivateTmp=yes
+# No business in /home or /root.
 ProtectHome=yes
+# Whole filesystem read-only except ReadWritePaths below. StateDirectory and
+# LogsDirectory (/var/lib/learning-app, /var/log/learning-app) stay writable
+# under strict automatically.
+ProtectSystem=strict
+# SQLite app.db lives in the working directory.
+ReadWritePaths=/opt/learning-app
+# Only pseudo-devices; the JVM needs urandom/null, both provided.
+PrivateDevices=yes
+# /proc/sys and /sys read-only; no module loading; no kernel ring buffer;
+# cgroup hierarchy read-only; no clock or hostname changes.
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# No setuid/setgid file creation, no new namespaces, no realtime scheduling,
+# personality(2) locked.
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+# TCP for HTTP/CouchDB/OpenRouter; AF_UNIX for journald and NSS lookups.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Unprivileged user on a port >1024: zero capabilities needed.
+CapabilityBoundingSet=
+# Native-ABI syscalls only, filtered to the standard service set.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# MemoryDenyWriteExecute stays OFF: the HotSpot JIT maps writable+executable
+# pages for compiled code; enabling it kills the JVM at startup.
 
 [Install]
 WantedBy=multi-user.target

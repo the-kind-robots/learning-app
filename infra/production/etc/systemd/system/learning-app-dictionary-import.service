@@ -18,9 +18,44 @@ Environment=COUCHDB_USER=admin
 Environment=COUCHDB_PASS_PATH=%d/couchdb_admin_password
 
 # Security settings
+#
+# What this service actually needs: JVM as user webapp, reads dump files from
+# the working directory (gunzip staging goes to private /tmp), pushes documents
+# to CouchDB on 127.0.0.1:5984, reads the decrypted credential from %d.
+#
+# No privilege gain on execve; nothing here elevates.
 NoNewPrivileges=yes
+# import.sh stages gunzipped dumps in /tmp; keep it private.
 PrivateTmp=yes
+# No /home access needed.
 ProtectHome=yes
+# Filesystem read-only except the drop directory below.
+ProtectSystem=strict
+# The deployer/webapp drop directory stays writable, matching its 2770 mode.
+ReadWritePaths=/var/lib/learning-app/dictionary
+# Only pseudo-devices; urandom/null suffice for the JVM.
+PrivateDevices=yes
+# Kernel interfaces read-only or unreachable.
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# No setuid/setgid files, namespaces, realtime, or personality changes.
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+# TCP to CouchDB; AF_UNIX for journald and NSS lookups.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Unprivileged user: zero capabilities needed.
+CapabilityBoundingSet=
+# Native-ABI syscalls only, filtered to the standard service set.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# MemoryDenyWriteExecute stays OFF: the HotSpot JIT maps writable+executable
+# pages for compiled code; enabling it kills the JVM at startup.
 
 [Install]
 WantedBy=multi-user.target

@@ -64,3 +64,25 @@ Closeout SHALL include deleting the delivered branch locally and on the remote, 
 - **WHEN** the pull request for tracked work is merged
 - **THEN** the branch is gone from both sides and no worktree is left behind for it
 
+### Requirement: Merge order is machine-enforced
+A PR declaring `Depends-on: #N` SHALL NOT be mergeable while any referenced issue or pull request is open; the enforcement SHALL come from branch protection, not from convention. A missing reference SHALL fail the same way, so a typo cannot silently unlock a merge.
+
+#### Scenario: The blocker is open
+- **WHEN** a PR body contains `Depends-on: #N` and node N is open
+- **THEN** the required check fails and the merge button is disabled
+
+#### Scenario: The blocker lands
+- **WHEN** a push to master closes node N
+- **THEN** the dependent's check is re-run automatically and turns green
+
+### Requirement: A required check reports on every pull request
+Every PR SHALL receive a verdict from each required check — pass, fail, or skipped — regardless of which paths it touches. A required check that cannot start is a broken merge pipeline, not a passing one.
+
+#### Scenario: A PR outside the tested paths
+- **WHEN** a PR touches no path the heavy job cares about
+- **THEN** the check reports skipped and branch protection is satisfied
+
+#### Scenario: A PR inside the tested paths
+- **WHEN** a PR touches the application or its build inputs
+- **THEN** the full suite runs and its verdict gates the merge
+

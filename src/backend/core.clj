@@ -155,12 +155,25 @@
 (defn create-account!
   "Mints a bearer token, creates the account row holding its sha256, and its
    role-secured CouchDB userdb. Returns {:id int :token str} — the raw token
-   is the user's key, stored nowhere on the server."
+   is the user's key, stored nowhere on the server.
+
+   Refuses an id whose userdb already exists. Account ids are row ids and
+   CouchDB outlives app.db resets, so a recycled id would silently inherit —
+   and sync down — the previous owner's data (seen live, #182). Refusal keeps
+   the evidence; deleting the stale userdb is the operator's call."
   [db]
-  (let [token        (random-token)
-        {:keys [id]} (jdbc/execute-one! db
-                       ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
-                        (sha256-hex token)])]
+  (let [token (random-token)
+        id    (jdbc/with-transaction [tx db]
+                ;; Explicit builder: the id must come back as :id no matter
+                ;; which connection options the caller carries.
+                (let [{:keys [id]} (jdbc/execute-one! tx
+                                     ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
+                                      (sha256-hex token)]
+                                     {:builder-fn result-set/as-unqualified-maps})]
+                  (when (db/exists? (str "userdb-" id))
+                    (throw (ex-info "userdb already exists for a fresh account id"
+                                    {:type ::recycled-id :id id})))
+                  id))]
     (db/secure (db/use (str "userdb-" id)) {:members {:names [] :roles [(str "u:" id)]}})
     {:id id :token token}))
 
@@ -397,10 +410,16 @@
          (on-connection [db db-spec]
            (let [{:keys [invite]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
              (if (and (utils/non-blank invite) (burn-grant! db invite))
-               (let [{:keys [id token]} (create-account! db)]
-                 {:status  200
-                  :headers {"Content-Type" "application/json"}
-                  :body    (cheshire/generate-string {:id id :token token})})
+               (try
+                 (let [{:keys [id token]} (create-account! db)]
+                   {:status  200
+                    :headers {"Content-Type" "application/json"}
+                    :body    (cheshire/generate-string {:id id :token token})})
+                 (catch clojure.lang.ExceptionInfo e
+                   (if (= ::recycled-id (:type (ex-data e)))
+                     (do (t/event! ::recycled-id-refused {:level :error :data (ex-data e)})
+                         {:status 503 :body ""})
+                     (throw e))))
                {:status 403 :body ""}))))}]
 
      ;; Adopting a key means holding a token and nothing else. The token comes
@@ -497,24 +516,44 @@
   (reset! server (server/run-server app {:port port :legacy-return-value? false})))
 
 
-#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
+(def ^:private drain-timeout-ms
+  "How long a stopping server keeps serving in-flight requests after the
+   listening socket has closed."
+  5000)
 
 
 (defn stop-server!
   []
-  (when (some? @server)
-    (when-let [stopping-promise (server/server-stop! @server)]
-      @stopping-promise
+  (when-some [running @server]
+    (when-some [stopping (server/server-stop! running {:timeout drain-timeout-ms})]
+      @stopping
       (reset! server nil))))
+
+
+#_{:clj-kondo/ignore [:unused-private-var]}
+
+
+(defonce ^:private shutdown-hook
+  ;; systemd stop is SIGTERM; without this hook the JVM dies mid-request.
+  ;; Stopping the server closes the listening socket first, then drains
+  ;; in-flight requests — and draining is all the cleanup there is: SQLite
+  ;; connections are per-request (`with-open` in `on-connection`), so the last
+  ;; response closes the last one. `defonce` keeps the dev reload path from
+  ;; registering a second hook; the hook itself only ever runs at JVM
+  ;; shutdown, so it cannot fight `restart-server!`.
+  (let [hook (Thread. ^Runnable
+                      (fn []
+                        (stop-server!)
+                        (println "Server stopped"))
+                      "graceful-shutdown")]
+    (.addShutdownHook (Runtime/getRuntime) hook)
+    hook))
 
 
 (defn restart-server!
   [app port]
-  (if @server
-    (when-some [stopping-promise (server/server-stop! @server)]
-      @stopping-promise
-      (start-server! app port))
-    (start-server! app port)))
+  (stop-server!)
+  (start-server! app port))
 
 
 (defn -main
