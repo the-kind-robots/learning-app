@@ -34,15 +34,20 @@
 
 (defn- observe!
   "Watches one PerformanceObserver entry type, quietly skipping the ones this
-   browser does not support."
+   browser does not support.
+
+   The constructor takes a callback the browser itself invokes with a batch of
+   entries whenever new ones are recorded; `.observe` only says which entry
+   type to watch. Nothing holds the observer afterwards on purpose: the
+   platform keeps a registered observer alive until `.disconnect`, and these
+   watch for the whole page lifetime."
   [entry-type f options]
   (try
-    (let [observer (js/PerformanceObserver.
-                    (fn [entries _]
-                      (doseq [entry (.getEntries ^js entries)]
-                        (f entry))))]
-      (.observe observer (clj->js (merge {:type entry-type :buffered true} options)))
-      observer)
+    (.observe (js/PerformanceObserver.
+               (fn [entries _]
+                 (doseq [entry (.getEntries ^js entries)]
+                   (f entry))))
+              (clj->js (merge {:type entry-type :buffered true} options)))
     (catch :default _ nil)))
 
 
@@ -101,6 +106,9 @@
                  :type     (.-name ^js entry)}))
             {:durationThreshold 100})
 
+  ;; The page-facing API for tests and CDP evals. Functions, not values: each
+  ;; call snapshots the atom at that moment — a value stored once would be
+  ;; frozen at install time.
   (set! (.-__metrics js/window) (fn [] (clj->js @metrics)))
   (set! (.-__metricsReset js/window)
         (fn []
