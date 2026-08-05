@@ -39,6 +39,7 @@ Always use `:reload` when requiring namespaces to pick up changes.
 
 - For browser-runtime behavior, use real browser proof, not only code inspection.
 - Before Windows Chrome CDP, run `bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh doctor`.
+- Chrome down (CDP endpoint silent, evals dying)? `learning_app_cdp.sh start-local`. Never launch chrome.exe by hand: the debug port needs the separate profile start-local provides.
 - If Windows interop is broken (`cmd.exe` gives `exec format error` or `WSLInterop` is missing), ask for `wsl --shutdown`, then retry.
 - For Service Worker offline reload checks, wait until `navigator.serviceWorker.controller` is true before switching offline.
 
