@@ -496,24 +496,44 @@
   (reset! server (server/run-server app {:port port :legacy-return-value? false})))
 
 
-#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
+(def ^:private drain-timeout-ms
+  "How long a stopping server keeps serving in-flight requests after the
+   listening socket has closed."
+  5000)
 
 
 (defn stop-server!
   []
-  (when (some? @server)
-    (when-let [stopping-promise (server/server-stop! @server)]
-      @stopping-promise
+  (when-some [running @server]
+    (when-some [stopping (server/server-stop! running {:timeout drain-timeout-ms})]
+      @stopping
       (reset! server nil))))
+
+
+#_{:clj-kondo/ignore [:unused-private-var]}
+
+
+(defonce ^:private shutdown-hook
+  ;; systemd stop is SIGTERM; without this hook the JVM dies mid-request.
+  ;; Stopping the server closes the listening socket first, then drains
+  ;; in-flight requests — and draining is all the cleanup there is: SQLite
+  ;; connections are per-request (`with-open` in `on-connection`), so the last
+  ;; response closes the last one. `defonce` keeps the dev reload path from
+  ;; registering a second hook; the hook itself only ever runs at JVM
+  ;; shutdown, so it cannot fight `restart-server!`.
+  (let [hook (Thread. ^Runnable
+                      (fn []
+                        (stop-server!)
+                        (println "Server stopped"))
+                      "graceful-shutdown")]
+    (.addShutdownHook (Runtime/getRuntime) hook)
+    hook))
 
 
 (defn restart-server!
   [app port]
-  (if @server
-    (when-some [stopping-promise (server/server-stop! @server)]
-      @stopping-promise
-      (start-server! app port))
-    (start-server! app port)))
+  (stop-server!)
+  (start-server! app port))
 
 
 (defn -main
