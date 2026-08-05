@@ -3,6 +3,7 @@
    [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
    [core :as sut]
+   [db :as db]
    [migrations :as migrations]
    [next.jdbc :as jdbc]
    [next.jdbc.result-set :as result-set])
@@ -76,3 +77,28 @@
     (is (str/includes? (slurp "build.clj")
                        (str "\"" @#'sut/sw-version-resource "\""))
         "build.clj writes the service worker version under a different name than core.clj reads")))
+
+
+(deftest a-recycled-id-is-refused-not-inherited
+  (testing "a userdb left by a previous owner of the id blocks provisioning"
+    (let [db (migrated-db)]
+      (with-redefs [db/exists? (constantly true)]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"userdb already exists"
+                              (#'sut/create-account! db))))
+      (is (empty? (jdbc/execute! db ["SELECT id FROM users"]))
+          "the transaction rolled the row back, the id stays unspent"))))
+
+
+(deftest a-fresh-id-provisions-and-secures-its-userdb
+  (testing "the guard does not get in the way of a normal provision"
+    (let [db      (migrated-db)
+          secured (atom nil)]
+      (with-redefs [db/exists? (constantly false)
+                    db/use     (fn [name] name)
+                    db/secure  (fn [name security] (reset! secured [name security]))]
+        (let [{:keys [id token]} (#'sut/create-account! db)]
+          (is (int? id))
+          (is (= 40 (count token)))
+          (is (= (str "userdb-" id) (first @secured)))
+          (is (= [(str "u:" id)] (get-in (second @secured) [:members :roles]))))))))
