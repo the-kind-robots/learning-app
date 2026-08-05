@@ -40,6 +40,9 @@ jobs:
       - run: clojure -T:build uber
       # Unique per-run temp name: concurrent deploys never share an upload path.
       - run: cp target/learning-app.jar 'target/learning-app.jar.${{ github.run_id }}.tmp'
+      # $GITHUB_OUTPUT is a file GitHub provides per step; `key=value` lines
+      # appended to it become `steps.<id>.outputs.<key>` for later steps:
+      # https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-an-output-parameter
       - id: jar
         run: echo "sha256=$(sha256sum target/learning-app.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
