@@ -4,6 +4,7 @@
    [db.pouch :as pouch]
    [db.sqlite :as sqlite]
    [install-guide.core]
+   [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [logging]
    [nexus.action-log :as action-log]
@@ -108,6 +109,8 @@
                                        (nxr/register-system->state! #(-> % :store deref))
                                        (r/set-dispatch! dispatch)
                                        (add-watch store ::render #(application/render! %4))
+                                       (when goog/DEBUG
+                                         (instrumentation/install! store))
                                        {:dispatch #(dispatch {} %)}))}
 
     :pwa/init           {:requires {:render :app/render}
