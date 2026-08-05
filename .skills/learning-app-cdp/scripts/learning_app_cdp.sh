@@ -207,6 +207,14 @@ resolve_page_ws_url() {
   printf 'ws://127.0.0.1:%s/devtools/page/%s\n' "$port" "$target_id"
 }
 
+require_endpoint() {
+  local port="$1"
+  bash "$LOW_LEVEL_SCRIPT" version --port "$port" >/dev/null 2>&1 ||
+    die "CDP endpoint on :${port} is not answering — Chrome is not running with the debug port.
+Fix: bash ${BASH_SOURCE[0]} start-local
+(Do not launch chrome.exe by hand: the debug port needs the separate profile start-local provides.)"
+}
+
 wait_for_page_ws_url() {
   local port="$1"
   local env_name="$2"
@@ -214,6 +222,8 @@ wait_for_page_ws_url() {
   local attempts="${4:-40}"
   local delay_sec="${5:-0.25}"
   local ws_url=""
+
+  require_endpoint "$port"
 
   for _ in $(seq 1 "$attempts"); do
     ws_url="$(resolve_page_ws_url "$port" "$env_name" "$url_substring" 2>/dev/null || true)"
@@ -378,7 +388,7 @@ runtime_eval_env() {
   parse_eval_args "$@"
   local ws_url params_json
   ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
-  [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+  [[ -n "$ws_url" ]] || die "Chrome is up, but no tab matches this environment — open one with: bash ${BASH_SOURCE[0]} start-local"
   params_json="$(jq -Rn --arg expr "$EXPRESSION" \
     '{expression:$expr, returnByValue:true, awaitPromise:true, userGesture:true}')"
   bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method Runtime.evaluate --params "$params_json"
@@ -404,7 +414,7 @@ wait_for_path() {
   deadline=$((SECONDS + timeout_sec))
   while :; do
     ws_url="$(wait_for_page_ws_url "$port" "$env_name" "$url_substring")"
-    [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+    [[ -n "$ws_url" ]] || die "Chrome is up, but no tab matches this environment — open one with: bash ${BASH_SOURCE[0]} start-local"
     current_path="$(current_path_via_ws_url "$ws_url")"
     if [[ "$current_path" == "$expected_path" ]]; then
       return 0
@@ -465,7 +475,7 @@ monitor_env() {
   fi
   local ws_url
   ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
-  [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+  [[ -n "$ws_url" ]] || die "Chrome is up, but no tab matches this environment — open one with: bash ${BASH_SOURCE[0]} start-local"
 
   mkdir -p "$MONITOR_BASE_DIR"
   local buffer_path state_path buffer_path_win state_path_win
@@ -507,7 +517,7 @@ console_env() {
   parse_console_args "$@"
   local ws_url
   ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
-  [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+  [[ -n "$ws_url" ]] || die "Chrome is up, but no tab matches this environment — open one with: bash ${BASH_SOURCE[0]} start-local"
   (
     cd /mnt/c
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$POWERSHELL_CAPTURE_SCRIPT_WIN" \
@@ -526,7 +536,7 @@ refresh_env() {
   parse_refresh_args "$@"
   local ws_url saved_path current_path
   ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
-  [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+  [[ -n "$ws_url" ]] || die "Chrome is up, but no tab matches this environment — open one with: bash ${BASH_SOURCE[0]} start-local"
 
   bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method ServiceWorker.enable --params '{}'
   bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method ServiceWorker.setForceUpdateOnPageLoad --params '{"forceUpdateOnPageLoad":true}'
@@ -536,7 +546,7 @@ refresh_env() {
   [[ -n "$saved_path" ]] || return 0
 
   ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
-  [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+  [[ -n "$ws_url" ]] || die "Chrome is up, but no tab matches this environment — open one with: bash ${BASH_SOURCE[0]} start-local"
   current_path="$(current_path_via_ws_url "$ws_url")"
   if [[ "$current_path" != "$saved_path" ]]; then
     start_env "$env_name" "$base_url" "$url_substring" --port "$PORT" --path "$saved_path" >/dev/null
@@ -555,7 +565,7 @@ wait_env() {
 
   local ws_url expression params_json
   ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
-  [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+  [[ -n "$ws_url" ]] || die "Chrome is up, but no tab matches this environment — open one with: bash ${BASH_SOURCE[0]} start-local"
 
   expression="$(jq -rn --arg path "$WAIT_PATH" --arg selector "$WAIT_SELECTOR" '
     "(() => { " +
@@ -589,7 +599,7 @@ wait_env() {
 
     sleep 0.25
     ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
-    [[ -n "$ws_url" ]] || die "Could not resolve page websocket URL"
+    [[ -n "$ws_url" ]] || die "Chrome is up, but no tab matches this environment — open one with: bash ${BASH_SOURCE[0]} start-local"
   done
 }
 
@@ -714,6 +724,17 @@ doctor() {
     echo "ok  Windows Chrome is visible: $CHROME_PATH"
   else
     echo "fail Windows Chrome not found at $CHROME_PATH"
+    failures=1
+  fi
+
+  # The plumbing being healthy says nothing about the endpoint: Chrome may
+  # simply not be running with the debug port.
+  if browser=$(bash "$LOW_LEVEL_SCRIPT" version --port "$DEFAULT_PORT" 2>/dev/null | jq -r '.Browser' 2>/dev/null) && [[ -n "$browser" && "$browser" != "null" ]]; then
+    echo "ok  CDP endpoint :$DEFAULT_PORT is alive ($browser)"
+  else
+    echo "fail CDP endpoint :$DEFAULT_PORT is not answering"
+    echo "     -> run: bash ${BASH_SOURCE[0]} start-local"
+    echo "        (never launch chrome.exe by hand: the debug port needs the separate profile start-local provides)"
     failures=1
   fi
 

@@ -1,6 +1,6 @@
 ---
 name: learning-app-cdp
-description: Inspect or debug the learning app in a real browser through the project-specific Windows Chrome CDP workflow. Prefer this skill for browser testing, browser debugging, console inspection, network capture, DOM/runtime inspection, and service-worker-aware refreshes against https://sprecha.local or https://sprecha.de.
+description: "Inspect or debug the learning app in a real browser through the project-specific Windows Chrome CDP workflow. Prefer this skill for browser testing, browser debugging, console inspection, network capture, DOM/runtime inspection, and service-worker-aware refreshes against https://sprecha.local or https://sprecha.de. Commands: doctor, start-local/start-prod (launches Chrome with the debug port — use this when Chrome is down, never launch chrome.exe by hand), refresh-*, wait-* (--path/--selector), eval-* (--expression/--file), console-*, monitor-*, read, clear, stop."
 ---
 
 # Learning App CDP
