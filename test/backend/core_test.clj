@@ -6,7 +6,9 @@
    [db :as db]
    [migrations :as migrations]
    [next.jdbc :as jdbc]
-   [next.jdbc.result-set :as result-set])
+   [next.jdbc.result-set :as result-set]
+   [org.httpkit.client :as client]
+   [org.httpkit.server :as server])
   (:import
    [java.io File]))
 
@@ -70,6 +72,30 @@
   (let [db    (migrated-db)
         token (sut/mint-grant! db -1)]
     (is (false? (#'sut/burn-grant! db token)))))
+
+
+(deftest stopping-the-server-drains-in-flight-requests
+  (let [in-flight (promise)
+        handler   (fn [_]
+                    (deliver in-flight true)
+                    (Thread/sleep 300)
+                    {:body "drained" :status 200})]
+    (sut/start-server! handler 0)
+    (try
+      (let [port     (server/server-port @sut/server)
+            response (future @(client/request {:method :get
+                                               :url    (str "http://localhost:" port "/")}))]
+        (is (true? (deref in-flight 2000 false)) "the request never reached the handler")
+        (sut/stop-server!)
+        (testing "the in-flight request finished with a response"
+          (is (= 200 (:status @response))))
+        (testing "the listening socket is closed"
+          (is (thrown? java.net.ConnectException
+                       (.close (java.net.Socket. "localhost" (int port))))))
+        (testing "the server handle is released"
+          (is (nil? @sut/server))))
+      (finally
+       (sut/stop-server!)))))
 
 
 (deftest the-build-and-the-server-agree-on-where-the-version-lives
