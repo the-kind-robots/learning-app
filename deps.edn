@@ -3,18 +3,18 @@
  :deps    {db/db                             {:local/root "lib/db"}
            buddy/buddy-hashers               {:mvn/version "2.0.167"}
            cheshire/cheshire                 {:mvn/version "6.2.0"}
-           com.github.seancorfield/honeysql  {:mvn/version "2.7.1368"}
-           com.github.seancorfield/next.jdbc {:mvn/version "1.3.1093"}
+           com.github.seancorfield/honeysql  {:mvn/version "2.7.1437"}
+           com.github.seancorfield/next.jdbc {:mvn/version "1.3.1118"}
            com.lambdaisland/hiccup           {:mvn/version "0.14.67"}
-           com.taoensso/telemere             {:mvn/version "1.2.1"}
-           funcool/promesa                   {:mvn/version "11.0.678"}
+           com.taoensso/telemere             {:mvn/version "1.4.0"}
+           funcool/promesa                   {:mvn/version "12.0.1"}
            http-kit/http-kit                 {:mvn/version "2.8.1"}
            metosin/malli                     {:mvn/version "0.20.1"}
            metosin/reitit                    {:mvn/version "0.10.1"}
-           org.clojure/clojure               {:mvn/version "1.12.4"}
-           org.xerial/sqlite-jdbc            {:mvn/version "3.53.0.0"}
+           org.clojure/clojure               {:mvn/version "1.12.5"}
+           org.xerial/sqlite-jdbc            {:mvn/version "3.53.2.1"}
            philoskim/debux-stubs             {:mvn/version "0.9.1"}
-           ring/ring                         {:mvn/version "1.15.4"}}
+           ring/ring                         {:mvn/version "1.15.5"}}
 
  :aliases {:dev   {:jvm-opts    ["-Djdk.attach.allowAttachSelf"] ; https://docs.cider.mx/cider/basics/up_and_running.html#enabling-nrepl-jvmti-agent
                    :extra-deps  {philoskim/debux {:mvn/version "0.9.1"}}
@@ -23,7 +23,7 @@
            :test  {:extra-paths ["test"]}
 
            :build {:deps       {org.clojure/clojure           {:mvn/version "1.12.4"}
-                                io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177"}}
+                                io.github.clojure/tools.build {:git/tag "v0.10.14" :git/sha "3a3c177"}}
                    :ns-default build}
 
            :dictionary {:deps       {dictionary/dictionary {:local/root "tools/dictionary"}}

@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: deployment
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v7.0.1
 
       - name: Build infra deb
         run: mkdir -p target && dpkg-deb --root-owner-group --build infra/production target/learning-app-infra.deb

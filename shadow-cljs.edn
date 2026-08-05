@@ -1,20 +1,20 @@
 {:dependencies
  [[binaryage/devtools "1.0.7"]
   [cheshire/cheshire "6.2.0"]
-  [cider/cider-nrepl "0.59.0"]
-  [com.lambdaisland/glogi "1.3.169"]
+  [cider/cider-nrepl "0.62.2"]
+  [com.lambdaisland/glogi "1.4.177"]
   [metosin/reitit "0.10.1"]
-  [no.cjohansen/dataspex "2026.04.1"]
-  [no.cjohansen/nexus "2025.11.1"]
+  [no.cjohansen/dataspex "2026.06.3"]
+  [no.cjohansen/nexus "2026.07.1"]
   [no.cjohansen/replicant "2026.07.1"]
 
   [philoskim/debux "0.9.1"]
-  [refactor-nrepl/refactor-nrepl "3.11.0"]
+  [refactor-nrepl/refactor-nrepl "3.14.0"]
 
   ;; These dependencies keep the shared application.cljc build green.
   ;; They are not used in cljs code, but the compiler fails unless they
   ;; are present because application.cljc references the backend APIs.
-  [com.taoensso/telemere "1.2.1"]
+  [com.taoensso/telemere "1.4.0"]
   [http-kit/http-kit "2.8.1"]]
 
  :source-paths
