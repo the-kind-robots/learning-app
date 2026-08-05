@@ -68,7 +68,8 @@
 
 
 (def db-spec
-  {:dbtype "sqlite" :dbname "app.db"})
+  {:dbname (or (System/getenv "LEARNING_APP_DB_PATH") "app.db")
+   :dbtype "sqlite"})
 
 
 (defmacro on-connection
