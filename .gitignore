@@ -74,3 +74,4 @@ app.db
 /opencode.json
 /.tmp/
 /src/client/sqlite3_cjs.js
+.claude/worktrees/
