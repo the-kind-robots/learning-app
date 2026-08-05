@@ -100,7 +100,7 @@ OPENSPEC_TELEMETRY=0 openspec ...
    - The owner reviews in the diff (Start a review → Submit review). A pending review is invisible to the API — if the owner says they reviewed and nothing shows, ask whether they submitted, do not conclude there were no comments.
    - When the owner says the review round is done, process **every** thread on every open PR of theirs:
      - Fetch threads with `gh api repos/<owner>/<repo>/pulls/<n>/comments` — each carries `path`, `line`, `diff_hunk`, `body`, `in_reply_to_id`.
-     - Agreed items: fix, push to the same branch, reply in the thread naming the commit, resolve the thread (GraphQL: query `pullRequest.reviewThreads` for ids, then `resolveReviewThread(input: {threadId})`).
+     - Agreed items: fix, push to the same branch, reply in the thread naming the commit, resolve the thread (GraphQL: query `pullRequest.reviewThreads` for ids, then `resolveReviewThread(input: {threadId})`). Commit first, reference after — a hash written before the commit exists is fiction, and it has already cost one edited comment.
      - Disagreements: never silently "fix" — reply with the argument, leave the thread unresolved; the owner decides.
      - ```suggestion blocks may be applied verbatim.
      - The round ends with every thread either resolved-with-commit or answered-and-open; report the split to the owner.
