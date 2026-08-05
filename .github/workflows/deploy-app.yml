@@ -38,7 +38,13 @@ jobs:
       - run: rm -rf resources/public/js/app
       - run: npx shadow-cljs release app
       - run: clojure -T:build uber
-      - run: cp target/learning-app.jar target/learning-app.jar.tmp
+      # Unique per-run temp name: concurrent deploys never share an upload path.
+      - run: cp target/learning-app.jar 'target/learning-app.jar.${{ github.run_id }}.tmp'
+      # $GITHUB_OUTPUT is a file GitHub provides per step; `key=value` lines
+      # appended to it become `steps.<id>.outputs.<key>` for later steps:
+      # https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-an-output-parameter
+      - id: jar
+        run: echo "sha256=$(sha256sum target/learning-app.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/save@v6.1.0
         if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}
@@ -55,16 +61,24 @@ jobs:
           username: ${{ secrets.USER }}
           key: ${{ secrets.KEY }}
           strip_components: 1 # removes '/target' segment from the source path.
-          source: 'target/learning-app.jar.tmp'
+          source: 'target/learning-app.jar.${{ github.run_id }}.tmp'
           target: '/opt/learning-app/'
           overwrite: true
 
+      # Verify the upload is complete, then rename(2) it into place: same
+      # filesystem, so the swap is atomic and the restart watch on
+      # learning-app.jar only ever sees a whole artifact.
       - uses: appleboy/ssh-action@v1.2.5
+        env:
+          JAR_TMP: /opt/learning-app/learning-app.jar.${{ github.run_id }}.tmp
+          JAR_SHA256: ${{ steps.jar.outputs.sha256 }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
           key: ${{ secrets.KEY }}
+          envs: JAR_TMP,JAR_SHA256
           script: |
             set -euo pipefail
-            test -f /opt/learning-app/learning-app.jar.tmp
-            mv -f /opt/learning-app/learning-app.jar.tmp /opt/learning-app/learning-app.jar
+            echo "${JAR_SHA256}  ${JAR_TMP}" | sha256sum -c -
+            mv -f "${JAR_TMP}" /opt/learning-app/learning-app.jar
+            find /opt/learning-app -maxdepth 1 -name 'learning-app.jar.*.tmp' -mmin +60 -delete
