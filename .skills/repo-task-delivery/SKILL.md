@@ -52,6 +52,7 @@ In those cases, use the narrower workflow skill directly.
    - In this repo, prefer base branch `master`.
    - For bug reports, default category/type to bug-oriented values when the project supports them.
    - Branches come from `gh issue develop <number> --checkout` and nothing else, so every branch is linked to its issue. A branch made with `git checkout -b` leaves the issue with no development link and drops out of every cleanup.
+   - The project board is the owner's window into the work; a status that lies is a process bug. Starting work moves the issue to **In progress** (`gh-project-workflow`'s `start_issue_flow.sh --status "In progress"`, or `gh project item-add` + `item-edit`). An issue filed but not started stays **Backlog**.
    - Decide where the work happens: the main worktree when it needs the full stand (sync, dictionary, migrations, schema, anything talking to CouchDB or nginx), otherwise a worktree from the built-in mechanism (`EnterWorktree`). See AGENTS.md.
 
 3. Start OpenSpec.
@@ -94,6 +95,7 @@ OPENSPEC_TELEMETRY=0 openspec ...
    - Push, open PR, merge, and close the issue.
    - If branch protection blocks merge, inspect checks first rather than forcing admin overrides.
    - Never push directly to `master`; use PRs for feature work and closeout work.
+   - Opening the PR moves the issue to **In review** — that is the owner's signal to look (`finish_issue_flow.sh --no-merge` does it, or set the status directly). The merge moves it to **Done**.
    - Clean up as part of the merge, not later: switch back to `master` and pull, delete the branch locally and on the remote, and leave the worktree with `ExitWorktree` (`remove`) if the work happened in one. Left alone these pile up — 43 local and 28 remote branches had to be deleted by hand once.
 
 8. Reset task boundary after delivery.
