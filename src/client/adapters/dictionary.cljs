@@ -6,21 +6,40 @@
 
 
 (def ^:private completions-sql
-  "SELECT
-     l.id    AS lemma_id,
-     l.value AS lemma,
-     l.pos AS pos,
-     l.rank AS rank,
-     MAX(sf.normalized_form = ?) AS has_exact,
-     GROUP_CONCAT(DISTINCT t.value ORDER BY t.rank ASC) AS translations
-   FROM surface_forms sf
-   JOIN lemmas l ON l.id = sf.lemma_id
-   LEFT JOIN translations t ON t.lemma_id = l.id
-   WHERE sf.normalized_form >= ? AND sf.normalized_form <= ?
-     AND l.pos NOT IN ('conj', 'particle', 'pron', 'prep')
-   GROUP BY l.id
-   ORDER BY l.rank DESC, lemma ASC
-   LIMIT 10")
+  "Top ten lemmas for a prefix range, cheap on short prefixes too.
+
+   Shape matters here. The inner SELECT DISTINCT collapses surface forms to
+   lemma ids before anything else: one lemma owns many in-range forms (Fenster,
+   Fensters, Fenstern...), and LIMIT counts rows, so without the collapse ten
+   rows would mean ten forms of maybe three lemmas. Rank then picks the winners
+   while the query still carries only (id, value, pos, rank) — no translations
+   joined, nothing concatenated. has_exact and translations are point lookups
+   for the surviving ten alone. The previous shape joined and GROUP_CONCATed
+   every in-range lemma — thousands on a one-letter prefix — and discarded all
+   but ten after sorting, which is why short prefixes cost ~100x more.
+   Measured in #179: prefix f 95-119 ms -> 20-27 ms."
+  "WITH top AS (
+     SELECT l.id, l.value, l.pos, l.rank
+     FROM (SELECT DISTINCT lemma_id
+           FROM surface_forms
+           WHERE normalized_form >= ? AND normalized_form <= ?) m
+     JOIN lemmas l ON l.id = m.lemma_id
+     WHERE l.pos NOT IN ('conj', 'particle', 'pron', 'prep')
+     ORDER BY l.rank DESC, l.value ASC
+     LIMIT 10)
+   SELECT
+     top.id    AS lemma_id,
+     top.value AS lemma,
+     top.pos AS pos,
+     top.rank AS rank,
+     EXISTS (SELECT 1
+             FROM surface_forms sf
+             WHERE sf.normalized_form = ? AND sf.lemma_id = top.id) AS has_exact,
+     (SELECT GROUP_CONCAT(DISTINCT t.value ORDER BY t.rank ASC)
+      FROM translations t
+      WHERE t.lemma_id = top.id) AS translations
+   FROM top
+   ORDER BY top.rank DESC, lemma ASC")
 
 
 (defn ready?
@@ -40,7 +59,7 @@
                           (await
                            (sqlite/exec db
                                         #js {:sql         completions-sql
-                                             :bind        #js [prefix-start prefix-start prefix-end]
+                                             :bind        #js [prefix-start prefix-end prefix-start]
                                              :returnValue "resultRows"
                                              :rowMode     "object"}))
                           :keywordize-keys
