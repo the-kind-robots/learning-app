@@ -28,7 +28,9 @@ Always use `:reload` when requiring namespaces to pick up changes.
 
 # Issues
 
-- Issues form a shallow DAG. Dependency is a `Needs: #N` line at the top of the body; no cycles.
+- Issues form a shallow DAG. Dependency is the native blocked-by relation, visible on the issue and the board:
+  `gh api graphql -f query='mutation($i: ID!, $b: ID!) { addBlockedBy(input: {issueId: $i, blockingIssueId: $b}) { issue { number } } }' -f i=$(gh api repos/u473t8/learning-app/issues/<child> --jq .node_id) -f b=$(gh api repos/u473t8/learning-app/issues/<blocker> --jq .node_id)`
+  A `Needs: #N` body line may mirror it for grep. No cycles.
 - An issue exists only for work a pull request can close, a bug, or a decision worth recording. Findings, measurements and design notes are comments on the existing issue — never a new issue.
 - Before filing, search open issues for an existing home; one issue may host several PRs.
 - If a chain goes deeper than Needs -> Needs, that is planning disguised as tracking — merge the nodes.
