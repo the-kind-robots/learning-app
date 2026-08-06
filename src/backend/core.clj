@@ -95,18 +95,15 @@
               target-wal (io/file (str (.getPath target) "-wal"))
               tmp        (io/file (str (.getPath target) ".adopting"))]
           (some-> (.getParentFile target) .mkdirs)
-          (let [replace ^"[Ljava.nio.file.CopyOption;"
-                        (into-array
-                         java.nio.file.CopyOption
-                         [java.nio.file.StandardCopyOption/REPLACE_EXISTING])
-                atomic  ^"[Ljava.nio.file.CopyOption;"
-                        (into-array
-                         java.nio.file.CopyOption
-                         [java.nio.file.StandardCopyOption/ATOMIC_MOVE])]
-            (when (.exists legacy-wal)
-              (java.nio.file.Files/copy (.toPath legacy-wal) (.toPath target-wal) replace))
-            (java.nio.file.Files/copy (.toPath legacy) (.toPath tmp) replace)
-            (java.nio.file.Files/move (.toPath tmp) (.toPath target) atomic))
+          ;; io/copy and File.renameTo instead of the NIO varargs API: the
+          ;; same semantics — overwriting copy, atomic same-directory rename
+          ;; via rename(2) — without the array-class type hints.
+          (when (.exists legacy-wal)
+            (io/copy legacy-wal target-wal))
+          (io/copy legacy tmp)
+          (when-not (.renameTo tmp target)
+            (throw (ex-info "Atomic rename failed during adoption"
+                            {:target (.getPath target) :tmp (.getPath tmp)})))
           (doseq [suffix ["" "-wal" "-shm"]]
             (.delete (io/file (str (.getPath legacy) suffix))))
           (t/event! ::database-adopted
