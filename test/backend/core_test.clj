@@ -128,3 +128,50 @@
           (is (= 40 (count token)))
           (is (= (str "userdb-" id) (first @secured)))
           (is (= [(str "u:" id)] (get-in (second @secured) [:members :roles]))))))))
+
+
+(defn- temp-dir
+  []
+  (.toFile (java.nio.file.Files/createTempDirectory
+            "adopt-test"
+            (into-array java.nio.file.attribute.FileAttribute []))))
+
+
+(deftest a-legacy-database-moves-into-the-configured-home
+  (testing "content and wal travel, the legacy trio disappears"
+    (let [dir    (temp-dir)
+          legacy (doto (File. dir "app.db") (spit "main-bytes"))
+          _ (spit (File. dir "app.db-wal") "wal-bytes")
+          _ (spit (File. dir "app.db-shm") "shm-bytes")
+          target (File. dir "state/db.sqlite")]
+      (#'sut/adopt-database! legacy {:dbname (.getPath target)})
+      (is (= "main-bytes" (slurp target)))
+      (is (= "wal-bytes" (slurp (File. dir "state/db.sqlite-wal"))))
+      (is (not (.exists legacy)) "legacy main gone")
+      (is (not (.exists (File. dir "app.db-wal"))) "legacy wal gone")
+      (is (not (.exists (File. dir "app.db-shm"))) "legacy shm gone"))))
+
+
+(deftest an-existing-target-is-never-clobbered
+  (testing "rollback safety: newer data at the target survives, legacy stays for the operator"
+    (let [dir    (temp-dir)
+          legacy (doto (File. dir "app.db") (spit "old-bytes"))
+          target (doto (File. dir "db.sqlite") (spit "newer-bytes"))]
+      (#'sut/adopt-database! legacy {:dbname (.getPath target)})
+      (is (= "newer-bytes" (slurp target)) "target untouched")
+      (is (= "old-bytes" (slurp legacy)) "legacy left in place"))))
+
+
+(deftest no-legacy-database-means-no-adoption
+  (let [dir    (temp-dir)
+        target (File. dir "db.sqlite")]
+    (#'sut/adopt-database! (File. dir "app.db") {:dbname (.getPath target)})
+    (is (not (.exists target)))))
+
+
+(deftest the-default-path-is-its-own-home
+  (testing "dev: legacy and target are the same file, nothing moves"
+    (let [dir (temp-dir)
+          db  (doto (File. dir "app.db") (spit "dev-bytes"))]
+      (#'sut/adopt-database! db {:dbname (.getPath db)})
+      (is (= "dev-bytes" (slurp db))))))
