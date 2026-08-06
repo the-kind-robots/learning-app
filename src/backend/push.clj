@@ -13,20 +13,30 @@
 (set! *warn-on-reflection* true)
 
 
-(defonce ^:private channels (atom {}))
+(defn- userdb
+  [account-id]
+  (str "userdb-" account-id))
+
+
+(defonce ^:private channels
+  ;; userdb name -> #{channels}. Keyed by database name so a feed answer
+  ;; looks its subscribers up directly; events of databases nobody can
+  ;; subscribe to (dictionary-db, _global_changes) simply find no entry.
+  (atom {}))
 
 
 (defn subscribe!
   [account-id channel]
-  (swap! channels update account-id (fnil conj #{}) channel))
+  (swap! channels update (userdb account-id) (fnil conj #{}) channel))
 
 
 (defn unsubscribe!
   [account-id channel]
   (swap! channels
     (fn [m]
-      (let [left (disj (get m account-id #{}) channel)]
-        (if (empty? left) (dissoc m account-id) (assoc m account-id left))))))
+      (let [k    (userdb account-id)
+            left (disj (get m k #{}) channel)]
+        (if (empty? left) (dissoc m k) (assoc m k left))))))
 
 
 (defn- send-poke!
@@ -34,26 +44,18 @@
   (server/send! channel "1"))
 
 
-(defn- poke!
-  [account-id]
-  (doseq [channel (get @channels account-id)]
-    (send-poke! channel)))
-
-
-(defn- userdb-account-id
-  [dbname]
-  (some-> (re-matches #"userdb-(\d+)" dbname) second parse-long))
-
-
-(defn ^:private poke-updated-accounts!
-  "Turns one _db_updates answer into pokes and returns the seq to resume from."
-  [{:keys [results last_seq]}]
-  (doseq [id (into #{}
-                   (keep #(when (= "updated" (:type %))
-                            (userdb-account-id (:db_name %))))
-                   results)]
-    (poke! id))
-  last_seq)
+(defn ^:private poke-updated-dbs!
+  "Turns one _db_updates answer into pokes and returns CouchDB's checkpoint
+   token — the `since` for the next turn, so no update falls between turns.
+   The set dedups channels, not databases: an account updated twice in one
+   turn is poked once."
+  [{results :results resume-from :last_seq}]
+  (doseq [channel (into #{}
+                        (comp (filter #(= "updated" (:type %)))
+                              (mapcat #(get @channels (:db_name %))))
+                        results)]
+    (send-poke! channel))
+  resume-from)
 
 
 (defonce ^:private running? (atom false))
@@ -70,7 +72,7 @@
   (loop [since "now"]
     (when @running?
       (recur (or (try
-                   (poke-updated-accounts! (db/db-updates since longpoll-ms))
+                   (poke-updated-dbs! (db/db-updates since longpoll-ms))
                    (catch Exception e
                      (t/event! ::fan-in-failed {:level :warn :data {:error (ex-message e)}})
                      ;; CouchDB is down or _global_changes is missing: wait it
@@ -85,6 +87,9 @@
   "Starts the fan-in loop unless it is already running."
   []
   (when (compare-and-set! running? false true)
+    ;; Daemon: the JVM may exit mid-longpoll instead of waiting out a turn.
+    ;; Nothing is lost — the loop holds no state, and a poke missed at
+    ;; shutdown is covered by the client's pull on reconnect.
     (doto (Thread. ^Runnable fan-in-loop! "push-fan-in")
       (.setDaemon true)
       (.start))
