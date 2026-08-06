@@ -10,7 +10,7 @@
 
    Honest limits, measured before this existed: the frame counter stops when
    the window is occluded even though visibilityState stays \"visible\", and a
-   render here means one store notification — the browser still paints at most
+   render here means one `render!` call — the browser still paints at most
    once per frame regardless of how many happened inside it."
   (:require
    [nexus.registry :as nxr]))
@@ -59,12 +59,17 @@
      (count-frames!))))
 
 
-(defn install!
-  "Wires every probe up. Takes the store so renders are counted the same way
-   they are triggered — one notification, one render."
-  [store]
-  (add-watch store ::renders (fn [_ _ _ _] (swap! metrics update :renders inc)))
+(defn count-render!
+  "Counts one render. Called from the render path itself, not from a store
+   watch: with unbatched saves one dispatch may notify the store several times
+   while rendering once, so notifications no longer measure renders."
+  []
+  (swap! metrics update :renders inc))
 
+
+(defn install!
+  "Wires every probe up."
+  []
   (nxr/register-interceptor!
     {:before-dispatch (fn [ctx]
                         (swap! metrics update

@@ -108,9 +108,15 @@
                                                       (nxr/dispatch system dispatch-data actions))]
                                        (nxr/register-system->state! #(-> % :store deref))
                                        (r/set-dispatch! dispatch)
-                                       (add-watch store ::render #(application/render! %4))
+                                       (application/install-render!
+                                        store
+                                        (if goog/DEBUG
+                                          (fn [state]
+                                            (instrumentation/count-render!)
+                                            (application/render! state))
+                                          application/render!))
                                        (when goog/DEBUG
-                                         (instrumentation/install! store))
+                                         (instrumentation/install!))
                                        {:dispatch #(dispatch {} %)}))}
 
     :pwa/init           {:requires {:render :app/render}
