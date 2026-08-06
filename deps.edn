@@ -23,7 +23,7 @@
            :test  {:extra-paths ["test"]}
 
            :build {:deps       {org.clojure/clojure           {:mvn/version "1.12.4"}
-                                io.github.clojure/tools.build {:git/tag "v0.10.14" :git/sha "3a3c177"}}
+                                io.github.clojure/tools.build {:git/tag "v0.10.14" :git/sha "1176afd"}}
                    :ns-default build}
 
            :dictionary {:deps       {dictionary/dictionary {:local/root "tools/dictionary"}}
