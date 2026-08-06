@@ -8,8 +8,6 @@ User=dbmaintainer
 # granted to this service only, not to the user account globally.
 SupplementaryGroups=couchdb
 WorkingDirectory=~
-LogsDirectory=learning-app
-StateDirectory=learning-app
 ExecStart=sh -c './backup.sh'
 
 # Environment
@@ -30,12 +28,17 @@ Environment=LEARNING_APP__DB_BACKUP_PATH=/var/backups/learning-app/db.sqlite
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes
-# Filesystem read-only except ReadWritePaths below. StateDirectory keeps
-# /var/lib/learning-app writable under strict — sqlite3 needs write access to
-# the source -wal/-shm files even when only reading a WAL database.
+# Filesystem read-only except ReadWritePaths below.
 ProtectSystem=strict
 # Local backup target plus borg cache/config/ssh state in the home directory.
-ReadWritePaths=/var/backups/learning-app /var/lib/dbmaintainer
+# /var/lib/learning-app is deliberately ReadWritePaths, NOT StateDirectory:
+# sqlite3 needs write access to the source journal/-wal/-shm files even when
+# only reading the database, but StateDirectory would rechown the whole state
+# tree to dbmaintainer on every backup run (learning-app-run owns it as
+# webapp). The directory is group-writable for group webapp (see tmpfiles.d
+# and StateDirectoryMode in learning-app-run.service); dbmaintainer is a
+# member of that group.
+ReadWritePaths=/var/backups/learning-app /var/lib/dbmaintainer /var/lib/learning-app
 PrivateDevices=yes
 # Kernel interfaces read-only or unreachable.
 ProtectKernelTunables=yes
