@@ -62,9 +62,13 @@
     [[:effect/save {:home/suggestions empty-suggestions}]]))
 
 
+;; Suggestions are deliberately not cleared here: the previous list stays
+;; until :action/update-suggestions delivers the next answer (GH-178), so the
+;; list does not flash empty on every keystroke. An emptied input still clears
+;; it — the dictionary returns [] for an empty prefix.
 (nxr/register-action! :action/update-word
   (fn update-word [_ value]
-    [[:effect/save {:home/word value :home/translation "" :home/suggestions empty-suggestions}]
+    [[:effect/save {:home/word value :home/translation ""}]
      [:effect/suggest-completions value]]))
 
 
