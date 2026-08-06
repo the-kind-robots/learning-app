@@ -40,6 +40,11 @@
 
 # DB
 app.db
+test-app.db*
+
+# Playwright artifacts
+/test-results/
+/playwright-report/
 
 # Keep linter config
 !/.clj-kondo/config.edn
