@@ -85,6 +85,11 @@
    leftover is the operator's decision."
   [^java.io.File legacy {:keys [dbname]}]
   (let [target (io/file dbname)]
+    ;; systemd-tmpfiles pre-creates the target as an empty file (#225), and an
+    ;; empty file is not data: adopting over it loses nothing, refusing over
+    ;; it strands the accounts. Only a non-empty target earns the refusal.
+    (when (and (.exists target) (zero? (.length target)))
+      (.delete target))
     (when (and (not= (.getCanonicalPath legacy) (.getCanonicalPath target))
                (.exists legacy))
       (if (.exists target)
