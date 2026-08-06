@@ -176,3 +176,13 @@
           db  (doto (File. dir "app.db") (spit "dev-bytes"))]
       (#'sut/adopt-database! db {:dbname (.getPath db)})
       (is (= "dev-bytes" (slurp db))))))
+
+
+(deftest an-empty-pre-created-target-does-not-block-adoption
+  (testing "systemd-tmpfiles pre-creates the target as a zero-length file (#225)"
+    (let [dir    (temp-dir)
+          legacy (doto (File. dir "app.db") (spit "real-bytes"))
+          target (doto (File. dir "db.sqlite") (spit ""))]
+      (#'sut/adopt-database! legacy {:dbname (.getPath target)})
+      (is (= "real-bytes" (slurp target)) "adopted over the empty placeholder")
+      (is (not (.exists legacy))))))
