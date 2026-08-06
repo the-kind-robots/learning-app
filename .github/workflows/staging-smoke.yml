@@ -1,0 +1,96 @@
+name: Staging smoke
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  # A required check that never reports blocks the merge forever, and a path
+  # filter on the trigger is exactly how a check never reports (#204). So the
+  # workflow fires on every PR and decides here: a skipped job satisfies
+  # branch protection, a never-started workflow does not.
+  changes:
+    name: Detect infra changes
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --name-only "$BASE" HEAD | grep -qE '^(infra/|\.github/workflows/staging-smoke\.yml$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  container-smoke:
+    name: Container smoke
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.relevant == 'true' }}
+    # Jar build ~8 min cold, image build + boot + smoke ~5 min; 20 leaves
+    # headroom without letting a wedged systemd boot hold the runner an hour.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-java@v5.7.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          cli: latest
+
+      - id: cache-clojure
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+            ~/.deps.clj
+          key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
+          restore-keys: |
+            clojure-
+
+      # The jar the runbook delivers, built the way deploy-app.yml builds it.
+      - name: Build the app jar
+        run: |
+          npm ci
+          npx shadow-cljs release app
+          clojure -T:build uber
+
+      # The systemd-in-docker incantation (cgroupns=host, rw cgroup bind,
+      # CAP_SYS_ADMIN, unconfined seccomp/apparmor) lives inside run.sh and is
+      # allowed on GitHub-hosted runners: rootful docker, no restrictive
+      # seccomp policy on the daemon.
+      - name: Run the container smoke
+        shell: bash
+        run: bash infra/staging/run.sh 2>&1 | tee smoke-output.log
+
+      - uses: actions/upload-artifact@v4.6.2
+        if: failure()
+        with:
+          name: staging-smoke-output
+          path: smoke-output.log
+          if-no-files-found: ignore
+
+      - uses: actions/cache/save@v6.1.0
+        if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+            ~/.deps.clj
+          key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
