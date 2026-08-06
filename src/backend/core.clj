@@ -13,6 +13,7 @@
    [next.jdbc.prepare :as prepare]
    [next.jdbc.result-set :as result-set]
    [org.httpkit.server :as server]
+   [reconciliation :as reconciliation]
    [reitit.http :as http]
    [reitit.http.interceptors.keyword-parameters :as keyword-parameters]
    [reitit.http.interceptors.parameters :as parameters]
@@ -614,6 +615,8 @@
     ;; outdated schema or a stranded database.
     (adopt-legacy-database!)
     (migrations/ensure-migrated! db-spec)
+    ;; Report orphan userdbs; CouchDB being down logs a warning, never blocks boot.
+    (reconciliation/report! db-spec)
     (restart-server! #'ring-handler port)
     (println "Serving" url)))
 
