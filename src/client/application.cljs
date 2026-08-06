@@ -5,7 +5,6 @@
    [application.presenter :as presenter]
    [install-guide.view :as install-guide]
    [lambdaisland.glogi :as log]
-   [nexus.batching :as batching]
    [nexus.registry :as nxr]
    [pages.collections.view :as pages.collections.view]
    [pages.home.view :as pages.home.view]
@@ -17,14 +16,6 @@
 ;;
 ;; Interceptors
 ;;
-
-
-;; Batching is opt-in since nexus 2026.06: the `^:nexus/batch` metadata alone
-;; became inert, and a batched handler then receives one effect argument where
-;; it expects a collection. It earns its keep here — `:effect/save` is what
-;; every action writes through, and without it each effect swaps the store
-;; separately, so one dispatch renders as many times as it has effects.
-(batching/install!)
 
 
 (nxr/register-interceptor!
@@ -39,9 +30,8 @@
 
 
 (nxr/register-effect! :effect/save
-  ^:nexus/batch
-  (fn save [_ system ms]
-    (swap! (:store system) #(reduce merge % (map first ms)))))
+  (fn save [_ system m]
+    (swap! (:store system) merge m)))
 
 
 (nxr/register-effect! :effect/navigate
@@ -439,6 +429,39 @@
   [state]
   (r/render js/document.body (render state))
   (sync-virtual-keyboard!))
+
+
+;; One render per dispatch that changed state, none for a dispatch that
+;; changed nothing. The store watch renders immediately outside a dispatch —
+;; external writes keep rendering — and only marks dirty inside one;
+;; `:after-dispatch` back at depth zero renders once if anything got dirty.
+;; A counter, not a flag: effects dispatch actions from inside a dispatch
+;; (dialog on-mount), and an async continuation arrives as a new top-level
+;; dispatch — both must keep the guard up until their own dispatch unwinds.
+(defonce ^:private dispatch-depth (volatile! 0))
+
+
+(defonce ^:private dirty? (volatile! false))
+
+
+(defn install-render!
+  [store render-fn]
+  (add-watch store
+             ::render
+             (fn [_ _ _ state]
+               (if (pos? @dispatch-depth)
+                 (vreset! dirty? true)
+                 (render-fn state))))
+  (nxr/register-interceptor!
+    {:before-dispatch (fn [ctx]
+                        (vswap! dispatch-depth inc)
+                        ctx)
+     :after-dispatch  (fn [ctx]
+                        (vswap! dispatch-depth dec)
+                        (when (and (zero? @dispatch-depth) @dirty?)
+                          (vreset! dirty? false)
+                          (render-fn @store))
+                        ctx)}))
 
 
 (defn routes
