@@ -7,13 +7,11 @@
    [use-cases.vocabulary :as vocabulary]))
 
 
-;; The debounce wears two hats: it kept the dictionary from being hammered per
-;; keystroke, and it decides how often the suggestion list rewrites itself.
-;; The first hat shrank — the worst-case query fell from ~120 to ~25 ms native
-;; (#179) — so the wait is set by the second: fast typing runs at 120–180 ms
-;; per key, and 150 still coalesces a burst while answering ~150 ms sooner
-;; after the pause. Lower than that trades list stability for nothing until
-;; the in-worker round trip is measured (#179 follow-up).
+;; Measured end to end (#195): past the debounce, worker + SQLite + render
+;; cost 9-44 ms (one-letter prefix worst). And since the list now keeps its
+;; previous answer until the next one arrives (#178), a mid-burst answer
+;; replaces smoothly instead of flashing. 100 ms still coalesces fast typing
+;; (120-180 ms per key) and puts suggestions ~110-145 ms after the pause.
 (def ^:private suggest!
   (gfn/debounce
    (fn ^:async suggest!
@@ -24,7 +22,7 @@
          (dispatch [[:action/update-suggestions completions]]))
        (catch js/Error err
          (log/error :effect/suggest-completions {:error (str err)}))))
-   150))
+   100))
 
 
 (defn- ^:async resolve-active
