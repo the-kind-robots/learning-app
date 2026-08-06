@@ -32,12 +32,16 @@ RUN curl -fsSL https://couchdb.apache.org/repo/keys.asc \
 # Preseed CouchDB: single node on localhost with a known staging admin
 # password (plaintext by design — this container never holds real secrets).
 # On the real server the operator answers these prompts during bootstrap.
+# The password is the one the app itself carries (lib/db/src/db.cljc `conn`,
+# hardcoded): with any other value the app cannot create userdbs or run the
+# boot reconciliation report, and the restore drill cannot seed through the
+# real provisioning endpoint. Must match COUCH_PASS in run.sh.
 RUN printf '%s\n' \
         'couchdb couchdb/mode select standalone' \
         'couchdb couchdb/bindaddress string 127.0.0.1' \
         'couchdb couchdb/cookie string learning-app-staging' \
-        'couchdb couchdb/adminpass password staging-couch-pass' \
-        'couchdb couchdb/adminpass_again password staging-couch-pass' \
+        'couchdb couchdb/adminpass password 3434' \
+        'couchdb couchdb/adminpass_again password 3434' \
     | debconf-set-selections
 
 # Everything the infra deb Depends on, baked at image build so installing the
