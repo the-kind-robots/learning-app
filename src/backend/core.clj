@@ -13,6 +13,7 @@
    [next.jdbc.prepare :as prepare]
    [next.jdbc.result-set :as result-set]
    [org.httpkit.server :as server]
+   [reconciliation :as reconciliation]
    [reitit.http :as http]
    [reitit.http.interceptors.keyword-parameters :as keyword-parameters]
    [reitit.http.interceptors.parameters :as parameters]
@@ -68,7 +69,59 @@
 
 
 (def db-spec
-  {:dbtype "sqlite" :dbname "app.db"})
+  {:dbname (or (System/getenv "LEARNING_APP__DB_PATH") "app.db")
+   :dbtype "sqlite"})
+
+
+(defn- adopt-database!
+  "One-time move of the database from its pre-#201 home into the configured
+   path. Runs before anything opens the database, so no writer exists.
+
+   Crash-safe by construction: the copy lands under a temp name and the final
+   rename is atomic, so the legacy file stays authoritative until the target
+   fully exists — a crash mid-copy just retries next boot. When both files
+   exist the target wins and the legacy is left in place with a loud log:
+   rolling back a deploy must never cost newer data, and disposal of the
+   leftover is the operator's decision."
+  [^java.io.File legacy {:keys [dbname]}]
+  (let [target (io/file dbname)]
+    (when (and (not= (.getCanonicalPath legacy) (.getCanonicalPath target))
+               (.exists legacy))
+      (if (.exists target)
+        (t/event! ::legacy-database-left-behind
+                  {:level :error
+                   :data  {:legacy (.getPath legacy) :target (.getPath target)}})
+        (let [legacy-wal (io/file (str (.getPath legacy) "-wal"))
+              target-wal (io/file (str (.getPath target) "-wal"))
+              tmp        (io/file (str (.getPath target) ".adopting"))]
+          (some-> (.getParentFile target) .mkdirs)
+          (when (.exists legacy-wal)
+            (java.nio.file.Files/copy (.toPath legacy-wal)
+                                      (.toPath target-wal)
+                                      (into-array java.nio.file.CopyOption
+                                                  [java.nio.file.StandardCopyOption/REPLACE_EXISTING])))
+          (java.nio.file.Files/copy (.toPath legacy)
+                                    (.toPath tmp)
+                                    (into-array java.nio.file.CopyOption
+                                                [java.nio.file.StandardCopyOption/REPLACE_EXISTING]))
+          (java.nio.file.Files/move (.toPath tmp)
+                                    (.toPath target)
+                                    (into-array java.nio.file.CopyOption
+                                                [java.nio.file.StandardCopyOption/ATOMIC_MOVE]))
+          (doseq [suffix ["" "-wal" "-shm"]]
+            (.delete (io/file (str (.getPath legacy) suffix))))
+          (t/event! ::database-adopted
+                    {:level :info
+                     :data  {:from (.getPath legacy) :to (.getPath target)}}))))))
+
+
+(defn adopt-legacy-database!
+  "The deploy-order trap this closes: moving the database in the deploy
+   pipeline and teaching the app the new path are two changes, and any deploy
+   carrying only one of them strands the accounts (#201). Shipping the move
+   inside the same artifact that reads the new path makes the pair atomic."
+  []
+  (adopt-database! (io/file "app.db") db-spec))
 
 
 (defmacro on-connection
@@ -558,8 +611,12 @@
 (defn -main
   []
   (let [url (str "http://localhost:" port "/")]
-    ;; Migrate before serving: the app never runs against an outdated schema.
+    ;; Adopt, then migrate, then serve: the app never runs against an
+    ;; outdated schema or a stranded database.
+    (adopt-legacy-database!)
     (migrations/ensure-migrated! db-spec)
+    ;; Report orphan userdbs; CouchDB being down logs a warning, never blocks boot.
+    (reconciliation/report! db-spec)
     (restart-server! #'ring-handler port)
     (println "Serving" url)))
 
