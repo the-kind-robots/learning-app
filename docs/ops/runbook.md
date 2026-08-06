@@ -74,6 +74,18 @@ curl -sf http://127.0.0.1:5984/ >/dev/null
 curl -sf --resolve sprecha.de:443:127.0.0.1 https://sprecha.de/db/dictionary-db/dictionary-meta >/dev/null
 ```
 
+## Restore from backup
+
+Archives named `app-<timestamp>` carry both stores: the SQLite snapshot and
+`/var/lib/couchdb`. Restore them together, from the same archive — an account
+row and its userdb must come from one moment, or you manufacture the orphan
+states #182/#205 exist to catch. `borg list ::` to pick, `borg extract` into a
+scratch dir, then: stop services, put the sqlite file at
+`/var/lib/learning-app/db.sqlite`, the couch tree at `/var/lib/couchdb`
+(ownership `couchdb:couchdb`), start, and check `/auth/check` with a known
+token before calling it done. Older `db-*.sqlite` archives predate #206 and
+hold SQLite only.
+
 ## Manual admin steps (bootstrap + secrets + one-off ops)
 
 Run the admin setup script (idempotent, safe to re-run).

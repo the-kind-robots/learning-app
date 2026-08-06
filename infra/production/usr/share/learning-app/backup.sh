@@ -29,13 +29,18 @@ sqlite3 ${LEARNING_APP_DB_BACKUP_PATH} ".selftest"
 
 sqlite_backup_exit=$?
 
-# Create remote backup
+# Create remote backup. One archive carries both stores so a restore is
+# coherent by construction: an account row and its userdb come from the same
+# moment. CouchDB files are append-only, so a live copy is recoverable —
+# still, the archive is taken right after the sqlite snapshot to keep the
+# two as close as possible.
 borg create                     \
     --list                      \
     --stats                     \
     --show-rc                   \
-    ::db-{now}.sqlite           \
-    $LEARNING_APP_DB_BACKUP_PATH
+    ::app-{now}                 \
+    $LEARNING_APP_DB_BACKUP_PATH \
+    /var/lib/couchdb
 
 borg_backup_exit=$?
 
