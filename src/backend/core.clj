@@ -277,7 +277,7 @@
 ;;
 
 
-(def ^:private token-cookie "sprecha-token")
+(def ^:private token-cookie "auth-token")
 
 
 (defn- request-token
@@ -465,7 +465,7 @@
          ;; cookie resolves to an account, or the upgrade is refused. A poke
          ;; carries no payload, so a hijacked socket learns only "something
          ;; changed".
-         (let [token (get-in request [:cookies "sprecha-token" :value])
+         (let [token (get-in request [:cookies token-cookie :value])
                id    (on-connection [db db-spec] (authenticated-user-id db token))]
            (if id
              (server/as-channel request

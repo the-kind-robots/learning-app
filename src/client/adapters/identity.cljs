@@ -3,7 +3,7 @@
    [db :as db]))
 
 
-(def ^:private token-cookie "sprecha-token")
+(def ^:private token-cookie "auth-token")
 
 
 (def ^:private identity-doc-id "identity:local")
