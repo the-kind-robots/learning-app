@@ -84,7 +84,7 @@
     [:div.lesson__answer
      [:h3.lesson__answer-header "Ваш ответ:"]
      [:p.lesson__answer-body {:lang "de"} (or user-answer "")]
-     [:h3.lesson__answer-header "Правильный ответ:"]
+     [:h3.lesson__answer-header "Правильно:"]
      (answer-body props)]
     [:div.lesson__action.page-footer__action
      [:button.big-button
