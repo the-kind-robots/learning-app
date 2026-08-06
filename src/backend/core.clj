@@ -100,19 +100,15 @@
               target-wal (io/file (str (.getPath target) "-wal"))
               tmp        (io/file (str (.getPath target) ".adopting"))]
           (some-> (.getParentFile target) .mkdirs)
+          ;; io/copy and File.renameTo instead of the NIO varargs API: the
+          ;; same semantics — overwriting copy, atomic same-directory rename
+          ;; via rename(2) — without the array-class type hints.
           (when (.exists legacy-wal)
-            (java.nio.file.Files/copy (.toPath legacy-wal)
-                                      (.toPath target-wal)
-                                      (into-array java.nio.file.CopyOption
-                                                  [java.nio.file.StandardCopyOption/REPLACE_EXISTING])))
-          (java.nio.file.Files/copy (.toPath legacy)
-                                    (.toPath tmp)
-                                    (into-array java.nio.file.CopyOption
-                                                [java.nio.file.StandardCopyOption/REPLACE_EXISTING]))
-          (java.nio.file.Files/move (.toPath tmp)
-                                    (.toPath target)
-                                    (into-array java.nio.file.CopyOption
-                                                [java.nio.file.StandardCopyOption/ATOMIC_MOVE]))
+            (io/copy legacy-wal target-wal))
+          (io/copy legacy tmp)
+          (when-not (.renameTo tmp target)
+            (throw (ex-info "Atomic rename failed during adoption"
+                            {:target (.getPath target) :tmp (.getPath tmp)})))
           (doseq [suffix ["" "-wal" "-shm"]]
             (.delete (io/file (str (.getPath legacy) suffix))))
           (t/event! ::database-adopted
@@ -616,6 +612,10 @@
 (defn -main
   []
   (let [url (str "http://localhost:" port "/")]
+    ;; Logging first: adoption, migrations and the reconciliation report all
+    ;; speak before the server starts, and events without a handler are
+    ;; dropped silently (#218 — the dev alias ships none).
+    (ensure-log-handler!)
     ;; Adopt, then migrate, then serve: the app never runs against an
     ;; outdated schema or a stranded database.
     (adopt-legacy-database!)
