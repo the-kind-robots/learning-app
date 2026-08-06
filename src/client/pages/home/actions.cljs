@@ -47,9 +47,16 @@
 
 
 (nxr/register-action! :action/update-suggestions
-  (fn update-suggestions [_ completions]
-    [[:effect/save
-      {:home/suggestions (suggestions completions)}]]))
+  (fn update-suggestions [state completions]
+    ;; The top suggestion's translation pre-fills an empty translation field
+    ;; (GH-178: the owner said yes). Blank-guarded: a translation the user
+    ;; already typed is theirs — the dictionary answers late (debounce plus
+    ;; query), and late answers must not clobber the user's input.
+    (let [{:keys [translations]} (first completions)]
+      [[:effect/save
+        (cond-> {:home/suggestions (suggestions completions)}
+          (and (seq translations) (str/blank? (:home/translation state)))
+          (assoc :home/translation (str/join ", " translations)))]])))
 
 
 (nxr/register-action! :action/show-word-error

@@ -120,3 +120,27 @@
       (is (= "Hund" (:home/word @store)))
       (is (= "пёс, собака" (:home/translation @store)))
       (is (nil? (:home/suggestions @store))))))
+
+
+(deftest arrival-fills-a-blank-translation-from-the-top-suggestion
+  (async-testing "the owner's yes in GH-178: the top suggestion pre-fills the empty field"
+    (let [{:keys [store] :as system} (test-system {"hund" [hund hut]})]
+      (nxr/dispatch system {} [[:action/update-word "hund"]])
+      (await (debounce-elapsed))
+      (is (= [hund hut] (suggestion-items store)))
+      (is (= "пёс, собака" (:home/translation @store))))))
+
+
+(deftest arrival-never-clobbers-a-typed-translation
+  (testing "late dictionary answers do not overwrite the user's own text"
+    (let [{:keys [store] :as system} (test-system {})]
+      (nxr/dispatch system {} [[:effect/save {:home/translation "мой перевод"}]])
+      (nxr/dispatch system {} [[:action/update-suggestions [hund]]])
+      (is (= "мой перевод" (:home/translation @store))))))
+
+
+(deftest an-empty-answer-leaves-the-translation-alone
+  (testing "no suggestions, nothing to fill"
+    (let [{:keys [store] :as system} (test-system {})]
+      (nxr/dispatch system {} [[:action/update-suggestions []]])
+      (is (nil? (:home/translation @store))))))
