@@ -183,6 +183,20 @@
 
 
 #?(:clj
+   (defn all-dbs
+     "Returns the names of all databases on the server.
+
+      https://docs.couchdb.org/en/stable/api/server/common.html#all-dbs"
+     ([]
+      (all-dbs conn))
+     ([conn]
+      (let [response (request-sync conn {:method :get :url "_all_dbs"})]
+        (if (= (:status response) 200)
+          (:body response)
+          (raise "Could not list databases" (:body response)))))))
+
+
+#?(:clj
    (defn create
      ([dbname]
       (create conn dbname))
@@ -333,13 +347,13 @@
   ([db docname]
    (get db docname {}))
   ([db docname params]
-   #?(:clj  (p/catch
-               (with-couch-op :couch/get
-                 (request (db-conn db)
-                          {:method :get :url (str (:name db) "/" docname) :query-params (clj->couch params)}))
-               (fn [error]
-                 (when-not (not-found? error)
-                   (throw error))))
+   #?(:clj (p/catch
+             (with-couch-op :couch/get
+               (request (db-conn db)
+                        {:method :get :url (str (:name db) "/" docname) :query-params (clj->couch params)}))
+             (fn [error]
+               (when-not (not-found? error)
+                 (throw error))))
       :cljs (-> (with-couch-op :couch/get
                   (.get ^js db docname (clj->couch params)))
                 (.catch (fn [error]
@@ -387,13 +401,13 @@
    - `execution-stats` (*object*) – Execution statistics.
    - `bookmark` (*string*) – An opaque string used for paging. See the bookmark field in the request (above) for usage details."
   [db query]
-  #?(:clj  (p/catch
-              (with-couch-op :couch/find
-                (request (db-conn db)
-                         {:method :get :url (str (:name db) "/_find") :body (clj->couch query)}))
-              (fn [error]
-                (when-not (not-found? error)
-                  (throw error))))
+  #?(:clj (p/catch
+            (with-couch-op :couch/find
+              (request (db-conn db)
+                       {:method :get :url (str (:name db) "/_find") :body (clj->couch query)}))
+            (fn [error]
+              (when-not (not-found? error)
+                (throw error))))
      :cljs (-> (with-couch-op :couch/find
                  (.find ^js db (clj->couch query)))
                (.catch (fn [error]
@@ -412,10 +426,10 @@
    Any incoming `:limit`/`:skip` in `query` is ignored."
   ([db query]
    (let [base-query (dissoc query :limit :skip)]
-     #?(:clj  (p/let [{:keys [doc-count]} (info db)]
-                 (if (zero? doc-count)
-                   {:docs []}
-                   (find db (assoc base-query :limit doc-count))))
+     #?(:clj (p/let [{:keys [doc-count]} (info db)]
+               (if (zero? doc-count)
+                 {:docs []}
+                 (find db (assoc base-query :limit doc-count))))
         :cljs ((fn ^:async f []
                  (let [{:keys [doc-count]} (await (info db))]
                    (if (zero? doc-count)
