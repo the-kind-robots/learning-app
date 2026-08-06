@@ -130,10 +130,11 @@
           (is (= [(str "u:" id)] (get-in (second @secured) [:members :roles]))))))))
 
 
-(defn- temp-dir
+(defn- ^File temp-dir
   []
   (.toFile (java.nio.file.Files/createTempDirectory
             "adopt-test"
+            ^"[Ljava.nio.file.attribute.FileAttribute;"
             (into-array java.nio.file.attribute.FileAttribute []))))
 
 

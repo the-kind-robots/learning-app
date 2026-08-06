@@ -66,7 +66,7 @@
                (.delete)
                (.deleteOnExit))]
     (with-open [out (JarOutputStream. (FileOutputStream. file))]
-      (doseq [name (cons "migrations/" names)]
+      (doseq [^String name (cons "migrations/" names)]
         (.putNextEntry out (JarEntry. name))
         (when-not (str/ends-with? name "/")
           (.write out (.getBytes "-- statement")))
@@ -83,7 +83,7 @@
 (deftest migrations-are-found-inside-a-jar
   ;; Production runs from an uberjar, where a resource directory cannot be
   ;; listed: an archive is a flat list of entries with no directory to open.
-  (let [jar     (jar-with ["migrations/001-first.sql" "migrations/002-second.sql" "migrations/notes.txt"])
+  (let [^java.io.File jar (jar-with ["migrations/001-first.sql" "migrations/002-second.sql" "migrations/notes.txt"])
         jar-url (.toString (.toURL (.toURI jar)))
         entry   (URL. (str "jar:" jar-url "!/migrations/001-first.sql"))
         dir     (URL. (str "jar:" jar-url "!/migrations/"))]
