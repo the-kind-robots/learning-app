@@ -57,7 +57,7 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 - `/etc/learning-app/environment` (overrides)
 
 **Expected values:**
-- `LEARNING_APP_DB_PATH` absolute path
+- `LEARNING_APP__DB_PATH` absolute path
 - Example generation uses OpenRouter. Required key via systemd cred or env var:
   - `/etc/credstore.encrypted/openrouter_api_key` or `OPENROUTER_API_KEY`
 - Optional OpenRouter env vars:

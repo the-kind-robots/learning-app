@@ -4,6 +4,9 @@ Description=Learning App Backup DB
 [Service]
 Type=oneshot
 User=dbmaintainer
+# Read access to /var/lib/couchdb (0750 couchdb:couchdb) for the backup —
+# granted to this service only, not to the user account globally.
+SupplementaryGroups=couchdb
 WorkingDirectory=~
 LogsDirectory=learning-app
 StateDirectory=learning-app
