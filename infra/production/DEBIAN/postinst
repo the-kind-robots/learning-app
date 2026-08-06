@@ -61,6 +61,23 @@ fi
 # Enable CouchDB and configure admin
 systemctl enable --now couchdb.service
 
+# CouchDB reads local.d only at startup, so a changed 10-learning-app.ini
+# riding the deb would otherwise apply on the next unrelated restart (GH-229).
+# Restart when the shipped content differs from what the last install stamped;
+# repeat installs with the same ini stay restart-free. The restart sits before
+# the wait-loop below, so readiness and admin setup run against the instance
+# that has the shipped config loaded.
+COUCH_INI="/opt/couchdb/etc/local.d/10-learning-app.ini"
+COUCH_INI_STAMP="/var/lib/misc/learning-app-couchdb-ini.sha256"
+if [ -f "${COUCH_INI}" ]; then
+    ini_hash="$(sha256sum "${COUCH_INI}" | cut -d' ' -f1)"
+    if [ ! -f "${COUCH_INI_STAMP}" ] || [ "$(cat "${COUCH_INI_STAMP}")" != "${ini_hash}" ]; then
+        systemctl restart couchdb.service
+        mkdir -p "$(dirname "${COUCH_INI_STAMP}")"
+        echo "${ini_hash}" > "${COUCH_INI_STAMP}"
+    fi
+fi
+
 # Wait for CouchDB to become available
 for i in $(seq 1 30); do
     curl -sf http://127.0.0.1:5984/ >/dev/null && break
