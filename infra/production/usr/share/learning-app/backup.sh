@@ -10,8 +10,8 @@ fi
 
 export BORG_PASSPHRASE=$(cat "${BORG_PASSPHRASE_PATH}")
 
-: "${LEARNING_APP_DB_PATH:=/var/lib/learning-app/db.sqlite}"
-export LEARNING_APP_DB_PATH
+: "${LEARNING_APP__DB_PATH:=/var/lib/learning-app/db.sqlite}"
+export LEARNING_APP__DB_PATH
 
 
 # some helpers and error handling:
@@ -23,9 +23,9 @@ trap 'echo $( date ) Backup interrupted >&2; exit 2' INT TERM
 info "Starting backup"
 
 # Create local backup
-sqlite3 ${LEARNING_APP_DB_PATH} ".backup $LEARNING_APP_DB_BACKUP_PATH"
+sqlite3 ${LEARNING_APP__DB_PATH} ".backup $LEARNING_APP__DB_BACKUP_PATH"
 info "Check backup"
-sqlite3 ${LEARNING_APP_DB_BACKUP_PATH} ".selftest"
+sqlite3 ${LEARNING_APP__DB_BACKUP_PATH} ".selftest"
 
 sqlite_backup_exit=$?
 
@@ -39,7 +39,7 @@ borg create                     \
     --stats                     \
     --show-rc                   \
     ::app-{now}                 \
-    $LEARNING_APP_DB_BACKUP_PATH \
+    $LEARNING_APP__DB_BACKUP_PATH \
     /var/lib/couchdb
 
 borg_backup_exit=$?
