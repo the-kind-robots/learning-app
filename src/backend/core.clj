@@ -1,6 +1,7 @@
 (ns core
   (:gen-class)
   (:require
+   [auth :as auth]
    [cheshire.core :as cheshire]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
@@ -277,13 +278,10 @@
 ;;
 
 
-(def ^:private token-cookie "auth-token")
-
-
 (defn- request-token
   "Reads the bearer token from the parsed cookies, or nil."
   [request]
-  (get-in request [:cookies token-cookie :value]))
+  (get-in request [:cookies auth/token-cookie :value]))
 
 
 (defn hmac-sign
@@ -465,7 +463,7 @@
          ;; cookie resolves to an account, or the upgrade is refused. A poke
          ;; carries no payload, so a hijacked socket learns only "something
          ;; changed".
-         (let [token (get-in request [:cookies token-cookie :value])
+         (let [token (get-in request [:cookies auth/token-cookie :value])
                id    (on-connection [db db-spec] (authenticated-user-id db token))]
            (if id
              (server/as-channel request
