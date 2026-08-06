@@ -68,7 +68,7 @@
 
 
 (def db-spec
-  {:dbname (or (System/getenv "LEARNING_APP_DB_PATH") "app.db")
+  {:dbname (or (System/getenv "LEARNING_APP__DB_PATH") "app.db")
    :dbtype "sqlite"})
 
 

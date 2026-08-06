@@ -6,7 +6,7 @@
 
 ## What changes
 
-- `db-spec` reads `LEARNING_APP_DB_PATH`, defaulting to `app.db` — production behavior (WorkingDirectory=/opt/learning-app, so /opt/learning-app/app.db) is unchanged.
+- `db-spec` reads `LEARNING_APP__DB_PATH`, defaulting to `app.db` — production behavior (WorkingDirectory=/opt/learning-app, so /opt/learning-app/app.db) is unchanged.
 - `db-spec` stays the single home of the value: migrations and handlers already take it as an argument; dictionary tools and tests build their own specs for their own files and are untouched.
 
 ## Impact

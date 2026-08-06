@@ -76,7 +76,7 @@ curl -sf --resolve sprecha.de:443:127.0.0.1 https://sprecha.de/db/dictionary-db/
 
 ## Server database home
 
-The server SQLite lives at `/var/lib/learning-app/db.sqlite` (`LEARNING_APP_DB_PATH`
+The server SQLite lives at `/var/lib/learning-app/db.sqlite` (`LEARNING_APP__DB_PATH`
 from environment.d; the directory is systemd's `StateDirectory`). Builds carrying
 #201 adopt a legacy `/opt/learning-app/app.db` on first boot: move it, log
 `database-adopted`, and refuse to clobber an existing target (`legacy-database-left-behind`

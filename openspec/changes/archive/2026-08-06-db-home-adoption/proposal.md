@@ -6,7 +6,7 @@ Production's EnvironmentFile has pointed at `/var/lib/learning-app/db.sqlite` al
 
 ## What changes
 
-The backend adopts the legacy database itself at startup, in the same artifact that reads `LEARNING_APP_DB_PATH`: copy under a temp name, atomic rename, delete the legacy trio — crash-safe, and an existing target is never clobbered (rollback must not cost newer data). Infra needs nothing: `StateDirectory` already creates and unlocks the directory, environment.d already carries the path, backup.sh already points at it.
+The backend adopts the legacy database itself at startup, in the same artifact that reads `LEARNING_APP__DB_PATH`: copy under a temp name, atomic rename, delete the legacy trio — crash-safe, and an existing target is never clobbered (rollback must not cost newer data). Infra needs nothing: `StateDirectory` already creates and unlocks the directory, environment.d already carries the path, backup.sh already points at it.
 
 ## Impact
 
