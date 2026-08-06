@@ -54,13 +54,24 @@
   (some? (io/resource "core.clj")))
 
 
+(defn- configured-db-auth-secret
+  [env from-source?]
+  ;; GH-217 phase 2a: the unit still exports the old single-underscore name,
+  ;; and unit (deb) and reader (jar) ship in different artifacts — so the jar
+  ;; reads both, preferring the new name. The old-name fallback is transition
+  ;; scaffolding: remove it in phase 2c, once the deb's rename (phase 2b) is
+  ;; deployed. #217 tracks the removal.
+  (or (get env "LEARNING_APP__DB_AUTH_SECRET")
+      (get env "LEARNING_APP_DB_AUTH_SECRET")
+      (when from-source? "secret")
+      (throw (ex-info "LEARNING_APP__DB_AUTH_SECRET is required outside a source checkout" {}))))
+
+
 (def db-auth-secret
   "Signs the proxy-auth headers `/auth/check` hands to CouchDB. A checkout may
    fall back to a well-known value; a packaged app may not, and says so instead
    of signing with something an attacker can guess."
-  (or (System/getenv "LEARNING_APP_DB_AUTH_SECRET")
-      (when running-from-source? "secret")
-      (throw (ex-info "LEARNING_APP_DB_AUTH_SECRET is required outside a source checkout" {}))))
+  (configured-db-auth-secret (System/getenv) running-from-source?))
 
 
 ;;
