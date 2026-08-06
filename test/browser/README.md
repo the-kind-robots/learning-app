@@ -11,7 +11,7 @@ The suite assumes a backend of its own is already listening on port 8301:
 
 ```sh
 npx shadow-cljs compile app
-LEARNING_APP_PORT=8301 LEARNING_APP_DB_PATH=$PWD/test-app.db \
+LEARNING_APP_PORT=8301 LEARNING_APP__DB_PATH=$PWD/test-app.db \
   clojure -M:dev -m core &
 ```
 
