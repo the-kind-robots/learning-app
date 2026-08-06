@@ -438,30 +438,19 @@
 ;; A counter, not a flag: effects dispatch actions from inside a dispatch
 ;; (dialog on-mount), and an async continuation arrives as a new top-level
 ;; dispatch — both must keep the guard up until their own dispatch unwinds.
-(defonce ^:private dispatch-depth (volatile! 0))
-
-
-(defonce ^:private dirty? (volatile! false))
-
-
 (defn install-render!
+  "Renders on every state change and only on change. `identical?` is enough:
+   CLJS `assoc`/`merge` hand back the same map when nothing differs, so a
+   dispatch that saves nothing costs no render. A dispatch that saves several
+   times renders several times — measured earlier: extra renders inside one
+   synchronous dispatch cost diffing, never extra paints, and the owner chose
+   this simplicity over a coalescing counter (#213)."
   [store render-fn]
   (add-watch store
              ::render
-             (fn [_ _ _ state]
-               (if (pos? @dispatch-depth)
-                 (vreset! dirty? true)
-                 (render-fn state))))
-  (nxr/register-interceptor!
-    {:before-dispatch (fn [ctx]
-                        (vswap! dispatch-depth inc)
-                        ctx)
-     :after-dispatch  (fn [ctx]
-                        (vswap! dispatch-depth dec)
-                        (when (and (zero? @dispatch-depth) @dirty?)
-                          (vreset! dirty? false)
-                          (render-fn @store))
-                        ctx)}))
+             (fn [_ _ old state]
+               (when-not (identical? old state)
+                 (render-fn state)))))
 
 
 (defn routes

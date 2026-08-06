@@ -48,13 +48,24 @@
   (nxr/dispatch {:store store} {} actions))
 
 
-(deftest saving-dispatch-renders-once
-  (testing "one dispatch with several saves renders exactly once"
+(deftest every-state-change-renders
+  (testing
+    "three distinct saves render three times — the accepted cost of the
+            compare-only scheme (#213): diffing, never extra paints"
     (dispatch! [[:effect/save {:a 1}]
                 [:effect/save {:b 2}]
                 [:effect/save {:c 3}]])
-    (is (= 1 @renders))
+    (is (= 3 @renders))
     (is (= {:a 1 :b 2 :c 3} @store))))
+
+
+(deftest an-identical-save-renders-nothing
+  (testing
+    "saving the value already in place is free: assoc hands back the
+            identical map and the watch sees no change"
+    (dispatch! [[:effect/save {:a 1}]])
+    (dispatch! [[:effect/save {:a 1}]])
+    (is (= 1 @renders))))
 
 
 (deftest stateless-dispatch-renders-nothing
@@ -63,11 +74,11 @@
     (is (= 0 @renders))))
 
 
-(deftest nested-dispatch-renders-once
-  (testing "an effect dispatching from inside the dispatch still renders once"
+(deftest nested-dispatch-renders-per-change
+  (testing "a nested dispatch's save is a change of its own"
     (dispatch! [[:effect/save {:outer 1}]
                 [::save-nested {:nested 2}]])
-    (is (= 1 @renders))
+    (is (= 2 @renders))
     (is (= {:outer 1 :nested 2} @store))))
 
 
