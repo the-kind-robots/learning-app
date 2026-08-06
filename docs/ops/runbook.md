@@ -74,6 +74,18 @@ curl -sf http://127.0.0.1:5984/ >/dev/null
 curl -sf --resolve sprecha.de:443:127.0.0.1 https://sprecha.de/db/dictionary-db/dictionary-meta >/dev/null
 ```
 
+## Server database home
+
+The server SQLite lives at `/var/lib/learning-app/db.sqlite` (`LEARNING_APP_DB_PATH`
+from environment.d; the directory is systemd's `StateDirectory`). Builds carrying
+#201 adopt a legacy `/opt/learning-app/app.db` on first boot: move it, log
+`database-adopted`, and refuse to clobber an existing target (`legacy-database-left-behind`
+in the log means both files exist — resolve by hand, the running app is on the target).
+
+Rollback caveat: redeploying a pre-#201 jar after adoption starts an empty
+database in `/opt` — tokens then 401 until a #201+ jar is redeployed. The data
+itself stays safe at the new home.
+
 ## Manual admin steps (bootstrap + secrets + one-off ops)
 
 Run the admin setup script (idempotent, safe to re-run).
