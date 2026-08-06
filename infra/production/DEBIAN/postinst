@@ -98,6 +98,11 @@ if [ -f "${CRED_DIR}/couchdb_admin_password" ]; then
             -d "\"${COUCH_PASS}\"" >/dev/null 2>&1 || true
     fi
 
+    # _db_updates (push sync, ADR-0009) needs the _global_changes database.
+    if ! curl -sf -u "admin:${COUCH_PASS}" http://127.0.0.1:5984/_global_changes >/dev/null 2>&1; then
+        curl -sf -X PUT -u "admin:${COUCH_PASS}" http://127.0.0.1:5984/_global_changes >/dev/null
+    fi
+
     # Create dictionary-db if it does not exist
     if ! curl -sf -u "admin:${COUCH_PASS}" http://127.0.0.1:5984/dictionary-db >/dev/null 2>&1; then
         curl -sf -X PUT -u "admin:${COUCH_PASS}" http://127.0.0.1:5984/dictionary-db >/dev/null

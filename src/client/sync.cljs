@@ -122,6 +122,48 @@
        :sync/pull!      (constantly nil)})))
 
 
+(defonce ^:private push-socket (atom nil))
+
+
+(defn connect-push!
+  "Holds a poke WebSocket while the page is visible (ADR-0009). A poke means
+   \"your data changed somewhere\" and carries nothing else; `on-poke` runs
+   then, and also on every (re)connect — one pull covers whatever was missed
+   while the socket was down. Hidden pages close the socket: the radio sleeps
+   when the user is elsewhere."
+  [on-poke]
+  (letfn
+    [(url []
+       (str (if (= "https:" (.. js/location -protocol)) "wss://" "ws://")
+            (.. js/location -host)
+            "/api/sync/updates"))
+     (connect! []
+       (when (and (nil? @push-socket) (= "visible" (.-visibilityState js/document)))
+         (let [socket (js/WebSocket. (url))]
+           (reset! push-socket socket)
+           (set! (.-onopen socket) (fn [_] (on-poke)))
+           (set! (.-onmessage socket) (fn [_] (on-poke)))
+           (set! (.-onclose socket)
+                 (fn [_]
+                   (when (identical? socket @push-socket)
+                     (reset! push-socket nil)
+                     ;; Not a deliberate close: try again soon while
+                     ;; visible. The backoff is flat — a poke socket is
+                     ;; cheap and reconnect already pulls.
+                     (js/setTimeout connect! 5000)))))))
+     (disconnect! []
+       (when-some [socket @push-socket]
+         (reset! push-socket nil)
+         (.close socket)))]
+    (.addEventListener js/document
+                       "visibilitychange"
+                       (fn [_]
+                         (if (= "visible" (.-visibilityState js/document))
+                           (connect!)
+                           (disconnect!))))
+    (connect!)))
+
+
 (defn- fragment-params
   "The URL fragment as params. Credentials arrive there rather than in the
    query string because a fragment is never part of the request: a query lands

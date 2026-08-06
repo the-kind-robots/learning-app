@@ -197,6 +197,25 @@
 
 
 #?(:clj
+   (defn db-updates
+     "One longpoll turn of the server-wide updates feed: blocks until any
+      database changes or `timeout-ms` passes, returns {:results [...] :last_seq s}.
+      Requires the `_global_changes` database to exist.
+
+      https://docs.couchdb.org/en/stable/api/server/common.html#db-updates"
+     ([since timeout-ms]
+      (db-updates conn since timeout-ms))
+     ([conn since timeout-ms]
+      (let [response (request-sync conn
+                                   {:method :get
+                                    :url    (str "_db_updates?feed=longpoll&since=" since
+                                                 "&timeout=" timeout-ms)})]
+        (if (= (:status response) 200)
+          (:body response)
+          (raise "Could not read _db_updates" (:body response)))))))
+
+
+#?(:clj
    (defn create
      ([dbname]
       (create conn dbname))

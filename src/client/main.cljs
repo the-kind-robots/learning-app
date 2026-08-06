@@ -124,13 +124,23 @@
                                      (let [dispatch (:dispatch render)]
                                        (dispatch [[:effect/pwa-init]])))}
 
-    :app/sync           {:requires {:render :app/render}
-                         :start    (fn [{:keys [render]}]
+    :app/sync           {:requires {:capabilities :app/capabilities
+                                    :render       :app/render}
+                         :start    (fn [{:keys [capabilities render]}]
                                      (let [dispatch (:dispatch render)]
                                        (dispatch [[:effect/load-account]])
                                        (js/window.addEventListener
                                         "online"
-                                        #(dispatch [[:effect/sync-pull]]))))}
+                                        #(dispatch [[:effect/sync-pull]]))
+                                       ;; Push channel (ADR-0009): a poke pulls
+                                       ;; through the normal path and closes a
+                                       ;; waiting pairing dialog — the first
+                                       ;; poke is how the old device learns
+                                       ;; pairing worked.
+                                       (when (get-in capabilities [:capabilities/sync :sync/account-id])
+                                         (sync/connect-push!
+                                          #(dispatch [[:effect/sync-pull]
+                                                      [:action/close-pairing-dialog]])))))}
 
     :app/router         {:requires {:render :app/render}
                          :after    [:worker/service-worker

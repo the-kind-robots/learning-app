@@ -13,6 +13,7 @@
    [next.jdbc.prepare :as prepare]
    [next.jdbc.result-set :as result-set]
    [org.httpkit.server :as server]
+   [push :as push]
    [reconciliation :as reconciliation]
    [reitit.http :as http]
    [reitit.http.interceptors.keyword-parameters :as keyword-parameters]
@@ -457,6 +458,21 @@
                   :body    (cheshire/generate-string
                             {:error "Examples are temporarily unavailable"})})))))}]
 
+     ["/api/sync/updates"
+      {:get
+       (fn [request]
+         ;; The socket authenticates like every other request: the bearer
+         ;; cookie resolves to an account, or the upgrade is refused. A poke
+         ;; carries no payload, so a hijacked socket learns only "something
+         ;; changed".
+         (let [token (get-in request [:cookies "sprecha-token" :value])
+               id    (on-connection [db db-spec] (authenticated-user-id db token))]
+           (if id
+             (server/as-channel request
+                                {:on-open  (fn [channel] (push/subscribe! id channel))
+                                 :on-close (fn [channel _status] (push/unsubscribe! id channel))})
+             {:status 401 :body ""})))}]
+
      ["/api/identity/provision"
       {:post
        (fn [request]
@@ -566,6 +582,7 @@
 (defn start-server!
   [app port]
   (ensure-log-handler!)
+  (push/start!)
   (reset! server (server/run-server app {:port port :legacy-return-value? false})))
 
 
@@ -577,6 +594,7 @@
 
 (defn stop-server!
   []
+  (push/stop!)
   (when-some [running @server]
     (when-some [stopping (server/server-stop! running {:timeout drain-timeout-ms})]
       @stopping
