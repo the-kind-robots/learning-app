@@ -46,3 +46,11 @@ curl -sf --resolve sprecha.de:443:127.0.0.1 https://sprecha.de/db/dictionary-db/
 systemctl is-enabled learning-app-backup-db.timer
 systemctl status learning-app-backup-db.timer
 ```
+Borg key dry check — the passphrase credential still opens the repository
+(see "Borg key" in `server-configuration.md`):
+```sh
+sudo runuser -u dbmaintainer -- env \
+    BORG_REPO="$(grep '^BORG_REPO=' /etc/learning-app/environment | cut -d= -f2-)" \
+    BORG_PASSPHRASE="$(sudo systemd-creds --name=borg-passphrase decrypt /etc/credstore.encrypted/borg-passphrase -)" \
+    borg list >/dev/null && echo borg-key-ok
+```

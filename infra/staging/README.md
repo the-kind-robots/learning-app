@@ -64,6 +64,13 @@ encrypted-credential flow — `systemd-creds` in postinst,
   real unit sandbox).
 - `learning-app-backup-db.service` produces a borg archive carrying both the
   SQLite snapshot and `/var/lib/couchdb`.
+- An archive actually restores into a working system (`restore-drill.sh`,
+  GH-191): seed an account and a userdb doc, back up, destroy both stores,
+  restore by the runbook's "Restore from backup" procedure, then prove
+  coherence — the seeded token authenticates, the userdb serves its doc
+  through nginx, and the boot orphan report (#205) is clean. The runbook
+  section is the spec; when drill and runbook disagree, one of them is wrong
+  and both live in the same PR.
 
 ## What it deliberately does not prove
 
