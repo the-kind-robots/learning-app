@@ -147,11 +147,12 @@
 
 
 (defn connect-push!
-  "Holds a poke WebSocket while the page is visible (ADR-0009). A poke means
-   \"your data changed somewhere\" and carries nothing else; `on-poke` runs
-   then, and also on every (re)connect — one pull covers whatever was missed
-   while the socket was down. Hidden pages close the socket: the radio sleeps
-   when the user is elsewhere."
+  "Holds a poke WebSocket while the page is visible and the network is up
+   (ADR-0009). A poke means \"your data changed somewhere\" and carries
+   nothing else; `on-poke` runs then, and also on every (re)connect — one
+   pull covers whatever was missed while the socket was down. Hidden pages
+   close the socket: the radio sleeps when the user is elsewhere. Offline
+   pages don't retry: reconnection resumes on the `online` event."
   [on-poke]
   (letfn
     [(url []
@@ -159,7 +160,9 @@
             (.. js/location -host)
             "/api/sync/updates"))
      (connect! []
-       (when (and (nil? @push-socket) (= "visible" (.-visibilityState js/document)))
+       (when (and (nil? @push-socket)
+                  (.-onLine js/navigator)
+                  (= "visible" (.-visibilityState js/document)))
          (let [socket (js/WebSocket. (url))]
            (reset! push-socket socket)
            (set! (.-onopen socket) (fn [_] (on-poke)))
@@ -182,6 +185,15 @@
                          (if (= "visible" (.-visibilityState js/document))
                            (connect!)
                            (disconnect!))))
+    ;; A socket that survived a network change is not trusted — it may be a
+    ;; zombie holding a dead connection. Recycling is free: the reconnect
+    ;; pulls anyway.
+    (.addEventListener js/window
+                       "online"
+                       (fn [_]
+                         (disconnect!)
+                         (connect!)))
+    (.addEventListener js/window "offline" (fn [_] (disconnect!)))
     (connect!)))
 
 

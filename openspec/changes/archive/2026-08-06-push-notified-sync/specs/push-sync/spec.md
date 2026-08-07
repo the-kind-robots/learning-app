@@ -23,7 +23,7 @@ The backend SHALL accept WebSocket subscriptions on `GET /api/sync/updates` only
 - **THEN** sockets subscribed to account 9 receive nothing
 
 ### Requirement: Poked clients pull through the normal path
-The client SHALL hold the poke socket only while the page is visible, SHALL pull once on every (re)connect and on every poke, and SHALL reconnect on a flat delay while visible. A waiting pairing dialog SHALL close only when a pull delivers the receipt echoing that dialog's nonce: the QR carries the nonce out, the newly paired device writes `pairing:<nonce>` into the replicated database, and confirmation removes every receipt.
+The client SHALL hold the poke socket only while the page is visible, SHALL pull once on every (re)connect and on every poke, and SHALL reconnect on a flat delay while visible and online — going offline stops the retries, the `online` event resumes them and recycles a possibly stale socket. A waiting pairing dialog SHALL close only when a pull delivers the receipt echoing that dialog's nonce: the QR carries the nonce out, the newly paired device writes `pairing:<nonce>` into the replicated database, and confirmation removes every receipt.
 
 #### Scenario: Idle device learns of a remote write
 - **WHEN** another device of the same account writes a word
