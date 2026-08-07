@@ -131,6 +131,17 @@
   (is (= "secret" (#'sut/configured-db-auth-secret {} true))))
 
 
+(deftest a-packaged-app-without-a-couchdb-password-refuses-to-start
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                        #"LEARNING_APP__COUCHDB_PASSWORD"
+                        (#'sut/require-couchdb-password! {} false))))
+
+
+(deftest a-couchdb-password-or-a-checkout-satisfies-the-guard
+  (is (nil? (#'sut/require-couchdb-password! {"LEARNING_APP__COUCHDB_PASSWORD" "x"} false)))
+  (is (nil? (#'sut/require-couchdb-password! {} true))))
+
+
 (deftest a-recycled-id-is-refused-not-inherited
   (testing "a userdb left by a previous owner of the id blocks provisioning"
     (let [db (migrated-db)]

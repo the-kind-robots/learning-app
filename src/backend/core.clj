@@ -77,6 +77,15 @@
   (configured-db-auth-secret (System/getenv) running-from-source?))
 
 
+(defn- require-couchdb-password!
+  "The value itself is read by lib/db's `conn` at load; this only refuses to
+   serve a packaged app on the dev fallback — silently wrong credentials keep
+   the server up while provisioning, reconciliation and push all 401 (#246)."
+  [env from-source?]
+  (when-not (or (get env "LEARNING_APP__COUCHDB_PASSWORD") from-source?)
+    (throw (ex-info "LEARNING_APP__COUCHDB_PASSWORD is required outside a source checkout" {}))))
+
+
 ;;
 ;; DB
 ;;
@@ -644,6 +653,7 @@
     ;; speak before the server starts, and events without a handler are
     ;; dropped silently (#218 — the dev alias ships none).
     (ensure-log-handler!)
+    (require-couchdb-password! (System/getenv) running-from-source?)
     ;; Adopt, then migrate, then serve: the app never runs against an
     ;; outdated schema or a stranded database.
     (adopt-legacy-database!)

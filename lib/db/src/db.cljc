@@ -20,11 +20,17 @@
 
 
 (def conn
+  ;; The credentials come from the environment so the packaged app can talk
+  ;; to a CouchDB whose admin password is not the dev one (#246). The
+  ;; fallbacks match the dev stand; core refuses to boot packaged without
+  ;; the real password.
   {:scheme   "http"
    :host     "localhost"
    :port     5984
-   :username "admin"
-   :password "3434"})
+   :username #?(:clj (or (System/getenv "LEARNING_APP__COUCHDB_USER") "admin")
+                :cljs "admin")
+   :password #?(:clj (or (System/getenv "LEARNING_APP__COUCHDB_PASSWORD") "3434")
+                :cljs "3434")})
 
 
 #?(:clj
