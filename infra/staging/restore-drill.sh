@@ -61,7 +61,7 @@ check "seed: doc written to the userdb" \
     bash -c "curl -sf -u admin:${COUCH_PASS} -X PUT ${COUCH}/${userdb}/drill-doc \
         -d '{\"payload\":\"${payload}\"}' >/dev/null"
 check "seed: /auth/check accepts the token" \
-    test "$(http_code -H "Cookie: sprecha-token=${token}" http://127.0.0.1:8083/auth/check)" = 200
+    test "$(http_code -H "Cookie: auth-token=${token}" http://127.0.0.1:8083/auth/check)" = 200
 
 echo "== drill: backup =="
 check "backup: learning-app-backup-db.service runs clean" \
@@ -75,7 +75,7 @@ check "destroy: userdb gone from couchdb" \
     test "$(http_code -u "admin:${COUCH_PASS}" "${COUCH}/${userdb}")" = 404
 rm -f "${DB}" "${DB}-wal" "${DB}-shm"
 check "destroy: token no longer authenticates" \
-    bash -c "test \"\$(http_code -H 'Cookie: sprecha-token=${token}' http://127.0.0.1:8083/auth/check)\" != 200"
+    bash -c "test \"\$(http_code -H 'Cookie: auth-token=${token}' http://127.0.0.1:8083/auth/check)\" != 200"
 
 echo "== drill: restore (runbook procedure) =="
 # Stop services before touching either store.
@@ -124,9 +124,9 @@ check "restore: app answers after restore" test "${up}" = 1
 
 echo "== drill: coherence =="
 check "coherence: /auth/check accepts the seeded token" \
-    test "$(http_code -H "Cookie: sprecha-token=${token}" http://127.0.0.1:8083/auth/check)" = 200
+    test "$(http_code -H "Cookie: auth-token=${token}" http://127.0.0.1:8083/auth/check)" = 200
 doc="$(curl -k -s --resolve sprecha.de:443:127.0.0.1 \
-    -H "Cookie: sprecha-token=${token}" \
+    -H "Cookie: auth-token=${token}" \
     "https://sprecha.de/db/${userdb}/drill-doc")"
 check "coherence: userdb serves the seeded doc through nginx" \
     bash -c "grep -q '${payload}' <<< '${doc}'"
