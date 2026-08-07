@@ -2,6 +2,8 @@
 
 Use this guide to open your local dev app on a real mobile device over HTTPS.
 
+The tunnel is a public front for the dev stand from `development-setup.md`: Cloudflare terminates TLS at `<name>.dev.sprecha.de` and forwards into the same local Nginx that serves `sprecha.localhost`.
+
 ## Team model
 
 - Use one tunnel per developer.
@@ -37,11 +39,10 @@ sudo apt-get install -y cloudflared
 1. Create a Cloudflare Tunnel in Zero Trust.
 2. Add a public hostname route:
    - Hostname: `<name>.dev.sprecha.de`
-   - Service type: `HTTPS`
-   - Service URL: `127.0.0.1:443`
+   - Service type: `HTTP`
+   - Service URL: `127.0.0.1:80`
    - Origin settings:
-     - `HTTP Host Header = sprecha.local`
-     - `No TLS Verify = ON`
+     - `HTTP Host Header = sprecha.localhost`
 3. Install service with your tunnel token:
 
 ```bash

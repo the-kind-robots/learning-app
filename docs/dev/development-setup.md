@@ -136,33 +136,30 @@ clj -M:dev -e '
 '
 ```
 
-## Local Domain Setup (sprecha.local)
+## Local Domain Setup (sprecha.localhost)
 
 For full functionality including CouchDB sync, set up the local domain with Nginx proxy.
 
-### 1. Install Nginx and mkcert
+The host is `sprecha.localhost` on plain http: browsers resolve `*.localhost` to loopback themselves and treat it as a secure context, so Secure cookies and the service worker work with no certificates and no hosts-file entry. To test from a phone, a Cloudflare tunnel feeds this same Nginx under `<name>.dev.sprecha.de` — see [mobile-pwa-testing.md](mobile-pwa-testing.md).
+
+### 1. Install Nginx
 
 ```bash
-brew install nginx mkcert
-mkcert -install
+# macOS
+brew install nginx
+# Ubuntu/WSL
+sudo apt-get install -y nginx
 ```
 
-### 2. Add local domain to hosts
+### 2. Hosts entry for CLI tools (optional)
+
+Browsers need nothing. `curl` and other CLI tools resolve through the OS, which may not know `*.localhost`:
 
 ```bash
-sudo sh -c 'echo "127.0.0.1 sprecha.local" >> /etc/hosts'
+sudo sh -c 'echo "127.0.0.1 sprecha.localhost" >> /etc/hosts'
 ```
 
-### 3. Generate SSL certificates
-
-```bash
-mkdir -p certs
-cd certs
-mkcert sprecha.local localhost 127.0.0.1 ::1
-cd -
-```
-
-### 4. Configure CouchDB proxy authentication
+### 3. Configure CouchDB proxy authentication
 
 ```bash
 cp infra/development/opt/couchdb/etc/local.d/00-proxy-auth.ini /opt/homebrew/opt/couchdb/etc/local.d/
@@ -170,34 +167,34 @@ cp infra/development/opt/couchdb/etc/local.d/00-proxy-auth.ini /opt/homebrew/opt
 
 Restart CouchDB after copying the config.
 
-### 5. Create Nginx config
+### 4. Install the Nginx config
 
 ```bash
-export NGINX_CERTS_DIR=/Volumes/wip/learning-app/certs
-envsubst '${NGINX_CERTS_DIR}' < infra/development/etc/nginx/sites-available/sprecha.local.template > /opt/homebrew/etc/nginx/servers/sprecha.local.conf
+# macOS
+cp infra/development/etc/nginx/sites-available/sprecha.localhost.conf /opt/homebrew/etc/nginx/servers/
+# Ubuntu/WSL
+sudo cp infra/development/etc/nginx/sites-available/sprecha.localhost.conf /etc/nginx/sites-available/
+sudo ln -sf /etc/nginx/sites-available/sprecha.localhost.conf /etc/nginx/sites-enabled/
 ```
 
-> **Note:** Use `envsubst '${NGINX_CERTS_DIR}'` (with quotes) to avoid replacing Nginx variables like `$host`.
-
-### 6. Fix Nginx port conflict (if needed)
-
-If Docker is running, it may occupy port 8080. Either stop Docker or edit `/opt/homebrew/etc/nginx/nginx.conf` and change `listen 8080` to another port (e.g., `listen 8081`).
-
-### 7. Start Nginx
+### 5. Start Nginx
 
 ```bash
+# macOS
 brew services restart nginx
+# Ubuntu/WSL
+sudo systemctl reload nginx
 ```
 
-### 8. Access the app
+### 6. Access the app
 
-Open **https://sprecha.local/** in your browser.
+Open **http://sprecha.localhost/** in your browser.
 
 ## Summary
 
 | Service | URL | Port |
 |---------|-----|------|
-| App (with Nginx) | https://sprecha.local/ | 443 |
+| App (with Nginx) | http://sprecha.localhost/ | 80 |
 | Backend | http://127.0.0.1:8083/ | 8083 |
 | shadow-cljs | http://localhost:9630/ | 9630 |
 | nREPL | - | 4444 |

@@ -17,8 +17,8 @@ pre-built offline dictionary stored in SQLite/OPFS on the client.
 
 ## Development
 
-Quick start (local, https://sprecha.local):
-1) Follow the "Local Domain Setup (sprecha.local)" section in `docs/dev/development-setup.md` (nginx + mkcert).
+Quick start (local, http://sprecha.localhost):
+1) Follow the "Local Domain Setup (sprecha.localhost)" section in `docs/dev/development-setup.md` (nginx, no certs). Phone testing goes through a Cloudflare tunnel — `docs/dev/mobile-pwa-testing.md`.
 2) Run:
 ```bash
 npm install
@@ -26,7 +26,7 @@ COUCHDB_URL=http://localhost:5984 COUCHDB_PASS=<pass> clojure -X:dictionary-impo
 npx shadow-cljs watch app  # terminal 1
 clj -M:dev -m core         # terminal 2
 ```
-Open https://sprecha.local/ in browser.
+Open http://sprecha.localhost/ in browser.
 
 Full guide: [docs/dev/development-setup.md](docs/dev/development-setup.md).
 

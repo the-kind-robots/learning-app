@@ -1,6 +1,6 @@
 ---
 name: learning-app-cdp
-description: "Inspect or debug the learning app in a real browser through the project-specific Windows Chrome CDP workflow. Prefer this skill for browser testing, browser debugging, console inspection, network capture, DOM/runtime inspection, and service-worker-aware refreshes against https://sprecha.local or https://sprecha.de. Commands: doctor, start-local/start-prod (launches Chrome with the debug port — use this when Chrome is down, never launch chrome.exe by hand), refresh-*, wait-* (--path/--selector), eval-* (--expression/--file), console-*, monitor-*, read, clear, stop."
+description: "Inspect or debug the learning app in a real browser through the project-specific Windows Chrome CDP workflow. Prefer this skill for browser testing, browser debugging, console inspection, network capture, DOM/runtime inspection, and service-worker-aware refreshes against http://sprecha.localhost or https://sprecha.de. Commands: doctor, start-local/start-prod (launches Chrome with the debug port — use this when Chrome is down, never launch chrome.exe by hand), refresh-*, wait-* (--path/--selector), eval-* (--expression/--file), console-*, monitor-*, read, clear, stop."
 ---
 
 # Learning App CDP
@@ -17,7 +17,7 @@ This skill is Windows-specific:
 
 Wrapper invariant:
 
-- one debug instance keeps exactly one app tab per environment (`sprecha.local` or `sprecha.de`)
+- one debug instance keeps exactly one app tab per environment (`sprecha.localhost` or `sprecha.de`)
 - `start-local` / `start-prod` reuse that single app tab instead of accumulating duplicates
 - the wrapper remembers the requested path and `refresh-local` / `refresh-prod` preserve that path instead of drifting to another app route
 
@@ -36,7 +36,7 @@ Related companion skill:
 Use this skill for:
 
 - browser debugging or browser testing of the learning app in this repo
-- watching console and network events while the user clicks through `sprecha.local` or `sprecha.de`
+- watching console and network events while the user clicks through `sprecha.localhost` or `sprecha.de`
 - opening the app in Windows Chrome with a remote debugging port
 - inspecting the current page target, DOM state, or JS state on home, lesson, or vocabulary screens
 - comparing local and production behavior in the same CDP workflow
@@ -306,7 +306,7 @@ bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
 
 ## Notes
 
-- Local URL is `https://sprecha.local`.
+- Local URL is `http://sprecha.localhost`.
 - Production URL is `https://sprecha.de`.
 - The wrapper defaults to port `9333`.
 - For this repository, prefer this skill over generic browser workflows when inspecting app behavior in a real browser.
@@ -314,7 +314,7 @@ bash .codex/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
 - Use `monitor-start -> user interacts -> read` as the primary debugging workflow.
 - For layout-stability bugs, combine event traces with visual measurements. HTMX/DOM traces can prove swap order, but they do not by themselves prove the absence of visual jerk.
 - When a transition replaces the page or destroys the JS runtime, prefer an external DevTools trace or repeated geometry snapshots that survive the swap, rather than relying only on in-page probes.
-- If DevTools is open, there may be multiple `page` targets; the wrapper filters by `sprecha.local` or `sprecha.de` so it attaches to the real app tab.
+- If DevTools is open, there may be multiple `page` targets; the wrapper filters by `sprecha.localhost` or `sprecha.de` so it attaches to the real app tab.
 - Prefer `eval-local` / `eval-prod` for anything you would normally type into DevTools Console, including IndexedDB inspection and JS-visible app hooks.
 - ClojureScript functions can be called only if they are visible in the page runtime. The wrapper does not invent exports; it gives you the same execution surface as DevTools Console.
 - For deep inspection or custom CDP methods beyond the project wrapper, drop down to `/home/u473t8/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh`.
