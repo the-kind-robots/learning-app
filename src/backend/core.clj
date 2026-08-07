@@ -78,9 +78,12 @@
 
 
 (defn- require-couchdb-password!
-  "The value itself is read by lib/db's `conn` at load; this only refuses to
-   serve a packaged app on the dev fallback — silently wrong credentials keep
-   the server up while provisioning, reconciliation and push all 401 (#246)."
+  "The dev fallback in lib/db's `conn` serves exactly one audience: a source
+   checkout talking to the dev stand's CouchDB. For the packaged app the
+   fallback is never right — its CouchDB has a real password — but with wrong
+   credentials the server still boots and looks alive while provisioning,
+   reconciliation and push silently 401. So the jar demands the variable up
+   front and dies loudly instead (#246)."
   [env from-source?]
   (when-not (or (get env "LEARNING_APP__COUCHDB_PASSWORD") from-source?)
     (throw (ex-info "LEARNING_APP__COUCHDB_PASSWORD is required outside a source checkout" {}))))

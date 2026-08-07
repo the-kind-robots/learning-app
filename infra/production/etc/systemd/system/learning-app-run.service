@@ -17,7 +17,9 @@ StateDirectory=learning-app
 StateDirectoryMode=2770
 Restart=always
 RestartSec=10
-ExecStart=sh -c 'if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -n "${OPENROUTER_API_KEY_PATH:-}" ] && [ -f "${OPENROUTER_API_KEY_PATH}" ]; then export OPENROUTER_API_KEY="$(cat "${OPENROUTER_API_KEY_PATH}")"; fi; if [ -z "${LEARNING_APP_DB_AUTH_SECRET:-}" ] && [ -n "${LEARNING_APP_DB_AUTH_SECRET_PATH:-}" ] && [ -f "${LEARNING_APP_DB_AUTH_SECRET_PATH}" ]; then export LEARNING_APP_DB_AUTH_SECRET="$(cat "${LEARNING_APP_DB_AUTH_SECRET_PATH}")"; fi; if [ -z "${LEARNING_APP__COUCHDB_PASSWORD:-}" ] && [ -n "${LEARNING_APP__COUCHDB_PASSWORD_PATH:-}" ] && [ -f "${LEARNING_APP__COUCHDB_PASSWORD_PATH}" ]; then export LEARNING_APP__COUCHDB_PASSWORD="$(cat "${LEARNING_APP__COUCHDB_PASSWORD_PATH}")"; fi; java -jar /opt/learning-app/learning-app.jar'
+# The script bridges systemd credentials (files under %d) into the env vars
+# the app reads — ships in the deb next to the jar.
+ExecStart=/opt/learning-app/bin/run.sh
 
 # Environment
 EnvironmentFile=-/etc/learning-app/environment
