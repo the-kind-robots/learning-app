@@ -1,18 +1,6 @@
 # backup-pipeline Specification
 
-## Purpose
-TBD - created by archiving change couchdb-in-backups. Update Purpose after archive.
-## Requirements
-### Requirement: Both stores are backed up as one coherent archive
-Every backup run SHALL capture the SQLite database and the CouchDB data tree in a single archive, taken back to back, so a restore recovers matching account rows and userdbs. Backup SHALL read CouchDB with access scoped to the backup service.
-
-#### Scenario: A backup run
-- **WHEN** the backup timer fires
-- **THEN** one archive contains the SQLite snapshot and /var/lib/couchdb
-
-#### Scenario: A restore
-- **WHEN** an operator restores from an archive
-- **THEN** both stores come from the same moment and an existing token authenticates against its userdb
+## ADDED Requirements
 
 ### Requirement: A restore is proven by drill, not assumed
 The staging run SHALL restore a real backup archive into the running container following the runbook's restore procedure — services stopped, files back, ownership corrected, services restarted — after destroying both stores, and SHALL verify coherence of the result: the seeded token authenticates via `/auth/check`, the seeded userdb document is served through the authenticated proxy, and the boot orphan-userdb report is clean. Each assertion SHALL report PASS or FAIL on its own line and the run SHALL exit nonzero on any FAIL. The runbook's restore section and the drill SHALL agree; a divergence is a defect in one of them.
@@ -31,4 +19,3 @@ Operator documentation SHALL state where the borg passphrase lives (the systemd 
 #### Scenario: An operator checks the key
 - **WHEN** the operator runs the documented `borg list` dry check
 - **THEN** success proves the stored passphrase still opens the repository without touching any archive
-

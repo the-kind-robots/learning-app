@@ -12,7 +12,9 @@ CONTAINER="${LEARNING_APP_STAGING_CONTAINER:-learning-app-staging-run}"
 KEEP="${LEARNING_APP_STAGING_KEEP:-0}"
 
 # Test-only secrets, plaintext by design: nothing in this container is real.
-COUCH_PASS="staging-couch-pass"   # must match the debconf preseed in Dockerfile
+# CouchDB's password is the app's hardcoded one (lib/db/src/db.cljc `conn`) —
+# see the Dockerfile preseed comment; the two must stay identical.
+COUCH_PASS="3434"                 # must match the debconf preseed in Dockerfile
 BORG_PASS="staging-borg-pass"     # must match smoke.sh
 
 cleanup() {
@@ -101,6 +103,7 @@ echo "== Stage inputs =="
 docker cp "${ROOT}/target/learning-app-infra.deb" "${CONTAINER}:/root/"
 docker cp "${ROOT}/target/learning-app.jar" "${CONTAINER}:/root/"
 docker cp "${HERE}/smoke.sh" "${CONTAINER}:/root/smoke.sh"
+docker cp "${HERE}/restore-drill.sh" "${CONTAINER}:/root/restore-drill.sh"
 
 echo "== Credentials the operator creates via admin-setup.sh =="
 # The OpenRouter key is withheld until after the first install so postinst's
@@ -164,4 +167,13 @@ in_c runuser -u dbmaintainer -- env \
     borg init --encryption=repokey
 
 echo "== Smoke =="
-in_c bash /root/smoke.sh
+smoke_exit=0
+in_c bash /root/smoke.sh || smoke_exit=$?
+
+# The drill runs even on a red smoke: its subject (backup/restore) is
+# independent of whichever smoke assertion is failing that day.
+echo "== Restore drill (GH-191) =="
+drill_exit=0
+in_c bash /root/restore-drill.sh || drill_exit=$?
+
+exit $(( smoke_exit > drill_exit ? smoke_exit : drill_exit ))
