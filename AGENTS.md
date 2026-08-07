@@ -28,6 +28,7 @@ Always use `:reload` when requiring namespaces to pick up changes.
 
 # Issues
 
+- The repository is public. Never state production facts in issues, PRs, commits or specs — what its passwords are not, what is currently broken there. Run such checks, report the results privately, and keep the tracker wording neutral ("a packaged deployment cannot override the dev credentials").
 - Issues form a shallow DAG. Dependency is the native blocked-by relation, visible on the issue and the board:
   `gh api graphql -f query='mutation($i: ID!, $b: ID!) { addBlockedBy(input: {issueId: $i, blockingIssueId: $b}) { issue { number } } }' -f i=$(gh api repos/u473t8/learning-app/issues/<child> --jq .node_id) -f b=$(gh api repos/u473t8/learning-app/issues/<blocker> --jq .node_id)`
   A `Needs: #N` body line may mirror it for grep. No cycles.
