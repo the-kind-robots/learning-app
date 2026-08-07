@@ -44,7 +44,7 @@
   (fn sync-pull [{:keys [capabilities dispatch]} _]
     (when-let [pull! (get-in capabilities [:capabilities/sync :sync/pull!])]
       (some-> (pull!)
-              (.then #(dispatch [[:action/reload-page]]))))))
+              (.then #(dispatch [[:action/reload-page] [:action/confirm-pairing]]))))))
 
 
 (nxr/register-action! :action/reload-page
@@ -239,6 +239,23 @@
     [[:effect/save {:app/pairing nil}]]))
 
 
+(nxr/register-action! :action/confirm-pairing
+  (fn confirm-pairing [state]
+    (when-some [nonce (get-in state [:app/pairing :nonce])]
+      [[:effect/confirm-pairing nonce]])))
+
+
+(nxr/register-effect! :effect/confirm-pairing
+  ;; Runs after every pull while the dialog waits. Only the receipt carrying
+  ;; this dialog's own nonce closes it — pokes from ordinary writes on other
+  ;; devices and socket reconnects change nothing.
+  (fn ^:async confirm-pairing
+    [{:keys [capabilities dispatch]} _ nonce]
+    (when-some [confirmed! (get-in capabilities [:capabilities/sync :sync/pairing-confirmed!])]
+      (when (await (confirmed! nonce))
+        (dispatch [[:action/close-pairing-dialog]])))))
+
+
 (defn- account-key-url
   "The QR/recovery URL a device opens to adopt this account. The token rides in
    the fragment, which browsers never send to the server, keeping it out of
@@ -262,14 +279,25 @@
         (log/error :effect/create-recovery-link {:error (str err)})))))
 
 
+(defn- pairing-nonce
+  "Random tag for one pairing round: the QR carries it out, the new device
+   echoes it back as a receipt, and only that echo closes this dialog."
+  []
+  (->> (js/crypto.getRandomValues (js/Uint8Array. 8))
+       (map #(-> (.toString % 16) (.padStart 2 "0")))
+       (apply str)))
+
+
 (nxr/register-effect! :effect/open-pairing
   (fn ^:async open-pairing
     [{:keys [dispatch]} _]
     (try
       (when-let [identity (await (identity/load-identity!))]
-        (let [pair-url (account-key-url identity)
+        (let [nonce    (pairing-nonce)
+              pair-url (str (account-key-url identity) "&pair=" nonce)
               qr-url   (await (.toDataURL QRCode pair-url))]
-          (dispatch [[:action/show-pairing-dialog {:qr-url qr-url :pair-url pair-url}]])))
+          (dispatch [[:action/show-pairing-dialog
+                      {:nonce nonce :pair-url pair-url :qr-url qr-url}]])))
       (catch js/Error err
         (log/error :effect/open-pairing {:error (str err)})))))
 

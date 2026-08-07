@@ -96,6 +96,26 @@
   3000)
 
 
+(defn- ^:async pairing-confirmed!
+  "True when the receipt a newly paired device wrote for `nonce` has arrived
+   with a pull. Confirmation clears every receipt — including strays from
+   dialogs abandoned before their echo came home."
+  [dbs nonce]
+  (try
+    (let [user-db      (:user/db dbs)
+          {rows :rows} (await (db/all-docs user-db
+                                           {:endkey       "pairing:￰"
+                                            :include-docs true
+                                            :startkey     "pairing:"}))
+          receipts     (map :doc rows)]
+      (when (some #(= (str "pairing:" nonce) (:_id %)) receipts)
+        (await (all! (map #(db/remove user-db %) receipts)))
+        true))
+    (catch js/Error err
+      (log/warn :sync/pairing-check-failed {:error (ex-message err)})
+      false)))
+
+
 (defn ^:async start!
   "Drives replication by triggers when the device has an account: a throttled
    push on every local user-db change, plus a pull returned as :sync/pull!
@@ -110,6 +130,7 @@
               unwatch (pouch/on-change dbs :user/db (gfn/throttle pull! push-interval-ms))]
           (log/info :sync/ready {:user-id id})
           {:sync/account-id id
+           :sync/pairing-confirmed! #(pairing-confirmed! dbs %)
            :sync/pull!      pull!
            :sync/unwatch    unwatch}))
       (do
@@ -201,6 +222,14 @@
               (when (not= (:id stored) account-id)
                 (await (db/destroy (db/use "user-db")))))
             (await (identity/save-identity! {:id account-id :token token}))
+            ;; The echo that ends pairing (ADR-0009): the QR carried a nonce,
+            ;; the receipt carries it back through ordinary replication, and
+            ;; the device that minted it closes its dialog and deletes the
+            ;; receipt once the pull delivers it.
+            (when-some [nonce (.get params "pair")]
+              (await (db/insert (db/use "user-db")
+                                {:_id  (str "pairing:" nonce)
+                                 :type "pairing"})))
             (log/info :sync/adopted {:user-id account-id}))
           (log/warn :sync/invalid-key {}))
         (catch js/Error err
