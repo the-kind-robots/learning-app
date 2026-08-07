@@ -19,12 +19,18 @@
 (defn- kebab->snake [k] (str/replace (name k) #"-" "_"))
 
 
-(def conn
-  {:scheme   "http"
-   :host     "localhost"
-   :port     5984
-   :username "admin"
-   :password "3434"})
+#?(:clj
+   (def conn
+     ;; Server-side only: the browser talks to CouchDB through the nginx
+     ;; proxy and never holds credentials. The env vars let a packaged app
+     ;; talk to a CouchDB whose admin password is not the dev one (#246);
+     ;; the fallbacks match the dev stand, and core refuses to boot
+     ;; packaged without the real password.
+     {:scheme   "http"
+      :host     "localhost"
+      :port     5984
+      :username (or (System/getenv "LEARNING_APP__COUCHDB_USER") "admin")
+      :password (or (System/getenv "LEARNING_APP__COUCHDB_PASSWORD") "3434")}))
 
 
 #?(:clj

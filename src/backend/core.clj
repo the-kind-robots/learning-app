@@ -77,6 +77,18 @@
   (configured-db-auth-secret (System/getenv) running-from-source?))
 
 
+(defn- require-couchdb-password!
+  "The dev fallback in lib/db's `conn` serves exactly one audience: a source
+   checkout talking to the dev stand's CouchDB. For the packaged app the
+   fallback is never right — its CouchDB has a real password — but with wrong
+   credentials the server still boots and looks alive while provisioning,
+   reconciliation and push silently 401. So the jar demands the variable up
+   front and dies loudly instead (#246)."
+  [env from-source?]
+  (when-not (or (get env "LEARNING_APP__COUCHDB_PASSWORD") from-source?)
+    (throw (ex-info "LEARNING_APP__COUCHDB_PASSWORD is required outside a source checkout" {}))))
+
+
 ;;
 ;; DB
 ;;
@@ -644,6 +656,7 @@
     ;; speak before the server starts, and events without a handler are
     ;; dropped silently (#218 — the dev alias ships none).
     (ensure-log-handler!)
+    (require-couchdb-password! (System/getenv) running-from-source?)
     ;; Adopt, then migrate, then serve: the app never runs against an
     ;; outdated schema or a stranded database.
     (adopt-legacy-database!)
