@@ -2,6 +2,15 @@
 
 This guide describes how to set up and run the Learning App in development mode.
 
+## Bring-up on a configured machine
+
+Everything below this section is one-time setup. A configured machine needs only:
+
+1. CouchDB, Nginx and cloudflared run as services — nothing to start by hand.
+2. `npx shadow-cljs watch app` — terminal 1.
+3. `clj -A:dev -M -m core` — terminal 2, after CouchDB answers (boot runs reconciliation against it; `fan-in-started` in the log means push sync is up).
+4. Open **http://sprecha.localhost/**. Phone: `https://<name>.dev.sprecha.de` (the Cloudflare tunnel feeds the same Nginx).
+
 ## Prerequisites
 
 ### Required Software
@@ -41,7 +50,7 @@ admin = 3434
 
 CouchDB will hash the password on first start.
 
-> **Note:** The password `3434` matches the default in `src/shared/db.cljc`. For production, use a strong password.
+> **Note:** The password `3434` matches the dev fallback in `lib/db/src/db.cljc` (`LEARNING_APP__COUCHDB_PASSWORD` overrides it). For production, use a strong password.
 
 #### Dictionary Database Setup
 
@@ -55,6 +64,12 @@ curl -X PUT http://admin:3434@localhost:5984/dictionary-db/_security \
 ```
 
 This matches the production configuration: anyone can read, only the admin can write.
+
+Push sync watches the server-wide updates feed, which needs one more database to exist:
+
+```bash
+curl -X PUT http://admin:3434@localhost:5984/_global_changes
+```
 
 ## Setup Steps
 
