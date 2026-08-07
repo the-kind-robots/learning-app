@@ -96,6 +96,26 @@
   3000)
 
 
+(defn- ^:async pairing-confirmed!
+  "True when the receipt a newly paired device wrote for `nonce` has arrived
+   with a pull. Confirmation clears every receipt — including strays from
+   dialogs abandoned before their echo came home."
+  [dbs nonce]
+  (try
+    (let [user-db      (:user/db dbs)
+          {rows :rows} (await (db/all-docs user-db
+                                           {:endkey       "pairing:￰"
+                                            :include-docs true
+                                            :startkey     "pairing:"}))
+          receipts     (map :doc rows)]
+      (when (some #(= (str "pairing:" nonce) (:_id %)) receipts)
+        (await (all! (map #(db/remove user-db %) receipts)))
+        true))
+    (catch js/Error err
+      (log/warn :sync/pairing-check-failed {:error (ex-message err)})
+      false)))
+
+
 (defn ^:async start!
   "Drives replication by triggers when the device has an account: a throttled
    push on every local user-db change, plus a pull returned as :sync/pull!
@@ -110,6 +130,7 @@
               unwatch (pouch/on-change dbs :user/db (gfn/throttle pull! push-interval-ms))]
           (log/info :sync/ready {:user-id id})
           {:sync/account-id id
+           :sync/pairing-confirmed! #(pairing-confirmed! dbs %)
            :sync/pull!      pull!
            :sync/unwatch    unwatch}))
       (do
@@ -120,6 +141,60 @@
       (log/warn :sync/start-failed {:error (ex-message err)})
       {:sync/account-id nil
        :sync/pull!      (constantly nil)})))
+
+
+(defonce ^:private push-socket (atom nil))
+
+
+(defn connect-push!
+  "Holds a poke WebSocket while the page is visible and the network is up
+   (ADR-0009). A poke means \"your data changed somewhere\" and carries
+   nothing else; `on-poke` runs then, and also on every (re)connect — one
+   pull covers whatever was missed while the socket was down. Hidden pages
+   close the socket: the radio sleeps when the user is elsewhere. Offline
+   pages don't retry: reconnection resumes on the `online` event."
+  [on-poke]
+  (letfn
+    [(url []
+       (str (if (= "https:" (.. js/location -protocol)) "wss://" "ws://")
+            (.. js/location -host)
+            "/api/sync/updates"))
+     (connect! []
+       (when (and (nil? @push-socket)
+                  (.-onLine js/navigator)
+                  (= "visible" (.-visibilityState js/document)))
+         (let [socket (js/WebSocket. (url))]
+           (reset! push-socket socket)
+           (set! (.-onopen socket) (fn [_] (on-poke)))
+           (set! (.-onmessage socket) (fn [_] (on-poke)))
+           (set! (.-onclose socket)
+                 (fn [_]
+                   (when (identical? socket @push-socket)
+                     (reset! push-socket nil)
+                     ;; Not a deliberate close: try again soon while
+                     ;; visible. The backoff is flat — a poke socket is
+                     ;; cheap and reconnect already pulls.
+                     (js/setTimeout connect! 5000)))))))
+     (disconnect! []
+       (when-some [socket @push-socket]
+         (reset! push-socket nil)
+         (.close socket)))]
+    (.addEventListener js/document
+                       "visibilitychange"
+                       (fn [_]
+                         (if (= "visible" (.-visibilityState js/document))
+                           (connect!)
+                           (disconnect!))))
+    ;; A socket that survived a network change is not trusted — it may be a
+    ;; zombie holding a dead connection. Recycling is free: the reconnect
+    ;; pulls anyway.
+    (.addEventListener js/window
+                       "online"
+                       (fn [_]
+                         (disconnect!)
+                         (connect!)))
+    (.addEventListener js/window "offline" (fn [_] (disconnect!)))
+    (connect!)))
 
 
 (defn- fragment-params
@@ -159,6 +234,14 @@
               (when (not= (:id stored) account-id)
                 (await (db/destroy (db/use "user-db")))))
             (await (identity/save-identity! {:id account-id :token token}))
+            ;; The echo that ends pairing (ADR-0009): the QR carried a nonce,
+            ;; the receipt carries it back through ordinary replication, and
+            ;; the device that minted it closes its dialog and deletes the
+            ;; receipt once the pull delivers it.
+            (when-some [nonce (.get params "pair")]
+              (await (db/insert (db/use "user-db")
+                                {:_id  (str "pairing:" nonce)
+                                 :type "pairing"})))
             (log/info :sync/adopted {:user-id account-id}))
           (log/warn :sync/invalid-key {}))
         (catch js/Error err
