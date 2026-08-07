@@ -37,7 +37,7 @@
    :modules    {:main {:init-fn main/start}}
    :js-options {:js-provider :shadow}
    :devtools
-   {:devtools-url "https://sprecha.local/shadow-cljs"
+   {:devtools-url "http://sprecha.localhost/shadow-cljs"
     :preloads     [debux.preloads]
     :watch-dir    "resources/public/css"
     :watch-path   "/css"}

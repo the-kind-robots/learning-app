@@ -1,6 +1,6 @@
 interface:
   display_name: "Learning App CDP"
-  short_description: "Preferred real-browser workflow for learning-app debugging on sprecha.local and sprecha.de."
+  short_description: "Preferred real-browser workflow for learning-app debugging on sprecha.localhost and sprecha.de."
   default_prompt: "Use the project-specific Windows Chrome CDP workflow as the default real-browser path for the learning app: open or reuse the app tab, prefer service-worker-aware refresh for local debugging, start a buffered monitor when useful, let the user interact manually, then read and analyze captured console, network, and DOM state."
 policy:
   allow_implicit_invocation: true
