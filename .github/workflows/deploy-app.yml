@@ -3,57 +3,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  deployment:
+  build:
     name: Build Server Artifact
+    uses: ./.github/workflows/build-jar.yml
+
+  deployment:
+    name: Deploy Server Artifact
     runs-on: ubuntu-latest
+    needs: build
     environment: deployment
     steps:
-      - uses: actions/checkout@v7.0.1
-
-      - uses: actions/setup-java@v5.7.0
+      - uses: actions/download-artifact@v4.3.0
         with:
-          distribution: temurin
-          java-version: 21
+          name: app-jar
+          path: target
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          cli: latest
-
-      - id: cache-clojure
-        uses: actions/cache/restore@v6.1.0
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-            ~/.deps.clj
-          key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
-
-      - run: npm ci
-      - run: rm -rf resources/public/js/app
-      - run: npx shadow-cljs release app
-      - run: clojure -T:build uber
       # Unique per-run temp name: concurrent deploys never share an upload path.
       - run: cp target/learning-app.jar 'target/learning-app.jar.${{ github.run_id }}.tmp'
-      # $GITHUB_OUTPUT is a file GitHub provides per step; `key=value` lines
-      # appended to it become `steps.<id>.outputs.<key>` for later steps:
-      # https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-an-output-parameter
-      - id: jar
-        run: echo "sha256=$(sha256sum target/learning-app.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache/save@v6.1.0
-        if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-            ~/.deps.clj
-          key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
 
       - uses: appleboy/scp-action@v1.0.0
         with:
@@ -71,7 +37,7 @@ jobs:
       - uses: appleboy/ssh-action@v1.2.5
         env:
           JAR_TMP: /opt/learning-app/learning-app.jar.${{ github.run_id }}.tmp
-          JAR_SHA256: ${{ steps.jar.outputs.sha256 }}
+          JAR_SHA256: ${{ needs.build.outputs.jar-sha256 }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}

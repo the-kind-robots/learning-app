@@ -3,7 +3,8 @@
   (:require
    [db :as db]
    [db-migrations :as db-migrations]
-   [lambdaisland.glogi :as log]))
+   [lambdaisland.glogi :as log]
+   [userdb :as userdb]))
 
 
 (defn- user-db
@@ -36,7 +37,7 @@
   "Which databases have a copy on the server, and what that copy is called
    there. device-db is absent on purpose: it holds what belongs to this device
    alone and has nowhere to replicate to."
-  {:user/db #(str "userdb-" %)})
+  {:user/db userdb/db-name})
 
 
 (defn on-change

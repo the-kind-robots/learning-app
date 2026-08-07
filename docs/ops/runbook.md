@@ -88,15 +88,46 @@ itself stays safe at the new home.
 
 ## Restore from backup
 
-Archives named `app-<timestamp>` carry both stores: the SQLite snapshot and
-`/var/lib/couchdb`. Restore them together, from the same archive — an account
-row and its userdb must come from one moment, or you manufacture the orphan
-states #182/#205 exist to catch. `borg list ::` to pick, `borg extract` into a
-scratch dir, then: stop services, put the sqlite file at
-`/var/lib/learning-app/db.sqlite`, the couch tree at `/var/lib/couchdb`
-(ownership `couchdb:couchdb`), start, and check `/auth/check` with a known
-token before calling it done. Older `db-*.sqlite` archives predate #206 and
-hold SQLite only.
+Archives named `app-<timestamp>` carry both stores: the SQLite snapshot (at
+its backup path, `var/backups/learning-app/db.sqlite`) and `/var/lib/couchdb`.
+Restore them together, from the same archive — an account row and its userdb
+must come from one moment, or you manufacture the orphan states #182/#205
+exist to catch. Older `db-*.sqlite` archives predate #206 and hold SQLite only.
+
+Borg runs as `dbmaintainer` (the repository owner) throughout — root would
+leave root-owned lock/cache state in the repository and break the backup
+timer. The passphrase and its handling: see "Borg key" in
+`docs/ops/server-configuration.md`.
+
+```sh
+sudo runuser -u dbmaintainer -- env BORG_REPO=... BORG_PASSPHRASE=... borg list   # pick an archive
+sudo systemctl stop learning-app-run.service couchdb.service
+# extract into a dbmaintainer-writable scratch dir
+sudo runuser -u dbmaintainer -- env BORG_REPO=... BORG_PASSPHRASE=... \
+    sh -c 'cd /var/tmp/restore && borg extract ::app-<timestamp>'
+# SQLite: snapshot to the live path; ownership webapp (borg extracted as
+# dbmaintainer, so ownership does NOT come back on its own). Stale -wal/-shm
+# from the old database MUST go — SQLite would replay them into the snapshot.
+sudo install -o webapp -g webapp -m 660 \
+    /var/tmp/restore/var/backups/learning-app/db.sqlite /var/lib/learning-app/db.sqlite
+sudo rm -f /var/lib/learning-app/db.sqlite-wal /var/lib/learning-app/db.sqlite-shm
+# CouchDB: replace the tree wholesale (an overlay mixes old state into the
+# restore), ownership couchdb:couchdb.
+sudo rm -rf /var/lib/couchdb
+sudo cp -a /var/tmp/restore/var/lib/couchdb /var/lib/couchdb
+sudo chown -R couchdb:couchdb /var/lib/couchdb
+# CouchDB first, answering before the app starts — the app's boot
+# reconciliation (orphan report) needs to enumerate databases.
+sudo systemctl start couchdb.service
+until curl -sf http://127.0.0.1:5984/ >/dev/null; do sleep 1; done
+sudo systemctl start learning-app-run.service
+```
+
+Before calling it done: `/auth/check` answers 200 for a known token, that
+account's userdb serves its documents through `/db/`, and the boot
+`orphan-userdbs` report in the app journal is clean. This procedure is
+exercised end to end by `infra/staging/restore-drill.sh` — if reality and
+this section disagree, fix whichever is wrong in the same PR.
 
 ## Manual admin steps (bootstrap + secrets + one-off ops)
 

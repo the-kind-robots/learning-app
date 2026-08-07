@@ -50,6 +50,26 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 **Cert renewal**
 - Units: `learning-app-certbot.service` and `learning-app-certbot.timer`.
 
+## Borg key
+
+- Repository encryption is `repokey`: the key sits inside the repository,
+  locked by the passphrase. **Losing the passphrase loses every archive** —
+  there is no recovery path.
+- The passphrase lives as the systemd encrypted credential
+  `/etc/credstore.encrypted/borg-passphrase`; the backup unit decrypts it via
+  `LoadCredentialEncrypted=` and hands the path to `backup.sh` as
+  `BORG_PASSPHRASE_PATH`. It exists nowhere else on the server — keep an
+  offline copy (password manager), since the encrypted credential is bound to
+  this host's `/var/lib/systemd/credential.secret` and does not survive it.
+- Set/rotate: `learning-app-admin-setup --rotate-borg`.
+- Verify the key still opens the repository (read-only, safe anytime):
+  ```sh
+  sudo runuser -u dbmaintainer -- env \
+      BORG_REPO="$(grep '^BORG_REPO=' /etc/learning-app/environment | cut -d= -f2-)" \
+      BORG_PASSPHRASE="$(sudo systemd-creds --name=borg-passphrase decrypt /etc/credstore.encrypted/borg-passphrase -)" \
+      borg list
+  ```
+
 ## Environment
 
 **Env files:**

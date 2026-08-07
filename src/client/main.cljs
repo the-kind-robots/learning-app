@@ -133,14 +133,13 @@
                                         "online"
                                         #(dispatch [[:effect/sync-pull]]))
                                        ;; Push channel (ADR-0009): a poke pulls
-                                       ;; through the normal path and closes a
-                                       ;; waiting pairing dialog — the first
-                                       ;; poke is how the old device learns
-                                       ;; pairing worked.
+                                       ;; through the normal path. A waiting
+                                       ;; pairing dialog closes only when the
+                                       ;; pull brings the receipt echoing that
+                                       ;; dialog's nonce.
                                        (when (get-in capabilities [:capabilities/sync :sync/account-id])
                                          (sync/connect-push!
-                                          #(dispatch [[:effect/sync-pull]
-                                                      [:action/close-pairing-dialog]])))))}
+                                          #(dispatch [[:effect/sync-pull]])))))}
 
     :app/router         {:requires {:render :app/render}
                          :after    [:worker/service-worker

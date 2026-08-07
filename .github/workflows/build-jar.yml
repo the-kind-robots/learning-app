@@ -1,0 +1,75 @@
+name: Build App Jar
+
+# The single home of the jar recipe (#237). deploy-app.yml and
+# staging-smoke.yml both call this workflow and consume the artifact it
+# uploads, so the recipe cannot drift between them.
+on:
+  workflow_call:
+    outputs:
+      jar-sha256:
+        description: sha256 of target/learning-app.jar, recorded at build time.
+        value: ${{ jobs.build.outputs.jar-sha256 }}
+
+jobs:
+  build:
+    name: Build app jar
+    runs-on: ubuntu-latest
+    outputs:
+      jar-sha256: ${{ steps.jar.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-java@v5.7.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          cli: latest
+
+      - id: cache-clojure
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+            ~/.deps.clj
+          key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
+          restore-keys: |
+            clojure-
+
+      - run: npm ci
+      - run: rm -rf resources/public/js/app
+      - run: npx shadow-cljs release app
+      - run: clojure -T:build uber
+
+      # $GITHUB_OUTPUT is a file GitHub provides per step; `key=value` lines
+      # appended to it become `steps.<id>.outputs.<key>` for later steps:
+      # https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-an-output-parameter
+      - id: jar
+        run: echo "sha256=$(sha256sum target/learning-app.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/save@v6.1.0
+        if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+            ~/.deps.clj
+          key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
+
+      # The artifact is a bus between jobs of one run, not a release channel;
+      # a day of retention is plenty.
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: app-jar
+          path: target/learning-app.jar
+          if-no-files-found: error
+          retention-days: 1

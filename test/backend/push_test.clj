@@ -12,7 +12,7 @@
         (push/subscribe! 3 :channel-b)
         (push/subscribe! 9 :channel-c)
         (try
-          (let [seq-after (#'push/poke-updated-dbs!
+          (let [seq-after (#'push/poke-subscribers!
                            {:results  [{:db_name "userdb-3" :type "updated"}
                                        {:db_name "userdb-3" :type "updated"}
                                        {:db_name "dictionary-db" :type "updated"}
@@ -30,7 +30,7 @@
            (push/unsubscribe! 9 :channel-c)))))))
 
 
-(deftest unsubscribing-the-last-channel-clears-the-account
+(deftest unsubscribing-the-last-channel-stops-its-pokes
   (push/subscribe! 4 :only)
   (push/unsubscribe! 4 :only)
-  (is (nil? (get @@#'push/channels "userdb-4"))))
+  (is (empty? (get @@#'push/channels "userdb-4"))))

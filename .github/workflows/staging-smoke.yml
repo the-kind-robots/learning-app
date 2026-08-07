@@ -21,55 +21,37 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --name-only "$BASE" HEAD | grep -qE '^(infra/|\.github/workflows/staging-smoke\.yml$)'; then
+          if git diff --name-only "$BASE" HEAD | grep -qE '^(infra/|\.github/workflows/(staging-smoke|build-jar)\.yml$)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
           fi
 
+  # The jar the runbook delivers, built by the shared recipe (#237). A called
+  # workflow inherits nothing implicit, so the needs/if gate lives here: the
+  # build runs exactly when the smoke will.
+  build:
+    name: Build app jar
+    needs: changes
+    if: ${{ needs.changes.outputs.relevant == 'true' }}
+    uses: ./.github/workflows/build-jar.yml
+
   container-smoke:
     name: Container smoke
     runs-on: ubuntu-latest
-    needs: changes
+    needs: [changes, build]
     if: ${{ needs.changes.outputs.relevant == 'true' }}
-    # Jar build ~8 min cold, image build + boot + smoke ~5 min; 20 leaves
-    # headroom without letting a wedged systemd boot hold the runner an hour.
-    timeout-minutes: 20
+    # Image build + boot + smoke ~5 min (the jar build has its own job now);
+    # 15 leaves headroom without letting a wedged systemd boot hold the
+    # runner an hour.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-java@v5.7.0
+      - uses: actions/download-artifact@v4.3.0
         with:
-          distribution: temurin
-          java-version: 21
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          cli: latest
-
-      - id: cache-clojure
-        uses: actions/cache/restore@v6.1.0
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-            ~/.deps.clj
-          key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
-          restore-keys: |
-            clojure-
-
-      # The jar the runbook delivers, built the way deploy-app.yml builds it.
-      - name: Build the app jar
-        run: |
-          npm ci
-          npx shadow-cljs release app
-          clojure -T:build uber
+          name: app-jar
+          path: target
 
       # The systemd-in-docker incantation (cgroupns=host, rw cgroup bind,
       # CAP_SYS_ADMIN, unconfined seccomp/apparmor) lives inside run.sh and is
@@ -85,12 +67,3 @@ jobs:
           name: staging-smoke-output
           path: smoke-output.log
           if-no-files-found: ignore
-
-      - uses: actions/cache/save@v6.1.0
-        if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-            ~/.deps.clj
-          key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
