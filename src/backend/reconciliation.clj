@@ -3,16 +3,11 @@
    [db :as db]
    [next.jdbc :as jdbc]
    [next.jdbc.result-set :as result-set]
-   [taoensso.telemere :as t]))
+   [taoensso.telemere :as t]
+   [userdb :as userdb]))
 
 
 (set! *warn-on-reflection* true)
-
-
-(defn- userdb-account-id
-  "The account id a `userdb-N` name derives from, or nil for any other database."
-  [dbname]
-  (some-> (re-matches #"userdb-(\d+)" dbname) second parse-long))
 
 
 (defn orphan-userdbs
@@ -32,7 +27,7 @@
                             {:builder-fn result-set/as-unqualified-maps}))]
     (->> (db/all-dbs)
          (keep (fn [dbname]
-                 (when-some [id (userdb-account-id dbname)]
+                 (when-some [id (userdb/account-id dbname)]
                    (when-not (contains? account-ids id)
                      {:id id :dbname dbname}))))
          (sort-by :id)

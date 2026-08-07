@@ -7,15 +7,11 @@
   (:require
    [db :as db]
    [org.httpkit.server :as server]
-   [taoensso.telemere :as t]))
+   [taoensso.telemere :as t]
+   [userdb :as userdb]))
 
 
 (set! *warn-on-reflection* true)
-
-
-(defn- userdb
-  [account-id]
-  (str "userdb-" account-id))
 
 
 (defonce ^:private channels
@@ -27,33 +23,35 @@
 
 (defn subscribe!
   [account-id channel]
-  (swap! channels update (userdb account-id) (fnil conj #{}) channel))
+  (swap! channels update (userdb/db-name account-id) (fnil conj #{}) channel))
 
 
 (defn unsubscribe!
   [account-id channel]
-  (swap! channels
-    (fn [m]
-      (let [k    (userdb account-id)
-            left (disj (get m k #{}) channel)]
-        (if (empty? left) (dissoc m k) (assoc m k left))))))
+  (swap! channels update (userdb/db-name account-id) disj channel))
+
+
+(def ^:private poke
+  "What a poke looks like on the wire. The content is never read — arrival is
+   the entire message — so it stays one byte."
+  "1")
 
 
 (defn- send-poke!
   [channel]
-  (server/send! channel "1"))
+  (server/send! channel poke))
 
 
-(defn ^:private poke-updated-dbs!
+(defn ^:private poke-subscribers!
   "Turns one _db_updates answer into pokes and returns CouchDB's checkpoint
    token — the `since` for the next turn, so no update falls between turns.
    The set dedups channels, not databases: an account updated twice in one
    turn is poked once."
   [{results :results resume-from :last_seq}]
-  (doseq [channel (into #{}
-                        (comp (filter #(= "updated" (:type %)))
-                              (mapcat #(get @channels (:db_name %))))
-                        results)]
+  (doseq [channel (->> results
+                       (filter #(= "updated" (:type %)))
+                       (mapcat #(get @channels (:db_name %)))
+                       (into #{}))]
     (send-poke! channel))
   resume-from)
 
@@ -69,18 +67,19 @@
 
 (defn- fan-in-loop!
   []
+  ;; Starting from "now", not from the beginning of the feed: everything
+  ;; older is already covered by the pull every client makes on connect.
   (loop [since "now"]
     (when @running?
-      (recur (or (try
-                   (poke-updated-dbs! (db/db-updates since longpoll-ms))
-                   (catch Exception e
-                     (t/event! ::fan-in-failed {:level :warn :data {:error (ex-message e)}})
-                     ;; CouchDB is down or _global_changes is missing: wait it
-                     ;; out instead of hammering. `since` is lost on purpose —
-                     ;; reconnecting clients pull anyway (ADR-0009).
-                     (Thread/sleep 5000)
-                     nil))
-                 "now")))))
+      (recur (try
+               (poke-subscribers! (db/db-updates since longpoll-ms))
+               (catch Exception e
+                 (t/event! ::fan-in-failed {:level :warn :data {:error (ex-message e)}})
+                 ;; CouchDB is down or _global_changes is missing: wait it
+                 ;; out instead of hammering. `since` is lost on purpose —
+                 ;; reconnecting clients pull anyway (ADR-0009).
+                 (Thread/sleep 5000)
+                 "now"))))))
 
 
 (defn start!

@@ -23,6 +23,7 @@
    [ring.middleware.cookies :as cookies]
    [ring.util.response :as response]
    [taoensso.telemere :as t]
+   [userdb :as userdb]
    [utils :as utils])
   (:import
    [java.security MessageDigest SecureRandom]
@@ -224,11 +225,11 @@
                                      ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
                                       (sha256-hex token)]
                                      {:builder-fn result-set/as-unqualified-maps})]
-                  (when (db/exists? (str "userdb-" id))
+                  (when (db/exists? (userdb/db-name id))
                     (throw (ex-info "userdb already exists for a fresh account id"
                                     {:type ::recycled-id :id id})))
                   id))]
-    (db/secure (db/use (str "userdb-" id)) {:members {:names [] :roles [(str "u:" id)]}})
+    (db/secure (db/use (userdb/db-name id)) {:members {:names [] :roles [(str "u:" id)]}})
     {:id id :token token}))
 
 

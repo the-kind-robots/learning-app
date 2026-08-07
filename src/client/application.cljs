@@ -279,21 +279,15 @@
         (log/error :effect/create-recovery-link {:error (str err)})))))
 
 
-(defn- pairing-nonce
-  "Random tag for one pairing round: the QR carries it out, the new device
-   echoes it back as a receipt, and only that echo closes this dialog."
-  []
-  (->> (js/crypto.getRandomValues (js/Uint8Array. 8))
-       (map #(-> (.toString % 16) (.padStart 2 "0")))
-       (apply str)))
-
-
 (nxr/register-effect! :effect/open-pairing
   (fn ^:async open-pairing
     [{:keys [dispatch]} _]
     (try
       (when-let [identity (await (identity/load-identity!))]
-        (let [nonce    (pairing-nonce)
+        ;; The nonce tags one pairing round: the QR carries it out, the new
+        ;; device echoes it back as a receipt, and only that echo closes
+        ;; this dialog.
+        (let [nonce    (js/crypto.randomUUID)
               pair-url (str (account-key-url identity) "&pair=" nonce)
               qr-url   (await (.toDataURL QRCode pair-url))]
           (dispatch [[:action/show-pairing-dialog
