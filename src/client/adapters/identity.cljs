@@ -1,9 +1,7 @@
 (ns adapters.identity
   (:require
+   [auth :as auth]
    [db :as db]))
-
-
-(def ^:private token-cookie "sprecha-token")
 
 
 (def ^:private identity-doc-id "identity:local")
@@ -46,7 +44,7 @@
    token, it builds the QR and the recovery link from it."
   [{:keys [token]}]
   (set! js/document.cookie
-        (str token-cookie "=" token "; path=/; SameSite=Lax; Secure")))
+        (str auth/token-cookie "=" token "; path=/; SameSite=Lax; Secure")))
 
 
 (defn ^:async account-id!
