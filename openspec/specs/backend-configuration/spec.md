@@ -26,7 +26,7 @@ On startup, before opening the database, the backend SHALL move a database found
 - **THEN** the target wins, nothing is deleted, and the log names both paths for the operator
 
 ### Requirement: Environment variables follow the LEARNING_APP__ prefix convention
-Every application environment variable SHALL be named `LEARNING_APP__XXX` — double underscore between the app prefix and the variable name. Legacy single-underscore names SHALL NOT be read; a rename that spans more than one deploy artifact SHALL ship as a dual-read transition before the old name is dropped.
+Every application environment variable SHALL be named `LEARNING_APP__XXX` — double underscore between the app prefix and the variable name. Legacy single-underscore names SHALL NOT be read, with one transitional exception: a rename that spans more than one deploy artifact SHALL ship as a dual-read transition — the reader prefers the new name and falls back to the old — before the old name is dropped. During the `LEARNING_APP_DB_AUTH_SECRET` transition (#217 phase 2a) the jar SHALL prefer `LEARNING_APP__DB_AUTH_SECRET`, fall back to the old name, and name the new variable when refusing to boot; the fallback SHALL be removed (phase 2c) once the unit's rename (phase 2b) is deployed.
 
 #### Scenario: Double-underscore name is honored
 - **WHEN** the backend starts with `LEARNING_APP__PORT=9999`
@@ -39,6 +39,18 @@ Every application environment variable SHALL be named `LEARNING_APP__XXX` — do
 #### Scenario: Backup pipeline uses the convention
 - **WHEN** the backup unit runs `backup.sh`
 - **THEN** the database and backup paths flow through `LEARNING_APP__DB_PATH` and `LEARNING_APP__DB_BACKUP_PATH`, both wired within the same deb artifact
+
+#### Scenario: Old unit, new jar — the secret still resolves
+- **WHEN** only `LEARNING_APP_DB_AUTH_SECRET` is set, as the pre-rename unit exports it
+- **THEN** the jar signs with that value
+
+#### Scenario: Both secret names set
+- **WHEN** both `LEARNING_APP__DB_AUTH_SECRET` and `LEARNING_APP_DB_AUTH_SECRET` are set
+- **THEN** the new name wins
+
+#### Scenario: Packaged app with neither secret name
+- **WHEN** neither name is set outside a source checkout
+- **THEN** boot is refused with an error naming `LEARNING_APP__DB_AUTH_SECRET`
 
 ### Requirement: Git dependency coordinates are internally consistent
 Every `:git/tag` + `:git/sha` coordinate in the repository SHALL name the same commit: the sha SHALL be a prefix of the commit the tag points to. A coordinate SHALL be proven by resolving it with cold dependency caches, not only on machines whose caches already hold the commit.
