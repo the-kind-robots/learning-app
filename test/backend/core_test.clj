@@ -105,6 +105,32 @@
         "build.clj writes the service worker version under a different name than core.clj reads")))
 
 
+(deftest the-new-secret-name-is-read
+  (is (= "new" (#'sut/configured-db-auth-secret {"LEARNING_APP__DB_AUTH_SECRET" "new"} false))))
+
+
+(deftest the-old-secret-name-still-works-until-the-unit-renames
+  (is (= "old" (#'sut/configured-db-auth-secret {"LEARNING_APP_DB_AUTH_SECRET" "old"} false))))
+
+
+(deftest the-new-secret-name-wins-when-both-are-set
+  (is (= "new"
+         (#'sut/configured-db-auth-secret
+          {"LEARNING_APP_DB_AUTH_SECRET"  "old"
+           "LEARNING_APP__DB_AUTH_SECRET" "new"}
+          false))))
+
+
+(deftest a-packaged-app-without-a-secret-refuses-to-start
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                        #"LEARNING_APP__DB_AUTH_SECRET"
+                        (#'sut/configured-db-auth-secret {} false))))
+
+
+(deftest a-checkout-falls-back-to-the-well-known-secret
+  (is (= "secret" (#'sut/configured-db-auth-secret {} true))))
+
+
 (deftest a-recycled-id-is-refused-not-inherited
   (testing "a userdb left by a previous owner of the id blocks provisioning"
     (let [db (migrated-db)]
