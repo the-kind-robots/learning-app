@@ -50,6 +50,29 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 **Cert renewal**
 - Units: `learning-app-certbot.service` and `learning-app-certbot.timer`.
 
+## Secrets
+
+Every secret is a systemd encrypted credential in `/etc/credstore.encrypted/`.
+Deploys never create or prompt for them — the deb's postinst and the units only
+read; a missing credential fails the unit with `243/CREDENTIALS`. Placement is
+a one-time step of server setup, repeated only when a secret rotates:
+
+```bash
+systemd-ask-password -n "value" | sudo systemd-creds encrypt --name=<name> - /etc/credstore.encrypted/<name>
+```
+
+| Credential | Read by |
+|---|---|
+| `db_auth_secret` | app (`/auth/check` proxy-auth signing) |
+| `openrouter_api_key` | app (examples generation) |
+| `couchdb_admin_password` | app (server-side CouchDB calls), `learning-app-dictionary-import`, postinst (CouchDB setup, `_global_changes`) |
+| `borg-passphrase` | `learning-app-backup-db` |
+
+`--name=` must equal the file name — the blob is bound to it. All blobs are
+also bound to this host's `/var/lib/systemd/credential.secret`: they do not
+survive a reinstall and cannot be copied to another machine, so every secret
+needs an offline copy (password manager).
+
 ## Borg key
 
 - Repository encryption is `repokey`: the key sits inside the repository,
@@ -97,7 +120,7 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 - `require_valid_user = false` for public reads.
 - Proxy auth enabled for future user-database support.
 
-**Admin credential:** `/etc/credstore.encrypted/couchdb_admin_password`.
+**Admin credential:** `/etc/credstore.encrypted/couchdb_admin_password` — placed per the Secrets section; CouchDB itself learned the same password from its package's debconf prompt at install time, so the two must match.
 
 **dictionary-db**
 - Public read-only database for the German dictionary.
