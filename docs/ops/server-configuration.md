@@ -50,6 +50,34 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 **Cert renewal**
 - Units: `learning-app-certbot.service` and `learning-app-certbot.timer`.
 
+## Secrets
+
+Every secret is a systemd encrypted credential in `/etc/credstore.encrypted/`.
+Deploys never create or prompt for them — the deb's postinst and the units only
+read; a missing credential fails the unit with `243/CREDENTIALS`. Placement is
+a one-time step of server setup, repeated only when a secret rotates. Each line
+prompts for its value (skip the ones already placed):
+
+```bash
+sudo -v  # first, or sudo's own prompt fights ask-password for the same terminal
+systemd-ask-password -n "db_auth_secret"          | sudo systemd-creds encrypt --name=db_auth_secret          - /etc/credstore.encrypted/db_auth_secret
+systemd-ask-password -n "openrouter_api_key"      | sudo systemd-creds encrypt --name=openrouter_api_key      - /etc/credstore.encrypted/openrouter_api_key
+systemd-ask-password -n "couchdb_admin_password"  | sudo systemd-creds encrypt --name=couchdb_admin_password  - /etc/credstore.encrypted/couchdb_admin_password
+# borg-passphrase is managed by learning-app-admin-setup --rotate-borg (see Borg key)
+```
+
+| Credential | Read by |
+|---|---|
+| `db_auth_secret` | app (`/auth/check` proxy-auth signing) |
+| `openrouter_api_key` | app (examples generation) |
+| `couchdb_admin_password` | app (server-side CouchDB calls), `learning-app-dictionary-import`, postinst (CouchDB setup, `_global_changes`) |
+| `borg-passphrase` | `learning-app-backup-db` |
+
+`--name=` must equal the file name — the blob is bound to it. All blobs are
+also bound to this host's `/var/lib/systemd/credential.secret`: they do not
+survive a reinstall and cannot be copied to another machine, so every secret
+needs an offline copy (password manager).
+
 ## Borg key
 
 - Repository encryption is `repokey`: the key sits inside the repository,
@@ -76,10 +104,9 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 - `/etc/environment.d/learning-app.conf` (defaults)
 - `/etc/learning-app/environment` (overrides)
 
-**Expected values:**
+**Expected values (non-secrets only — secrets live in the credstore and
+override anything set here):**
 - `LEARNING_APP__DB_PATH` absolute path
-- Example generation uses OpenRouter. Required key via systemd cred or env var:
-  - `/etc/credstore.encrypted/openrouter_api_key` or `OPENROUTER_API_KEY`
 - Optional OpenRouter env vars:
   - `OPENROUTER_API_URL` — endpoint override
   - `OPENROUTER_MODEL` — primary model id (default: `google/gemini-2.5-flash-lite`)
@@ -97,7 +124,7 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 - `require_valid_user = false` for public reads.
 - Proxy auth enabled for future user-database support.
 
-**Admin credential:** `/etc/credstore.encrypted/couchdb_admin_password`.
+**Admin credential:** `/etc/credstore.encrypted/couchdb_admin_password` — placed per the Secrets section; CouchDB itself learned the same password from its package's debconf prompt at install time, so the two must match.
 
 **dictionary-db**
 - Public read-only database for the German dictionary.
