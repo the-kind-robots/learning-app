@@ -55,10 +55,14 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 Every secret is a systemd encrypted credential in `/etc/credstore.encrypted/`.
 Deploys never create or prompt for them — the deb's postinst and the units only
 read; a missing credential fails the unit with `243/CREDENTIALS`. Placement is
-a one-time step of server setup, repeated only when a secret rotates:
+a one-time step of server setup, repeated only when a secret rotates. Each line
+prompts for its value (skip the ones already placed):
 
 ```bash
-systemd-ask-password -n "value" | sudo systemd-creds encrypt --name=<name> - /etc/credstore.encrypted/<name>
+systemd-ask-password -n "db_auth_secret"          | sudo systemd-creds encrypt --name=db_auth_secret          - /etc/credstore.encrypted/db_auth_secret
+systemd-ask-password -n "openrouter_api_key"      | sudo systemd-creds encrypt --name=openrouter_api_key      - /etc/credstore.encrypted/openrouter_api_key
+systemd-ask-password -n "couchdb_admin_password"  | sudo systemd-creds encrypt --name=couchdb_admin_password  - /etc/credstore.encrypted/couchdb_admin_password
+# borg-passphrase is managed by learning-app-admin-setup --rotate-borg (see Borg key)
 ```
 
 | Credential | Read by |
