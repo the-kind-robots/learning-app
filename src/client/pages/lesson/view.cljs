@@ -168,6 +168,8 @@
     (empty-state)
     (let [lesson-state (:lesson/state state)]
       [:div.lesson
+       (when (= :token-info (:modal/type state))
+         (token-info-dialog (:modal/data state)))
        [:h1.lesson__title "Урок"]
        [:header.lesson__header
         (progress lesson-state {})
