@@ -34,6 +34,9 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
   rm -f /etc/credstore.encrypted/openai_api_key
   rm -f /etc/credstore.encrypted/couchdb_admin_password
 
+  # Remove the postinst-written admin password ini (not owned by the deb)
+  rm -f /opt/couchdb/etc/local.d/99-admin-password.ini
+
   # 5. Remove users if exist, with their home directories
   if id webapp &>/dev/null; then
     userdel -r webapp || true

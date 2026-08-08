@@ -4,6 +4,7 @@
 set -u
 
 BORG_PASS="staging-borg-pass"   # must match run.sh
+COUCH_PASS="3434"               # must match run.sh
 BORG_REPO="/var/lib/dbmaintainer/borg-repo"
 DB="/var/lib/learning-app/db.sqlite"
 
@@ -30,6 +31,17 @@ for unit in nginx.service couchdb.service learning-app-run.service \
             learning-app-backup-db.timer; do
     check "unit active: ${unit}" systemctl is-active --quiet "${unit}"
 done
+
+# CouchDB admin: the credstore password authenticates, and the ini postinst
+# wrote during the drift scenario (run.sh, GH-252) holds a hash, not plaintext
+# -- CouchDB rewrites the value on startup.
+ADMIN_INI="/opt/couchdb/etc/local.d/99-admin-password.ini"
+check "couchdb: credstore password is the admin password" \
+    test "$(http_code -u "admin:${COUCH_PASS}" http://127.0.0.1:5984/_node/_local/_config/admins)" = 200
+check "couchdb: admin ini exists after drift realignment" \
+    test -f "${ADMIN_INI}"
+check "couchdb: admin ini holds a hash, not the plaintext password" \
+    grep -Eq '^admin *= *-' "${ADMIN_INI}"
 
 # nginx answers inside the container (self-signed cert, hence -k).
 check "nginx: https:// answers 200" \
