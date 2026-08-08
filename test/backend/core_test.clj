@@ -167,6 +167,38 @@
           (is (= [(str "u:" id)] (get-in (second @secured) [:members :roles]))))))))
 
 
+(deftest a-failed-couch-step-leaves-no-half-created-account
+  (testing "the row and the secured userdb exist together or not at all"
+    (let [db        (migrated-db)
+          destroyed (atom nil)]
+      (with-redefs [db/exists? (constantly false)
+                    db/use     (fn [name] {:name name})
+                    db/secure  (fn [_ _] (throw (ex-info "couch is down" {})))
+                    db/destroy (fn [db] (reset! destroyed (:name db)) (delay nil))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"couch is down"
+                              (sut/create-account! db))))
+      (is (empty? (jdbc/execute! db ["SELECT id FROM users"]))
+          "the insert rolled back, no orphan row")
+      (is (= "userdb-1" @destroyed)
+          "the userdb created for the rolled-back row is removed with it"))))
+
+
+(deftest a-failed-provision-burns-nothing-for-the-next-attempt
+  (testing "after a couch failure the same id provisions cleanly"
+    (let [db (migrated-db)]
+      (with-redefs [db/exists? (constantly false)
+                    db/use     (fn [name] {:name name})
+                    db/secure  (fn [_ _] (throw (ex-info "couch is down" {})))
+                    db/destroy (fn [_] (delay nil))]
+        (is (thrown? clojure.lang.ExceptionInfo (sut/create-account! db))))
+      (with-redefs [db/exists? (constantly false)
+                    db/use     (fn [name] {:name name})
+                    db/secure  (fn [_ _] nil)]
+        (is (= 1 (:id (sut/create-account! db)))
+            "the id the failed attempt minted is minted again, not leaked")))))
+
+
 (defn- ^File temp-dir
   []
   (.toFile (java.nio.file.Files/createTempDirectory
