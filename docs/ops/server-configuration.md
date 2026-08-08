@@ -59,6 +59,7 @@ a one-time step of server setup, repeated only when a secret rotates. Each line
 prompts for its value (skip the ones already placed):
 
 ```bash
+sudo -v  # first, or sudo's own prompt fights ask-password for the same terminal
 systemd-ask-password -n "db_auth_secret"          | sudo systemd-creds encrypt --name=db_auth_secret          - /etc/credstore.encrypted/db_auth_secret
 systemd-ask-password -n "openrouter_api_key"      | sudo systemd-creds encrypt --name=openrouter_api_key      - /etc/credstore.encrypted/openrouter_api_key
 systemd-ask-password -n "couchdb_admin_password"  | sudo systemd-creds encrypt --name=couchdb_admin_password  - /etc/credstore.encrypted/couchdb_admin_password
