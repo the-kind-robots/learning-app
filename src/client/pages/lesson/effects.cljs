@@ -2,6 +2,7 @@
   (:require
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
+   [pages.lesson.popover :as popover]
    [use-cases.lesson :as lesson]
    [use-cases.vocabulary :as vocabulary]))
 
@@ -56,25 +57,33 @@
 
 (nxr/register-effect! :effect/open-token-info
   (fn ^:async open-token-info
-    [{:keys [capabilities dispatch]} _ {:keys [dictionary-form translation]}]
+    [{:keys [capabilities dispatch]} _ {:keys [dictionary-form translation word-index]}]
     (try
       (let [td (await (lesson/token-info capabilities dictionary-form translation))]
-        (dispatch [[:action/open-modal td]])
-        (when (= :known-with-translation (:state td))
-          (js/setTimeout #(dispatch [[:action/close-modal]]) 900)))
+        (dispatch [[:action/open-modal (assoc td :word-index word-index)]]))
       (catch js/Error err
         (log/error :effect/open-token-info {:error (str err)})))))
 
 
+(nxr/register-effect! :effect/show-token-popover
+  (fn show-token-popover
+    [{:keys [dispatch]} _ word-index]
+    (let [anchor (js/document.querySelector
+                  (str ".lesson__answer-token[data-word-index=\"" word-index "\"]"))]
+      (if anchor
+        (popover/open! anchor #(dispatch [[:action/close-modal]]))
+        (dispatch [[:action/close-modal]])))))
+
+
 (nxr/register-effect! :effect/add-token
   (fn ^:async add-token
-    [{:keys [capabilities dispatch]} _ {:keys [dictionary-form translation]}]
+    [{:keys [capabilities dispatch]} _ {:keys [dictionary-form translation word-index]}]
     (try
       (await (vocabulary/add! capabilities dictionary-form translation))
       (dispatch [[:action/open-modal
                   {:dictionary-form dictionary-form
-                   :translation translation
-                   :state       :known-with-translation}]])
-      (js/setTimeout #(dispatch [[:action/close-modal]]) 900)
+                   :state           :known-with-translation
+                   :translation     translation
+                   :word-index      word-index}]])
       (catch js/Error err
         (log/error :effect/add-token {:error (str err)})))))

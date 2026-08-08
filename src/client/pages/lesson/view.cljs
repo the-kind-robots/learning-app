@@ -4,7 +4,7 @@
 
 
 (defn- answer-body
-  [{:keys [correct-answer correct-answer-segments]}]
+  [{:keys [correct-answer correct-answer-segments open-token-index]}]
   (if (seq correct-answer-segments)
     (into
      [:p.lesson__answer-body {:lang "de"}]
@@ -14,9 +14,13 @@
          [:button.lesson__answer-token
           {:type "button"
            :data-word-index word-index
-           :on   {:click [[:action/view-token-info
-                           {:dictionary-form dictionary-form
-                            :translation     translation}]]}}
+           :aria-haspopup "dialog"
+           :aria-controls "popover"
+           :aria-expanded (str (= word-index open-token-index))
+           :on {:click [[:action/view-token-info
+                         {:dictionary-form dictionary-form
+                          :translation     translation
+                          :word-index      word-index}]]}}
           text]
          text)))
     [:p.lesson__answer-body {:lang "de"} correct-answer]))
@@ -95,29 +99,40 @@
       "ДАЛЕЕ"]]]])
 
 
-(defn token-info-dialog
-  [{:keys [dictionary-form translation state]}]
-  [:dialog#token-info-dialog
-   {:replicant/on-mount [[:action/open-dialog]]
-    :on {:close [[:action/close-modal]]}}
-   [:div.token-card
-    (when (= state :known-with-translation) {:data-dismiss "900"})
-    [:p.token-card__word {:lang "de"} dictionary-form]
-    [:p.token-card__translation {:lang "ru"} translation]
-    (case state
-      :known-with-translation [:p.token-card__state "✓ В словаре"]
-      :known-missing-translation [:button.token-card__button
-                                  {:type "button"
-                                   :on   {:click [[:action/save-lesson-word
-                                                   {:dictionary-form dictionary-form
-                                                    :translation     translation}]]}}
-                                  "+ ДОБАВИТЬ ПЕРЕВОД"]
-      :unknown-word [:button.token-card__button
-                     {:type "button"
-                      :on   {:click [[:action/save-lesson-word
-                                      {:dictionary-form dictionary-form
-                                       :translation     translation}]]}}
-                     "+ В СЛОВАРЬ"])]])
+(defn- token-add-button
+  [{:keys [dictionary-form translation word-index]} label]
+  [:button.token-card__button
+   {:type "button"
+    :on   {:click [[:action/save-lesson-word
+                    {:dictionary-form dictionary-form
+                     :translation     translation
+                     :word-index      word-index}]]}}
+   label])
+
+
+(defn- token-card
+  [{:keys [dictionary-form translation state] :as data}]
+  [:div.token-card
+   (when (= state :known-with-translation) {:data-dismiss "900"})
+   [:p.token-card__word {:lang "de"} dictionary-form]
+   [:p.token-card__translation {:lang "ru"} translation]
+   (case state
+     :known-with-translation [:p.token-card__state "✓ В словаре"]
+     :known-missing-translation (token-add-button data "+ ДОБАВИТЬ ПЕРЕВОД")
+     :unknown-word (token-add-button data "+ В СЛОВАРЬ"))])
+
+
+(defn token-popover
+  "Popover shell anchored to the clicked answer token. The Popover API gives
+   light-dismiss and top-layer rendering; pages.lesson.popover positions the
+   shell and arms the auto-close timers via :action/show-token-popover."
+  [{:keys [word-index] :as data}]
+  [:div#popover.popover
+   {:popover "auto"
+    :replicant/on-mount [[:action/show-token-popover word-index]]
+    :replicant/on-update [[:action/show-token-popover word-index]]}
+   [:div#popover-content (token-card data)]
+   [:div#popover-arrow.popover__arrow]])
 
 
 (defn progress
@@ -166,10 +181,11 @@
   [state]
   (if (:lesson/empty? state)
     (empty-state)
-    (let [lesson-state (:lesson/state state)]
+    (let [lesson-state (:lesson/state state)
+          token-info   (when (= :token-info (:modal/type state))
+                         (:modal/data state))]
       [:div.lesson
-       (when (= :token-info (:modal/type state))
-         (token-info-dialog (:modal/data state)))
+       (when token-info (token-popover token-info))
        [:h1.lesson__title "Урок"]
        [:header.lesson__header
         (progress lesson-state {})
@@ -185,7 +201,8 @@
             "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"}]]]]
        [:main.lesson__body
         (challenge lesson-state)]
-       (let [footer-props (presenter/footer-props lesson-state)]
+       (let [footer-props (some-> (presenter/footer-props lesson-state)
+                                  (assoc :open-token-index (:word-index token-info)))]
          (if footer-props
            (case (:variant footer-props)
              :success (success-footer footer-props)

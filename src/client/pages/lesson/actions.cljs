@@ -47,13 +47,18 @@
 
 
 (nxr/register-action! :action/view-token-info
-  (fn view-token-info [_ {:keys [dictionary-form translation]}]
-    [[:effect/open-token-info {:dictionary-form dictionary-form :translation translation}]]))
+  (fn view-token-info [_ payload]
+    [[:effect/open-token-info payload]]))
+
+
+(nxr/register-action! :action/show-token-popover
+  (fn show-token-popover [_ word-index]
+    [[:effect/show-token-popover word-index]]))
 
 
 (nxr/register-action! :action/save-lesson-word
-  (fn save-lesson-word [_ {:keys [dictionary-form translation]}]
-    [[:effect/add-token {:dictionary-form dictionary-form :translation translation}]]))
+  (fn save-lesson-word [_ payload]
+    [[:effect/add-token payload]]))
 
 
 (nxr/register-action! :action/focus-lesson-input
