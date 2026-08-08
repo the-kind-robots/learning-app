@@ -31,6 +31,7 @@ The client SHALL hold the poke socket only while the page is visible, SHALL pull
 #### Scenario: Idle device learns of a remote write
 - **WHEN** another device of the same account writes a word
 - **THEN** the idle visible device pulls without navigation and the word appears locally
+- **AND** the current page reflects it — home recomputes lesson availability without touching a half-typed add form
 
 #### Scenario: Pairing confirmed by its own echo
 - **WHEN** the QR carried nonce N and a new device adopts the account and writes receipt `pairing:N`

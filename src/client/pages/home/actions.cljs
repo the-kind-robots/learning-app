@@ -16,7 +16,11 @@
   (fn show-home [_ {:keys [active-id active-name total]}]
     [[:effect/save
       {:page/current        :page/home
-       :page/load           nil
+       ;; Reloaded after every replication pass (#255): lesson availability
+       ;; is derived from synced data, so a pull landing while the user sits
+       ;; here — a poke, a pairing adoption — must recompute it. The refresh
+       ;; variant leaves the add form alone.
+       :page/load           [:effect/refresh-home]
        :home/active-coll-id active-id
        :home/active-coll-name active-name
        :home/add-error      nil
@@ -24,6 +28,14 @@
        :home/suggestions    empty-suggestions
        :home/translation    ""
        :home/word           ""}]]))
+
+
+(nxr/register-action! :action/refresh-home
+  (fn refresh-home [_ {:keys [active-id active-name total]}]
+    [[:effect/save
+      {:home/active-coll-id   active-id
+       :home/active-coll-name active-name
+       :home/empty-vocab?     (zero? total)}]]))
 
 
 (nxr/register-action! :action/handle-collection-rename-keydown
