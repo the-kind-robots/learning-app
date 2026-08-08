@@ -1,14 +1,15 @@
 #!/bin/sh
-# Bridges systemd credentials into the environment the app reads: every
-# secret is a file under $CREDENTIALS_DIRECTORY (decrypted by systemd),
-# and the app wants plain env vars. An already-set variable wins, so a
-# dev override in /etc/learning-app/environment keeps working.
+# Exports systemd credentials as the env vars the app reads. Credentials are
+# the single source of truth for secrets: a value that leaked into an env
+# file is overwritten, so there is exactly one place to rotate. The files
+# are guaranteed by LoadCredentialEncrypted= — a missing one already failed
+# the unit before this script ran.
 set -eu
 
 env_from_file() {
     var="$1"
     file="$2"
-    if [ -z "$(eval "printf %s \"\${$var:-}\"")" ] && [ -n "$file" ] && [ -f "$file" ]; then
+    if [ -n "$file" ] && [ -f "$file" ]; then
         export "$var"="$(cat "$file")"
     fi
 }

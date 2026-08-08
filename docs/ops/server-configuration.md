@@ -104,10 +104,9 @@ needs an offline copy (password manager).
 - `/etc/environment.d/learning-app.conf` (defaults)
 - `/etc/learning-app/environment` (overrides)
 
-**Expected values:**
+**Expected values (non-secrets only — secrets live in the credstore and
+override anything set here):**
 - `LEARNING_APP__DB_PATH` absolute path
-- Example generation uses OpenRouter. Required key via systemd cred or env var:
-  - `/etc/credstore.encrypted/openrouter_api_key` or `OPENROUTER_API_KEY`
 - Optional OpenRouter env vars:
   - `OPENROUTER_API_URL` — endpoint override
   - `OPENROUTER_MODEL` — primary model id (default: `google/gemini-2.5-flash-lite`)
