@@ -74,6 +74,32 @@
     (is (false? (#'sut/burn-grant! db token)))))
 
 
+(deftest the-invite-url-points-at-the-configured-public-origin
+  (testing "without configuration the canonical origin is assumed"
+    (is (= "https://sprecha.de" (#'sut/configured-public-url {}))))
+  (testing "the environment wins"
+    (is (= "https://example.test"
+           (#'sut/configured-public-url {"LEARNING_APP__PUBLIC_URL" "https://example.test"}))))
+  (testing "a trailing slash never doubles up in the URL"
+    (is (= "https://example.test/#invite=abc"
+           (#'sut/invite-url
+            (#'sut/configured-public-url {"LEARNING_APP__PUBLIC_URL" "https://example.test/"})
+            "abc")))))
+
+
+(deftest the-mint-invite-command-prints-a-usable-invite-and-starts-no-server
+  (let [db (migrated-db)]
+    (with-redefs [sut/db-spec db
+                  sut/adopt-legacy-database! (fn [])]
+      (let [out   (with-out-str (sut/-main "mint-invite"))
+            token (second (re-find #"/#invite=([0-9a-f]{40})" out))]
+        (testing "the printed URL carries a grant the server will honour"
+          (is (some? token) (str "no invite URL in output: " (pr-str out)))
+          (is (true? (#'sut/burn-grant! db token))))
+        (testing "the command serves nothing"
+          (is (nil? @sut/server)))))))
+
+
 (deftest stopping-the-server-drains-in-flight-requests
   (let [in-flight (promise)
         handler   (fn [_]

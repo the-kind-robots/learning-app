@@ -280,6 +280,24 @@
      token)))
 
 
+(defn- configured-public-url
+  "The address users reach the app at — where invite links must point. The
+   server cannot infer it: behind the reverse proxy its own port says nothing
+   about the public origin."
+  [env]
+  (str/replace (or (get env "LEARNING_APP__PUBLIC_URL") "https://sprecha.de")
+               #"/+$"
+               ""))
+
+
+(defn- invite-url
+  "The link an invited user opens. The token travels in the fragment, never in
+   the query string: a fragment is not part of the request, so it stays out of
+   access logs and Referer headers."
+  [base-url token]
+  (str base-url "/#invite=" token))
+
+
 (defn- burn-grant!
   "Atomically burns an unused, unexpired grant. Returns true when burned."
   [db token]
@@ -649,13 +667,9 @@
   (start-server! app port))
 
 
-(defn -main
+(defn- serve!
   []
   (let [url (str "http://localhost:" port "/")]
-    ;; Logging first: adoption, migrations and the reconciliation report all
-    ;; speak before the server starts, and events without a handler are
-    ;; dropped silently (#218 — the dev alias ships none).
-    (ensure-log-handler!)
     (require-couchdb-password! (System/getenv) running-from-source?)
     ;; Adopt, then migrate, then serve: the app never runs against an
     ;; outdated schema or a stranded database.
@@ -665,6 +679,34 @@
     (reconciliation/report! db-spec)
     (restart-server! #'ring-handler port)
     (println "Serving" url)))
+
+
+(defn mint-invite!
+  "Operator command (#262): mints a single-use grant against the configured
+   database and prints the invite URL. Adopts and migrates first, exactly like
+   serving does — the grant must land in the same database the server reads.
+   Touches only SQLite, so no CouchDB credentials are demanded and no server
+   comes up."
+  []
+  (adopt-legacy-database!)
+  (migrations/ensure-migrated! db-spec)
+  (on-connection [db db-spec]
+    (println (invite-url (configured-public-url (System/getenv))
+                         (mint-grant! db)))))
+
+
+(defn -main
+  [& args]
+  ;; Logging first: adoption, migrations and the reconciliation report all
+  ;; speak before the server starts, and events without a handler are
+  ;; dropped silently (#218 — the dev alias ships none).
+  (ensure-log-handler!)
+  (case (first args)
+    nil (serve!)
+    "mint-invite" (mint-invite!)
+    (binding [*out* *err*]
+      (println "Unknown command:" (first args))
+      (System/exit 2))))
 
 
 (comment
