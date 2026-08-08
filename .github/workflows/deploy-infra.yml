@@ -10,6 +10,42 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
+      - name: Extract credential names from shipped units
+        id: credentials
+        run: |
+          names="$(infra/scripts/list-unit-credentials.sh infra/production/etc/systemd/system/* | tr '\n' ' ')"
+          echo "Units reference credentials: ${names:-none}"
+          echo "names=${names}" >> "$GITHUB_OUTPUT"
+
+      # Units that load systemd credentials crash-loop with 243/CREDENTIALS
+      # when the encrypted file is absent on the target, and staging cannot
+      # catch that (its container preseeds every credential). Fail here,
+      # before the deb lands, with the list of names to place first.
+      # The checker itself ships in the deb, so the first deploy that
+      # delivers it has nothing to call yet and skips with a notice.
+      - name: Verify credentials exist on the target
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          CRED_NAMES: ${{ steps.credentials.outputs.names }}
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          key: ${{ secrets.KEY }}
+          envs: CRED_NAMES
+          script: |
+            set -euo pipefail
+            checker=/opt/learning-app/bin/check-credentials.sh
+            if [ -z "${CRED_NAMES// }" ]; then
+              echo "No unit credentials to verify"
+              exit 0
+            fi
+            if [ ! -x "${checker}" ]; then
+              echo "NOTICE: ${checker} not installed yet (it ships with this deb); skipping credential preflight"
+              exit 0
+            fi
+            # shellcheck disable=SC2086 -- names are single words by construction
+            sudo -n "${checker}" ${CRED_NAMES}
+
       - name: Build infra deb
         run: mkdir -p target && dpkg-deb --root-owner-group --build infra/production target/learning-app-infra.deb
 
