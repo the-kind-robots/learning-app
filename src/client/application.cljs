@@ -479,7 +479,7 @@
   [dispatch]
   [["/home"
     {:name        :page/home
-     :controllers [{:start #(dispatch [[:effect/load-home]])}]}]
+     :controllers [{:start #(dispatch [[:effect/load-home] [:effect/sync-pull]])}]}]
    ["/words"
     {:name        :page/words
      :controllers [{:start #(dispatch [[:effect/load-words] [:effect/sync-pull]])}]}]

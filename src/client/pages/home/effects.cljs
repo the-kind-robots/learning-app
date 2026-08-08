@@ -43,19 +43,35 @@
       {:active-id nil :active-name nil :word-count nil})))
 
 
+(defn- ^:async home-data
+  [capabilities]
+  (let [colls (:collections capabilities)
+        total (await (vocabulary/count capabilities))
+        {:keys [active-id active-name word-count]} (await (resolve-active colls))]
+    {:active-id   active-id
+     :active-name active-name
+     :total       (or word-count total)}))
+
+
 (nxr/register-effect! :effect/load-home
   (fn ^:async load-home
     [{:keys [capabilities dispatch]} _]
     (try
-      (let [colls (:collections capabilities)
-            total (await (vocabulary/count capabilities))
-            {:keys [active-id active-name word-count]} (await (resolve-active colls))]
-        (dispatch [[:action/show-home
-                    {:active-id   active-id
-                     :active-name active-name
-                     :total       (or word-count total)}]]))
+      (dispatch [[:action/show-home (await (home-data capabilities))]])
       (catch js/Error err
         (log/error :effect/load-home {:error (str err)})))))
+
+
+(nxr/register-effect! :effect/refresh-home
+  ;; The post-pull reload (#255): recomputes what synced data decides —
+  ;; lesson availability, the active collection — without :action/show-home's
+  ;; reset of the add form the user may be typing into.
+  (fn ^:async refresh-home
+    [{:keys [capabilities dispatch]} _]
+    (try
+      (dispatch [[:action/refresh-home (await (home-data capabilities))]])
+      (catch js/Error err
+        (log/error :effect/refresh-home {:error (str err)})))))
 
 
 (nxr/register-effect! :effect/suggest-completions
