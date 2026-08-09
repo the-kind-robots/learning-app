@@ -11,7 +11,7 @@
                  [{:id "word-1" :value "der Hund" :translation "пёс"}]
                  []
                  :first)]
-      (is (nil? (sut/footer-props state))))))
+      (is (nil? (sut/footer-props {:lesson/state state}))))))
 
 
 (deftest footer-props-includes-user-answer-for-example-trial
@@ -45,18 +45,19 @@
                                     :locked?   false}
                  :last-result      {:correct? false
                                     :answer   "Mein Hund schlaeft"}}
-          props (sut/footer-props state)]
+          props (sut/footer-props {:lesson/state state})]
       (is (= :error (:variant props)))
       (is (= "Mein Hund schlaeft" (:user-answer props)))
       (is (= "Der Hund schlaeft." (:correct-answer props)))
-      (is (= [{:type :plain-word :text "Der" :word-index 0}
-              {:type        :annotated-word
-               :text        "Hund"
-               :used-form   "Hund"
+      (is (= [{:type :plain-word :text "Der" :word-index 0 :expanded? false}
+              {:type            :annotated-word
+               :text            "Hund"
+               :used-form       "Hund"
                :dictionary-form "der Hund"
-               :translation "пёс"
-               :word-index  1}
-              {:type :plain-word :text "schlaeft." :word-index 2}]
+               :translation     "пёс"
+               :word-index      1
+               :expanded?       false}
+              {:type :plain-word :text "schlaeft." :word-index 2 :expanded? false}]
              (:correct-answer-segments props))))))
 
 
@@ -67,7 +68,7 @@
                  []
                  :first)
           state (domain/check-answer state "die Katze")
-          props (sut/footer-props state)]
+          props (sut/footer-props {:lesson/state state})]
       (is (= :error (:variant props)))
       (is (= "die Katze" (:user-answer props)))
       (is (= "der Hund" (:correct-answer props))))))

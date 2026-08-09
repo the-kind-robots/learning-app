@@ -1,6 +1,7 @@
 (ns backend.push-test
   (:require
    [clojure.test :refer [deftest is testing]]
+   [db :as db]
    [push :as push]))
 
 
@@ -34,3 +35,31 @@
   (push/subscribe! 4 :only)
   (push/unsubscribe! 4 :only)
   (is (empty? (get @@#'push/channels "userdb-4"))))
+
+
+(deftest failed-turn-backs-off-by-error-type
+  (testing "refused credentials back off for minutes and log loudly"
+    (doseq [status [401 403]]
+      (let [{:keys [level sleep-ms]} (#'push/backoff (ex-info "Could not read _db_updates" {:status status}))]
+        (is (= :error level))
+        (is
+         (<= 60000 sleep-ms)
+         "minutes, not seconds — a steady retry of bad credentials trips the server's lockout"))))
+
+  (testing "everything else keeps the quick retry"
+    (doseq [error [(java.net.ConnectException. "Connection refused")
+                   (ex-info "Could not read _db_updates" {:status 404 :body {:error "not_found"}})
+                   (ex-info "no status at all" {})]]
+      (let [{:keys [level sleep-ms]} (#'push/backoff error)]
+        (is (= :warn level))
+        (is (= 5000 sleep-ms))))))
+
+
+(deftest refused-feed-turn-is-auth-shaped-end-to-end
+  (testing "db-updates carries the answer's status in ex-data, so the fan-in tells a refusal from an outage"
+    (with-redefs [db/request-sync (fn [_conn _opts] {:status 401 :body {:error "unauthorized"}})]
+      (let [error (try
+                    (db/db-updates "now" 1)
+                    (catch Exception e e))]
+        (is (= 401 (:status (ex-data error))))
+        (is (= :error (:level (#'push/backoff error))))))))

@@ -218,7 +218,9 @@
                                                  "&timeout=" timeout-ms)})]
         (if (= (:status response) 200)
           (:body response)
-          (raise "Could not read _db_updates" (:body response)))))))
+          ;; `:status` rides along so callers can tell an auth refusal
+          ;; (401/403) from an outage and back off accordingly.
+          (raise "Could not read _db_updates" (select-keys response [:status :body])))))))
 
 
 #?(:clj

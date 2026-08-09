@@ -12,7 +12,7 @@ ensure_deployer_ci_sudo() {
 
     install -d -m 750 /etc/sudoers.d
     cat > "${tmp}" <<'EOF'
-deployer ALL=(root) NOPASSWD: /usr/bin/dpkg, /usr/bin/apt-get, /usr/bin/systemctl, /usr/sbin/nginx
+deployer ALL=(root) NOPASSWD: /usr/bin/dpkg, /usr/bin/apt-get, /usr/bin/systemctl, /usr/sbin/nginx, /opt/learning-app/bin/check-credentials.sh
 EOF
 
     if command -v visudo >/dev/null 2>&1; then

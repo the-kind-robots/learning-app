@@ -1,21 +1,34 @@
 (ns client.pages.lesson-view-test
-  "Token-info card in the lesson page render tree (GH-257): the click on an
-   annotated answer word saves :modal/type :token-info, and the page must
-   actually render the dialog for that state — after the Replicant migration
-   the dialog function existed but nothing called it."
+  "Answer-hint popover in the lesson page render tree (GH-257, GH-273): the
+   annotated answer is marked up in state, a click stores only the open word
+   index, and the page renders the anchored popover for it — after the
+   Replicant migration the card existed but nothing rendered it, and the
+   first fix rendered it as a centered modal dialog instead of a popover."
   (:require
    [cljs.test :refer-macros [deftest is testing]]
-   [domain.lesson :as domain]
    [pages.lesson.view :as sut]))
 
 
+(def ^:private example-trial
+  {:type      "example"
+   :word-id   "word-1"
+   :prompt    "Пёс спит"
+   :answer    "Der Hund schlaeft."
+   :structure [{:usedForm       "Hund"
+                :dictionaryForm "der Hund"
+                :translation    "пёс"
+                :wordIndex      1}]
+   :locked?   false})
+
+
 (defn- lesson-page-state
-  [modal]
-  (merge {:lesson/state (domain/initial-state
-                         [{:id "word-1" :value "der Hund" :translation "пёс"}]
-                         []
-                         :first)}
-         modal))
+  [hint-state]
+  (merge {:lesson/state {:trials           [example-trial]
+                         :remaining-trials [example-trial]
+                         :current-trial    example-trial
+                         :last-result      {:correct? true
+                                            :answer   "Der Hund schlaeft."}}}
+         hint-state))
 
 
 (defn- contains-node?
@@ -25,17 +38,17 @@
        boolean))
 
 
-(deftest page-renders-token-info-dialog-for-modal-state
-  (testing "modal state :token-info puts the dialog into the render tree"
+(deftest page-renders-answer-hint-popover-for-open-index
+  (testing "open hint index puts the anchored popover into the render tree"
     (let [page (sut/page (lesson-page-state
-                          {:modal/data {:dictionary-form "die Katze"
-                                        :state       :unknown-word
-                                        :translation "кошка"}
-                           :modal/type :token-info}))]
-      (is (contains-node? page :dialog#token-info-dialog)))))
+                          {:lesson/answer-hints    {1 :unknown-word}
+                           :lesson/open-hint-index 1}))]
+      (is (contains-node? page :div#popover.popover))
+      (is (contains-node? page :button.token-card__button))
+      (is (not (contains-node? page :dialog#token-info-dialog))))))
 
 
-(deftest page-omits-token-info-dialog-without-modal-state
-  (testing "no modal state — no dialog in the render tree"
+(deftest page-omits-answer-hint-popover-without-open-index
+  (testing "no open hint index — no popover in the render tree"
     (is (not (contains-node? (sut/page (lesson-page-state {}))
-                             :dialog#token-info-dialog)))))
+                             :div#popover.popover)))))

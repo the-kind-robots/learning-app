@@ -236,6 +236,11 @@
    role-secured CouchDB userdb. Returns {:id int :token str} — the raw token
    is the user's key, stored nowhere on the server.
 
+   The CouchDB steps run inside the transaction, like the guard below already
+   does: the row and the secured userdb exist together or not at all (#254).
+   A failed step throws, the insert rolls back, and the id — never handed to
+   anyone — is simply minted again by the next attempt.
+
    Refuses an id whose userdb already exists. Account ids are row ids and
    CouchDB outlives app.db resets, so a recycled id would silently inherit —
    and sync down — the previous owner's data (seen live, #182). Refusal keeps
@@ -248,12 +253,24 @@
                 (let [{:keys [id]} (jdbc/execute-one! tx
                                      ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
                                       (sha256-hex token)]
-                                     {:builder-fn result-set/as-unqualified-maps})]
-                  (when (db/exists? (userdb/db-name id))
+                                     {:builder-fn result-set/as-unqualified-maps})
+                      dbname       (userdb/db-name id)]
+                  (when (db/exists? dbname)
                     (throw (ex-info "userdb already exists for a fresh account id"
                                     {:type ::recycled-id :id id})))
+                  (try
+                    (db/secure (db/use dbname) {:members {:names [] :roles [(str "u:" id)]}})
+                    (catch Exception e
+                      ;; The rollback frees the id for reuse, and the guard
+                      ;; above would refuse it for as long as a leftover
+                      ;; userdb exists — so the userdb this very call created
+                      ;; (the guard just proved the name was free) goes too.
+                      ;; Best effort: if CouchDB is down, the delete fails
+                      ;; like everything else and reconciliation reports the
+                      ;; orphan.
+                      (try @(db/destroy {:name dbname}) (catch Exception _))
+                      (throw e)))
                   id))]
-    (db/secure (db/use (userdb/db-name id)) {:members {:names [] :roles [(str "u:" id)]}})
     {:id id :token token}))
 
 
@@ -278,6 +295,24 @@
        ["INSERT INTO grants (sha256, expires_at) VALUES (?, ?)"
         (sha256-hex token) (+ (System/currentTimeMillis) ttl-ms)])
      token)))
+
+
+(defn- configured-public-url
+  "The address users reach the app at — where invite links must point. The
+   server cannot infer it: behind the reverse proxy its own port says nothing
+   about the public origin."
+  [env]
+  (str/replace (or (get env "LEARNING_APP__PUBLIC_URL") "https://sprecha.de")
+               #"/+$"
+               ""))
+
+
+(defn- invite-url
+  "The link an invited user opens. The token travels in the fragment, never in
+   the query string: a fragment is not part of the request, so it stays out of
+   access logs and Referer headers."
+  [base-url token]
+  (str base-url "/#invite=" token))
 
 
 (defn- burn-grant!
@@ -543,7 +578,13 @@
            [:meta {:name "viewport" :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
            [:title "Sprecha"]
            [:link {:rel "icon" :href "/favicon.ico"}]
-           [:link {:rel "manifest" :href "/manifest.json"}]
+           ;; Dev installs carry a red-D-badged icon set so a device can hold
+           ;; both the dev and the production PWA without confusing them.
+           [:link
+            {:rel  "manifest"
+             :href (if running-from-source?
+                     "/dev-manifest.json"
+                     "/manifest.json")}]
            [:link {:rel "stylesheet" :href "/css/styles.css"}]
            [:script {:src "/js/app/main.js" :defer true}]]
           [:body
@@ -649,13 +690,9 @@
   (start-server! app port))
 
 
-(defn -main
+(defn- serve!
   []
   (let [url (str "http://localhost:" port "/")]
-    ;; Logging first: adoption, migrations and the reconciliation report all
-    ;; speak before the server starts, and events without a handler are
-    ;; dropped silently (#218 — the dev alias ships none).
-    (ensure-log-handler!)
     (require-couchdb-password! (System/getenv) running-from-source?)
     ;; Adopt, then migrate, then serve: the app never runs against an
     ;; outdated schema or a stranded database.
@@ -665,6 +702,34 @@
     (reconciliation/report! db-spec)
     (restart-server! #'ring-handler port)
     (println "Serving" url)))
+
+
+(defn mint-invite!
+  "Operator command (#262): mints a single-use grant against the configured
+   database and prints the invite URL. Adopts and migrates first, exactly like
+   serving does — the grant must land in the same database the server reads.
+   Touches only SQLite, so no CouchDB credentials are demanded and no server
+   comes up."
+  []
+  (adopt-legacy-database!)
+  (migrations/ensure-migrated! db-spec)
+  (on-connection [db db-spec]
+    (println (invite-url (configured-public-url (System/getenv))
+                         (mint-grant! db)))))
+
+
+(defn -main
+  [& args]
+  ;; Logging first: adoption, migrations and the reconciliation report all
+  ;; speak before the server starts, and events without a handler are
+  ;; dropped silently (#218 — the dev alias ships none).
+  (ensure-log-handler!)
+  (case (first args)
+    nil (serve!)
+    "mint-invite" (mint-invite!)
+    (binding [*out* *err*]
+      (println "Unknown command:" (first args))
+      (System/exit 2))))
 
 
 (comment
