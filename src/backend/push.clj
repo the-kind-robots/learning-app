@@ -65,6 +65,30 @@
   30000)
 
 
+(def ^:private outage-backoff-ms
+  "CouchDB is down or `_global_changes` is missing: a short wait, then the
+   next turn probes again."
+  5000)
+
+
+(def ^:private auth-backoff-ms
+  "CouchDB answered but refused the credentials. A quick retry would repeat
+   the failed authentication every few seconds — steady enough to trip the
+   server's lockout and turn one misconfiguration into a self-inflicted
+   outage. Minutes, not seconds."
+  300000)
+
+
+(defn- backoff
+  "How to wait out one failed feed turn. Auth-shaped failures — CouchDB
+   answered 401/403 — back off for minutes and log loudly; anything else
+   (connection refused, missing `_global_changes`) keeps the quick retry."
+  [error]
+  (if (contains? #{401 403} (:status (ex-data error)))
+    {:level :error :sleep-ms auth-backoff-ms}
+    {:level :warn :sleep-ms outage-backoff-ms}))
+
+
 (defn- fan-in-loop!
   []
   ;; Starting from "now", not from the beginning of the feed: everything
@@ -74,11 +98,11 @@
       (recur (try
                (poke-subscribers! (db/db-updates since longpoll-ms))
                (catch Exception e
-                 (t/event! ::fan-in-failed {:level :warn :data {:error (ex-message e)}})
-                 ;; CouchDB is down or _global_changes is missing: wait it
-                 ;; out instead of hammering. `since` is lost on purpose —
-                 ;; reconnecting clients pull anyway (ADR-0009).
-                 (Thread/sleep 5000)
+                 (let [{:keys [level sleep-ms]} (backoff e)]
+                   (t/event! ::fan-in-failed {:level level :data {:error (ex-message e)}})
+                   ;; `since` is lost on purpose — reconnecting clients
+                   ;; pull anyway (ADR-0009).
+                   (Thread/sleep ^long sleep-ms))
                  "now"))))))
 
 

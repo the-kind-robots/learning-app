@@ -74,6 +74,32 @@
     (is (false? (#'sut/burn-grant! db token)))))
 
 
+(deftest the-invite-url-points-at-the-configured-public-origin
+  (testing "without configuration the canonical origin is assumed"
+    (is (= "https://sprecha.de" (#'sut/configured-public-url {}))))
+  (testing "the environment wins"
+    (is (= "https://example.test"
+           (#'sut/configured-public-url {"LEARNING_APP__PUBLIC_URL" "https://example.test"}))))
+  (testing "a trailing slash never doubles up in the URL"
+    (is (= "https://example.test/#invite=abc"
+           (#'sut/invite-url
+            (#'sut/configured-public-url {"LEARNING_APP__PUBLIC_URL" "https://example.test/"})
+            "abc")))))
+
+
+(deftest the-mint-invite-command-prints-a-usable-invite-and-starts-no-server
+  (let [db (migrated-db)]
+    (with-redefs [sut/db-spec db
+                  sut/adopt-legacy-database! (fn [])]
+      (let [out   (with-out-str (sut/-main "mint-invite"))
+            token (second (re-find #"/#invite=([0-9a-f]{40})" out))]
+        (testing "the printed URL carries a grant the server will honour"
+          (is (some? token) (str "no invite URL in output: " (pr-str out)))
+          (is (true? (#'sut/burn-grant! db token))))
+        (testing "the command serves nothing"
+          (is (nil? @sut/server)))))))
+
+
 (deftest stopping-the-server-drains-in-flight-requests
   (let [in-flight (promise)
         handler   (fn [_]
@@ -165,6 +191,38 @@
           (is (= 40 (count token)))
           (is (= (str "userdb-" id) (first @secured)))
           (is (= [(str "u:" id)] (get-in (second @secured) [:members :roles]))))))))
+
+
+(deftest a-failed-couch-step-leaves-no-half-created-account
+  (testing "the row and the secured userdb exist together or not at all"
+    (let [db        (migrated-db)
+          destroyed (atom nil)]
+      (with-redefs [db/exists? (constantly false)
+                    db/use     (fn [name] {:name name})
+                    db/secure  (fn [_ _] (throw (ex-info "couch is down" {})))
+                    db/destroy (fn [db] (reset! destroyed (:name db)) (delay nil))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"couch is down"
+                              (sut/create-account! db))))
+      (is (empty? (jdbc/execute! db ["SELECT id FROM users"]))
+          "the insert rolled back, no orphan row")
+      (is (= "userdb-1" @destroyed)
+          "the userdb created for the rolled-back row is removed with it"))))
+
+
+(deftest a-failed-provision-burns-nothing-for-the-next-attempt
+  (testing "after a couch failure the same id provisions cleanly"
+    (let [db (migrated-db)]
+      (with-redefs [db/exists? (constantly false)
+                    db/use     (fn [name] {:name name})
+                    db/secure  (fn [_ _] (throw (ex-info "couch is down" {})))
+                    db/destroy (fn [_] (delay nil))]
+        (is (thrown? clojure.lang.ExceptionInfo (sut/create-account! db))))
+      (with-redefs [db/exists? (constantly false)
+                    db/use     (fn [name] {:name name})
+                    db/secure  (fn [_ _] nil)]
+        (is (= 1 (:id (sut/create-account! db)))
+            "the id the failed attempt minted is minted again, not leaked")))))
 
 
 (defn- ^File temp-dir

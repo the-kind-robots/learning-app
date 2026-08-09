@@ -221,6 +221,9 @@
   line-height: inherit;
   margin: 0;
   padding: 0 1px;
+  /* Buttons default to user-select:none; the answer must select as one
+     continuous text run across hinted words (#283). */
+  user-select: text;
   text-decoration-color: currentcolor;
   text-decoration-line: underline;
   text-decoration-style: dotted;
