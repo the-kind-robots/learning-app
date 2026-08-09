@@ -113,7 +113,8 @@
 (defn- token-card
   [{:keys [dictionary-form translation state] :as data}]
   [:div.token-card
-   (when (= state :known-with-translation) {:data-dismiss "900"})
+   (cond-> {}
+     (= state :known-with-translation) (assoc :data-dismiss "900"))
    [:p.token-card__word {:lang "de"} dictionary-form]
    [:p.token-card__translation {:lang "ru"} translation]
    (case state
