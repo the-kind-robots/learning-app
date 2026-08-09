@@ -107,6 +107,18 @@ test('adding a word updates the card in place and persists the word', async ({ p
   await expect(page.locator('.word-item__value').filter({ hasText: 'der Garten' })).toBeVisible();
 });
 
+test('revealed answer selects as continuous text across hinted words', async ({ page }) => {
+  await setUpLesson(page, 'Der Hund schläft im Garten.');
+  const body = page.locator('.lesson__answer-body');
+  const box = await body.boundingBox();
+  await page.mouse.move(box.x + 1, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const selected = await page.evaluate(() => window.getSelection().toString());
+  expect(selected.replace(/\s+/g, ' ').trim()).toContain('Der Hund schläft im Garten.');
+});
+
 test('popover light-dismisses instantly and auto-closes after pointer leaves', async ({ page }) => {
   await setUpLesson(page, 'Der Hund schläft im Garten.');
 
