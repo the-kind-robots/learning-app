@@ -77,11 +77,12 @@
 
 (nxr/register-effect! :effect/add-token
   (fn ^:async add-token
-    [{:keys [capabilities dispatch]} system {:keys [dictionary-form translation word-index]}]
+    [{:keys [capabilities dispatch]} _ {:keys [dictionary-form hints translation word-index]}]
     (try
       (await (vocabulary/add! capabilities dictionary-form translation))
-      (let [hints (:lesson/answer-hints (deref (:store system)))]
-        (dispatch [[:action/annotate-answer
-                    (assoc hints word-index :known-with-translation)]]))
+      ;; The saved hint map re-renders the open card to its added state;
+      ;; the popover's on-update then repositions the shell.
+      (dispatch [[:action/annotate-answer
+                  (assoc hints word-index :known-with-translation)]])
       (catch js/Error err
         (log/error :effect/add-token {:error (str err)})))))

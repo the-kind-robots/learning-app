@@ -61,8 +61,8 @@
 
 
 (nxr/register-action! :action/save-lesson-word
-  (fn save-lesson-word [_ payload]
-    [[:effect/add-token payload]]))
+  (fn save-lesson-word [state payload]
+    [[:effect/add-token (assoc payload :hints (:lesson/answer-hints state))]]))
 
 
 (nxr/register-action! :action/focus-lesson-input
