@@ -9,14 +9,15 @@
     (into
      [:p.lesson__answer-body {:lang "de"}]
      (interpose " ")
-     (for [{:keys [type text dictionary-form translation word-index]} correct-answer-segments]
+     (for [{:keys [expanded? type text word-index]} correct-answer-segments]
        (if (= :annotated-word type)
          [:button.lesson__answer-token
           {:type "button"
            :data-word-index word-index
-           :on   {:click [[:action/view-token-info
-                           {:dictionary-form dictionary-form
-                            :translation     translation}]]}}
+           :aria-haspopup "dialog"
+           :aria-controls "popover"
+           :aria-expanded (str expanded?)
+           :on {:click [[:action/open-answer-hint word-index]]}}
           text]
          text)))
     [:p.lesson__answer-body {:lang "de"} correct-answer]))
@@ -95,29 +96,36 @@
       "ДАЛЕЕ"]]]])
 
 
-(defn token-info-dialog
-  [{:keys [dictionary-form translation state]}]
-  [:dialog#token-info-dialog
-   {:replicant/on-mount [[:action/open-dialog]]
-    :on {:close [[:action/close-modal]]}}
-   [:div.token-card
-    (when (= state :known-with-translation) {:data-dismiss "900"})
-    [:p.token-card__word {:lang "de"} dictionary-form]
-    [:p.token-card__translation {:lang "ru"} translation]
-    (case state
-      :known-with-translation [:p.token-card__state "✓ В словаре"]
-      :known-missing-translation [:button.token-card__button
-                                  {:type "button"
-                                   :on   {:click [[:action/save-lesson-word
-                                                   {:dictionary-form dictionary-form
-                                                    :translation     translation}]]}}
-                                  "+ ДОБАВИТЬ ПЕРЕВОД"]
-      :unknown-word [:button.token-card__button
-                     {:type "button"
-                      :on   {:click [[:action/save-lesson-word
-                                      {:dictionary-form dictionary-form
-                                       :translation     translation}]]}}
-                     "+ В СЛОВАРЬ"])]])
+(defn- hint-card
+  [{:keys [action-label data-dismiss status-note translation word word-index]}]
+  [:div.token-card
+   (cond-> {}
+     data-dismiss (assoc :data-dismiss data-dismiss))
+   [:p.token-card__word {:lang "de"} word]
+   [:p.token-card__translation {:lang "ru"} translation]
+   (when status-note
+     [:p.token-card__state status-note])
+   (when action-label
+     [:button.token-card__button
+      {:type "button"
+       :on   {:click [[:action/save-lesson-word
+                       {:dictionary-form word
+                        :translation     translation
+                        :word-index      word-index}]]}}
+      action-label])])
+
+
+(defn answer-hint-popover
+  "Popover shell anchored to the clicked answer word. The Popover API gives
+   light-dismiss and top-layer rendering; pages.lesson.popover opens the shell
+   at the clicked token (from the click's dispatch data) and re-positions it
+   when the card's content changes."
+  [props]
+  [:div#popover.popover
+   {:popover "auto"
+    :replicant/on-update [[:action/reposition-token-popover]]}
+   [:div#popover-content (hint-card props)]
+   [:div#popover-arrow.popover__arrow]])
 
 
 (defn progress
@@ -166,10 +174,10 @@
   [state]
   (if (:lesson/empty? state)
     (empty-state)
-    (let [lesson-state (:lesson/state state)]
+    (let [lesson-state (:lesson/state state)
+          answer-hint  (presenter/answer-hint-props state)]
       [:div.lesson
-       (when (= :token-info (:modal/type state))
-         (token-info-dialog (:modal/data state)))
+       (when answer-hint (answer-hint-popover answer-hint))
        [:h1.lesson__title "Урок"]
        [:header.lesson__header
         (progress lesson-state {})
@@ -185,7 +193,7 @@
             "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"}]]]]
        [:main.lesson__body
         (challenge lesson-state)]
-       (let [footer-props (presenter/footer-props lesson-state)]
+       (let [footer-props (presenter/footer-props state)]
          (if footer-props
            (case (:variant footer-props)
              :success (success-footer footer-props)
