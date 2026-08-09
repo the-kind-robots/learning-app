@@ -30,7 +30,10 @@ jobs:
         run: |
           while IFS= read -r file; do
             bash -n "$file"
-          done < <(find infra/production -type f \( -name '*.sh' -o -path '*/DEBIAN/postinst' -o -path '*/DEBIAN/postrm' \) | sort)
+          done < <(find infra/production infra/scripts -type f \( -name '*.sh' -o -path '*/DEBIAN/postinst' -o -path '*/DEBIAN/postrm' \) | sort)
+
+      - name: Test credential extraction script
+        run: infra/scripts/list-unit-credentials.test.sh
 
       - name: Build infra deb
         run: |
