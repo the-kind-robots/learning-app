@@ -46,7 +46,8 @@
 
 (nxr/register-action! :action/open-answer-hint
   (fn open-answer-hint [_ word-index]
-    [[:effect/save {:lesson/open-hint-index word-index}]]))
+    [[:effect/save {:lesson/open-hint-index word-index}]
+     [:effect/show-token-popover]]))
 
 
 (nxr/register-action! :action/close-answer-hint
@@ -54,9 +55,9 @@
     [[:effect/save {:lesson/open-hint-index nil}]]))
 
 
-(nxr/register-action! :action/show-token-popover
-  (fn show-token-popover [_ word-index]
-    [[:effect/show-token-popover word-index]]))
+(nxr/register-action! :action/reposition-token-popover
+  (fn reposition-token-popover [_]
+    [[:effect/reposition-token-popover]]))
 
 
 (nxr/register-action! :action/save-lesson-word

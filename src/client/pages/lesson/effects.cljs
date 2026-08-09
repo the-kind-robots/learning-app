@@ -64,8 +64,15 @@
 
 (nxr/register-effect! :effect/show-token-popover
   (fn show-token-popover
-    [{:keys [dispatch]} _ word-index]
-    (popover/open-for-word! word-index #(dispatch [[:action/close-answer-hint]]))))
+    [{:keys [dispatch dispatch-data]} _]
+    (popover/open! (:replicant/node dispatch-data)
+                   #(dispatch [[:action/close-answer-hint]]))))
+
+
+(nxr/register-effect! :effect/reposition-token-popover
+  (fn reposition-token-popover
+    [_ _]
+    (popover/reposition!)))
 
 
 (nxr/register-effect! :effect/add-token

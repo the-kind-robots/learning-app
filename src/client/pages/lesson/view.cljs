@@ -116,14 +116,14 @@
 
 
 (defn answer-hint-popover
-  "Popover shell anchored to the opened answer word. The Popover API gives
-   light-dismiss and top-layer rendering; pages.lesson.popover positions the
-   shell and arms the auto-close timers via :action/show-token-popover."
-  [{:keys [word-index] :as props}]
+  "Popover shell anchored to the clicked answer word. The Popover API gives
+   light-dismiss and top-layer rendering; pages.lesson.popover opens the shell
+   at the clicked token (from the click's dispatch data) and re-positions it
+   when the card's content changes."
+  [props]
   [:div#popover.popover
    {:popover "auto"
-    :replicant/on-mount [[:action/show-token-popover word-index]]
-    :replicant/on-update [[:action/show-token-popover word-index]]}
+    :replicant/on-update [[:action/reposition-token-popover]]}
    [:div#popover-content (hint-card props)]
    [:div#popover-arrow.popover__arrow]])
 

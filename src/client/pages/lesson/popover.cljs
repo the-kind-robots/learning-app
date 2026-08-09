@@ -129,35 +129,35 @@
                           0)))))
 
 
-(defn- open!
-  "Shows the popover anchored to `anchor`, or re-anchors and repositions an
-   already-open one. `on-closed` runs once when the popover closes for any
-   reason (light-dismiss, Escape, auto-close)."
+(defn open!
+  "Shows the popover anchored to `anchor` (the clicked token from Replicant's
+   dispatch data), or re-anchors an already-open one. `on-closed` runs once
+   when the popover closes for any reason (light-dismiss, Escape, auto-close).
+
+   Everything is deferred a frame: this runs from the click's effect, before
+   the render that mounts the shell — next frame the shell and the card exist
+   and their sizes are real."
   [anchor on-closed]
-  (when-let [pop (popover-el)]
-    (wire-listeners! pop)
-    (swap! state assoc :anchor anchor :on-closed on-closed)
-    (when-not (open? pop)
-      (.showPopover pop))
-    ;; Positioning reads the popover's rendered size (offsetWidth/Height), and
-    ;; this runs from a Replicant life-cycle hook — the card's content may not
-    ;; be laid out yet. One frame later the size is real and reading it does
-    ;; not force a mid-patch reflow.
-    (js/requestAnimationFrame
-     (fn []
+  (swap! state assoc :anchor anchor :on-closed on-closed)
+  (js/requestAnimationFrame
+   (fn []
+     (when-let [pop (popover-el)]
+       (wire-listeners! pop)
+       (when-not (open? pop)
+         (.showPopover pop))
        (position!)
        (schedule-auto-close! (if (active?) 0 (initial-close-ms)))))))
 
 
-(defn open-for-word!
-  "Shows the popover anchored to the answer token carrying `word-index`.
-   Owns the markup details (token selector) so effects stay markup-free.
-   Calls `on-closed` immediately when no such token is rendered."
-  [word-index on-closed]
-  (if-let [anchor (js/document.querySelector
-                   (str ".lesson__answer-token[data-word-index=\"" word-index "\"]"))]
-    (open! anchor on-closed)
-    (on-closed)))
+(defn reposition!
+  "Recomputes position against the stored anchor and re-arms auto-close after
+   the card's content swap (the add flow changes the card's size and its
+   data-dismiss)."
+  []
+  (js/requestAnimationFrame
+   (fn []
+     (position!)
+     (schedule-auto-close! (if (active?) 0 (initial-close-ms))))))
 
 
 (defonce window-listeners
