@@ -560,7 +560,13 @@
            [:meta {:name "viewport" :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
            [:title "Sprecha"]
            [:link {:rel "icon" :href "/favicon.ico"}]
-           [:link {:rel "manifest" :href "/manifest.json"}]
+           ;; Dev installs carry a red-D-badged icon set so a device can hold
+           ;; both the dev and the production PWA without confusing them.
+           [:link
+            {:rel  "manifest"
+             :href (if running-from-source?
+                     "/dev-manifest.json"
+                     "/manifest.json")}]
            [:link {:rel "stylesheet" :href "/css/styles.css"}]
            [:script {:src "/js/app/main.js" :defer true}]]
           [:body

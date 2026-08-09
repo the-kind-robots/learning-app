@@ -25,6 +25,13 @@ Config is `playwright.config.js` at the repo root: baseURL
 `http://localhost:8301`, `trace: "retain-on-failure"` (traces land in
 `test-results/` on failure).
 
+## CI
+
+The `Browser Tests` job in `.github/workflows/integration.yml` runs the same
+recipe on every relevant pull request: compile the app bundle, boot a backend
+on 8301, run the suite against the runner's system Chrome. On failure the job
+uploads `test-results/` (traces) and the backend log as an artifact.
+
 ## Conventions
 
 - Role- and label-based locators (`getByRole`, `getByLabel`) with auto-waiting
@@ -40,4 +47,3 @@ Config is `playwright.config.js` at the repo root: baseURL
 - **Sync-menu dialog** — it renders only for a provisioned account (invite
   gate, ADR-0006); a fresh environment has none, so the backdrop-dismiss
   scenario exercises the install guide instead.
-- **CI** — explicitly deferred by #169 until the suite proves its keep.
