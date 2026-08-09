@@ -65,14 +65,7 @@
 (nxr/register-effect! :effect/show-token-popover
   (fn show-token-popover
     [{:keys [dispatch]} _ word-index]
-    ;; Anchor is re-found by data attribute rather than captured from the click:
-    ;; the popover re-anchors on content updates too, when no event exists, and
-    ;; action payloads stay plain data.
-    (let [anchor (js/document.querySelector
-                  (str ".lesson__answer-token[data-word-index=\"" word-index "\"]"))]
-      (if anchor
-        (popover/open! anchor #(dispatch [[:action/close-answer-hint]]))
-        (dispatch [[:action/close-answer-hint]])))))
+    (popover/open-for-word! word-index #(dispatch [[:action/close-answer-hint]]))))
 
 
 (nxr/register-effect! :effect/add-token

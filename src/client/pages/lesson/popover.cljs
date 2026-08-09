@@ -129,7 +129,7 @@
                           0)))))
 
 
-(defn open!
+(defn- open!
   "Shows the popover anchored to `anchor`, or re-anchors and repositions an
    already-open one. `on-closed` runs once when the popover closes for any
    reason (light-dismiss, Escape, auto-close)."
@@ -147,6 +147,17 @@
      (fn []
        (position!)
        (schedule-auto-close! (if (active?) 0 (initial-close-ms)))))))
+
+
+(defn open-for-word!
+  "Shows the popover anchored to the answer token carrying `word-index`.
+   Owns the markup details (token selector) so effects stay markup-free.
+   Calls `on-closed` immediately when no such token is rendered."
+  [word-index on-closed]
+  (if-let [anchor (js/document.querySelector
+                   (str ".lesson__answer-token[data-word-index=\"" word-index "\"]"))]
+    (open! anchor on-closed)
+    (on-closed)))
 
 
 (defonce window-listeners
