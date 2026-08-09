@@ -9,7 +9,7 @@
     (into
      [:p.lesson__answer-body {:lang "de"}]
      (interpose " ")
-     (for [{:keys [expanded? type text dictionary-form translation word-index]} correct-answer-segments]
+     (for [{:keys [expanded? type text word-index]} correct-answer-segments]
        (if (= :annotated-word type)
          [:button.lesson__answer-token
           {:type "button"
@@ -17,10 +17,7 @@
            :aria-haspopup "dialog"
            :aria-controls "popover"
            :aria-expanded (str expanded?)
-           :on {:click [[:action/view-token-info
-                         {:dictionary-form dictionary-form
-                          :translation     translation
-                          :word-index      word-index}]]}}
+           :on {:click [[:action/open-answer-hint word-index]]}}
           text]
          text)))
     [:p.lesson__answer-body {:lang "de"} correct-answer]))
@@ -99,40 +96,35 @@
       "ДАЛЕЕ"]]]])
 
 
-(defn- token-add-button
-  [{:keys [dictionary-form translation word-index]} label]
-  [:button.token-card__button
-   {:type "button"
-    :on   {:click [[:action/save-lesson-word
-                    {:dictionary-form dictionary-form
-                     :translation     translation
-                     :word-index      word-index}]]}}
-   label])
-
-
-(defn- token-card
-  [{:keys [data-dismiss dictionary-form translation state] :as data}]
+(defn- hint-card
+  [{:keys [action-label data-dismiss status-note translation word word-index]}]
   [:div.token-card
    (cond-> {}
      data-dismiss (assoc :data-dismiss data-dismiss))
-   [:p.token-card__word {:lang "de"} dictionary-form]
+   [:p.token-card__word {:lang "de"} word]
    [:p.token-card__translation {:lang "ru"} translation]
-   (case state
-     :known-with-translation [:p.token-card__state "✓ В словаре"]
-     :known-missing-translation (token-add-button data "+ ДОБАВИТЬ ПЕРЕВОД")
-     :unknown-word (token-add-button data "+ В СЛОВАРЬ"))])
+   (when status-note
+     [:p.token-card__state status-note])
+   (when action-label
+     [:button.token-card__button
+      {:type "button"
+       :on   {:click [[:action/save-lesson-word
+                       {:dictionary-form word
+                        :translation     translation
+                        :word-index      word-index}]]}}
+      action-label])])
 
 
-(defn token-popover
-  "Popover shell anchored to the clicked answer token. The Popover API gives
+(defn answer-hint-popover
+  "Popover shell anchored to the opened answer word. The Popover API gives
    light-dismiss and top-layer rendering; pages.lesson.popover positions the
    shell and arms the auto-close timers via :action/show-token-popover."
-  [{:keys [word-index] :as data}]
+  [{:keys [word-index] :as props}]
   [:div#popover.popover
    {:popover "auto"
     :replicant/on-mount [[:action/show-token-popover word-index]]
     :replicant/on-update [[:action/show-token-popover word-index]]}
-   [:div#popover-content (token-card data)]
+   [:div#popover-content (hint-card props)]
    [:div#popover-arrow.popover__arrow]])
 
 
@@ -183,9 +175,9 @@
   (if (:lesson/empty? state)
     (empty-state)
     (let [lesson-state (:lesson/state state)
-          token-info   (presenter/token-popover-props state)]
+          answer-hint  (presenter/answer-hint-props state)]
       [:div.lesson
-       (when token-info (token-popover token-info))
+       (when answer-hint (answer-hint-popover answer-hint))
        [:h1.lesson__title "Урок"]
        [:header.lesson__header
         (progress lesson-state {})

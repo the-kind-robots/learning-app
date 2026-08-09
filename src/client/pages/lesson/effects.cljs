@@ -1,5 +1,6 @@
 (ns pages.lesson.effects
   (:require
+   [domain.lesson :as domain]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
    [pages.lesson.popover :as popover]
@@ -28,7 +29,13 @@
     (try
       (let [{:keys [lesson-state]} (await (lesson/check-answer! capabilities answer))]
         (when lesson-state
-          (dispatch [[:action/update-lesson lesson-state]])))
+          (dispatch [[:action/update-lesson lesson-state]])
+          ;; The revealed answer carries hints for its annotated words; their
+          ;; vocabulary states are looked up once here, not on every click.
+          (let [trial (domain/current-trial lesson-state)]
+            (when (domain/example-trial? trial)
+              (let [hints (await (lesson/answer-annotations capabilities trial))]
+                (dispatch [[:action/annotate-answer hints]]))))))
       (catch js/Error err
         (log/error :effect/check-answer {:error (str err)})))))
 
@@ -55,35 +62,26 @@
         (log/error :effect/end-lesson {:error (str err)})))))
 
 
-(nxr/register-effect! :effect/open-token-info
-  (fn ^:async open-token-info
-    [{:keys [capabilities dispatch]} _ {:keys [dictionary-form translation word-index]}]
-    (try
-      (let [td (await (lesson/token-info capabilities dictionary-form translation))]
-        (dispatch [[:action/open-modal (assoc td :word-index word-index)]]))
-      (catch js/Error err
-        (log/error :effect/open-token-info {:error (str err)})))))
-
-
 (nxr/register-effect! :effect/show-token-popover
   (fn show-token-popover
     [{:keys [dispatch]} _ word-index]
+    ;; Anchor is re-found by data attribute rather than captured from the click:
+    ;; the popover re-anchors on content updates too, when no event exists, and
+    ;; action payloads stay plain data.
     (let [anchor (js/document.querySelector
                   (str ".lesson__answer-token[data-word-index=\"" word-index "\"]"))]
       (if anchor
-        (popover/open! anchor #(dispatch [[:action/close-modal]]))
-        (dispatch [[:action/close-modal]])))))
+        (popover/open! anchor #(dispatch [[:action/close-answer-hint]]))
+        (dispatch [[:action/close-answer-hint]])))))
 
 
 (nxr/register-effect! :effect/add-token
   (fn ^:async add-token
-    [{:keys [capabilities dispatch]} _ {:keys [dictionary-form translation word-index]}]
+    [{:keys [capabilities dispatch]} system {:keys [dictionary-form translation word-index]}]
     (try
       (await (vocabulary/add! capabilities dictionary-form translation))
-      (dispatch [[:action/open-modal
-                  {:dictionary-form dictionary-form
-                   :state           :known-with-translation
-                   :translation     translation
-                   :word-index      word-index}]])
+      (let [hints (:lesson/answer-hints (deref (:store system)))]
+        (dispatch [[:action/annotate-answer
+                    (assoc hints word-index :known-with-translation)]]))
       (catch js/Error err
         (log/error :effect/add-token {:error (str err)})))))

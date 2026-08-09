@@ -130,3 +130,17 @@
     {:dictionary-form dictionary-form
      :translation translation
      :state       (token-state existing translation)}))
+
+
+(defn ^:async answer-annotations
+  "Vocabulary state per annotated word of the trial's answer:
+   {word-index :unknown-word | :known-missing-translation | :known-with-translation}."
+  [capabilities trial]
+  (let [segments (filterv #(= :annotated-word (:type %))
+                          (domain/answer-segments trial))
+        infos    (await (js/Promise.all
+                         (into-array
+                          (map #(token-info capabilities (:dictionary-form %) (:translation %))
+                               segments))))]
+    (zipmap (map :word-index segments)
+            (map :state infos))))

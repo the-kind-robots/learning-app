@@ -139,6 +139,10 @@
     (swap! state assoc :anchor anchor :on-closed on-closed)
     (when-not (open? pop)
       (.showPopover pop))
+    ;; Positioning reads the popover's rendered size (offsetWidth/Height), and
+    ;; this runs from a Replicant life-cycle hook — the card's content may not
+    ;; be laid out yet. One frame later the size is real and reading it does
+    ;; not force a mid-patch reflow.
     (js/requestAnimationFrame
      (fn []
        (position!)

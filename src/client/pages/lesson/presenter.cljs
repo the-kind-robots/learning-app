@@ -15,24 +15,37 @@
   (domain/progress state))
 
 
-(defn- token-info-data
+(defn- open-hint-segment
   [state]
-  (when (= :token-info (:modal/type state))
-    (:modal/data state)))
+  (when-let [open-index (:lesson/open-hint-index state)]
+    (->> (domain/answer-segments (domain/current-trial (:lesson/state state)))
+         (filter #(= open-index (:word-index %)))
+         first)))
 
 
-(defn token-popover-props
-  "Props for the token-info popover, or nil when it is closed. The card
-   auto-dismisses only for a word already stored with this translation."
+(defn answer-hint-props
+  "Props for the hint card over the opened answer word, or nil when closed.
+   The card names the word, its translation, and — depending on the word's
+   vocabulary state — either a status note or an add action. A word already
+   stored with this translation auto-dismisses the card."
   [state]
-  (when-let [data (token-info-data state)]
-    (assoc data :data-dismiss (when (= :known-with-translation (:state data)) "900"))))
+  (when-let [{:keys [dictionary-form translation word-index]} (open-hint-segment state)]
+    (let [word-state (get (:lesson/answer-hints state) word-index)]
+      {:word         dictionary-form
+       :translation  translation
+       :word-index   word-index
+       :data-dismiss (when (= :known-with-translation word-state) "900")
+       :status-note  (when (= :known-with-translation word-state) "✓ В словаре")
+       :action-label (case word-state
+                       :known-missing-translation "+ ДОБАВИТЬ ПЕРЕВОД"
+                       :unknown-word "+ В СЛОВАРЬ"
+                       nil)})))
 
 
 (defn- answer-segments
-  [trial open-token-index]
+  [trial open-hint-index]
   (mapv (fn [{:keys [word-index] :as segment}]
-          (assoc segment :expanded? (= word-index open-token-index)))
+          (assoc segment :expanded? (= word-index open-hint-index)))
         (domain/answer-segments trial)))
 
 
@@ -46,6 +59,6 @@
          :correct-answer-segments (when (domain/example-trial? trial)
                                     (answer-segments
                                      trial
-                                     (:word-index (token-info-data state))))
+                                     (:lesson/open-hint-index state)))
          :user-answer    (:answer result)
          :finished?      (domain/finished? lesson-state)}))))
