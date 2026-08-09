@@ -1,8 +1,5 @@
-# identity-provisioning Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change recycled-id-guard. Update Purpose after archive.
-## Requirements
 ### Requirement: A recycled account id never inherits an existing userdb
 Provisioning SHALL refuse to create an account whose derived userdb already exists in CouchDB, leaving the user row unwritten and the stale userdb untouched. The refusal SHALL be observable to the operator.
 
@@ -19,19 +16,3 @@ Provisioning SHALL be atomic across the two stores: the user row commits only on
 #### Scenario: CouchDB step fails mid-provision
 - **WHEN** creating or securing the userdb fails after the row was inserted
 - **THEN** the insert rolls back, the userdb the attempt created is removed, and the next attempt provisions the same id cleanly
-
-### Requirement: Orphan userdbs are reported, never auto-deleted
-The system SHALL report every CouchDB `userdb-N` whose account row `N` is missing from SQLite — at startup and on operator demand — and SHALL NOT delete or tombstone any userdb on its own. A restored-from-older-backup SQLite makes such userdbs live and legitimate, so disposal stays a human decision. Account rows without a userdb are a different signal and are not part of this report.
-
-#### Scenario: Staged orphan userdb
-- **WHEN** CouchDB holds `userdb-7` and no `users` row with id 7 exists
-- **THEN** the report names `userdb-7` and nothing else, and no data is touched
-
-#### Scenario: Stores agree
-- **WHEN** every `userdb-N` has a matching `users` row
-- **THEN** the report is empty
-
-#### Scenario: CouchDB unreachable at startup
-- **WHEN** the startup report cannot enumerate CouchDB databases
-- **THEN** a warning is logged and boot continues
-
