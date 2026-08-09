@@ -160,6 +160,32 @@ if [ "${up}" != 1 ]; then
     exit 1
 fi
 
+echo "== CouchDB admin drift (GH-252): credstore rotates, postinst realigns =="
+# postinst must adopt whatever the credstore holds without knowing the old
+# password: rotate the credential, reinstall, prove the rotated password is
+# live and the old one is dead — then rotate back (the app and the restore
+# drill authenticate with the hardcoded password, see the Dockerfile comment).
+couch_admin_auth() {
+    in_c curl -sf -u "admin:$1" \
+        http://127.0.0.1:5984/_node/_local/_config/admins >/dev/null
+}
+ROTATED_PASS="rotated-${COUCH_PASS}"
+in_c rm -f /etc/credstore.encrypted/couchdb_admin_password
+encrypt_credential couchdb_admin_password "${ROTATED_PASS}"
+in_c dpkg -i /root/learning-app-infra.deb
+if ! couch_admin_auth "${ROTATED_PASS}"; then
+    echo "ERROR: rotated credential is not the CouchDB admin password after reinstall" >&2
+    exit 1
+fi
+if couch_admin_auth "${COUCH_PASS}"; then
+    echo "ERROR: pre-rotation CouchDB admin password still authenticates" >&2
+    exit 1
+fi
+in_c rm -f /etc/credstore.encrypted/couchdb_admin_password
+encrypt_credential couchdb_admin_password "${COUCH_PASS}"
+in_c dpkg -i /root/learning-app-infra.deb
+echo "credstore drift realigned in both directions"
+
 echo "== Local borg repository (remote borg is out of scope here) =="
 in_c runuser -u dbmaintainer -- env \
     BORG_REPO=/var/lib/dbmaintainer/borg-repo \

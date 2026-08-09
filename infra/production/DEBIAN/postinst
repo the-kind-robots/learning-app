@@ -79,23 +79,43 @@ if [ -f "${COUCH_INI}" ]; then
 fi
 
 # Wait for CouchDB to become available
-for i in $(seq 1 30); do
-    curl -sf http://127.0.0.1:5984/ >/dev/null && break
-    sleep 1
-done
-
-if ! curl -sf http://127.0.0.1:5984/ >/dev/null 2>&1; then
+wait_for_couchdb() {
+    local i
+    for i in $(seq 1 30); do
+        curl -sf http://127.0.0.1:5984/ >/dev/null && return 0
+        sleep 1
+    done
     echo "ERROR: CouchDB did not start within 30 seconds" >&2
-    exit 1
-fi
+    return 1
+}
+
+wait_for_couchdb
 
 if [ -f "${CRED_DIR}/couchdb_admin_password" ]; then
-    # Set admin password from encrypted credential if not already configured
     COUCH_PASS=$(systemd-creds --name=couchdb_admin_password decrypt "${CRED_DIR}/couchdb_admin_password" -)
-    if curl -sf http://127.0.0.1:5984/_node/_local/_config/admins >/dev/null 2>&1; then
-        # CouchDB is in admin party mode (no admin set) -- create admin
-        curl -sf -X PUT http://127.0.0.1:5984/_node/_local/_config/admins/admin \
-            -d "\"${COUCH_PASS}\"" >/dev/null 2>&1 || true
+
+    admin_auth_works() {
+        curl -sf -u "admin:${COUCH_PASS}" \
+            http://127.0.0.1:5984/_node/_local/_config/admins >/dev/null
+    }
+
+    # Align the running admin password with the credential. The old HTTP PUT
+    # could only re-set a password it already knew (it authenticated with the
+    # previous one); writing plaintext into local.d needs no old password —
+    # CouchDB replaces it with a hash on startup. Owner couchdb so that hash
+    # write-back succeeds; 99- so it overrides any earlier [admins] entry.
+    if ! admin_auth_works; then
+        ADMIN_INI="/opt/couchdb/etc/local.d/99-admin-password.ini"
+        admin_tmp="$(mktemp)"
+        printf '[admins]\nadmin = %s\n' "${COUCH_PASS}" > "${admin_tmp}"
+        install -o couchdb -g couchdb -m 640 "${admin_tmp}" "${ADMIN_INI}"
+        rm -f "${admin_tmp}"
+        systemctl restart couchdb.service
+        wait_for_couchdb
+        if ! admin_auth_works; then
+            echo "ERROR: CouchDB admin credential still rejected after installing ${ADMIN_INI}" >&2
+            exit 1
+        fi
     fi
 
     # _db_updates (push sync, ADR-0009) needs the _global_changes database.
