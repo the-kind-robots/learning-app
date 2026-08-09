@@ -4,19 +4,19 @@
 
 
 (defn- answer-body
-  [{:keys [correct-answer correct-answer-segments open-token-index]}]
+  [{:keys [correct-answer correct-answer-segments]}]
   (if (seq correct-answer-segments)
     (into
      [:p.lesson__answer-body {:lang "de"}]
      (interpose " ")
-     (for [{:keys [type text dictionary-form translation word-index]} correct-answer-segments]
+     (for [{:keys [expanded? type text dictionary-form translation word-index]} correct-answer-segments]
        (if (= :annotated-word type)
          [:button.lesson__answer-token
           {:type "button"
            :data-word-index word-index
            :aria-haspopup "dialog"
            :aria-controls "popover"
-           :aria-expanded (str (= word-index open-token-index))
+           :aria-expanded (str expanded?)
            :on {:click [[:action/view-token-info
                          {:dictionary-form dictionary-form
                           :translation     translation
@@ -111,10 +111,10 @@
 
 
 (defn- token-card
-  [{:keys [dictionary-form translation state] :as data}]
+  [{:keys [data-dismiss dictionary-form translation state] :as data}]
   [:div.token-card
    (cond-> {}
-     (= state :known-with-translation) (assoc :data-dismiss "900"))
+     data-dismiss (assoc :data-dismiss data-dismiss))
    [:p.token-card__word {:lang "de"} dictionary-form]
    [:p.token-card__translation {:lang "ru"} translation]
    (case state
@@ -183,8 +183,7 @@
   (if (:lesson/empty? state)
     (empty-state)
     (let [lesson-state (:lesson/state state)
-          token-info   (when (= :token-info (:modal/type state))
-                         (:modal/data state))]
+          token-info   (presenter/token-popover-props state)]
       [:div.lesson
        (when token-info (token-popover token-info))
        [:h1.lesson__title "Урок"]
@@ -202,8 +201,7 @@
             "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"}]]]]
        [:main.lesson__body
         (challenge lesson-state)]
-       (let [footer-props (some-> (presenter/footer-props lesson-state)
-                                  (assoc :open-token-index (:word-index token-info)))]
+       (let [footer-props (presenter/footer-props state)]
          (if footer-props
            (case (:variant footer-props)
              :success (success-footer footer-props)
