@@ -1,7 +1,9 @@
 (ns pages.lesson.effects
   (:require
+   [domain.lesson :as domain]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
+   [pages.lesson.popover :as popover]
    [use-cases.lesson :as lesson]
    [use-cases.vocabulary :as vocabulary]))
 
@@ -27,7 +29,13 @@
     (try
       (let [{:keys [lesson-state]} (await (lesson/check-answer! capabilities answer))]
         (when lesson-state
-          (dispatch [[:action/update-lesson lesson-state]])))
+          (dispatch [[:action/update-lesson lesson-state]])
+          ;; The revealed answer carries hints for its annotated words; their
+          ;; vocabulary states are looked up once here, not on every click.
+          (let [trial (domain/current-trial lesson-state)]
+            (when (domain/example-trial? trial)
+              (let [hints (await (lesson/answer-annotations capabilities trial))]
+                (dispatch [[:action/annotate-answer hints]]))))))
       (catch js/Error err
         (log/error :effect/check-answer {:error (str err)})))))
 
@@ -54,27 +62,27 @@
         (log/error :effect/end-lesson {:error (str err)})))))
 
 
-(nxr/register-effect! :effect/open-token-info
-  (fn ^:async open-token-info
-    [{:keys [capabilities dispatch]} _ {:keys [dictionary-form translation]}]
-    (try
-      (let [td (await (lesson/token-info capabilities dictionary-form translation))]
-        (dispatch [[:action/open-modal td]])
-        (when (= :known-with-translation (:state td))
-          (js/setTimeout #(dispatch [[:action/close-modal]]) 900)))
-      (catch js/Error err
-        (log/error :effect/open-token-info {:error (str err)})))))
+(nxr/register-effect! :effect/show-token-popover
+  (fn show-token-popover
+    [{:keys [dispatch dispatch-data]} _]
+    (popover/open! (:replicant/node dispatch-data)
+                   #(dispatch [[:action/close-answer-hint]]))))
+
+
+(nxr/register-effect! :effect/reposition-token-popover
+  (fn reposition-token-popover
+    [_ _]
+    (popover/reposition!)))
 
 
 (nxr/register-effect! :effect/add-token
   (fn ^:async add-token
-    [{:keys [capabilities dispatch]} _ {:keys [dictionary-form translation]}]
+    [{:keys [capabilities dispatch]} _ {:keys [dictionary-form hints translation word-index]}]
     (try
       (await (vocabulary/add! capabilities dictionary-form translation))
-      (dispatch [[:action/open-modal
-                  {:dictionary-form dictionary-form
-                   :translation translation
-                   :state       :known-with-translation}]])
-      (js/setTimeout #(dispatch [[:action/close-modal]]) 900)
+      ;; The saved hint map re-renders the open card to its added state;
+      ;; the popover's on-update then repositions the shell.
+      (dispatch [[:action/annotate-answer
+                  (assoc hints word-index :known-with-translation)]])
       (catch js/Error err
         (log/error :effect/add-token {:error (str err)})))))
