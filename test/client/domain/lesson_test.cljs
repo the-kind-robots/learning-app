@@ -398,3 +398,47 @@
                   lesson-state
                   (recur (sut/advance lesson-state) (dec attempts)))))]
         (is (empty? (:remaining-trials final-state)))))))
+
+
+;; =============================================================================
+;; Phrase trials
+;; =============================================================================
+
+
+(def ^:private phrase-word
+  {:id          "phrase:wie gehts"
+   :translation [{:lang "ru" :value "Как дела?"}]
+   :type        "phrase"
+   :value       "Wie geht's?"})
+
+
+(deftest generate-trials-creates-phrase-trials
+  (testing "a phrase item produces a phrase trial without examples"
+    (let [trials (sut/generate-trials [phrase-word] [])]
+      (is (= 1 (count trials)))
+      (is (true? (sut/phrase-trial? (first trials))))
+      (is (= "Wie geht's?" (:answer (first trials))))
+      (is (= "Как дела?" (:prompt (first trials)))))))
+
+
+(deftest phrase-answers-forgive-typography-only
+  (testing "apostrophes and case are forgiven, words are not"
+    (let [state (sut/initial-state [phrase-word] [] :first)]
+      (is (true? (-> state (sut/check-answer "wie gehts") sut/last-result :correct?)))
+      (is (true? (-> state (sut/check-answer "Wie geht's") sut/last-result :correct?)))
+      (is (false? (-> state (sut/check-answer "wie stehts") sut/last-result :correct?))))))
+
+
+(deftest phrase-review-once-per-trial
+  (testing "only the first graded attempt of a phrase trial is review-due"
+    (let [state (sut/initial-state [phrase-word] [] :first)
+          trial (sut/current-trial state)]
+      (is (true? (sut/phrase-review-due? state trial)))
+      (let [marked (sut/mark-trial-reviewed state trial)]
+        (is (false? (sut/phrase-review-due? marked trial)))))))
+
+
+(deftest word-trials-are-never-phrase-review-due
+  (testing "word trials keep their own review path"
+    (let [state (sut/initial-state fixtures/lesson-words [] :first)]
+      (is (false? (sut/phrase-review-due? state (sut/current-trial state)))))))

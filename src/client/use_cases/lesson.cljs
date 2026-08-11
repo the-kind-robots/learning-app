@@ -23,10 +23,11 @@
 
 
 (defn- lesson-word
-  [{id :_id value :value translation :translation}]
+  [{id :_id type :type value :value translation :translation}]
   {:id          id
-   :value       value
-   :translation translation})
+   :translation translation
+   :type        type
+   :value       value})
 
 
 (defn ^:async start!
@@ -77,10 +78,13 @@
       (do
         (log/warn :lesson/check-answer-missing {:answer answer})
         {:error :lesson-not-found :lesson-state nil})
-      (let [current-trial (domain/current-trial current-state)
-            lesson-state  (domain/check-answer current-state answer)]
+      (let [current-trial  (domain/current-trial current-state)
+            checked        (domain/check-answer current-state answer)
+            phrase-review? (domain/phrase-review-due? current-state current-trial)
+            lesson-state   (cond-> checked
+                             phrase-review? (domain/mark-trial-reviewed current-trial))]
         (try
-          (when (domain/word-trial? current-trial)
+          (when (or (domain/word-trial? current-trial) phrase-review?)
             (await (vocabulary/add-review
                     capabilities
                     (:word-id current-trial)
@@ -91,6 +95,22 @@
           (catch js/Error err
             (log/error :lesson/check-answer-save-failed {:error (ex-message err)})
             {:error :lesson-save-failed :lesson-state lesson-state}))))))
+
+
+(defn ^:async retry!
+  "Return the current trial to the input state without touching the trial
+   pool. Returns {:lesson-state ...} or {:error ...}."
+  [{:keys [progress-store]}]
+  (let [lesson-state (await (state progress-store))]
+    (if-not lesson-state
+      {:error :lesson-not-found}
+      (let [next-state (assoc lesson-state :last-result nil)]
+        (try
+          (let [{:keys [rev]} (await ((:progress-store/save-lesson! progress-store) next-state))]
+            {:lesson-state (assoc next-state :_rev rev)})
+          (catch js/Error err
+            (log/error :retry-lesson/save-failed {:error (ex-message err)})
+            {:error :lesson-save-failed}))))))
 
 
 (defn ^:async advance!

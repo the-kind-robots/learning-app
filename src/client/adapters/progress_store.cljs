@@ -4,6 +4,7 @@
    [clojure.core :as clojure]
    [db.pouch :as dbs]
    [domain.lesson :as lesson]
+   [domain.phrase :as phrase]
    [domain.retention :as retention]
    [domain.vocabulary :as vocabulary]
    [utils :as utils]))
@@ -79,9 +80,23 @@
     (nil? (:started-at lesson-state)) (assoc :started-at (now-iso clock))))
 
 
+(defn- ^:async learnable-docs
+  "All vocab and phrase docs. Two queries on purpose: db routing keys on a
+   single :type value, so a $in selector would route nowhere."
+  [dbs]
+  (let [{vocab :docs}   (await (find-all dbs "vocab"))
+        {phrases :docs} (await (find-all dbs "phrase"))]
+    (into vocab phrases)))
+
+
 (defn ^:async find-word-by-value
   [dbs value]
   (await (dbs/get dbs "vocab" (vocabulary/vocab-id value))))
+
+
+(defn ^:async find-phrase-by-value
+  [dbs value]
+  (await (dbs/get dbs "phrase" (phrase/phrase-id value))))
 
 
 (defn ^:async get-word
@@ -94,7 +109,7 @@
   [dbs clock
    {:keys [order limit offset search word-ids]
     :or   {order :desc}}]
-  (let [{all-docs :docs} (await (find-all dbs "vocab"))
+  (let [all-docs    (await (learnable-docs dbs))
         docs        (cond->> all-docs
                       (some? word-ids) (filter #((set word-ids) (:_id %))))
         total-count (clojure/count docs)
@@ -120,7 +135,7 @@
 
 (defn ^:async count-words
   [dbs]
-  (let [{docs :docs} (await (find-all dbs "vocab"))]
+  (let [docs (await (learnable-docs dbs))]
     (clojure/count docs)))
 
 

@@ -1,5 +1,6 @@
 (ns pages.lesson.presenter
   (:require
+   [domain.answer-diff :as answer-diff]
    [domain.lesson :as domain]))
 
 
@@ -7,12 +8,20 @@
   [state]
   (let [trial (domain/current-trial state)]
     {:prompt      (:prompt trial)
-     :is-example? (domain/example-trial? trial)}))
+     :instruction (cond
+                    (domain/example-trial? trial) "Переведите предложение на немецкий"
+                    (domain/phrase-trial? trial)  "Переведите фразу на немецкий"
+                    :else                         "Переведите слово на немецкий")}))
 
 
 (defn progress-props
   [state]
   (domain/progress state))
+
+
+(defn input-props
+  [state]
+  {:prefill (:lesson/retry-answer state)})
 
 
 (defn- open-hint-segment
@@ -49,16 +58,43 @@
         (domain/answer-segments trial)))
 
 
+(def ^:private diff-status->class
+  {:extra   "lesson__diff-token--extra"
+   :missing "lesson__diff-token--missing"
+   :wrong   "lesson__diff-token--wrong"})
+
+
+(defn- diff-segments
+  [segments]
+  (mapv (fn [{:keys [status text]}]
+          {:highlight-class (diff-status->class status)
+           :text text})
+        segments))
+
+
+(defn- phrase-error-props
+  [lesson-state result]
+  (let [{:keys [answer expected]} (answer-diff/answer-diff
+                                   (:answer result)
+                                   (domain/expected-answer lesson-state))]
+    {:retry?        true
+     :retry-answer  (:answer result)
+     :diff-answer   (diff-segments answer)
+     :diff-expected (diff-segments expected)}))
+
+
 (defn footer-props
   [state]
   (let [lesson-state (:lesson/state state)]
     (when-let [result (domain/last-result lesson-state)]
       (let [trial (domain/current-trial lesson-state)]
-        {:variant        (if (:correct? result) :success :error)
-         :correct-answer (domain/expected-answer lesson-state)
-         :correct-answer-segments (when (domain/example-trial? trial)
-                                    (answer-segments
-                                     trial
-                                     (:lesson/open-hint-index state)))
-         :user-answer    (:answer result)
-         :finished?      (domain/finished? lesson-state)}))))
+        (cond-> {:variant        (if (:correct? result) :success :error)
+                 :correct-answer (domain/expected-answer lesson-state)
+                 :correct-answer-segments (when (domain/example-trial? trial)
+                                            (answer-segments
+                                             trial
+                                             (:lesson/open-hint-index state)))
+                 :user-answer    (:answer result)
+                 :finished?      (domain/finished? lesson-state)}
+          (and (not (:correct? result)) (domain/phrase-trial? trial))
+          (merge (phrase-error-props lesson-state result)))))))

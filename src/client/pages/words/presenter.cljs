@@ -4,8 +4,9 @@
 
 
 (defn word-item-props
-  [{id :_id value :value translation :translation retention-level :retention-level}]
+  [{id :_id type :type value :value translation :translation retention-level :retention-level}]
   {:id          id
+   :phrase?     (= "phrase" type)
    :value       value
    :retention-level retention-level
    :translation (->> translation

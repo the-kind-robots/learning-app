@@ -201,6 +201,47 @@
   border-color: rgb(var(--color-fire-ant));
 }
 
+.home__add-form-textarea {
+  field-sizing: content;
+  height: auto;
+  max-height: 136px;
+  min-height: 52px;
+  overflow-y: auto;
+  resize: none;
+}
+
+.home__add-label-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.home__mode-chip {
+  background: rgb(var(--color-iguana));
+  border: 1px solid rgb(var(--color-anchovy));
+  border-radius: 999px;
+  color: rgb(var(--color-eel));
+  cursor: pointer;
+  font: var(--text-body-weight) 12px / 1 din-round, sans-serif;
+  margin-bottom: 4px;
+  padding: 5px 12px;
+}
+
+.home__add-form-row--phrase {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.home__add-form-row--phrase .home__add-form-arrow {
+  display: none;
+}
+
+.home__add-warning {
+  color: rgb(var(--color-guinea-pig));
+  font-size: 14px;
+  margin: 6px 0 0;
+}
+
 .home__add-form-submit.big-button {
   height: 52px;
   margin-top: 4px;

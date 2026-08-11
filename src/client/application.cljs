@@ -94,6 +94,25 @@
       (.setSelectionRange node len len))))
 
 
+(defn- autogrow!
+  "Fits a textarea's height to its content: collapse, then measure. Works as
+   the cross-browser fallback for `field-sizing: content` (absent in Safari)."
+  [node]
+  (when node
+    (set! (.. node -style -height) "auto")
+    (set! (.. node -style -height) (str (.-scrollHeight node) "px"))))
+
+
+(nxr/register-effect! :effect/autogrow-target
+  (fn autogrow-target [{:keys [dispatch-data]} _]
+    (autogrow! (some-> dispatch-data :replicant/dom-event .-target))))
+
+
+(nxr/register-effect! :effect/autogrow
+  (fn autogrow [_ _ element-id]
+    (autogrow! (js/document.getElementById element-id))))
+
+
 (nxr/register-effect! :effect/select-all
   (fn select-all [{:keys [dispatch-data]} _]
     (some-> dispatch-data :replicant/node .select)))

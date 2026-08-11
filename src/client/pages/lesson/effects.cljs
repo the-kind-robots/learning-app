@@ -51,6 +51,28 @@
         (log/error :effect/next-trial {:error (str err)})))))
 
 
+(nxr/register-effect! :effect/retry-trial
+  (fn ^:async retry-trial
+    [{:keys [capabilities dispatch]} _]
+    (try
+      (let [{:keys [lesson-state]} (await (lesson/retry! capabilities))]
+        (when lesson-state
+          (dispatch [[:action/update-lesson lesson-state]])))
+      (catch js/Error err
+        (log/error :effect/retry-trial {:error (str err)})))))
+
+
+(nxr/register-effect! :effect/restore-lesson-answer
+  (fn restore-lesson-answer
+    [_ _]
+    (when-let [node (js/document.getElementById "lesson-answer")]
+      (let [len (.. node -value -length)]
+        (set! (.. node -style -height) "auto")
+        (set! (.. node -style -height) (str (.-scrollHeight node) "px"))
+        (.focus node)
+        (.setSelectionRange node len len)))))
+
+
 (nxr/register-effect! :effect/end-lesson
   (fn ^:async end-lesson
     [{:keys [capabilities]} _]

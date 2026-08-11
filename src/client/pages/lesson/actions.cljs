@@ -6,10 +6,11 @@
 (nxr/register-action! :action/show-lesson
   (fn show-lesson [_ {:keys [lesson-state error]}]
     [[:effect/save
-      {:page/current  :page/lesson
-       :page/load     nil
-       :lesson/empty? (boolean error)
-       :lesson/state  (when-not error lesson-state)}]]))
+      {:page/current        :page/lesson
+       :page/load           nil
+       :lesson/empty?       (boolean error)
+       :lesson/retry-answer nil
+       :lesson/state        (when-not error lesson-state)}]]))
 
 
 (nxr/register-action! :action/update-lesson
@@ -27,12 +28,25 @@
 
 (nxr/register-action! :action/check-answer
   (fn check-answer [_ answer]
-    [[:effect/check-answer answer]]))
+    [[:effect/save {:lesson/retry-answer nil}]
+     [:effect/check-answer answer]]))
 
 
 (nxr/register-action! :action/next-trial
   (fn next-trial [_]
-    [[:effect/next-trial]]))
+    [[:effect/save {:lesson/retry-answer nil}]
+     [:effect/next-trial]]))
+
+
+(nxr/register-action! :action/retry-answer
+  (fn retry-answer [_ answer]
+    [[:effect/save {:lesson/retry-answer answer}]
+     [:effect/retry-trial]]))
+
+
+(nxr/register-action! :action/restore-lesson-answer
+  (fn restore-lesson-answer [_]
+    [[:effect/restore-lesson-answer]]))
 
 
 (def ^:private end-lesson-handler (fn [_] [[:effect/end-lesson]]))

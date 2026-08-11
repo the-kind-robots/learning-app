@@ -269,6 +269,38 @@
   word-break: break-word;
 }
 
+.lesson__diff-token {
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+.lesson__diff-token--wrong,
+.lesson__diff-token--extra {
+  background-color: rgb(var(--color-walking-fish));
+  color: rgb(var(--color-fire-ant));
+}
+
+.lesson__diff-token--extra {
+  text-decoration: line-through;
+}
+
+.lesson__diff-token--missing {
+  background-color: rgb(var(--color-sea-sponge));
+  color: rgb(var(--color-tree-frog));
+}
+
+.lesson__retry-later {
+  background: transparent;
+  border: 0;
+  color: rgb(var(--color-wolf));
+  cursor: pointer;
+  font: inherit;
+  margin-top: 8px;
+  padding: 10px;
+  text-transform: uppercase;
+  width: 100%;
+}
+
 .lesson__empty {
   align-items: center;
   display: flex;

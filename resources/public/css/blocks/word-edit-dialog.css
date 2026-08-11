@@ -42,6 +42,30 @@
   color: rgb(var(--color-hare));
 }
 
+.word-edit-dialog__inputs--phrase {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.word-edit-dialog__inputs--phrase .word-edit-dialog__value {
+  overflow-wrap: anywhere;
+}
+
+.word-edit-dialog__inputs--phrase .word-edit-dialog__arrow {
+  display: none;
+}
+
+.word-edit-dialog__input--phrase {
+  box-sizing: border-box;
+  field-sizing: content;
+  height: auto;
+  max-height: 144px;
+  min-height: 48px;
+  overflow-y: auto;
+  resize: none;
+  width: 100%;
+}
+
 .word-edit-dialog__actions {
   display: flex;
   gap: 10px;

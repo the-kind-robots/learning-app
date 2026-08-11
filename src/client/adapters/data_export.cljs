@@ -58,14 +58,14 @@
 
 (defn ^:async import-data!
   "Merges an export payload into user-db by doc type:
-   vocab LWW by :modified-at, anything else insert-if-absent."
+   vocab and phrase LWW by :modified-at, anything else insert-if-absent."
   [db-map payload]
   (let [user-db (:user/db db-map)
         docs    (payload-docs payload)]
     (log/info :data-export/importing {:count (count docs)})
     (await (js/Promise.all
             (into-array
-             (map #(if (= "vocab" (:type %))
+             (map #(if (#{"vocab" "phrase"} (:type %))
                      (import-vocab-doc! user-db %)
                      (import-doc! user-db %))
                   docs))))

@@ -16,6 +16,9 @@
 (def trial-type-word "word")
 
 
+(def trial-type-phrase "phrase")
+
+
 (def trial-type-example "example")
 
 
@@ -29,9 +32,16 @@
   (= (:type trial) trial-type-word))
 
 
+(defn phrase-trial?
+  [trial]
+  (= (:type trial) trial-type-phrase))
+
+
 (defn- word->trial
   [word]
-  {:type    trial-type-word
+  {:type    (if (= "phrase" (:type word))
+              trial-type-phrase
+              trial-type-word)
    :word-id (:id word)
    :prompt  (->> (:translation word)
                  (filter #(= "ru" (:lang %)))
@@ -110,17 +120,40 @@
   (utils/normalize-german (or answer "")))
 
 
+(defn- trial-normalized
+  "Phrase trials grade through the typography-forgiving normalization; word
+   and example trials keep the id-grade one."
+  [trial answer]
+  (if (phrase-trial? trial)
+    (utils/normalize-for-grading (or answer ""))
+    (normalized-answer answer)))
+
+
 (defn remove-trial
   [remaining-trials trial]
   (vec (remove #(= % trial) remaining-trials)))
+
+
+(defn phrase-review-due?
+  "True when this graded attempt should write a review: phrase trials write
+   one per trial per lesson (the first attempt decides), tracked in state
+   rather than on the trial — `remove-trial` compares trials by value."
+  [state trial]
+  (and (phrase-trial? trial)
+       (not (some #{(trial-id trial)} (:reviewed-trial-ids state)))))
+
+
+(defn mark-trial-reviewed
+  [state trial]
+  (update state :reviewed-trial-ids (fnil conj []) (trial-id trial)))
 
 
 (defn check-answer
   [state answer]
   (let [current-trial  (:current-trial state)
         correct-answer (expected-answer state)
-        correct?       (= (normalized-answer answer)
-                          (normalized-answer correct-answer))
+        correct?       (= (trial-normalized current-trial answer)
+                          (trial-normalized current-trial correct-answer))
         remaining      (cond-> (:remaining-trials state)
                          correct? (remove-trial current-trial))
         remaining      (if (and correct? (word-trial? current-trial))

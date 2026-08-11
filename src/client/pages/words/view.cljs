@@ -13,22 +13,27 @@
 
 
 (defn- word-list-item
-  [{:keys [id retention-level translation value]}]
+  [{:keys [id phrase? retention-level translation value]}]
   [:li.word-item
    {:id (str "word-" id)}
    [:button.word-item__display
     {:type "button"
-     :on   {:click [[:action/open-word-edit {:id id :value value :translation translation}]]}}
+     :on   {:click [[:action/open-word-edit
+                     {:id id :phrase? phrase? :value value :translation translation}]]}}
     [:div.word-item__retention
      {:style {:background-color (utils/prozent->color retention-level)}
       :title (str (retention-text retention-level) " (" (int retention-level) "%)")}]
-    [:span.word-item__value {:lang "de"} value]
+    [:span.word-item__value
+     {:lang "de" :class (when phrase? "word-item__value--phrase")}
+     value
+     (when phrase?
+       [:span.word-item__badge "фраза"])]
     [:span.word-item__translation {:lang "ru"} translation]
     [:span.word-item__arrow.word-item__chevron "→"]]])
 
 
 (defn- edit-dialog
-  [{:keys [id value translation]}]
+  [{:keys [id phrase? value translation]}]
   [:dialog.word-edit-dialog.modal
    {:replicant/key id
     :replicant/on-mount [[:action/open-dialog]]
@@ -39,20 +44,36 @@
      :on {:submit [[:effect/prevent-default]
                    [:action/save-word {:id id :translation [:event.form.field/value "translation"]}]]}}
     [:div.word-edit-dialog__inputs
+     {:class (when phrase? "word-edit-dialog__inputs--phrase")}
      [:span.word-edit-dialog__value {:lang "de"} value]
      [:span.word-edit-dialog__arrow {:aria-hidden "true"} "→"]
-     [:input.word-edit-dialog__input
-      {:name           "translation"
-       :autocapitalize "none"
-       :autocomplete   "off"
-       :autocorrect    "off"
-       :enterkeyhint   "done"
-       :lang           "ru"
-       :placeholder    "Перевод"
-       :spellcheck     "false"
-       :default-value  translation
-       :autofocus      true
-       :replicant/on-mount [[:action/move-cursor-to-end]]}]]
+     (if phrase?
+       [:textarea.word-edit-dialog__input.word-edit-dialog__input--phrase
+        {:name          "translation"
+         :rows          2
+         :autocapitalize "none"
+         :autocomplete  "off"
+         :autocorrect   "off"
+         :enterkeyhint  "done"
+         :lang          "ru"
+         :placeholder   "Перевод"
+         :spellcheck    "false"
+         :default-value translation
+         :autofocus     true
+         :replicant/on-mount [[:action/move-cursor-to-end]]
+         :on            {:input [[:effect/autogrow-target]]}}]
+       [:input.word-edit-dialog__input
+        {:name           "translation"
+         :autocapitalize "none"
+         :autocomplete   "off"
+         :autocorrect    "off"
+         :enterkeyhint   "done"
+         :lang           "ru"
+         :placeholder    "Перевод"
+         :spellcheck     "false"
+         :default-value  translation
+         :autofocus      true
+         :replicant/on-mount [[:action/move-cursor-to-end]]}])]
     [:div.word-edit-dialog__actions
      [:button.word-edit-dialog__save {:type "submit"} "Сохранить"]
      [:button.word-edit-dialog__cancel

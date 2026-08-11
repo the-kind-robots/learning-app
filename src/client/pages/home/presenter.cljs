@@ -1,4 +1,6 @@
-(ns pages.home.presenter)
+(ns pages.home.presenter
+  (:require
+   [domain.phrase :as phrase]))
 
 
 (defn- active-collection-props
@@ -10,19 +12,42 @@
      :name (:home/active-coll-name state)}))
 
 
+(defn- suggestion-props
+  [item]
+  (assoc item :phrase? (phrase/phrase-suggestion? item)))
+
+
 (defn- suggestions-props
   [state]
   (when-let [s (:home/suggestions state)]
-    {:items  (:suggestions/items s)
+    {:items  (mapv suggestion-props (:suggestions/items s))
      :active (:suggestions/active s)}))
+
+
+(def ^:private mode-copy
+  {:phrase {:chip-label  "фраза"
+            :legend      "Добавить фразу"
+            :placeholder "Новая фраза"
+            :value-label "Фраза (немецкий)"}
+   :word   {:chip-label  "слово"
+            :legend      "Добавить слово"
+            :placeholder "Новое слово"
+            :value-label "Слово (немецкий)"}})
 
 
 (defn- form-props
   [state]
-  {:add-error   (:home/add-error state)
-   :suggestions (suggestions-props state)
-   :translation (:home/translation state)
-   :word        (:home/word state)})
+  (let [mode (phrase/add-mode (:home/word state)
+                              (:suggestions/items (:home/suggestions state))
+                              (:home/mode-override state))]
+    {:add-error    (:home/add-error state)
+     :add-warning  (:home/add-warning state)
+     :copy         (mode-copy mode)
+     :phrase-mode? (= :phrase mode)
+     :show-chip?   (or (= :phrase mode) (some? (:home/mode-override state)))
+     :suggestions  (suggestions-props state)
+     :translation  (:home/translation state)
+     :word         (:home/word state)}))
 
 
 (defn page-props

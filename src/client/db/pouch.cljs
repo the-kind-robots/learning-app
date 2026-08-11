@@ -22,6 +22,7 @@
   {"collection" :user/db
    "example"    :device/db
    "lesson"     :device/db
+   "phrase"     :user/db
    "review"     :user/db
    "task"       :device/db
    "vocab"      :user/db})

@@ -45,29 +45,40 @@
     (await (all! (map #(db/remove user-db %) losers)))))
 
 
-(def ^:private vocabulary-with-conflicts
-  "Vocabulary ids are content-addressed under a `vocab:` prefix (ADR-0008), so
-   the words can be read as a key range rather than by scanning every review,
-   collection and example in the database. `￰` sorts past anything an id
-   can carry, which makes the range the whole prefix.
+(def ^:private conflict-scans
+  "Vocab and phrase ids are content-addressed under their prefixes (ADR-0008,
+   extended to phrases), so both can be read as key ranges rather than by
+   scanning every review, collection and example in the database. `￰` sorts
+   past anything an id can carry, which makes each range its whole prefix.
 
-   `:conflicts` is what this whole query is for, and only `all-docs`, `get` and
+   `:conflicts` is what these queries are for, and only `all-docs`, `get` and
    `changes` honour it — `find` accepts the option and silently answers without
    the conflicts, which would look like a database that never conflicts."
-  {:conflicts    true
-   :endkey       "vocab:￰"
-   :include-docs true
-   :startkey     "vocab:"})
+  [{:doc-type "vocab"
+    :query    {:conflicts    true
+               :endkey       "vocab:￰"
+               :include-docs true
+               :startkey     "vocab:"}}
+   {:doc-type "phrase"
+    :query    {:conflicts    true
+               :endkey       "phrase:￰"
+               :include-docs true
+               :startkey     "phrase:"}}])
 
 
 (defn ^:async resolve-vocab-conflicts!
-  "Resolves every conflicted vocab doc a replication pass left behind."
+  "Resolves every conflicted vocab and phrase doc a replication pass left
+   behind."
   [user-db]
   (try
-    (let [{rows :rows} (await (db/all-docs user-db vocabulary-with-conflicts))
-          conflicted   (->> rows
-                            (map :doc)
-                            (filter #(and (-> % :type #{"vocab"}) (-> % :_conflicts seq))))]
+    (let [scanned    (await (all! (map #(db/all-docs user-db (:query %)) conflict-scans)))
+          conflicted (->> (mapcat (fn [{:keys [doc-type]} {rows :rows}]
+                                    (->> rows
+                                         (map :doc)
+                                         (filter #(-> % :type (= doc-type)))))
+                           conflict-scans
+                           scanned)
+                          (filter #(-> % :_conflicts seq)))]
       (when (seq conflicted)
         (log/info :sync/resolving-conflicts {:count (count conflicted)}))
       (await (all! (map #(resolve-conflict! user-db %) conflicted))))
