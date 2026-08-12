@@ -72,14 +72,16 @@
     ;; after more typing (say, the pre-space prefix of a phrase) must neither
     ;; show a stale list nor prefill the translation with a stale word.
     (when (= value (:home/word state))
-      ;; The top suggestion's translation pre-fills the translation field
-      ;; (GH-178: the owner said yes) as long as the field is still the
-      ;; dictionary's to fill. Once the user types there — or picks a
-      ;; suggestion — the text is theirs and late answers leave it alone.
+      ;; While the user has not typed a translation, the field belongs to the
+      ;; dictionary and follows its current answer — including an answer with
+      ;; nothing to offer, or the word it was filled for would linger under a
+      ;; phrase that no longer has anything to do with it (GH-178 kept the
+      ;; prefill; the owner asked for it). A typed or picked translation is
+      ;; theirs, and late answers leave it alone.
       (let [{:keys [translations]} (first completions)]
         [[:effect/save
           (cond-> {:home/suggestions (suggestions completions)}
-            (and (seq translations) (not (:home/translation-typed? state)))
+            (not (:home/translation-typed? state))
             (assoc :home/translation (str/join ", " translations)))]]))))
 
 
@@ -126,7 +128,11 @@
 
 (nxr/register-action! :action/update-translation
   (fn update-translation [_ value]
-    [[:effect/save {:home/translation value :home/translation-typed? true}]]))
+    ;; Clearing the field hands it back to the dictionary: the next answer may
+    ;; prefill it again.
+    [[:effect/save
+      {:home/translation        value
+       :home/translation-typed? (not (str/blank? value))}]]))
 
 
 (nxr/register-action! :action/add-word

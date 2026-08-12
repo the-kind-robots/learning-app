@@ -6,6 +6,7 @@
    [client.support.test :refer [async-testing]])
   (:require
    [cljs.test :refer-macros [deftest is testing]]
+   [clojure.string :as str]
    [nexus.registry :as nxr]
    [pages.home.actions]
    [pages.home.effects]
@@ -153,6 +154,27 @@
       (is (= "мой перевод" (:home/translation @store))))))
 
 
+(deftest a-prefilled-translation-leaves-when-the-input-becomes-a-phrase
+  (async-testing "the word's translation does not linger under an unrelated phrase"
+    (let [{:keys [store] :as system} (test-system {"hätte" [{:lemma "hätte" :translations ["иметь"]}]})]
+      (nxr/dispatch system {} [[:action/update-word "hätte"]])
+      (await (debounce-elapsed))
+      (is (= "иметь" (:home/translation @store)))
+      (nxr/dispatch system {} [[:action/update-word "hätte hätte fahrad kätte"]])
+      (await (debounce-elapsed))
+      (is (= "" (:home/translation @store))))))
+
+
+(deftest an-emptied-translation-may-be-prefilled-again
+  (async-testing "clearing the field hands it back to the dictionary"
+    (let [{:keys [store] :as system} (test-system {"hund" [hund]})]
+      (nxr/dispatch system {} [[:action/update-translation "мой перевод"]])
+      (nxr/dispatch system {} [[:action/update-translation ""]])
+      (nxr/dispatch system {} [[:action/update-word "hund"]])
+      (await (debounce-elapsed))
+      (is (= "пёс, собака" (:home/translation @store))))))
+
+
 (deftest a-picked-suggestion-owns-the-translation
   (testing "a later dictionary answer does not overwrite what the pick filled in"
     (let [{:keys [store] :as system} (test-system {})]
@@ -170,8 +192,8 @@
       (is (nil? (:home/translation @store))))))
 
 
-(deftest an-empty-answer-leaves-the-translation-alone
+(deftest an-empty-answer-leaves-the-translation-blank
   (testing "no suggestions, nothing to fill"
     (let [{:keys [store] :as system} (test-system {})]
       (nxr/dispatch system {} [[:action/update-suggestions {:completions [] :value nil}]])
-      (is (nil? (:home/translation @store))))))
+      (is (str/blank? (:home/translation @store))))))
