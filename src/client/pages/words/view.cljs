@@ -49,19 +49,20 @@
      [:span.word-edit-dialog__arrow {:aria-hidden "true"} "→"]
      (if phrase?
        [:textarea.word-edit-dialog__input.word-edit-dialog__input--phrase
-        {:name          "translation"
-         :rows          2
+        {:name         "translation"
+         :rows         2
          :autocapitalize "none"
-         :autocomplete  "off"
-         :autocorrect   "off"
-         :enterkeyhint  "done"
-         :lang          "ru"
-         :placeholder   "Перевод"
-         :spellcheck    "false"
-         :default-value translation
-         :autofocus     true
+         :autocomplete "off"
+         :autocorrect  "off"
+         :enterkeyhint "done"
+         :lang         "ru"
+         :placeholder  "Перевод"
+         :spellcheck   "false"
+         :autofocus    true
          :replicant/on-mount [[:action/move-cursor-to-end]]
-         :on            {:input [[:effect/autogrow-target]]}}]
+         :on           {:input [[:effect/autogrow-target]]}}
+        ;; textarea ignores a value attribute — the default rides as child text
+        translation]
        [:input.word-edit-dialog__input
         {:name           "translation"
          :autocapitalize "none"

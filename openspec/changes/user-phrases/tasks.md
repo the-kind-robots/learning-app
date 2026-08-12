@@ -45,6 +45,6 @@
 ## 7. Verification
 
 - [x] 7.1 Run client unit test suite (shadow-cljs node tests)
-- [ ] 7.2 Browser pass (learning-app-cdp): add phrase (auto mode, exceptions, chip, autogrow), words list badge/wrap, phrase lesson trial (diff, retry, single review), duplicates, pos=phrase suggestion
-- [ ] 7.3 Sync check: phrase replicates to CouchDB; conflicting translations union (main stand)
-- [ ] 7.4 Screenshots for the PR (test data only)
+- [x] 7.2 Browser pass (learning-app-cdp): add phrase (auto mode, exceptions, chip, autogrow), words list badge/wrap, phrase lesson trial (diff, retry, single review), duplicates, pos=phrase suggestion
+- [x] 7.3 Sync check: phrase replicates to CouchDB; conflicting translations union (main stand)
+- [x] 7.4 Screenshots for the PR (test data only)

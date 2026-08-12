@@ -137,7 +137,7 @@
       [:section#home-add-panel.home__add
        {:replicant/on-mount [[:action/focus-word-input "new-word-value"]]}
        [:header.home__add-header
-        [:h2.home__panel-title "Добавить слово"]
+        [:h2.home__panel-title (get-in form [:copy :legend])]
         [:button#home-words-button.home__words-button
          {:type        "button"
           :class       (when empty-vocab? "home__words-button--hidden")
