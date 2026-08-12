@@ -35,11 +35,13 @@
   gap: 10px;
 }
 
+/* Anchored to the top on purpose: centring turns every height change below —
+   a suggestion list, a growing field — into a move of the whole panel. */
 .home__content {
   display: flex;
   flex: 1;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .home__subtitle {
@@ -150,22 +152,18 @@
   padding: 0;
 }
 
+/* One column at every width: the row layout used to flip to a column the
+   moment the input became a phrase, relaying out the form under the cursor. */
 .home__add-form-row {
-  align-items: center;
+  align-items: stretch;
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .home__add-translation {
   flex: 1;
   min-width: 0;
-}
-
-.home__add-form-arrow {
-  color: rgb(var(--color-wolf));
-  font-size: 18px;
-  font-weight: 700;
-  opacity: 0.6;
 }
 
 .home__add-form-input {
@@ -210,9 +208,12 @@
   resize: none;
 }
 
+/* Height reserved for the chip, which only mounts in phrase mode: without it
+   the detection would shove the input down mid-word. */
 .home__add-label-row {
   display: flex;
   justify-content: flex-end;
+  min-height: 28px;
 }
 
 .home__mode-chip {
@@ -224,22 +225,6 @@
   font: var(--text-body-weight) 12px / 1 din-round, sans-serif;
   margin-bottom: 4px;
   padding: 5px 12px;
-}
-
-.home__add-form-row--phrase {
-  align-items: stretch;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.home__add-form-row--phrase .home__add-form-arrow {
-  display: none;
-}
-
-.home__add-warning {
-  color: rgb(var(--color-guinea-pig));
-  font-size: 14px;
-  margin: 6px 0 0;
 }
 
 .home__add-form-submit.big-button {
@@ -281,16 +266,6 @@
 @media (max-width: 600px) {
   .home__add {
     box-shadow: 0 6px 16px rgb(0 0 0 / 0.08);
-  }
-
-  .home__add-form-row {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .home__add-form-arrow {
-    display: none;
   }
 
   .home__add-form-submit,

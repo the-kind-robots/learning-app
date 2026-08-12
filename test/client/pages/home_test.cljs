@@ -36,6 +36,10 @@
   (fn [_ _ _]))
 
 
+(nxr/register-effect! :effect/clear-autogrow
+  (fn [_ _ _]))
+
+
 (def hund
   {:lemma "Hund" :translations ["пёс" "собака"] :exact? true})
 
@@ -134,9 +138,27 @@
 (deftest arrival-never-clobbers-a-typed-translation
   (testing "late dictionary answers do not overwrite the user's own text"
     (let [{:keys [store] :as system} (test-system {})]
-      (nxr/dispatch system {} [[:effect/save {:home/translation "мой перевод"}]])
+      (nxr/dispatch system {} [[:action/update-translation "мой перевод"]])
       (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value nil}]])
       (is (= "мой перевод" (:home/translation @store))))))
+
+
+(deftest a-typed-translation-survives-further-typing-in-the-german-field
+  (testing "the translation field neither blanks nor refills while the word is typed"
+    (let [{:keys [store] :as system} (test-system {"hu" [hund]})]
+      (nxr/dispatch system {} [[:action/update-translation "мой перевод"]])
+      (nxr/dispatch system {} [[:action/update-word "hu"]])
+      (is (= "мой перевод" (:home/translation @store)))
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value "hu"}]])
+      (is (= "мой перевод" (:home/translation @store))))))
+
+
+(deftest a-picked-suggestion-owns-the-translation
+  (testing "a later dictionary answer does not overwrite what the pick filled in"
+    (let [{:keys [store] :as system} (test-system {})]
+      (nxr/dispatch system {} [[:action/select-suggestion (assoc hund :focus-id nil)]])
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hut] :value "Hund"}]])
+      (is (= "пёс, собака" (:home/translation @store))))))
 
 
 (deftest stale-answer-is-ignored

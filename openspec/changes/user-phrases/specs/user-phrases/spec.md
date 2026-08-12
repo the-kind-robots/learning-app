@@ -41,12 +41,12 @@ Submitting the form in phrase mode SHALL create a `phrase` document with the tra
 - **WHEN** the user adds a phrase whose normalized value already exists as a phrase document
 - **THEN** the translations are merged as whole entries and the document count does not grow
 
-### Requirement: Cross-type duplicates produce a hint, not a block
-When a submitted phrase's normalized value already exists as a vocab document, the form SHALL show a non-blocking hint that the entry already exists as a word. Creation SHALL still be possible.
+### Requirement: A phrase and a word may share a value
+A word and a phrase carrying the same normalized value are distinct learnable entities in distinct id namespaces. Submitting a phrase whose value already exists as a word SHALL create it without a warning, a confirmation, or a second press.
 
 #### Scenario: Phrase matching an existing multi-word vocab word
 - **WHEN** the user submits a phrase whose normalized value equals an existing `vocab:` document's value
-- **THEN** a hint "Уже есть как слово" is shown and the user can still proceed
+- **THEN** the phrase document is created on the first submit and both entries keep their own review logs
 
 ### Requirement: Phrases appear in the words list
 The words page SHALL show phrases in the same list as words, sorted by the same retention order, marked with a badge, and wrapped over multiple lines instead of truncated. Search and word counts SHALL include phrases. The badge decision SHALL be computed by the presenter, not the view.

@@ -180,6 +180,7 @@
   margin-inline: auto;
   max-width: 600px;
   min-height: 87px;
+  field-sizing: content;
   padding: 0.625rem 0.875rem;
   resize: none;
   width: 100%;

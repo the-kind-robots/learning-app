@@ -67,8 +67,6 @@
     [_ _]
     (when-let [node (js/document.getElementById "lesson-answer")]
       (let [len (.. node -value -length)]
-        (set! (.. node -style -height) "auto")
-        (set! (.. node -style -height) (str (.-scrollHeight node) "px"))
         (.focus node)
         (.setSelectionRange node len len)))))
 

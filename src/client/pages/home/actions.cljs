@@ -25,12 +25,17 @@
        :home/active-coll-id   active-id
        :home/active-coll-name active-name
        :home/add-error        nil
-       :home/add-warning      nil
        :home/empty-vocab?     (zero? total)
        :home/mode-override    nil
        :home/suggestions      empty-suggestions
        :home/translation      ""
-       :home/word             ""}]]))
+       :home/translation-typed? false
+       :home/word             ""}]
+     ;; Only Safari ever measures a height here, and only it needs the reset:
+     ;; where `field-sizing` works the browser has already forgotten the
+     ;; content the old height was measured for.
+     [:effect/clear-autogrow "new-word-value"]
+     [:effect/clear-autogrow "new-word-translation"]]))
 
 
 (nxr/register-action! :action/refresh-home
@@ -67,14 +72,14 @@
     ;; after more typing (say, the pre-space prefix of a phrase) must neither
     ;; show a stale list nor prefill the translation with a stale word.
     (when (= value (:home/word state))
-      ;; The top suggestion's translation pre-fills an empty translation field
-      ;; (GH-178: the owner said yes). Blank-guarded: a translation the user
-      ;; already typed is theirs — the dictionary answers late (debounce plus
-      ;; query), and late answers must not clobber the user's input.
+      ;; The top suggestion's translation pre-fills the translation field
+      ;; (GH-178: the owner said yes) as long as the field is still the
+      ;; dictionary's to fill. Once the user types there — or picks a
+      ;; suggestion — the text is theirs and late answers leave it alone.
       (let [{:keys [translations]} (first completions)]
         [[:effect/save
           (cond-> {:home/suggestions (suggestions completions)}
-            (and (seq translations) (str/blank? (:home/translation state)))
+            (and (seq translations) (not (:home/translation-typed? state)))
             (assoc :home/translation (str/join ", " translations)))]]))))
 
 
@@ -93,8 +98,14 @@
 ;; list does not flash empty on every keystroke. An emptied input still clears
 ;; it — the dictionary returns [] for an empty prefix.
 (nxr/register-action! :action/update-word
-  (fn update-word [_ value]
-    [[:effect/save {:home/add-warning nil :home/word value :home/translation ""}]
+  (fn update-word [state value]
+    ;; A prefilled translation belongs to the word that earned it: emptying the
+    ;; German field drops it, but it is no longer wiped on every keystroke —
+    ;; that made the field blink and resize while typing in this one.
+    [[:effect/save
+      (cond-> {:home/word value}
+        (and (str/blank? value) (not (:home/translation-typed? state)))
+        (assoc :home/translation ""))]
      [:effect/suggest-completions value]]))
 
 
@@ -106,11 +117,6 @@
       [[:effect/save {:home/mode-override (if (= :phrase mode) :word :phrase)}]])))
 
 
-(nxr/register-action! :action/show-add-warning
-  (fn show-add-warning [_ warning]
-    [[:effect/save {:home/add-warning warning}]]))
-
-
 (nxr/register-action! :action/submit-if-enter
   (fn submit-if-enter [_ {:keys [key shift?]}]
     (when (and (= "Enter" key) (not shift?))
@@ -120,7 +126,7 @@
 
 (nxr/register-action! :action/update-translation
   (fn update-translation [_ value]
-    [[:effect/save {:home/translation value}]]))
+    [[:effect/save {:home/translation value :home/translation-typed? true}]]))
 
 
 (nxr/register-action! :action/add-word
@@ -132,8 +138,7 @@
         {:focus-id    focus-id
          :mode        mode
          :translation translation
-         :value       value
-         :warned?     (some? (:home/add-warning state))}]])))
+         :value       value}]])))
 
 
 (nxr/register-action! :action/focus-word-input
@@ -153,6 +158,9 @@
                            :word)
      :home/suggestions   empty-suggestions
      :home/translation   (str/join ", " translations)
+     ;; A deliberate pick owns the field: later dictionary answers must not
+     ;; overwrite what the user chose.
+     :home/translation-typed? true
      :home/word          lemma}]
    [:effect/focus element-id]])
 

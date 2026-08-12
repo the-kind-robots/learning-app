@@ -40,14 +40,12 @@
   (let [mode (phrase/add-mode (:home/word state)
                               (:suggestions/items (:home/suggestions state))
                               (:home/mode-override state))]
-    {:add-error    (:home/add-error state)
-     :add-warning  (:home/add-warning state)
-     :copy         (mode-copy mode)
-     :phrase-mode? (= :phrase mode)
-     :show-chip?   (or (= :phrase mode) (some? (:home/mode-override state)))
-     :suggestions  (suggestions-props state)
-     :translation  (:home/translation state)
-     :word         (:home/word state)}))
+    {:add-error   (:home/add-error state)
+     :copy        (mode-copy mode)
+     :show-chip?  (or (= :phrase mode) (some? (:home/mode-override state)))
+     :suggestions (suggestions-props state)
+     :translation (:home/translation state)
+     :word        (:home/word state)}))
 
 
 (defn page-props

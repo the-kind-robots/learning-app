@@ -98,26 +98,19 @@
 
 (nxr/register-effect! :effect/add-word
   (fn ^:async add-word
-    [{:keys [dispatch capabilities]} _ {:keys [value translation focus-id mode warned?]}]
+    [{:keys [dispatch capabilities]} _ {:keys [value translation focus-id mode]}]
     (try
-      (if (and (= :phrase mode)
-               (not warned?)
-               (await (phrase/find-word-twin capabilities value)))
-        ;; Non-blocking cross-type duplicate hint: the first submit warns,
-        ;; an unchanged second submit goes through.
-        (dispatch [[:action/show-add-warning
-                    "Уже есть как слово — нажмите ещё раз, чтобы добавить как фразу"]])
-        (let [add!   (if (= :phrase mode) phrase/add! vocabulary/add!)
-              result (await (add! capabilities value translation))]
-          (if (:error result)
-            (dispatch [[:action/show-word-error (:error result)]])
-            (let [colls (:collections capabilities)
-                  total (await (vocabulary/count capabilities))
-                  {:keys [active-id active-name word-count]} (await (resolve-active colls))]
-              (dispatch (cond-> [[:action/show-home
-                                  {:active-id   active-id
-                                   :active-name active-name
-                                   :total       (or word-count total)}]]
-                          focus-id (conj [:effect/focus focus-id])))))))
+      (let [add!   (if (= :phrase mode) phrase/add! vocabulary/add!)
+            result (await (add! capabilities value translation))]
+        (if (:error result)
+          (dispatch [[:action/show-word-error (:error result)]])
+          (let [colls (:collections capabilities)
+                total (await (vocabulary/count capabilities))
+                {:keys [active-id active-name word-count]} (await (resolve-active colls))]
+            (dispatch (cond-> [[:action/show-home
+                                {:active-id   active-id
+                                 :active-name active-name
+                                 :total       (or word-count total)}]]
+                        focus-id (conj [:effect/focus focus-id]))))))
       (catch js/Error err
         (log/error :effect/add-word {:error (str err)})))))

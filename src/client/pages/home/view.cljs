@@ -23,7 +23,7 @@
 
 
 (defn- add-form
-  [{:keys [add-error add-warning copy phrase-mode? show-chip? suggestions translation word]}]
+  [{:keys [add-error copy show-chip? suggestions translation word]}]
   (let [{:keys [items active]} suggestions]
     [:form.home__add-form
      {:id "home-add-form"
@@ -37,7 +37,6 @@
      [:fieldset.home__add-fieldset
       [:legend.home__add-legend (:legend copy)]
       [:div.home__add-form-row
-       {:class (when phrase-mode? "home__add-form-row--phrase")}
        [:div.autocomplete
         [:div.home__add-label-row
          [:label.home__add-form-label {:for "new-word-value"} (:value-label copy)]
@@ -73,10 +72,7 @@
                                      :scroll-selector ".suggestions [data-active]"}]]}}]
         [:ul.suggestions
          (for [item items]
-           (suggestion-item item (= item active)))]
-        (when add-warning
-          [:p.home__add-warning add-warning])]
-       [:span.home__add-form-arrow "→"]
+           (suggestion-item item (= item active)))]]
        [:div.home__add-translation
         [:label.home__add-form-label {:for "new-word-translation"} "Перевод (русский)"]
         [:textarea.home__add-form-input.home__add-form-textarea
@@ -91,7 +87,7 @@
           :maxlength    500
           :lang         "ru"
           :value        translation
-          :placeholder  (or (first (:translations active)) "Перевод")
+          :placeholder  "Перевод"
           :required     true
           :class        (when (= :empty-translations add-error)
                           "home__add-form-input--error")

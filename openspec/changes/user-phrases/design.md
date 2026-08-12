@@ -15,7 +15,7 @@ In-force ADRs constraining this design: 0008 (content-addressed ids, frozen `nor
 **Non-Goals:**
 - No LLM translation or example generation for phrases.
 - No mass import of dictionary phrases.
-- No migration of existing multi-word vocab docs (stay words; cross-type hint only).
+- No migration of existing multi-word vocab docs (they stay words; a phrase with the same value is a separate entity).
 - No changes to dictionary pipeline, SQLite artifact, backend API, or CouchDB schema.
 - No change to word-trial review discipline.
 
@@ -38,7 +38,7 @@ In-force ADRs constraining this design: 0008 (content-addressed ids, frozen `nor
 - [Self-typed long answers frustrate users] → diff shows where the mistake is, retry preserves the answer, correct answer stays visible (existing error footer).
 - [Union rewrite of progress-store selects regresses word queries] → unit tests over union queries; browser pass on /words and lesson start.
 - [Autogrow via `field-sizing: content` unsupported on Safari] → JS scrollHeight fallback is part of v1, not an afterthought.
-- [Cross-type duplicates (word "auf jeden Fall" + phrase)] → submit-time hint "Уже есть как слово", non-blocking; no conversion in v1.
+- [Cross-type duplicates (word "auf jeden Fall" + phrase)] → both exist, each with its own review log; no warning, no conversion in v1.
 
 ## Migration Plan
 

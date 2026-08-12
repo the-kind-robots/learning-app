@@ -21,7 +21,7 @@
 - [x] 3.3 Phrase-mode mechanics: clear open suggestions on mode flip, guard stale async completion responses against current input
 - [x] 3.4 Chip UI: appears on detected phrase mode, tappable override until form clear; phrase-mode layout (vertical, full width), copy (legend/labels/placeholders)
 - [x] 3.5 Suggestion badge for multi-word pos=phrase items; selecting one sets phrase mode and fills fields
-- [x] 3.6 Submit routing: phrase mode → `phrase/add!`; cross-type duplicate hint «Уже есть как слово» (non-blocking); success clears form+override, refocuses
+- [x] 3.6 Submit routing: phrase mode → `phrase/add!`; a value that also exists as a word is created without a warning; success clears form+override, refocuses
 - [x] 3.7 Enter behavior: German field → focus translation; translation → submit; line breaks collapse to spaces on submit
 
 ## 4. Words page

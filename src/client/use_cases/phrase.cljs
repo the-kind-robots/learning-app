@@ -11,13 +11,6 @@
   (await ((:progress-store/find-phrase-by-value progress-store) value)))
 
 
-(defn ^:async find-word-twin
-  "Find a vocab doc whose value matches the phrase, or nil. Feeds the
-   non-blocking «already exists as a word» hint."
-  [{:keys [progress-store]} value]
-  (await ((:progress-store/find-word-by-value progress-store) value)))
-
-
 (defn ^:async add!
   "Adds a phrase with an initial review. The translation stays one whole
    entry — never split on punctuation — and no example fetch is queued: a
