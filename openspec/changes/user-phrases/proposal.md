@@ -7,7 +7,7 @@ Users meet useful German multi-word expressions ("auf jeden Fall", "Wie geht's?"
 - New replicated document type `phrase` (`phrase:<normalized>`) with its own review log; translation stored as a single string (never split by `parse-translations`).
 - The home add form detects word vs phrase automatically (space heuristic with article/`sich`/dictionary-lemma exceptions; picking a suggestion decides by its pos) with a tappable chip as override. Both inputs become auto-growing textareas.
 - Dictionary completions stop discarding `:pos`; multi-word pos=phrase suggestions get a badge and switch the form into phrase mode.
-- Words page shows phrases in the same list with a badge and line wrapping; counts, search, and collections include them.
+- Words page shows phrases in the same list with line wrapping and no type label; counts, search, and collections include them.
 - Lesson gains a phrase trial: exact typing required (RU→DE), grading through a new typography-only normalization (`normalize-for-grading`), token-level diff on error, "ИСПРАВИТЬ" retry that preserves the answer, and at most one review write per trial per lesson.
 - No LLM example generation for phrases; client conflict resolver and import LWW extended to the `phrase` doc type.
 

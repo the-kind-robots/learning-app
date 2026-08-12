@@ -26,7 +26,7 @@
 
 ## 4. Words page
 
-- [x] 4.1 Presenter emits `:phrase?`; row badge + multi-line wrap CSS (no ellipsis)
+- [x] 4.1 Presenter emits `:phrase?`; multi-line wrap CSS (no ellipsis), no type label in the row
 - [x] 4.2 Edit dialog: phrase translation as whole multi-line string (bypass `parse-translations`), same autogrow component; delete path verified for phrase ids
 
 ## 5. Lesson
@@ -45,6 +45,6 @@
 ## 7. Verification
 
 - [x] 7.1 Run client unit test suite (shadow-cljs node tests)
-- [x] 7.2 Browser pass (learning-app-cdp): add phrase (auto mode, exceptions, chip, autogrow), words list badge/wrap, phrase lesson trial (diff, retry, single review), duplicates, pos=phrase suggestion
+- [x] 7.2 Browser pass (learning-app-cdp): add phrase (auto mode, exceptions, chip, autogrow), words list wrap, phrase lesson trial (diff, retry, single review), duplicates, pos=phrase suggestion
 - [x] 7.3 Sync check: phrase replicates to CouchDB; conflicting translations union (main stand)
 - [x] 7.4 Screenshots for the PR (test data only)

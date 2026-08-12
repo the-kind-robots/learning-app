@@ -25,9 +25,7 @@
       :title (str (retention-text retention-level) " (" (int retention-level) "%)")}]
     [:span.word-item__value
      {:lang "de" :class (when phrase? "word-item__value--phrase")}
-     value
-     (when phrase?
-       [:span.word-item__badge "фраза"])]
+     value]
     [:span.word-item__translation {:lang "ru"} translation]
     [:span.word-item__arrow.word-item__chevron "→"]]])
 

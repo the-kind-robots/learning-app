@@ -49,11 +49,11 @@ A word and a phrase carrying the same normalized value are distinct learnable en
 - **THEN** the phrase document is created on the first submit and both entries keep their own review logs
 
 ### Requirement: Phrases appear in the words list
-The words page SHALL show phrases in the same list as words, sorted by the same retention order, marked with a badge, and wrapped over multiple lines instead of truncated. Search and word counts SHALL include phrases. The badge decision SHALL be computed by the presenter, not the view.
+The words page SHALL show phrases in the same list as words, sorted by the same retention order, and wrapped over multiple lines instead of truncated. Search and word counts SHALL include phrases. No type label is shown: the list reads as one vocabulary, and how a row is laid out is what tells the two apart. The type decision SHALL be computed by the presenter, not the view.
 
 #### Scenario: Phrase row rendering
 - **WHEN** the words page lists a phrase
-- **THEN** the row wraps the phrase text, shows the badge, and the retention indicator works as for words
+- **THEN** the row wraps the phrase text and the retention indicator works as for words
 
 ### Requirement: Phrase translations are edited as a whole string
 The edit dialog SHALL edit a phrase's translation as one multi-line string; saving SHALL NOT split it on punctuation. The German text of a phrase SHALL be immutable, as for words.

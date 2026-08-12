@@ -46,18 +46,6 @@
   overflow-wrap: anywhere;
 }
 
-.word-item__badge {
-  background: rgb(var(--color-iguana));
-  border-radius: 999px;
-  color: rgb(var(--color-eel));
-  font-size: 11px;
-  font-weight: 400;
-  margin-left: 8px;
-  padding: 2px 8px;
-  vertical-align: middle;
-  white-space: nowrap;
-}
-
 .word-item__translation {
   color: rgb(var(--color-wolf));
   font-size: 15px;
