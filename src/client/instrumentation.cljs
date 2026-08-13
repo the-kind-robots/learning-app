@@ -1,8 +1,9 @@
 (ns instrumentation
   "In-page measurement for development. Answers, with numbers, what the
    browser did: how many times the app rendered, how many dispatches ran and
-   how they nested, whether layout shifted, which tasks ran long, which
-   interactions were slow.
+   how they nested, whether layout shifted — both under the CLS rule and
+   counting the shifts the user's own typing caused — which tasks ran long,
+   which interactions were slow.
 
    Installed only under goog.DEBUG — a release build eliminates the whole
    namespace. Read from the page as `window.__metrics()`, reset with
@@ -17,12 +18,13 @@
 
 
 (defonce ^:private zero-metrics
-  {:dispatches   0
-   :frames       0
-   :layout-shift 0.0
-   :long-tasks   []
+  {:dispatches       0
+   :frames           0
+   :layout-shift     0.0
+   :layout-shift-all 0.0
+   :long-tasks       []
    :nested-dispatches 0
-   :renders      0
+   :renders          0
    :slow-interactions []})
 
 
@@ -83,12 +85,19 @@
 
   (count-frames!)
 
-  ;; Shifts the user did not cause: hadRecentInput filters out reflows that
-  ;; follow the user's own click or keystroke, the same rule CLS scoring uses.
+  ;; Two scores off one stream, so they can never disagree about which entries
+  ;; they saw. :layout-shift keeps the CLS rule — hadRecentInput drops the
+  ;; reflows that follow the user's own click or keystroke. :layout-shift-all
+  ;; keeps everything: typing is recent input, so a form that jumps under the
+  ;; cursor scores zero on the first counter and exists only on the second.
   (observe! "layout-shift"
             (fn [entry]
-              (when-not (.-hadRecentInput ^js entry)
-                (swap! metrics update :layout-shift + (.-value ^js entry))))
+              (let [value        (.-value ^js entry)
+                    user-caused? (.-hadRecentInput ^js entry)]
+                (swap! metrics
+                  (fn [m]
+                    (cond-> (update m :layout-shift-all + value)
+                      (not user-caused?) (update :layout-shift + value))))))
             {})
 
   (observe! "longtask"
