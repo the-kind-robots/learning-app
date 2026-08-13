@@ -16,6 +16,8 @@ on:
       - 'package-lock.json'
       - '.github/workflows/**'
       - 'test/browser/**'
+      - 'test/fixtures/**'
+      - 'tools/dictionary/**'
       - 'playwright.config.js'
 
 jobs:
@@ -43,7 +45,7 @@ jobs:
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
           fi
-          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.github/workflows/|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$|test/browser/|playwright\.config\.js$)'; then
+          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.github/workflows/|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$|test/browser/|test/fixtures/|tools/dictionary/|playwright\.config\.js$)'; then
             echo "browser=true" >> "$GITHUB_OUTPUT"
           else
             echo "browser=false" >> "$GITHUB_OUTPUT"
@@ -138,11 +140,17 @@ jobs:
       - run: npm ci
       - run: npx shadow-cljs compile app
 
+      # Suggestions need a dictionary, and every Playwright test gets a fresh
+      # context — the shipped 37 MB file would be imported into an empty OPFS
+      # once per test. This one is ~28 KB (#289).
+      - name: Build the fixture dictionary
+        run: clojure -X:dictionary-fixture
+
       # The runner image ships Google Chrome; `channel: "chrome"` in
       # playwright.config.js picks it up, so no browser download is needed.
       - name: Start backend
         run: |
-          LEARNING_APP__PORT=8301 LEARNING_APP__DB_PATH="$PWD/test-app.db"             clojure -M:dev -m core > backend.log 2>&1 &
+          LEARNING_APP__PORT=8301 LEARNING_APP__DB_PATH="$PWD/test-app.db"             LEARNING_APP__DICTIONARY_DIR="$PWD/target/test-dictionary"             clojure -M:dev -m core > backend.log 2>&1 &
 
       - name: Wait for backend
         run: |
