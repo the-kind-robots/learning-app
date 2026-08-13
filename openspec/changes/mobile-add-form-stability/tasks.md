@@ -38,4 +38,6 @@
       shipped dictionary byte-for-byte as before; pointed at a directory with
       no manifest it answers 404 and still boots
 - [x] 6.2 Full suite green; the mobile spec stable over six sequential runs
-- [ ] 6.3 CI green on the pull request for this change
+- [x] 6.3 CI green on the pull request for this change — the runner measured
+      zero long tasks and zero slow interactions, so the quiet-machine
+      assumption holds there too
