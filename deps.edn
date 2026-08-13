@@ -31,6 +31,14 @@
                         :exec-args  {:data-dir      "tools/dictionary/data"
                                      :output-dir    "resources/dictionary"}}
 
+           ;; Separate from :dictionary, whose :output-dir defaults to
+           ;; resources/dictionary — where write-dictionary! would delete and
+           ;; replace the shipped 37 MB artifact.
+           :dictionary-fixture {:deps      {dictionary/dictionary {:local/root "tools/dictionary"}}
+                                :exec-fn   dictionary.fixture/build
+                                :exec-args {:source     "test/fixtures/dictionary/lemmas.edn"
+                                            :output-dir "target/test-dictionary"}}
+
            :word-frequencies {:deps       {dictionary/dictionary {:local/root "tools/dictionary"}}
                               :ns-default word-frequencies}
 
