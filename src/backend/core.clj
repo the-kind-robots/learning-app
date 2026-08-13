@@ -371,18 +371,44 @@
 ;;
 
 
+(defn- configured-dictionary-dir
+  "Filesystem directory to serve the dictionary from, when set. Production
+   leaves it unset and answers from its own classpath resource — the only
+   artifact a deployment can be held to. The browser suite points it at a small
+   fixture (#289) so a spec waits milliseconds for the SQLite worker instead of
+   importing 37 MB into a fresh OPFS on every test."
+  [env]
+  (some-> (get env "LEARNING_APP__DICTIONARY_DIR") not-empty io/file))
+
+
+(def ^:private dictionary-dir (configured-dictionary-dir (System/getenv)))
+
+
 (def ^:private dictionary-manifest
-  (some-> (io/resource "dictionary/manifest.edn")
-          slurp
-          edn/read-string))
+  ;; Deferred, not read at load: a directory without a manifest must answer 404
+  ;; the way a missing resource already does, not break the namespace.
+  (delay
+   (some-> (if dictionary-dir
+             (let [file (io/file dictionary-dir "manifest.edn")]
+               (when (.isFile file) file))
+             (io/resource "dictionary/manifest.edn"))
+           slurp
+           edn/read-string)))
+
+
+(defn- dictionary-body
+  []
+  (if dictionary-dir
+    (response/file-response "dictionary.sqlite" {:root (str dictionary-dir)})
+    (response/resource-response "dictionary/dictionary.sqlite")))
 
 
 (defn- dictionary-handler
   [{:keys [path-params]}]
-  (if-let [{:keys [sha256]} (get-in dictionary-manifest [:files "dictionary.sqlite"])]
+  (if-let [{:keys [sha256]} (get-in @dictionary-manifest [:files "dictionary.sqlite"])]
     (let [expected (str "dict." (subs sha256 0 12) ".sqlite")]
       (if (= (:filename path-params) expected)
-        (-> (response/resource-response "dictionary/dictionary.sqlite")
+        (-> (dictionary-body)
             (response/content-type "application/x-sqlite3")
             (response/header "ETag" (str "\"" sha256 "\""))
             (response/header "Content-Hash" sha256)
@@ -466,7 +492,7 @@
     [["/dictionary/:filename"
       {:get (fn [{:keys [path-params] :as req}]
               (if (= (:filename path-params) "manifest")
-                (if-let [{:keys [sha256]} (get-in dictionary-manifest [:files "dictionary.sqlite"])]
+                (if-let [{:keys [sha256]} (get-in @dictionary-manifest [:files "dictionary.sqlite"])]
                   (let [hash12 (subs sha256 0 12)]
                     {:status  200
                      :headers {"Content-Type"  "application/json"
