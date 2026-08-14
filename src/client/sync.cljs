@@ -50,20 +50,20 @@
    extended to phrases), so both can be read as key ranges rather than by
    scanning every review, collection and example in the database. `￰` sorts
    past anything an id can carry, which makes each range its whole prefix.
+   The prefix is also what makes a row's type certain, so the rows need no
+   `:type` check on top.
 
    `:conflicts` is what these queries are for, and only `all-docs`, `get` and
    `changes` honour it — `find` accepts the option and silently answers without
    the conflicts, which would look like a database that never conflicts."
-  [{:doc-type "vocab"
-    :query    {:conflicts    true
-               :endkey       "vocab:￰"
-               :include-docs true
-               :startkey     "vocab:"}}
-   {:doc-type "phrase"
-    :query    {:conflicts    true
-               :endkey       "phrase:￰"
-               :include-docs true
-               :startkey     "phrase:"}}])
+  [{:conflicts    true
+    :endkey       "vocab:￰"
+    :include-docs true
+    :startkey     "vocab:"}
+   {:conflicts    true
+    :endkey       "phrase:￰"
+    :include-docs true
+    :startkey     "phrase:"}])
 
 
 (defn ^:async resolve-vocab-conflicts!
@@ -71,13 +71,10 @@
    behind."
   [user-db]
   (try
-    (let [scanned    (await (all! (map #(db/all-docs user-db (:query %)) conflict-scans)))
-          conflicted (->> (mapcat (fn [{:keys [doc-type]} {rows :rows}]
-                                    (->> rows
-                                         (map :doc)
-                                         (filter #(-> % :type (= doc-type)))))
-                           conflict-scans
-                           scanned)
+    (let [scanned    (await (all! (map #(db/all-docs user-db %) conflict-scans)))
+          conflicted (->> scanned
+                          (mapcat :rows)
+                          (map :doc)
                           (filter #(-> % :_conflicts seq)))]
       (when (seq conflicted)
         (log/info :sync/resolving-conflicts {:count (count conflicted)}))
