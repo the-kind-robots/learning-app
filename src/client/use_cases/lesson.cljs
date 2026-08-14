@@ -22,7 +22,7 @@
       answer)))
 
 
-(defn- lesson-word
+(defn- lesson-learnable
   [{id :_id type :type value :value translation :translation}]
   {:id          id
    :translation translation
@@ -34,22 +34,22 @@
   "Start a new lesson. Returns {:lesson-state ...} or {:error ...}.
 
    opts:
-     :words-per-lesson  — how many vocabulary words to include (default 3)
+     :learnables-per-lesson — how many words and phrases to include (default 3)
      :trial-selector    — strategy for picking the next trial (:first or :random, default nil → random)"
   [{:keys [collections examples progress-store] :as capabilities}
-   {:keys [words-per-lesson trial-selector]
-    :or   {words-per-lesson domain/default-words-per-lesson}}]
+   {:keys [learnables-per-lesson trial-selector]
+    :or   {learnables-per-lesson domain/default-learnables-per-lesson}}]
   (try
-    (let [{selected-words :words} (await (vocabulary/list-active
-                                          capabilities
-                                          {:order :asc :limit words-per-lesson}))]
-      (if-not (seq selected-words)
+    (let [{selected :words} (await (vocabulary/list-active
+                                    capabilities
+                                    {:order :asc :limit learnables-per-lesson}))]
+      (if-not (seq selected)
         {:error :no-words-available}
         (let [collection-id   ((:collections/active-id collections))
-              lesson-words    (mapv lesson-word selected-words)
-              word-ids        (mapv :id lesson-words)
+              learnables      (mapv lesson-learnable selected)
+              word-ids        (mapv :id learnables)
               lesson-examples (await ((:examples/list examples) word-ids collection-id))
-              lesson-state    (domain/initial-state lesson-words lesson-examples trial-selector)
+              lesson-state    (domain/initial-state learnables lesson-examples trial-selector)
               {:keys [rev]}   (await ((:progress-store/save-lesson! progress-store) lesson-state))]
           {:lesson-state (assoc lesson-state :_rev rev)})))
     (catch js/Error err
