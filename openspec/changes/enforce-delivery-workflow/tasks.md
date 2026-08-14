@@ -25,6 +25,6 @@
 - [x] 4.3 The settings.json command string resolves the script with `CLAUDE_PROJECT_DIR` pointing at the worktree, at the main checkout, and unset — deny in all three
 - [x] 4.4 The wrapper script runs unblocked end to end — it created #293 with Status and Priority set
 - [x] 4.5 A live session refuses `gh issue create` — and does so despite `Bash(gh *)` sitting in the allowlist, which was the one assumption that could have voided the design. The refusal text reaches the model as the tool result, so it can act on it. `gh issue view`, `gh pr create` from the issue branch, and the wrapper script all pass in the same session.
-- [ ] 4.6 The rule text is in a fresh session's context, in the main checkout and in a worktree
+- [x] 4.6 A fresh headless session on this branch, with every file tool disallowed, quotes the `# Delivery` section from `AGENTS.md` (so the `@` import loads) and lists `.claude/rules/repo-delivery.md` as the one rules file it can see — the two `paths:`-scoped rules stay out until a Clojure file is touched, which is the intended split. The same probe run in the main checkout answers `NOT IN CONTEXT`, so the rule is visible because of these files and nothing else
 - [x] 4.7 New files are tracked and reach a worktree through git
-- [ ] 4.8 CI green on the pull request
+- [x] 4.8 CI green on the pull request — the test jobs skip, since the change touches no application code, and a skipped job satisfies branch protection by design (#204)
