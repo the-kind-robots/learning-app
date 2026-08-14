@@ -34,9 +34,8 @@
 - [x] 5.1 `normalize-for-grading` in shared utils: existing folding + apostrophes (U+0027/U+2019/U+02BC) removed, unicode quotes/dashes → space; unit tests
 - [x] 5.2 Trial generation: phrase trial type (prompt = translation, answer = value), no example trials for phrases; instruction copy «Переведите фразу на немецкий»
 - [x] 5.3 Grading branch for phrase trials via `normalize-for-grading`; reviews written to phrase log
-- [x] 5.4 Token diff domain fn (LCS over normalized tokens, match/wrong/extra/missing) + unit tests
-- [x] 5.5 Error footer for phrase trials: diff-highlighted answer and reference; «ИСПРАВИТЬ» (restores preserved answer, cursor at end) + «ПОЗЖЕ»; autogrow answer textarea
-- [x] 5.6 `:reviewed-trial-ids` in lesson state: first graded attempt per trial per lesson writes the review; later attempts skip
+- [x] 5.4 Error footer for phrase trials: typed answer and reference as plain text; «ИСПРАВИТЬ» (restores preserved answer, cursor at end) + «ПОЗЖЕ»; autogrow answer textarea
+- [x] 5.5 `:reviewed-trial-ids` in lesson state: first graded attempt per trial per lesson writes the review; later attempts skip
 
 ## 6. ADR
 
@@ -45,6 +44,6 @@
 ## 7. Verification
 
 - [x] 7.1 Run client unit test suite (shadow-cljs node tests)
-- [x] 7.2 Browser pass (learning-app-cdp): add phrase (auto mode, exceptions, chip, autogrow), words list wrap, phrase lesson trial (diff, retry, single review), duplicates, pos=phrase suggestion
+- [x] 7.2 Browser pass (learning-app-cdp): add phrase (auto mode, exceptions, chip, autogrow), words list wrap, phrase lesson trial (retry, single review), duplicates, pos=phrase suggestion
 - [x] 7.3 Sync check: phrase replicates to CouchDB; conflicting translations union (main stand)
 - [x] 7.4 Screenshots for the PR (test data only)

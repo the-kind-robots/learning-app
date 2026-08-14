@@ -73,12 +73,8 @@ A phrase trial SHALL present the translation as prompt and require typing the fu
 - **WHEN** the user replaces a word of the phrase with a different word
 - **THEN** the answer is graded incorrect
 
-### Requirement: Phrase errors show a token diff and preserve the answer
-On an incorrect phrase answer, the error state SHALL highlight non-matching tokens in the user's answer (wrong/extra) and in the reference (missing), computed over grading-normalized tokens. A primary retry action SHALL return to the input with the previous answer preserved; a secondary action SHALL move on (trial stays in the pool).
-
-#### Scenario: Diff highlights the mistake
-- **WHEN** the user answers with one wrong word in the middle of the phrase
-- **THEN** that token is highlighted in the answer and the corresponding reference token is highlighted as missing
+### Requirement: Phrase errors preserve the answer for a retry
+On an incorrect phrase answer, the error state SHALL show the typed answer and the reference as plain text. A primary retry action SHALL return to the input with the previous answer preserved; a secondary action SHALL move on (trial stays in the pool). Marking up where the answer differs is out of scope: it has to work for word and example trials too, over one grading normalization.
 
 #### Scenario: Retry keeps the typed text
 - **WHEN** the user chooses "ИСПРАВИТЬ"

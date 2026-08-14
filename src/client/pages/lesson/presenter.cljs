@@ -1,6 +1,5 @@
 (ns pages.lesson.presenter
   (:require
-   [domain.answer-diff :as answer-diff]
    [domain.lesson :as domain]))
 
 
@@ -58,31 +57,6 @@
         (domain/answer-segments trial)))
 
 
-(def ^:private diff-status->class
-  {:extra   "lesson__diff-token--extra"
-   :missing "lesson__diff-token--missing"
-   :wrong   "lesson__diff-token--wrong"})
-
-
-(defn- diff-segments
-  [segments]
-  (mapv (fn [{:keys [status text]}]
-          {:highlight-class (diff-status->class status)
-           :text text})
-        segments))
-
-
-(defn- phrase-error-props
-  [lesson-state result]
-  (let [{:keys [answer expected]} (answer-diff/answer-diff
-                                   (:answer result)
-                                   (domain/expected-answer lesson-state))]
-    {:retry?        true
-     :retry-answer  (:answer result)
-     :diff-answer   (diff-segments answer)
-     :diff-expected (diff-segments expected)}))
-
-
 (defn footer-props
   [state]
   (let [lesson-state (:lesson/state state)]
@@ -97,4 +71,4 @@
                  :user-answer    (:answer result)
                  :finished?      (domain/finished? lesson-state)}
           (and (not (:correct? result)) (domain/phrase-trial? trial))
-          (merge (phrase-error-props lesson-state result)))))))
+          (assoc :retry? true :retry-answer (:answer result)))))))

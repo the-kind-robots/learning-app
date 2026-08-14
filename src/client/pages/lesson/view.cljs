@@ -79,31 +79,17 @@
        (if finished? "ЗАКОНЧИТЬ" "ДАЛЕЕ")]]]]])
 
 
-(defn- diff-body
-  [segments]
-  (into [:p.lesson__answer-body {:lang "de"}]
-        (interpose " ")
-        (for [{:keys [highlight-class text]} segments]
-          (if highlight-class
-            [:mark.lesson__diff-token {:class highlight-class} text]
-            text))))
-
-
 (defn- error-footer
-  [{:keys [diff-answer diff-expected retry? retry-answer user-answer] :as props}]
+  [{:keys [retry? retry-answer user-answer] :as props}]
   [:footer#lesson-footer
    {:replicant/key      :error
     :replicant/on-mount [[:action/focus-continue-button "#lesson-next"]]}
    [:div.lesson__footer.lesson__footer--error.page-footer
     [:div.lesson__answer
      [:h3.lesson__answer-header "Ваш ответ:"]
-     (if retry?
-       (diff-body diff-answer)
-       [:p.lesson__answer-body {:lang "de"} (or user-answer "")])
+     [:p.lesson__answer-body {:lang "de"} (or user-answer "")]
      [:h3.lesson__answer-header "Правильно:"]
-     (if retry?
-       (diff-body diff-expected)
-       (answer-body props))]
+     (answer-body props)]
     (if retry?
       [:div.lesson__action.page-footer__action
        [:button.big-button

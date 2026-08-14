@@ -9,7 +9,7 @@ In-force ADRs constraining this design: 0008 (content-addressed ids, frozen `nor
 **Goals:**
 - Phrase document type with its own review log, replicated and conflict-resolved like vocab.
 - Frictionless authoring: automatic word/phrase mode detection, auto-growing textareas.
-- Phrase lesson trial with exact typing, token diff on error, preserved answer on retry.
+- Phrase lesson trial with exact typing and a preserved answer on retry.
 - Dictionary pos=phrase suggestions flow into the new entity.
 
 **Non-Goals:**
@@ -27,7 +27,7 @@ In-force ADRs constraining this design: 0008 (content-addressed ids, frozen `nor
 4. **Separate use-case `phrase-add!`** rather than flags inside `vocabulary/add!`: dedup in the phrase namespace, single-entry translation merge, initial review seed, collection membership, and no `examples/request!` (a phrase is its own example; also avoids backend `same-lemma?` validation burning LLM retries on multi-word lemmas).
 5. **Automatic mode detection, no manual toggle.** Space in trimmed input → phrase, except article+word (der/die/das/ein/eine), `sich`+word, or input matching a non-phrase dictionary lemma from already-fetched completions; picking a suggestion decides by its pos (multi-word pos=phrase → phrase). Tappable chip appears only when phrase is detected, as override until the form clears. Both fields are always auto-growing textareas (rows=1 compact) so a mode flip never remounts inputs or loses text. Mode flip must clear open suggestions and guard stale async completion responses. Alternative — explicit segment toggle — rejected by owner as tiresome.
 6. **Grading normalization is a new function, `normalize-for-grading`** in shared utils — `normalize-german` is a frozen id contract (ADR-0008) and must not change. Forgiveness is typography-only: apostrophes (U+0027/U+2019/U+02BC) deleted, unicode quotes/dashes → space. Words are never forgiven.
-7. **Token diff over normalized tokens** (LCS, statuses match/wrong/extra/missing) computed in domain/presenter; view renders segments. Both strings tokenize after `normalize-for-grading`, guaranteeing alignment. Char-level markers deferred.
+7. **No markup of where the answer differs.** The error footer shows the typed answer and the reference as plain text. A token diff was built and then dropped from this change: it has to serve word and example trials too, and those grade through `normalize-german` while the diff would normalize through `normalize-for-grading` — a token could read as matched while the grader called it wrong. Designed from scratch in its own change.
 8. **Review discipline for phrase trials: one review per trial-id per lesson**, tracked as `:reviewed-trial-ids` in lesson state — not a flag on the trial (trials are compared by value in `remove-trial`). Prevents a hard phrase from writing 4 lapses in one lesson (rate×16) and monopolizing future lessons. Word trials keep current behavior.
 9. **Dictionary layer exposes `:pos`** in completions (adapter stops discarding it; port passes it through). Badge/mode routing keys on pos=phrase AND multi-word — single-word phrase lemmas (hallo, hey) stay words.
 
@@ -35,7 +35,7 @@ In-force ADRs constraining this design: 0008 (content-addressed ids, frozen `nor
 
 - [Space heuristic misfires on multi-word lemmas not in completions yet] → article/`sich` exceptions + suggestion-pos override + chip escape hatch; wrong mode costs one tap.
 - [Phrases fail more often and dominate the 3-slot lesson pick] → observe; a per-lesson phrase quota is a one-line follow-up.
-- [Self-typed long answers frustrate users] → diff shows where the mistake is, retry preserves the answer, correct answer stays visible (existing error footer).
+- [Self-typed long answers frustrate users] → retry preserves the answer, correct answer stays visible (existing error footer). Showing where the mistake is comes later, for every trial type at once.
 - [Union rewrite of progress-store selects regresses word queries] → unit tests over union queries; browser pass on /words and lesson start.
 - [Autogrow via `field-sizing: content` unsupported on Safari] → JS scrollHeight fallback is part of v1, not an afterthought.
 - [Cross-type duplicates (word "auf jeden Fall" + phrase)] → both exist, each with its own review log; no warning, no conversion in v1.
