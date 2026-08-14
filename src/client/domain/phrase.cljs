@@ -40,23 +40,37 @@
   #{"das" "der" "die" "ein" "eine" "sich"})
 
 
-(defn- word-lemma-match?
-  [value {:keys [lemma pos]}]
-  (and (not= "phrase" pos)
-       (= (vocabulary/normalize-value lemma)
-          (vocabulary/normalize-value value))))
+(defn- lemma-match?
+  [value {:keys [lemma]}]
+  (= (vocabulary/normalize-value lemma)
+     (vocabulary/normalize-value value)))
+
+
+(defn- lemma-pos
+  "The part of speech the dictionary gives this exact value, when one of the
+   completions already on screen is the value itself."
+  [value completions]
+  (some #(when (lemma-match? value %) (:pos %)) completions))
+
+
+(defn- word-pair?
+  [tokens]
+  (and (= 2 (count tokens))
+       (word-pair-prefixes (str/lower-case (first tokens)))))
 
 
 (defn phrase-value?
-  "True when the entered value reads as a phrase: it contains a space and is
-   neither an article/sich pair nor a non-phrase dictionary lemma among the
-   completions already fetched."
+  "True when the entered value reads as a phrase. A dictionary lemma equal to
+   the value settles it either way — otherwise a space makes it a phrase,
+   except for an article/`sich` pair. Typing `das heißt` in full and picking it
+   from the suggestions have to agree, and the dictionary is the one that knows."
   [value completions]
   (let [tokens (str/split (collapsed value) #" ")]
     (and (> (count tokens) 1)
-         (not (and (= 2 (count tokens))
-                   (word-pair-prefixes (str/lower-case (first tokens)))))
-         (not (some #(word-lemma-match? value %) completions)))))
+         (case (lemma-pos value completions)
+           "phrase" true
+           nil      (not (word-pair? tokens))
+           false))))
 
 
 (defn phrase-suggestion?

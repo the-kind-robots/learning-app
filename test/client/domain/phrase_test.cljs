@@ -39,7 +39,15 @@
                                    [{:lemma "guten Morgen" :pos "noun"}]))))
   (testing "a pos=phrase completion does not veto phrase mode"
     (is (true? (sut/phrase-value? "auf jeden Fall"
-                                  [{:lemma "auf jeden Fall" :pos "phrase"}])))))
+                                  [{:lemma "auf jeden Fall" :pos "phrase"}]))))
+  (testing "a pos=phrase lemma beats the article exception"
+    (is (true? (sut/phrase-value? "das heißt"
+                                  [{:lemma "das heißt" :pos "phrase"}])))
+    (is (true? (sut/phrase-value? "ein paar"
+                                  [{:lemma "ein paar" :pos "phrase"}]))))
+  (testing "a phrase lemma that is not the value itself decides nothing"
+    (is (false? (sut/phrase-value? "der Tisch"
+                                   [{:lemma "der Tisch ist rund" :pos "phrase"}])))))
 
 
 (deftest phrase-suggestion-detection

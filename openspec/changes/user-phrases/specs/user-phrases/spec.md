@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Phrases are added from the home form with automatic mode detection
-The home add form SHALL detect whether the input is a word or a phrase without a manual toggle. Input containing a space (after trim) SHALL be treated as a phrase, EXCEPT when it is an article (der/die/das/ein/eine) followed by a single token, `sich` followed by a single token, or it matches a non-phrase dictionary lemma from already-fetched completions. Selecting an autocomplete suggestion SHALL set the mode from the suggestion: multi-word pos=phrase suggestions select phrase mode, all others word mode. A tappable chip SHALL appear when phrase mode is detected and SHALL let the user override the detected mode until the form is cleared.
+The home add form SHALL detect whether the input is a word or a phrase without a manual toggle. When an already-fetched completion is the input itself, its pos SHALL decide: `phrase` selects phrase mode, anything else word mode. Otherwise input containing a space (after trim) SHALL be treated as a phrase, EXCEPT when it is an article (der/die/das/ein/eine) or `sich` followed by a single token. Selecting an autocomplete suggestion SHALL set the mode from the suggestion: multi-word pos=phrase suggestions select phrase mode, all others word mode. A tappable chip SHALL appear when phrase mode is detected and SHALL let the user override the detected mode until the form is cleared.
 
 #### Scenario: Space switches to phrase mode
 - **WHEN** the user types "auf jeden Fall" into the German field
