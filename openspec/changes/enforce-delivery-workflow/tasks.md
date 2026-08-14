@@ -24,7 +24,7 @@
 - [x] 4.2 `gh pr create` denied on `master`, allowed on `293-...` — checked from both checkouts
 - [x] 4.3 The settings.json command string resolves the script with `CLAUDE_PROJECT_DIR` pointing at the worktree, at the main checkout, and unset — deny in all three
 - [x] 4.4 The wrapper script runs unblocked end to end — it created #293 with Status and Priority set
-- [ ] 4.5 A live session refuses `gh issue create`: hooks load at session start, so this needs a session started after this branch is checked out. Owner to confirm.
+- [x] 4.5 A live session refuses `gh issue create` — and does so despite `Bash(gh *)` sitting in the allowlist, which was the one assumption that could have voided the design. The refusal text reaches the model as the tool result, so it can act on it. `gh issue view`, `gh pr create` from the issue branch, and the wrapper script all pass in the same session.
 - [ ] 4.6 The rule text is in a fresh session's context, in the main checkout and in a worktree
 - [x] 4.7 New files are tracked and reach a worktree through git
 - [ ] 4.8 CI green on the pull request
