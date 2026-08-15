@@ -79,7 +79,7 @@
     (nil? (:started-at lesson-state)) (assoc :started-at (now-iso clock))))
 
 
-(defn- ^:async learnable-docs
+(defn- ^:async vocab-docs
   "Everything a lesson can draw from. Words and phrases are one document type
    that differ by `:kind`, so one query answers for both."
   [dbs]
@@ -101,7 +101,7 @@
   [dbs clock
    {:keys [order limit offset search word-ids]
     :or   {order :desc}}]
-  (let [all-docs    (await (learnable-docs dbs))
+  (let [all-docs    (await (vocab-docs dbs))
         docs        (cond->> all-docs
                       (some? word-ids) (filter #((set word-ids) (:_id %))))
         total-count (clojure/count docs)
@@ -127,7 +127,7 @@
 
 (defn ^:async count-words
   [dbs]
-  (let [docs (await (learnable-docs dbs))]
+  (let [docs (await (vocab-docs dbs))]
     (clojure/count docs)))
 
 

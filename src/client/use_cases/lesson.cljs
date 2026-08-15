@@ -22,7 +22,7 @@
       answer)))
 
 
-(defn- lesson-learnable
+(defn- lesson-vocab
   [{id :_id kind :kind value :value translation :translation}]
   {:id          id
    :kind        kind
@@ -34,22 +34,22 @@
   "Start a new lesson. Returns {:lesson-state ...} or {:error ...}.
 
    opts:
-     :learnables-per-lesson — how many words and phrases to include (default 3)
+     :vocab-per-lesson  — how many words and phrases to include (default 3)
      :trial-selector    — strategy for picking the next trial (:first or :random, default nil → random)"
   [{:keys [collections examples progress-store] :as capabilities}
-   {:keys [learnables-per-lesson trial-selector]
-    :or   {learnables-per-lesson domain/default-learnables-per-lesson}}]
+   {:keys [vocab-per-lesson trial-selector]
+    :or   {vocab-per-lesson domain/default-vocab-per-lesson}}]
   (try
     (let [{selected :words} (await (vocabulary/list-active
                                     capabilities
-                                    {:order :asc :limit learnables-per-lesson}))]
+                                    {:order :asc :limit vocab-per-lesson}))]
       (if-not (seq selected)
         {:error :no-words-available}
         (let [collection-id   ((:collections/active-id collections))
-              learnables      (mapv lesson-learnable selected)
-              word-ids        (mapv :id learnables)
+              vocab           (mapv lesson-vocab selected)
+              word-ids        (mapv :id vocab)
               lesson-examples (await ((:examples/list examples) word-ids collection-id))
-              lesson-state    (domain/initial-state learnables lesson-examples trial-selector)
+              lesson-state    (domain/initial-state vocab lesson-examples trial-selector)
               {:keys [rev]}   (await ((:progress-store/save-lesson! progress-store) lesson-state))]
           {:lesson-state (assoc lesson-state :_rev rev)})))
     (catch js/Error err

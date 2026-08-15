@@ -7,7 +7,7 @@
 (def lesson-id "lesson")
 
 
-(def default-learnables-per-lesson 3)
+(def default-vocab-per-lesson 3)
 
 
 (def default-trial-selector rand-nth)
@@ -37,19 +37,19 @@
   (= (:type trial) trial-type-phrase))
 
 
-(defn- learnable->trial
-  "A word or a phrase becomes the trial its type calls for. `:word-id` keeps
+(defn- vocab->trial
+  "A word or a phrase becomes the trial its kind calls for. `:word-id` keeps
    its name because reviews and examples are stored under it."
-  [learnable]
-  {:type    (if (= "phrase" (:kind learnable))
+  [vocab]
+  {:type    (if (= "phrase" (:kind vocab))
               trial-type-phrase
               trial-type-word)
-   :word-id (:id learnable)
-   :prompt  (->> (:translation learnable)
+   :word-id (:id vocab)
+   :prompt  (->> (:translation vocab)
                  (filter #(= "ru" (:lang %)))
                  (map :value)
                  (str/join ", "))
-   :answer  (:value learnable)
+   :answer  (:value vocab)
    :locked? false})
 
 
@@ -64,8 +64,8 @@
 
 
 (defn generate-trials
-  [learnables examples]
-  (into (mapv learnable->trial learnables)
+  [vocab examples]
+  (into (mapv vocab->trial vocab)
         (map example->trial examples)))
 
 
@@ -101,8 +101,8 @@
 
 
 (defn initial-state
-  [learnables examples trial-selector]
-  (let [trials (generate-trials learnables examples)]
+  [vocab examples trial-selector]
+  (let [trials (generate-trials vocab examples)]
     {:_id           lesson-id
      :type          "lesson"
      :options       {:trial-selector trial-selector}
