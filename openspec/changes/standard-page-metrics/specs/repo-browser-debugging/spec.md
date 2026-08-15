@@ -1,7 +1,9 @@
 ## MODIFIED Requirements
 
 ### Requirement: Development builds expose page metrics
-A development build SHALL expose in-page measurements — the app-level counters (renders, dispatches with nesting, frames), the standard web metrics, long animation frames, dictionary readiness, and the storage estimate — readable as `window.__metrics()` and resettable as `window.__metricsReset()`. Release builds SHALL NOT contain the instrumentation, including any library it depends on.
+A development build SHALL expose in-page measurements — the app-level counters (renders, dispatches with nesting, frames), the standard web metrics, long animation frames, dictionary readiness, and the storage estimate — readable as `window.__metrics()` and resettable as `window.__metricsReset()`.
+
+The measurement library SHALL be fetched at runtime by the development path rather than imported, so that a release bundle carries none of it. Dead-code elimination alone is not sufficient evidence here: a release build was inspected and still contained the instrumentation's own code, so any claim about release contents MUST be made by inspecting the built output.
 
 Map keys SHALL keep the ClojureScript keyword spelling that `clj->js` produces, so a reader accesses `layout-shift`, not `layoutShift`.
 
@@ -13,9 +15,9 @@ Map keys SHALL keep the ClojureScript keyword spelling that `clj->js` produces, 
 - **WHEN** the browser window is occluded or hidden
 - **THEN** frame- and paint-dependent metrics stop advancing while dispatch and long-frame counters keep working — a documented property, verified in a painting environment instead
 
-#### Scenario: Release build carries no instrumentation
-- **WHEN** a release build is produced
-- **THEN** the bundle contains neither the instrumentation namespace nor the web-metrics library it imports, confirmed by inspecting the built output rather than by inference
+#### Scenario: Release build carries no measurement library
+- **WHEN** a release build is produced and its output is inspected
+- **THEN** the bundle contains no trace of the web-metrics library — none of its identifiers, such as the interaction grouping it performs
 
 ## ADDED Requirements
 
@@ -44,13 +46,19 @@ Where the browser does not support `long-animation-frame`, the list SHALL stay e
 - **THEN** the metrics still read without error and the long-frame list is empty
 
 ### Requirement: Dictionary readiness is measurable
-The instrumentation SHALL record how long the dictionary takes to become usable, measured on the document's timeline from worker construction to the worker reporting readiness, as a User Timing measure so it is visible in a performance trace. The per-phase durations the worker already reports SHALL be carried into the metrics alongside it, including the marker that distinguishes a warm start from a cold one.
+The instrumentation SHALL record how long the dictionary takes to become usable, measured on the document's timeline from worker construction to the worker reporting readiness, as a User Timing measure so it is visible in a performance trace. Whatever per-phase durations the worker reports SHALL be carried into the metrics alongside it.
+
+The readiness figure SHALL NOT depend on the worker's own telemetry, which reaches the page only on an uncontrolled load — see the service worker defect that strips the worker's query string.
 
 When the dictionary never becomes ready, no readiness figure SHALL be reported; its absence MUST NOT be represented as zero.
 
 #### Scenario: Cold start against warm start
 - **WHEN** the dictionary is loaded with an empty OPFS pool and then again with the file already present
-- **THEN** both runs report a readiness duration, the second is markedly shorter, and only the second carries the warm-start marker
+- **THEN** both runs report a readiness duration and the second is markedly shorter
+
+#### Scenario: Phase breakdown on an uncontrolled load
+- **WHEN** the dictionary loads on a page the service worker does not yet control
+- **THEN** the worker's own phase timings, including the download and import steps, appear in the metrics alongside the readiness figure
 
 #### Scenario: Dictionary never opens
 - **WHEN** the worker reports an error instead of readiness
