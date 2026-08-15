@@ -138,7 +138,7 @@ command to use instead.
 
 ### Requirement: A branch for tracked work is linked to its issue
 
-Tracked work SHALL happen on a branch created from its issue, including when the work is isolated in a worktree. The repository SHALL record, for each situation it puts agents in, an order that satisfies both the branch rule and the worktree rule and that runs to a pushed branch without a refused command. Where an agent cannot create a worktree beside its own, the recorded order SHALL say so and give the one that works, naming the tool that must not be used and why.
+Tracked work SHALL happen on a branch created from its issue, including when the work is isolated in a worktree. The repository SHALL record, for each situation it puts agents in, an order that satisfies both the branch rule and the worktree rule and that runs to a pushed branch without a refused command. Where an agent cannot create a worktree beside its own, the recorded order SHALL say so and give the one that works, naming the tool that must not be used and why. A session that coordinates tracked work SHALL delegate repository edits rather than making them and SHALL stay in the main checkout, because an agent launched from a worktree inherits that pin and can no longer place its own work in a worktree of its own.
 
 #### Scenario: Work is isolated in a worktree
 
@@ -154,6 +154,11 @@ Tracked work SHALL happen on a branch created from its issue, including when the
 
 - **WHEN** an agent already pinned to a worktree has to land a different issue branch
 - **THEN** it creates the issue branch first, adds a linked worktree inside its own worktree, works there with plain directory changes, and reaches a pushed branch with no refused command
+
+#### Scenario: The session that coordinates the work
+
+- **WHEN** a coordinating session needs a repository edit
+- **THEN** it delegates that edit and stays in the main checkout, so the agent it launches can create its own `.claude/worktrees/<slug>` from the issue branch and work there
 
 ### Requirement: Filing an issue stays within a small share of the API budget
 
