@@ -48,6 +48,10 @@ die() {
   exit 1
 }
 
+graphql_remaining() {
+  gh api rate_limit --jq '.resources.graphql.remaining' 2>/dev/null || true
+}
+
 normalize_fields_json() {
   local raw_json="$1"
   jq -c 'if type == "array" then . else (.fields // []) end' <<<"$raw_json"
@@ -98,8 +102,58 @@ apply_single_select_field() {
     --single-select-option-id "$option_id" >/dev/null
 }
 
+# `gh project item-list` asks for every field value of every item — 203 points of the 5000
+# hourly GraphQL budget on a board this size. Matching an item needs four fields, so ask for
+# those. Output keeps the shape the CLI produced, so the jq matchers below are unchanged.
 project_items_json() {
-  gh project item-list "$project_number" --owner "$owner" --limit "${GHWF_ITEM_LIMIT:-200}" --format json
+  local query='
+    query($owner: String!, $number: Int!, $after: String) {
+      owner: repositoryOwner(login: $owner) {
+        ... on ProjectV2Owner {
+          projectV2(number: $number) {
+            items(first: 100, after: $after) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                id
+                isArchived
+                content {
+                  __typename
+                  ... on Issue { number url title }
+                  ... on PullRequest { number url title }
+                  ... on DraftIssue { title }
+                }
+              }
+            }
+          }
+        }
+      }
+    }'
+
+  local after="null" page nodes all="[]" has_next
+  while :; do
+    if [[ "$after" == "null" ]]; then
+      page="$(gh api graphql -f query="$query" -F owner="$owner" -F number="$project_number")"
+    else
+      page="$(gh api graphql -f query="$query" -F owner="$owner" -F number="$project_number" -F after="$after")"
+    fi
+
+    # Archived items are out of the CLI's listing too; reusing one would resurrect
+    # work the owner had put away.
+    nodes="$(jq -c '[.data.owner.projectV2.items.nodes[]
+                     | select(.isArchived | not)
+                     | {id: .id,
+                        title: (.content.title // ""),
+                        content: {type: .content.__typename,
+                                  number: .content.number,
+                                  url: .content.url}}]' <<<"$page")"
+    all="$(jq -c --argjson nodes "$nodes" '. + $nodes' <<<"$all")"
+
+    has_next="$(jq -r '.data.owner.projectV2.items.pageInfo.hasNextPage' <<<"$page")"
+    [[ "$has_next" == "true" ]] || break
+    after="$(jq -r '.data.owner.projectV2.items.pageInfo.endCursor' <<<"$page")"
+  done
+
+  jq -c --argjson items "$all" -n '{items: $items}'
 }
 
 find_project_item_by_title() {
@@ -344,9 +398,31 @@ done
 [[ -n "$project_number" ]] || die "--project-number or GHWF_PROJECT_NUMBER is required"
 [[ "$mode" == "issue" || "$mode" == "draft-convert" ]] || die "--mode must be 'issue' or 'draft-convert'"
 
-project_id="$(gh project view "$project_number" --owner "$owner" --format json --jq '.id')"
+graphql_budget_before="$(graphql_remaining)"
+
+# `gh project field-list` pulls every option of every field (102 points); the script reads the
+# ids of single-select fields and their options. One query answers that and the project id.
+project_query='
+  query($owner: String!, $number: Int!) {
+    owner: repositoryOwner(login: $owner) {
+      ... on ProjectV2Owner {
+        projectV2(number: $number) {
+          id
+          fields(first: 50) {
+            nodes {
+              ... on ProjectV2FieldCommon { id name }
+              ... on ProjectV2SingleSelectField { id name options { id name } }
+            }
+          }
+        }
+      }
+    }
+  }'
+project_json="$(gh api graphql -f query="$project_query" -F owner="$owner" -F number="$project_number")"
+
+project_id="$(jq -r '.data.owner.projectV2.id // empty' <<<"$project_json")"
 [[ -n "$project_id" ]] || die "Unable to resolve project id"
-fields_json="$(normalize_fields_json "$(gh project field-list "$project_number" --owner "$owner" --format json)")"
+fields_json="$(normalize_fields_json "$(jq -c '[.data.owner.projectV2.fields.nodes[] | select(.id)]' <<<"$project_json")")"
 
 issue_url=""
 issue_number=""
@@ -453,4 +529,13 @@ echo "Issue Number: $issue_number"
 echo "Project Item ID: $item_id"
 if [[ -n "$checked_out_branch" ]]; then
   echo "Checked Out Branch: $checked_out_branch"
+fi
+
+# A run that quietly eats a tenth of the hourly budget is only noticed an hour later, when
+# the next run is refused. Print the price.
+if [[ -n "$graphql_budget_before" ]]; then
+  graphql_budget_after="$(graphql_remaining)"
+  if [[ -n "$graphql_budget_after" ]]; then
+    echo "GraphQL Cost: $(( graphql_budget_before - graphql_budget_after )) points (${graphql_budget_after} left this hour)"
+  fi
 fi
