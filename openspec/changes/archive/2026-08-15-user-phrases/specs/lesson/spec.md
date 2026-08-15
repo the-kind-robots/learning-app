@@ -17,9 +17,9 @@ The system SHALL generate trials for each word, each phrase, and each example, u
 
 ## ADDED Requirements
 
-### Requirement: Phrase-trial answers record review progress with per-lesson discipline
-Graded phrase-trial answers SHALL write review documents to the phrase's own review log, at most once per trial per lesson (the first graded attempt decides `retained`).
+### Requirement: Phrase-trial answers record review progress
+Graded phrase-trial answers SHALL write a review document on every graded attempt, as word trials do. A trial answered wrongly stays in the pool and may be graded again in the same lesson; each attempt is its own review.
 
-#### Scenario: First attempt writes the review
+#### Scenario: Both attempts are written
 - **WHEN** a phrase trial is answered incorrectly and later correctly in the same lesson
-- **THEN** exactly one review with `retained` false is written for that trial
+- **THEN** a review with `retained` false and a review with `retained` true are written for that trial
