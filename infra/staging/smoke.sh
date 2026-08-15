@@ -56,6 +56,70 @@ check "app: /auth/check without cookie is 401" \
 check "nginx: /db/ without cookie is 401" \
     test "$(http_code --resolve sprecha.de:443:127.0.0.1 https://sprecha.de/db/anything)" = 401
 
+# The proxy-auth boundary (GH-304). CouchDB trusts X-Auth-CouchDB-* by
+# construction, so nginx must drop whatever a client sends. No response reveals
+# the headers an upstream received -- CouchDB answers a spoofed request exactly
+# as it answers an anonymous one -- so the app steps aside and a listener reads
+# the request nginx actually forwards.
+upstream_clean_of_couch_headers() {
+    local capture=/tmp/proxy-auth-capture nc_pid
+    systemctl stop learning-app-run.service
+    timeout 10 nc -l 127.0.0.1 8083 > "${capture}" &
+    nc_pid=$!
+    sleep 1
+    curl -k -s -m 3 --resolve sprecha.de:443:127.0.0.1 \
+        -H 'X-Auth-CouchDB-UserName: attacker' \
+        -H 'X-Auth-CouchDB-Roles: _admin' \
+        -H 'X-Auth-CouchDB-Token: forged' \
+        https://sprecha.de/ >/dev/null 2>&1
+    kill "${nc_pid}" 2>/dev/null
+    wait "${nc_pid}" 2>/dev/null
+    systemctl start learning-app-run.service
+    # A capture that never happened must not read as clean.
+    grep -qi '^GET ' "${capture}" && ! grep -qi 'x-auth-couchdb' "${capture}"
+}
+check "nginx: a client's proxy-auth header does not reach the upstream" \
+    upstream_clean_of_couch_headers
+
+# The same boundary read off the installed config, so a new location that
+# forgets the snippet fails here even though the assertion above only exercises
+# one of them. `nginx -T` dumps each file separately instead of inlining
+# includes, so the snippet is checked on its own and a location counts as safe
+# when it includes it or assigns all three headers from auth_request.
+STRIP_SNIPPET=/etc/nginx/snippets/couchdb-proxy-auth-strip.conf
+
+strip_snippet_clears_all_three() {
+    grep -Eq 'proxy_set_header +X-Auth-CouchDB-UserName +""' "${STRIP_SNIPPET}" &&
+    grep -Eq 'proxy_set_header +X-Auth-CouchDB-Roles +""' "${STRIP_SNIPPET}" &&
+    grep -Eq 'proxy_set_header +X-Auth-CouchDB-Token +""' "${STRIP_SNIPPET}"
+}
+check "nginx: the strip snippet clears all three headers" \
+    strip_snippet_clears_all_three
+
+every_proxy_location_handles_couch_headers() {
+    nginx -T 2>/dev/null | awk '
+        /^[[:space:]]*location[^{]*\{/ { inloc = 1; depth = 1; buf = ""; next }
+        inloc {
+            opens = gsub(/\{/, "{"); closes = gsub(/\}/, "}")
+            depth += opens - closes
+            buf = buf $0 "\n"
+            if (depth <= 0) {
+                inloc = 0
+                if (buf ~ /proxy_pass/) {
+                    assigned = (buf ~ /X-Auth-CouchDB-UserName/) \
+                             + (buf ~ /X-Auth-CouchDB-Roles/) \
+                             + (buf ~ /X-Auth-CouchDB-Token/)
+                    included = (buf ~ /include +snippets\/couchdb-proxy-auth-strip\.conf/)
+                    if (assigned != 3 && !included) bad++
+                }
+            }
+        }
+        END { exit(bad > 0) }
+    '
+}
+check "nginx: every proxying location handles the proxy-auth headers" \
+    every_proxy_location_handles_couch_headers
+
 # Migrations ran against the configured database path.
 check "migrations: schema_migrations has rows" \
     bash -c "test \"\$(sqlite3 ${DB} 'SELECT count(*) FROM schema_migrations;')\" -ge 1"
