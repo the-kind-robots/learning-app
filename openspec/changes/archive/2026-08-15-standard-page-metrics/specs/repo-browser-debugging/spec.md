@@ -1,38 +1,4 @@
-# repo-browser-debugging Specification
-
-## Purpose
-TBD - created by archiving change improve-tracked-workflow-and-project-cdp-browser-handling. Update Purpose after archive.
-## Requirements
-### Requirement: Project-specific CDP workflow is preferred for learning-app browser debugging
-The repository SHALL prefer the project-specific CDP workflow for browser debugging of `sprecha.localhost` and `sprecha.de`.
-
-#### Scenario: Browser debugging request for the learning app
-- **WHEN** a browser-debugging task targets this learning app
-- **THEN** the project-specific CDP skill is the preferred workflow
-- **AND** generic browser tooling is treated as fallback rather than first choice
-
-### Requirement: Local CDP workflow supports service-worker-aware refresh
-The project-specific CDP workflow SHALL provide a local refresh path that forces service-worker update-on-reload before reloading the app.
-
-#### Scenario: Local browser debugging after rebuilding the app
-- **WHEN** a local debugging session needs to refresh the app after a new build
-- **THEN** the project CDP wrapper can enable service-worker update-on-reload and reload the page
-- **AND** the workflow reduces the chance of inspecting stale service-worker-controlled assets
-
-### Requirement: CDP tooling failures prescribe the fix
-When the CDP endpoint is not answering, the tooling SHALL fail fast and name the exact command that repairs the situation, rather than diagnosing transport health alone or timing out silently.
-
-#### Scenario: Doctor with Chrome down
-- **WHEN** `doctor` runs while the CDP endpoint is not answering
-- **THEN** it reports the endpoint as failed and prints the `start-local` command to run
-
-#### Scenario: Eval with Chrome down
-- **WHEN** any page-resolving command runs while the endpoint is not answering
-- **THEN** it fails within seconds — not after a multi-minute retry loop — and its error names `start-local`
-
-#### Scenario: Chrome up but no app tab
-- **WHEN** the endpoint answers but no tab matches the environment
-- **THEN** the error names `start-local` as the way to open one
+## MODIFIED Requirements
 
 ### Requirement: Development builds expose page metrics
 A development build SHALL expose in-page measurements — the app-level counters (renders, dispatches with nesting, frames), the standard web metrics, long animation frames, dictionary readiness, and the storage estimate — readable as `window.__metrics()` and resettable as `window.__metricsReset()`.
@@ -52,6 +18,8 @@ Map keys SHALL keep the ClojureScript keyword spelling that `clj->js` produces, 
 #### Scenario: Release build carries no measurement library
 - **WHEN** a release build is produced and its output is inspected
 - **THEN** the bundle contains no trace of the web-metrics library — none of its identifiers, such as the interaction grouping it performs
+
+## ADDED Requirements
 
 ### Requirement: Standard web metrics are reported under their published definitions
 The instrumentation SHALL report LCP, FCP, TTFB, CLS and INP as defined by their specifications, through a maintained implementation rather than a hand-written observer. CLS SHALL be the session-window score, not a running sum. INP SHALL group events by `interactionId` so that one gesture yields one interaction, and SHALL survive back/forward-cache restores without merging two visits into one number.
@@ -106,4 +74,3 @@ The instrumentation SHALL expose the origin's storage estimate — usage, quota,
 #### Scenario: Synchronous metrics stay synchronous
 - **WHEN** `window.__metrics()` is called
 - **THEN** it returns a value directly, not a promise
-
