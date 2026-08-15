@@ -22,33 +22,34 @@
       answer)))
 
 
-(defn- lesson-word
-  [{id :_id value :value translation :translation}]
+(defn- lesson-vocab
+  [{id :_id kind :kind value :value translation :translation}]
   {:id          id
-   :value       value
-   :translation translation})
+   :kind        kind
+   :translation translation
+   :value       value})
 
 
 (defn ^:async start!
   "Start a new lesson. Returns {:lesson-state ...} or {:error ...}.
 
    opts:
-     :words-per-lesson  — how many vocabulary words to include (default 3)
+     :vocab-per-lesson  — how many words and phrases to include (default 3)
      :trial-selector    — strategy for picking the next trial (:first or :random, default nil → random)"
   [{:keys [collections examples progress-store] :as capabilities}
-   {:keys [words-per-lesson trial-selector]
-    :or   {words-per-lesson domain/default-words-per-lesson}}]
+   {:keys [vocab-per-lesson trial-selector]
+    :or   {vocab-per-lesson domain/default-vocab-per-lesson}}]
   (try
-    (let [{selected-words :words} (await (vocabulary/list-active
-                                          capabilities
-                                          {:order :asc :limit words-per-lesson}))]
-      (if-not (seq selected-words)
+    (let [{selected :words} (await (vocabulary/list-active
+                                    capabilities
+                                    {:order :asc :limit vocab-per-lesson}))]
+      (if-not (seq selected)
         {:error :no-words-available}
         (let [collection-id   ((:collections/active-id collections))
-              lesson-words    (mapv lesson-word selected-words)
-              word-ids        (mapv :id lesson-words)
+              vocab           (mapv lesson-vocab selected)
+              word-ids        (mapv :id vocab)
               lesson-examples (await ((:examples/list examples) word-ids collection-id))
-              lesson-state    (domain/initial-state lesson-words lesson-examples trial-selector)
+              lesson-state    (domain/initial-state vocab lesson-examples trial-selector)
               {:keys [rev]}   (await ((:progress-store/save-lesson! progress-store) lesson-state))]
           {:lesson-state (assoc lesson-state :_rev rev)})))
     (catch js/Error err
@@ -80,7 +81,10 @@
       (let [current-trial (domain/current-trial current-state)
             lesson-state  (domain/check-answer current-state answer)]
         (try
-          (when (domain/word-trial? current-trial)
+          ;; Every graded attempt is written, however many a lesson holds: a
+          ;; run of lapses is the log being honest, not noise. Example trials
+          ;; keep writing nothing — they grade a word already reviewed here.
+          (when-not (domain/example-trial? current-trial)
             (await (vocabulary/add-review
                     capabilities
                     (:word-id current-trial)

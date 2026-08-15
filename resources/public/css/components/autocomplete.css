@@ -43,6 +43,16 @@
   font-weight: 700;
 }
 
+.suggestions__badge {
+  background: rgb(var(--color-iguana));
+  border-radius: 999px;
+  color: rgb(var(--color-eel));
+  font-size: 11px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  vertical-align: middle;
+}
+
 /* Phones overlay the list too (#289). It used to open in flow here, animating
    184px of height into the page — and since `.home__content` centres the add
    panel, that height went both ways: the value field being typed into rose

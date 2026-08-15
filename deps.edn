@@ -22,7 +22,7 @@
 
            :test  {:extra-paths ["test"]}
 
-           :build {:deps       {org.clojure/clojure           {:mvn/version "1.12.4"}
+           :build {:deps       {org.clojure/clojure           {:mvn/version "1.12.5"}
                                 io.github.clojure/tools.build {:git/tag "v0.10.14" :git/sha "1176afd"}}
                    :ns-default build}
 

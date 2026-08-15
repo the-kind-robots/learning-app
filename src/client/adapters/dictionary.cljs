@@ -48,7 +48,7 @@
 
 
 (defn ^:async completions
-  "Returns a vec of completion maps {:lemma :translation :exact?} from SQLite."
+  "Returns a vec of completion maps {:lemma :translations :exact? :pos} from SQLite."
   [db prefix]
   (if (ready? db)
     (let [prefix-start (utils/normalize-german (or prefix ""))]
@@ -64,8 +64,9 @@
                                              :rowMode     "object"}))
                           :keywordize-keys
                           true)]
-          (for [{:keys [lemma translations has_exact]} rows]
+          (for [{:keys [lemma translations has_exact pos]} rows]
             {:lemma        lemma
+             :pos          pos
              :translations (str/split (or translations "") #",")
              :exact?       (pos? has_exact)}))))
     []))

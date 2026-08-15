@@ -4,6 +4,7 @@
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
    [use-cases.collections :as collections]
+   [use-cases.phrase :as phrase]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -19,7 +20,9 @@
      (try
        (when-let [completions (when ((:dictionary/ready? dictionary))
                                 (await ((:dictionary/completions dictionary) value)))]
-         (dispatch [[:action/update-suggestions completions]]))
+         ;; The queried value rides along so the action can drop answers that
+         ;; arrive after further typing (stale list, stale translation prefill).
+         (dispatch [[:action/update-suggestions {:completions completions :value value}]]))
        (catch js/Error err
          (log/error :effect/suggest-completions {:error (str err)}))))
    100))
@@ -95,9 +98,10 @@
 
 (nxr/register-effect! :effect/add-word
   (fn ^:async add-word
-    [{:keys [dispatch capabilities]} _ {:keys [value translation focus-id]}]
+    [{:keys [dispatch capabilities]} _ {:keys [value translation focus-id mode]}]
     (try
-      (let [result (await (vocabulary/add! capabilities value translation))]
+      (let [add!   (if (= :phrase mode) phrase/add! vocabulary/add!)
+            result (await (add! capabilities value translation))]
         (if (:error result)
           (dispatch [[:action/show-word-error (:error result)]])
           (let [colls (:collections capabilities)

@@ -1,4 +1,6 @@
-(ns pages.home.presenter)
+(ns pages.home.presenter
+  (:require
+   [domain.phrase :as phrase]))
 
 
 (defn- active-collection-props
@@ -10,19 +12,39 @@
      :name (:home/active-coll-name state)}))
 
 
+(defn- suggestion-props
+  [item]
+  (assoc item :phrase? (phrase/phrase-suggestion? item)))
+
+
 (defn- suggestions-props
   [state]
   (when-let [s (:home/suggestions state)]
-    {:items  (:suggestions/items s)
+    {:items  (mapv suggestion-props (:suggestions/items s))
      :active (:suggestions/active s)}))
+
+
+(def ^:private mode-copy
+  "The mode has no control of its own: the legend and the label are how the
+   form says which of the two it is about to save."
+  {:phrase {:legend      "Добавить фразу"
+            :placeholder "Новая фраза"
+            :value-label "Фраза (немецкий)"}
+   :word   {:legend      "Добавить слово"
+            :placeholder "Новое слово"
+            :value-label "Слово (немецкий)"}})
 
 
 (defn- form-props
   [state]
-  {:add-error   (:home/add-error state)
-   :suggestions (suggestions-props state)
-   :translation (:home/translation state)
-   :word        (:home/word state)})
+  (let [mode (phrase/add-mode (:home/word state)
+                              (:suggestions/items (:home/suggestions state))
+                              (:home/mode-override state))]
+    {:add-error   (:home/add-error state)
+     :copy        (mode-copy mode)
+     :suggestions (suggestions-props state)
+     :translation (:home/translation state)
+     :word        (:home/word state)}))
 
 
 (defn page-props

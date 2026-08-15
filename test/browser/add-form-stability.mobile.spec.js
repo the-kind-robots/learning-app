@@ -2,14 +2,21 @@ const { test, expect } = require('@playwright/test');
 
 // The phone half of the add-form stability specs (GH-289), phase 2 of #177.
 // Runs in the `mobile` project only: at 390x844 the autocomplete media query
-// applies, the suggestion list leaves its desktop overlay and opens in flow
-// under the value field, pushing everything below it down the page.
+// applies, and before this change the suggestion list left its desktop overlay
+// to open in flow under the value field, pushing everything below it down.
 //
-// Two things had to change before this could be asserted at all:
-//   - `__metrics().layoutShift` follows the CLS rule and drops entries with
-//     hadRecentInput. Typing *is* recent input, so the shifts this spec is
-//     about never reached it — hence the unfiltered `layoutShiftAll`.
-//   - The suite had no viewport, so no phone media query had ever applied.
+// Why this spec does not assert on CLS, measured rather than assumed. CLS is
+// defined to ignore any layout-shift entry with `hadRecentInput`, which the
+// browser sets on every entry within 500 ms of a keystroke. Measured on the
+// in-flow layout: 11 entries, 0.028 total, `hadRecentInput` true on all
+// eleven, so CLS read 0.000. The same page, given a shift with no input near
+// it, reported 0.224 — the instrument works, it is the definition that looks
+// away. A software keyboard is invisible to it twice over: shrinking the
+// viewport from 844 to 520 emitted no layout-shift entries at all.
+//
+// So the numbers this spec trusts are the geometry — `boundingBox()` before
+// and after — and the unfiltered `layout-shift.score`. `web-vitals.cls` is
+// logged beside them to keep the contrast visible, never asserted on.
 //
 // The dictionary is the fixture the backend serves from
 // LEARNING_APP__DICTIONARY_DIR (see README.md), not the shipped 37 MB file:
@@ -25,7 +32,11 @@ const WORD_MATCHES = 2; // das Fenster, die Fensterbank — the shipped dictiona
 // very shift the spec exists to measure.
 const PROBE = 'Haus';
 
+// INP's own "good" boundary. Not a budget invented here.
+const INP_BUDGET_MS = 200;
+
 const valueField = (page) => page.getByLabel('Слово (немецкий)');
+const translationField = (page) => page.getByLabel('Перевод (русский)');
 const submitButton = (page) => page.getByRole('button', { name: 'ДОБАВИТЬ' });
 const options = (page) => page.getByRole('option');
 
@@ -34,6 +45,16 @@ const options = (page) => page.getByRole('option');
 const panelTitle = (page) => page.getByRole('heading', { name: 'Добавить слово' });
 
 const topOf = async (locator) => (await locator.boundingBox()).y;
+
+// INP as the web-vitals library reports it, once it has reported anything.
+// Null until the library has seen an interaction worth naming.
+const interactionLatency = async (page) => {
+  await expect
+    .poll(() => page.evaluate(() => window.__metrics()['web-vitals'].inp?.value ?? null),
+          { timeout: 10000 })
+    .not.toBeNull();
+  return page.evaluate(() => window.__metrics()['web-vitals'].inp.value);
+};
 
 // The list animates its height over 180 ms, so shifts arrive spread over a
 // dozen frames and the last lands well after the final render. Waiting on the
@@ -73,7 +94,7 @@ test('typing a word does not move the form under the cursor', async ({ page }) =
   // failing later on undefined.
   expect(await page.evaluate(() => typeof window.__metrics)).toBe('function');
 
-  const restingY = await topOf(submitButton(page));
+  const restingSubmitY = await topOf(submitButton(page));
 
   // The dictionary lives in a Worker that fetches and imports SQLite, and the
   // only honest signal that it finished is a suggestion appearing. Warm up on
@@ -91,10 +112,18 @@ test('typing a word does not move the form under the cursor', async ({ page }) =
   await field.fill('');
   await expect(options(page)).toHaveCount(0);
   await settleSuggestions(page);
-  await expect.poll(() => topOf(submitButton(page))).toBeCloseTo(restingY, 1);
+  await expect.poll(() => topOf(submitButton(page))).toBeCloseTo(restingSubmitY, 1);
 
   const fieldBefore = await field.boundingBox();
   const titleBefore = await panelTitle(page).boundingBox();
+  const translationBefore = await translationField(page).boundingBox();
+
+  // INP is the library's own accumulating state: `__metricsReset()` clears our
+  // copy of it but cannot rewind the library, so after the reset it re-reports
+  // only if a *new* worst interaction appears. Keeping the warm-up's reading
+  // means the final worst is whichever of the two is larger, which is exactly
+  // the number "was any interaction slow" wants.
+  const inpBeforeReset = await interactionLatency(page);
 
   await page.evaluate(() => window.__metricsReset());
 
@@ -109,30 +138,34 @@ test('typing a word does not move the form under the cursor', async ({ page }) =
 
   const fieldAfter = await field.boundingBox();
   const titleAfter = await panelTitle(page).boundingBox();
+  const translationAfter = await translationField(page).boundingBox();
   const submitAfter = await topOf(submitButton(page));
   const scrolled = await page.evaluate(() => window.scrollY);
-  const metrics = await page.evaluate(() => window.__metrics());
 
-  // `clj->js` keeps the ClojureScript key names verbatim — `layout-shift-all`,
-  // not `layoutShiftAll` — so these are bracket reads, not property reads.
-  const shiftAll = metrics['layout-shift-all'];
-  const shiftCls = metrics['layout-shift'];
-  const longTasks = metrics['long-tasks'];
-  const slowInteractions = metrics['slow-interactions'];
+  // `clj->js` keeps the ClojureScript key names verbatim — `layout-shift`,
+  // not `layoutShift` — so these are bracket reads, not property reads.
+  const metrics = await page.evaluate(() => window.__metrics());
+  const shift = metrics['layout-shift'];
+  const vitals = metrics['web-vitals'];
+  const longFrames = metrics['long-frames'];
 
   // The numbers this spec exists to produce. The list reporter prints them on
   // every run, which is how the in-flow-versus-overlay question (#289) gets
-  // answered with measurements instead of opinions.
+  // answered with measurements instead of opinions. `cls` sits next to
+  // `shiftScore` on purpose: the gap between them is the whole reason the
+  // assertions below read geometry.
   console.log(
     '[add-form mobile]',
     JSON.stringify({
-      submitPush: Math.round(submitAfter - restingY),
-      shiftAll: Number(shiftAll.toFixed(4)),
-      shiftCls: Number(shiftCls.toFixed(4)),
+      submitPush: Math.round(submitAfter - restingSubmitY),
+      shiftScore: Number(shift.score.toFixed(4)),
+      shiftExcludedByCls: Number(shift['input-excluded'].toFixed(4)),
+      shiftEntries: shift.entries.length,
+      cls: vitals.cls ? Number(vitals.cls.value.toFixed(4)) : null,
+      inp: vitals.inp ? vitals.inp.value : inpBeforeReset,
       renders: metrics.renders,
       keystrokes: WORD.length,
-      longTasks,
-      slowInteractions,
+      longFrames: longFrames.length,
       scrolled,
     })
   );
@@ -142,28 +175,46 @@ test('typing a word does not move the form under the cursor', async ({ page }) =
   expect(fieldAfter.y).toBe(fieldBefore.y);
   expect(titleAfter.y).toBe(titleBefore.y);
 
-  // Everything below the list does move, and this is the budget for it.
-  expect(shiftAll).toBeLessThan(0.05);
+  // And what the in-flow list used to push down the page. These are the
+  // assertions that actually fail when the list re-enters the flow: it moved
+  // both of these by 184 px, while CLS reported 0.000 throughout.
+  expect(translationAfter.y).toBe(translationBefore.y);
+  expect(submitAfter).toBe(restingSubmitY);
+
+  // The unfiltered score, which is the only shift number that can see typing
+  // at all. Measured 0.000 as an overlay, 0.028 in flow.
+  expect(shift.score).toBeLessThan(0.05);
+
+  // Every entry recorded here is one CLS discarded, so a nonzero score with a
+  // zero `input-excluded` would mean something shifted outside the typing —
+  // a different defect, and worth knowing about.
+  expect(shift['input-excluded']).toBeCloseTo(shift.score, 4);
 
   // One render for the keystroke, one for the answer that follows it.
   expect(metrics.renders).toBeLessThanOrEqual(2 * WORD.length);
 
-  // No keystroke took long enough to feel sluggish. This is the responsiveness
-  // assertion, and `event` entries are the right instrument for it: they are
-  // anchored to the user's own input, so they measure this form rather than
-  // whatever else the machine is doing.
+  // No keystroke took long enough to feel sluggish. INP is the standard
+  // instrument for that and it is anchored to the user's own input, so it
+  // measures this form rather than whatever else the machine is doing.
+  // Measured 48-56 ms here, against INP's own 200 ms "good" boundary.
   //
-  // `long-tasks` is logged but deliberately not asserted on. Its threshold is
-  // 50 ms by definition, and an unminified dev build under WSL crosses that on
-  // background work alone — measured three tasks of 58-81 ms with the browser
-  // running by itself and nothing typed into the page since the reset. An
-  // assertion that fails on the machine's mood rather than on the code is
-  // worse than no assertion: it teaches people to rerun until green.
+  // `long-frames` is logged but deliberately not asserted on. A long frame is
+  // main-thread time, and an unminified development build under WSL produces
+  // them on background work alone. An assertion that fails on the machine's
+  // mood rather than on the code is worse than no assertion: it teaches people
+  // to rerun until green.
   //
-  // This one holds because the mobile project waits for the desktop one and
-  // then runs alone (see playwright.config.js). Run several copies of this
-  // spec at once — `--repeat-each` without `--workers=1` — and it fails by
-  // construction: keystrokes measured 128-336 ms with five browsers sharing
-  // the machine. The geometry assertions above survive that; timing cannot.
-  expect(slowInteractions).toEqual([]);
+  // Even INP holds only because the mobile project waits for the desktop one
+  // and then runs alone (see playwright.config.js). Run several copies at once
+  // — `--repeat-each` without `--workers=1` — and it fails by construction:
+  // keystrokes measured 128-336 ms with five browsers sharing the machine. The
+  // geometry assertions above survive that; timing cannot.
+  // A plain read, not a poll: after the reset an unchanged worst interaction
+  // is reported by nobody, and that is a pass, not a timeout.
+  const inpAfter = await page.evaluate(
+    () => window.__metrics()['web-vitals'].inp?.value ?? null
+  );
+  const inp = Math.max(inpBeforeReset ?? 0, inpAfter ?? 0);
+  expect(inp).toBeGreaterThan(0); // an unreported INP would make the next line vacuous
+  expect(inp).toBeLessThan(INP_BUDGET_MS);
 });

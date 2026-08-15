@@ -86,3 +86,95 @@ Every PR SHALL receive a verdict from each required check — pass, fail, or ski
 - **WHEN** a PR touches the application or its build inputs
 - **THEN** the full suite runs and its verdict gates the merge
 
+### Requirement: The delivery rules are present in every session
+
+The repository SHALL state the delivery flow in files the agent loads at session start,
+not only inside a skill that must first be chosen. The statement SHALL name the
+entrypoint skill, the sequence, and the cases where the flow does not apply.
+
+#### Scenario: A session begins
+
+- **WHEN** an agent session starts in this repository, in the main checkout or in a
+  worktree
+- **THEN** the delivery flow and its entrypoint are already in context, without any file
+  being read first
+
+#### Scenario: A task arrives that will end in a commit
+
+- **WHEN** the user reports a bug or proposes a change likely to become a committed edit
+- **THEN** the agent enters the flow through the entrypoint skill rather than assembling
+  the GitHub and OpenSpec steps by hand
+
+### Requirement: Commands that bypass tracked delivery are refused
+
+The repository SHALL refuse the commands that create work outside the board. A raw issue
+creation SHALL be denied. A pull request SHALL be denied from a branch that carries no
+issue number, and allowed from a branch created for an issue. Each refusal SHALL name the
+command to use instead.
+
+#### Scenario: Issue created by hand
+
+- **WHEN** an agent runs a raw issue-creation command
+- **THEN** the call is denied and the refusal names the workflow script that creates the
+  issue, places it on the board and sets its fields
+
+#### Scenario: Pull request from an untracked branch
+
+- **WHEN** an agent opens a pull request from a branch with no issue number
+- **THEN** the call is denied, because a pull request with no issue behind it is work the
+  board cannot see
+
+#### Scenario: Pull request from an issue branch
+
+- **WHEN** the branch was created for an issue
+- **THEN** opening the pull request by hand is allowed, which is what a dirty worktree
+  requires anyway
+
+#### Scenario: The owner asks for the raw command
+
+- **WHEN** the user explicitly wants the bypassed command
+- **THEN** an explicit prefix downgrades the refusal to an approval prompt, so the human
+  confirms rather than the agent deciding alone
+
+### Requirement: A branch for tracked work is linked to its issue
+
+Tracked work SHALL happen on a branch created from its issue, including when the work is
+isolated in a worktree. The repository SHALL record the order that satisfies both the
+branch rule and the worktree rule.
+
+#### Scenario: Work is isolated in a worktree
+
+- **WHEN** a task needs a worktree
+- **THEN** the issue branch is created first and the worktree is placed on that branch,
+  so the issue keeps its development link
+
+### Requirement: Filing an issue stays within a small share of the API budget
+
+The tracked-delivery workflow SHALL file an issue without consuming a disproportionate share
+of the hourly GraphQL budget, so that a batch of backlog work can be filed in one sitting.
+
+Lookups the workflow performs SHALL request only the data the workflow reads. Matching a board
+item needs its id, title, type and issue number; resolving a field needs that field's id and
+the id of the option being set. Requesting every field value of every board item, or every
+option of every field, is not permitted merely because a convenience command offers it.
+
+Reducing the cost SHALL NOT cost behaviour: a same-titled draft item on the board is still
+found and converted into the issue rather than duplicated.
+
+#### Scenario: Filing twenty issues in a row
+
+- **WHEN** twenty issues are filed one after another through the start-work script
+- **THEN** every one of them is created, placed on the board, and given Status and Priority
+- **AND** the hourly GraphQL budget is not exhausted
+
+#### Scenario: A same-titled draft is still reused
+
+- **WHEN** the board holds a draft item whose title matches the issue being filed
+- **THEN** that draft is converted into the issue
+- **AND** no second board item is created
+
+#### Scenario: The cost is visible
+
+- **WHEN** the script finishes a run
+- **THEN** it reports what that run cost against the GraphQL budget
+

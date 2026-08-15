@@ -4,22 +4,27 @@
 
 `src/client/instrumentation.cljs` has exposed `window.__metrics()` since #177
 and the Playwright suite has run in CI since #260, but nothing connected them:
-no spec read a counter. Two gaps made a naive assertion useless — the
-layout-shift counter drops entries with `hadRecentInput`, which is every shift
-that happens while the user types, and the suite set no viewport, so the phone
-media queries had never applied to anything. GitHub issue: #289.
+no spec read a counter. Two gaps made a naive assertion useless — every
+layout-shift counter that follows the CLS rule drops entries with
+`hadRecentInput`, which is every shift that happens while the user types, and
+the suite set no viewport, so the phone media queries had never applied to
+anything. GitHub issue: #289.
 
 Connecting them found the defect they were meant to find. On a phone the
-suggestion list opened in flow, adding 184 px of height to the add panel; since
-`.home__content` centres that panel, the height went both ways and the value
-field being typed into rose 92 px out from under the finger while the submit
-button sank 92 px. Measured over five runs: 0.053-0.058 unfiltered layout
-shift, past the 0.05 budget, with the CLS-filtered counter reading exactly 0.
+suggestion list opened in flow, adding 184 px of height to the add panel, so
+the translation field and the submit button both dropped 184 px while the user
+was still typing into the field above them. Measured on the merged tree: 11
+layout-shift entries totalling 0.028, every one of them carrying
+`hadRecentInput`, so the standard CLS read 0.000 throughout. The same page,
+given a shift with no input near it, reported 0.224 — the metric is looking
+away by definition, not failing.
 
 ## What Changes
 
-- `instrumentation` counts layout shift twice off one observer: the existing
-  CLS-filtered `:layout-shift` and a new unfiltered `:layout-shift-all`.
+- `instrumentation` gains `:layout-shift` beside the standard web metrics:
+  `:score` over every entry, `:input-excluded` for the part CLS discards, and
+  the entries themselves. The standard CLS stays exactly as
+  `standard-page-metrics` left it.
 - The phone suggestion list becomes an overlay, as it already is on desktop.
   It now moves nothing; the shift score is 0.
 - `playwright.config.js` gains two projects: `desktop` (default viewport, every

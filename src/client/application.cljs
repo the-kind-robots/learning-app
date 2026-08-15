@@ -94,6 +94,42 @@
       (.setSelectionRange node len len))))
 
 
+(defn- css-sized?
+  "Whether the browser sizes this textarea itself through `field-sizing`.
+   Asked by the CSS property name: `fieldSizing` is missing from Closure's
+   externs, so the dotted accessor survives :advanced only as long as extern
+   inference keeps resolving it. A string never has to be resolved."
+  [node]
+  (-> (js/getComputedStyle node)
+      (.getPropertyValue "field-sizing")
+      (= "content")))
+
+
+(defn- autogrow!
+  "Fits a textarea's height to its content: collapse, then measure. The
+   fallback for Safari, which lacks `field-sizing: content` — where the
+   property works, measuring only overrides a height the browser got right.
+   `scrollHeight` omits the borders a border-box height must carry."
+  [node]
+  (when (and node (not (css-sized? node)))
+    (set! (.. node -style -height) "auto")
+    (let [borders (- (.-offsetHeight node) (.-clientHeight node))]
+      (set! (.. node -style -height) (str (+ (.-scrollHeight node) borders) "px")))))
+
+
+(nxr/register-effect! :effect/autogrow-target
+  (fn autogrow-target [{:keys [dispatch-data]} _]
+    (autogrow! (some-> dispatch-data :replicant/dom-event .-target))))
+
+
+(nxr/register-effect! :effect/clear-autogrow
+  ;; Hands the height back to CSS. The measured height is an inline style, so
+  ;; nothing else clears it: an emptied field would keep the height its former
+  ;; content earned.
+  (fn clear-autogrow [_ _ element-id]
+    (some-> (js/document.getElementById element-id) .-style (.removeProperty "height"))))
+
+
 (nxr/register-effect! :effect/select-all
   (fn select-all [{:keys [dispatch-data]} _]
     (some-> dispatch-data :replicant/node .select)))

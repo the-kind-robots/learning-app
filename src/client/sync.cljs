@@ -47,9 +47,10 @@
 
 (def ^:private vocabulary-with-conflicts
   "Vocabulary ids are content-addressed under a `vocab:` prefix (ADR-0008), so
-   the words can be read as a key range rather than by scanning every review,
+   the entries can be read as a key range rather than by scanning every review,
    collection and example in the database. `￰` sorts past anything an id
-   can carry, which makes the range the whole prefix.
+   can carry, which makes the range the whole prefix. Phrases live in this
+   range too — they are vocabulary documents with a `:kind`.
 
    `:conflicts` is what this whole query is for, and only `all-docs`, `get` and
    `changes` honour it — `find` accepts the option and silently answers without
@@ -61,13 +62,13 @@
 
 
 (defn ^:async resolve-vocab-conflicts!
-  "Resolves every conflicted vocab doc a replication pass left behind."
+  "Resolves every conflicted vocabulary doc a replication pass left behind."
   [user-db]
   (try
     (let [{rows :rows} (await (db/all-docs user-db vocabulary-with-conflicts))
           conflicted   (->> rows
                             (map :doc)
-                            (filter #(and (-> % :type #{"vocab"}) (-> % :_conflicts seq))))]
+                            (filter #(-> % :_conflicts seq)))]
       (when (seq conflicted)
         (log/info :sync/resolving-conflicts {:count (count conflicted)}))
       (await (all! (map #(resolve-conflict! user-db %) conflicted))))

@@ -36,17 +36,34 @@ moment either moved. It refuses to write into `resources/dictionary`, because
 `write-dictionary!` deletes and renames `dictionary.sqlite` inside its output
 directory.
 
-## Why two counters instead of changing the one
+## Why an unfiltered shift counter beside the standard CLS
 
-`hadRecentInput` is the CLS rule and the existing counter should keep it: it
-answers "would this page score badly", and that question still matters. The
-counter this spec needs answers a different one — "did the layout move while
-the user was typing" — and by construction the CLS rule hides exactly that.
-Both are computed in a single observer callback so they cannot disagree about
-which entries they saw.
+`standard-page-metrics` replaced the hand-rolled shift counter with the
+web-vitals library, so CLS is now the real session-window score. It still
+cannot see this defect, and that is not a bug in the library — CLS is defined
+to drop every `layout-shift` entry carrying `hadRecentInput`, which the browser
+sets on everything within 500 ms of a keystroke.
 
-Measured here, the difference is the whole finding: 0.053 unfiltered against
-0.000 filtered for the same seven keystrokes.
+Measured on this form, which is the whole finding:
+
+| | entries | sum | of which `hadRecentInput` | web-vitals CLS |
+|---|---|---|---|---|
+| list in flow | 11 | 0.028 | 0.028 (all of it) | 0.000 |
+| list overlaid | 0 | 0.000 | 0.000 | 0.000 |
+| control: a shift with no input near it | 2 | 0.224 | 0.000 | 0.224 |
+
+The control is what makes the first row a statement about the metric rather
+than about the instrument: the same page, the same observer, reports 0.224 the
+moment the shift is not attributable to typing. CLS is looking away on purpose.
+
+A software keyboard is invisible to it twice over. Shrinking the viewport from
+844 to 520 — what the keyboard does to the page — emitted no `layout-shift`
+entries at all, so no counter built on that stream can see it either.
+
+Hence `:layout-shift`, off the same observer, keeping `:score` (every entry),
+`:input-excluded` (the part CLS discarded) and the entries themselves. And
+hence the spec's real assertions being `boundingBox()` comparisons: geometry is
+the only instrument that measures what is actually being asked about.
 
 ## Why the mobile project waits for the desktop one
 
@@ -56,25 +73,47 @@ zero long tasks and no slow interactions every time; five in parallel, up to
 nine long tasks per run and keystrokes taking 128-336 ms. `dependencies` costs
 nothing — the mobile project holds one spec — and buys a quiet machine.
 
-The spec asserts on `slow-interactions` rather than `long-tasks`. The long-task
-threshold is 50 ms by definition, and an unminified development build under WSL
-crosses it on background work alone, with nothing typed into the page. Event
-entries are anchored to the user's own input, so they measure this form instead
-of the machine's mood. Long tasks are still logged: a number worth watching is
-not the same as a number worth failing on.
+The spec asserts on INP rather than on long frames. A long frame is main-thread
+time, and an unminified development build under WSL produces them on background
+work alone, with nothing typed into the page. INP is anchored to the user's own
+input, so it measures this form instead of the machine's mood. Long frames are
+still logged: a number worth watching is not the same as a number worth failing
+on. Measured over five sequential runs, INP came out 40-88 ms against its own
+200 ms "good" boundary; the same spec run against the in-flow layout produced
+272 ms, so the headroom belongs to the fix, not to the threshold.
+
+One trap, since `__metricsReset()` runs mid-spec: web-vitals keeps its own
+state, so clearing our copy of INP does not rewind the library, and after the
+reset it re-reports only if a new worst interaction appears. The spec therefore
+reads INP before the reset as well and takes the larger of the two.
 
 ## Why the list overlays instead of staying in flow
 
-The issue left this open, to be decided from measurements. The measurements
-decided it: 0.053-0.058 unfiltered shift is past the 0.05 budget on every run,
-and the shift is not confined to what sits below the list — `.home__content`
-centres the add panel, so half the added height travels upward and takes the
-value field with it, 92 px out from under the finger that is typing into it.
+The issue left this open, to be decided from measurements.
 
-The in-flow layout was not careless: its 180 ms height animation is what kept
-the score as low as 0.053, by spreading the movement over a dozen frames rather
-than one. But an animation can only make a layout shift cheaper. An overlay
-does not shift at all, it is what the desktop already does, and `.home__add`
-already sets `overflow: visible` for it. The phone keeps one thing of its own —
+Re-measured after merging master, because master moved the ground. When this
+was first measured, `.home__content` still had `justify-content: center`, so
+half the list's added height travelled upward and took the value field 92 px
+out from under the finger. Master has since anchored that container to the top
+(`justify-content: flex-start`) for exactly this reason. On the merged tree the
+value field and the panel title no longer move at all with the list in flow —
+that half of the original argument is now master's fix, not this one's.
+
+What remains, measured on the merged tree: the list in flow adds 184 px between
+the value field and everything under it, so the translation field and the
+submit button both drop 184 px while the user is still typing the first field.
+The unfiltered shift score is 0.028, which is *inside* the 0.05 budget — so the
+budget is no longer what decides this. The 184 px displacement is.
+
+The in-flow layout was not careless: its 180 ms height animation is what keeps
+the score that low, by spreading the movement over a dozen frames rather than
+one. But an animation can only make a layout shift cheaper. An overlay does not
+shift at all, it is what the desktop already does, and `.home__add` already
+sets `overflow: visible` for it. The phone keeps one thing of its own —
 `max-height: min(240px, 34svh)`, because the software keyboard takes roughly a
 third of the screen.
+
+The overlay has a cost of its own and it is not measured away: while the list
+is open it covers the translation field completely (56 px of 56) and 3 px of
+`ДОБАВИТЬ`. Trading a 184 px jump for occlusion is a judgement, not a
+measurement, and it is tracked separately as #349 rather than settled here.

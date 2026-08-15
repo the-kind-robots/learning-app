@@ -61,8 +61,8 @@ uploads `test-results/` (traces) and the backend log as an artifact.
 - Geometry and performance specs additionally read `boundingBox()` and
   `window.__metrics()`. The latter exists only in a development build
   (`shadow-cljs compile`, never `release`) and its keys keep their
-  ClojureScript spelling: `metrics['layout-shift-all']`, not
-  `metrics.layoutShiftAll`.
+  ClojureScript spelling: `metrics['layout-shift']`, not
+  `metrics.layoutShift`.
 
 ## Projects
 
@@ -79,6 +79,49 @@ spec use `npx playwright test --project=mobile --no-deps`.
 Per-file user agents stay `test.use({ userAgent })`, which is why
 `dialog-backdrop.spec.js` sets an iPhone UA inside the desktop project: it
 wants the install button to render, not a phone viewport.
+
+## Metrics
+
+A development build exposes measurements on the page. `metrics.spec.js` reads
+them; so can any CDP eval.
+
+- `window.__metrics()` — synchronous snapshot.
+- `window.__metricsReset()` — clears our copy of the counters.
+- `window.__storage()` — a **promise** of `{usage, quota, usage-details}`.
+  Separate because `navigator.storage.estimate()` is asynchronous.
+
+Keys are kebab-case. `clj->js` keeps ClojureScript keyword names as written,
+so it is `long-frames`, never `longFrames`; reading the camelCase spelling
+yields `undefined` silently.
+
+| Key | What it holds |
+|---|---|
+| `renders`, `dispatches`, `nested-dispatches`, `frames` | app-level counters; no web metric covers these |
+| `web-vitals` | `{cls, fcp, inp, lcp, ttfb}`, each `{value, rating, attribution}` |
+| `long-frames` | `long-animation-frame` entries: `blocking-duration`, `duration`, `start-time`, `scripts` |
+| `layout-shift` | every shift, filtered by nothing: `score`, `input-excluded`, `entries` |
+| `dictionary` | `ready-ms` plus the worker's own `phases` |
+
+Two caveats worth knowing before writing an assertion:
+
+- The web-vitals figures accumulate over the page's whole life. `__metricsReset()`
+  clears our copy but does not rewind CLS or INP — the library keeps its own state,
+  so after a reset it re-reports only when a *new* worst interaction or a new shift
+  appears. A spec that resets and then waits for INP will wait forever; read it
+  before the reset as well and take the larger of the two.
+- `web-vitals.cls` cannot see a shift the user's own typing caused. CLS is defined
+  to drop every `layout-shift` entry carrying `hadRecentInput`, which the browser
+  sets on everything within 500 ms of a keystroke. Measured on the phone add form
+  (#289): 11 entries, 0.028 total, `hadRecentInput` on all eleven, CLS 0.000 — while
+  the same page given a shift with no input near it reported 0.224. Shrinking the
+  viewport, which is what a software keyboard does, emits no entries at all. That is
+  why `layout-shift` exists beside it and why layout specs assert on geometry.
+- `ready-ms` is absent, not zero, when the dictionary never opens. A test that
+  reads it must wait for it rather than compare against `0`.
+
+`long-animation-frame` is Chrome-only. Elsewhere `long-frames` stays empty
+instead of raising, so a spec asserting entries exist must run under Chrome —
+which the suite does (`channel: "chrome"`).
 
 ## Out of scope
 
