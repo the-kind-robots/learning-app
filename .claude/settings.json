@@ -16,7 +16,11 @@
       "Bash(bash .skills/install.sh *)",
       "Bash(OPENSPEC_TELEMETRY=0 openspec *)",
       "Bash(GHWF_OWNER=* bash *)",
+      "Bash(bash .skills/gh-project-workflow/scripts/*.sh *)",
+      "Bash(bash .claude/skills/gh-project-workflow/scripts/*.sh *)",
       "Bash(bash .codex/skills/gh-project-workflow/scripts/*.sh *)",
+      "Bash(bash .skills/learning-app-cdp/scripts/*.sh *)",
+      "Bash(bash .claude/skills/learning-app-cdp/scripts/*.sh *)",
       "Bash(clj-nrepl-eval *)",
       "Bash(mkdir *)",
       "Bash(chmod *)",
@@ -24,6 +28,21 @@
       "Bash(mv *)",
       "Bash(kill *)",
       "WebSearch"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'g=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/delivery-guard.sh\"; [ -r \"$g\" ] || g=.claude/hooks/delivery-guard.sh; [ -r \"$g\" ] || exit 0; exec bash \"$g\"'",
+            "timeout": 10,
+            "statusMessage": "Checking delivery flow..."
+          }
+        ]
+      }
     ]
   }
 }
