@@ -17,10 +17,19 @@
   One call creates the issue, reuses an existing item of the same title, puts it on project `Learning app` (2), sets Status and Priority, and runs `gh issue develop --checkout`.
 - A raw `gh issue create` makes an issue that is on no board, with no Status and no Priority — work nobody can see. #288, #289, #290 and #292 were made that way and had to be added by hand afterwards. A `PreToolUse` hook now refuses the raw form and names the script instead.
 - The board is the owner's only window into the work. An issue that is not on it does not exist.
+- The coordinating session delegates edits and stays in the main checkout. A second `PreToolUse` hook, `.claude/hooks/coordinator-guard.sh`, holds that: it refuses `Edit`/`Write`/`NotebookEdit` from a session with no subagent id when the target is inside the repository, and asks instead of refusing when the target's worktree is on an issue branch, since that is also what legitimate full-stand work looks like. Subagents pass untouched. Its header comment records what it cannot tell apart — read it before trusting it.
 
 Do not start the flow when the user asks a question, wants only reading or measuring, is continuing an issue that is already active, or says to skip GitHub/OpenSpec. Everything else goes through it — bug, refactor, docs, skills, config. "It is small" is not an exception; it is the usual excuse, and it is what produced four issues nobody could see.
 
 If the user asks for a blocked command outright, prefix it with `DELIVERY_GUARD=off`. That turns the refusal into a normal approval prompt, so the owner still confirms. Never reach for it on your own judgement.
+
+A refusal — from one of these hooks or from workspace isolation — stops the work and goes to the owner. Report three things: what you were doing, what was refused, and the refusal verbatim. The owner decides what happens next. Do not look for a way around it. Named, because each has happened:
+
+- Do not assemble a commit in a side or detached worktree and push straight to the branch ref because ordinary writes were blocked. That was PR #347; the harness flagged it afterwards rather than preventing it, and absence of prevention is not permission.
+- Do not reword a command so it slips past a static check. Run it the permitted way or stop.
+- Do not set `DELIVERY_GUARD=off` on your own judgement. Owner's request only, as above.
+
+The guards read command text and the working directory, so they stop accidents, not intent. Going around one does not break the protection — it breaks the assurance that delivered work went down a verified path.
 
 # Clojure REPL Evaluation
 
