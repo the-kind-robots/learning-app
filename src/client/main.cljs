@@ -71,7 +71,12 @@
 
     :port/clock         {:start clock/start!}
 
-    :worker/task-runner {:requires {:db    :db/pouch
+    ;; After :sync/identity, not beside it: that component writes the auth
+    ;; cookie, and the first task off the queue may be an example fetch, which
+    ;; the backend answers 401 without it. Same layer meant that race was a
+    ;; coin toss on every boot.
+    :worker/task-runner {:after    [:sync/identity]
+                         :requires {:db    :db/pouch
                                     :clock :port/clock}
                          :start    task-queue/start!
                          :stop     task-queue/stop!}
