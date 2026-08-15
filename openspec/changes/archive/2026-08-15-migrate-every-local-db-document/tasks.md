@@ -25,5 +25,5 @@
 ## 4. Close out
 
 - [x] 4.1 Full client test suite green
-- [ ] 4.2 `openspec validate` clean, change archived on the branch
-- [ ] 4.3 PR opened, issue moved to In review
+- [x] 4.2 `openspec validate` clean, change archived on the branch
+- [x] 4.3 PR opened, issue moved to In review
