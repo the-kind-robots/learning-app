@@ -67,7 +67,7 @@ jobs:
 
       # The artifact is a bus between jobs of one run, not a release channel;
       # a day of retention is plenty.
-      - uses: actions/upload-artifact@v4.6.2
+      - uses: actions/upload-artifact@v7.0.1
         with:
           name: app-jar
           path: target/learning-app.jar
