@@ -9,7 +9,7 @@ In-force ADRs constraining this design: 0008 (content-addressed ids, frozen `nor
 **Goals:**
 - Phrase document type with its own review log, replicated and conflict-resolved like vocab.
 - Frictionless authoring: automatic word/phrase mode detection, auto-growing textareas.
-- Phrase lesson trial with exact typing and a preserved answer on retry.
+- Phrase lesson trial with exact typing, reusing the existing error footer.
 - Dictionary pos=phrase suggestions flow into the new entity.
 
 **Non-Goals:**
@@ -35,7 +35,7 @@ In-force ADRs constraining this design: 0008 (content-addressed ids, frozen `nor
 
 - [Space heuristic misfires on multi-word lemmas not in completions yet] → article/`sich` exceptions + suggestion-pos override + chip escape hatch; wrong mode costs one tap.
 - [Phrases fail more often and dominate the 3-slot lesson pick] → observe; a per-lesson phrase quota is a one-line follow-up.
-- [Self-typed long answers frustrate users] → retry preserves the answer, correct answer stays visible (existing error footer). Showing where the mistake is comes later, for every trial type at once.
+- [Self-typed long answers frustrate users] → the correct answer stays visible in the existing error footer. Getting a second attempt without retyping, and showing where the mistake is, come later — both have to serve every trial type, not phrases alone.
 - [Union rewrite of progress-store selects regresses word queries] → unit tests over union queries; browser pass on /words and lesson start.
 - [Autogrow via `field-sizing: content` unsupported on Safari] → JS scrollHeight fallback is part of v1, not an afterthought.
 - [Cross-type duplicates (word "auf jeden Fall" + phrase)] → both exist, each with its own review log; no warning, no conversion in v1.

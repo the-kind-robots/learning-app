@@ -24,11 +24,10 @@
 
 
 (defn- input-footer
-  [{:keys [prefill]}]
+  []
   [:footer#lesson-footer
    {:replicant/key      :input
-    :replicant/on-mount (cond-> [[:action/focus-lesson-input]]
-                          prefill (conj [:action/restore-lesson-answer]))}
+    :replicant/on-mount [[:action/focus-lesson-input]]}
    [:form.lesson__footer.lesson__footer--input.page-footer
     {:autocapitalize "none"
      :autocorrect "off"
@@ -36,22 +35,21 @@
                    [:action/check-answer [:event.form.field/value "answer"]]]}}
     [:label.lesson__input-label {:for "lesson-answer"} "Ответ на немецком"]
     [:textarea.lesson__input
-     {:id           "lesson-answer"
-      :name         "answer"
-      :rows         4
+     {:id          "lesson-answer"
+      :name        "answer"
+      :rows        4
       :autocapitalize "none"
       :autocomplete "off"
-      :autocorrect  "off"
+      :autocorrect "off"
       :enterkeyhint "done"
-      :placeholder  "Введите перевод..."
-      :maxlength    1000
-      :lang         "de"
-      :spellcheck   "false"
-      :value        (or prefill "")
-      :on           {:input   [[:effect/autogrow-target]]
-                     :keydown [[:action/submit-if-ctrl-enter
-                                {:key   [:event.keyboard/key]
-                                 :ctrl? [:event.keyboard/ctrl?]}]]}}]
+      :placeholder "Введите перевод..."
+      :maxlength   1000
+      :lang        "de"
+      :spellcheck  "false"
+      :on          {:input   [[:effect/autogrow-target]]
+                    :keydown [[:action/submit-if-ctrl-enter
+                               {:key   [:event.keyboard/key]
+                                :ctrl? [:event.keyboard/ctrl?]}]]}}]
     [:div.lesson__action.page-footer__action
      [:button.big-button {:type "submit"} "ПРОВЕРИТЬ"]]]])
 
@@ -80,7 +78,7 @@
 
 
 (defn- error-footer
-  [{:keys [retry? retry-answer user-answer] :as props}]
+  [{:keys [user-answer] :as props}]
   [:footer#lesson-footer
    {:replicant/key      :error
     :replicant/on-mount [[:action/focus-continue-button "#lesson-next"]]}
@@ -90,25 +88,13 @@
      [:p.lesson__answer-body {:lang "de"} (or user-answer "")]
      [:h3.lesson__answer-header "Правильно:"]
      (answer-body props)]
-    (if retry?
-      [:div.lesson__action.page-footer__action
-       [:button.big-button
-        {:id   "lesson-next"
-         :type "button"
-         :on   {:click   [[:action/retry-answer retry-answer]]
-                :keydown [[:action/click-if-enter [:event.keyboard/key]]]}}
-        "ИСПРАВИТЬ"]
-       [:button.lesson__retry-later
-        {:type "button"
-         :on   {:click [[:action/next-trial]]}}
-        "ПОЗЖЕ"]]
-      [:div.lesson__action.page-footer__action
-       [:button.big-button
-        {:id   "lesson-next"
-         :type "button"
-         :on   {:click   [[:action/next-trial]]
-                :keydown [[:action/click-if-enter [:event.keyboard/key]]]}}
-        "ДАЛЕЕ"]])]])
+    [:div.lesson__action.page-footer__action
+     [:button.big-button
+      {:id   "lesson-next"
+       :type "button"
+       :on   {:click   [[:action/next-trial]]
+              :keydown [[:action/click-if-enter [:event.keyboard/key]]]}}
+      "ДАЛЕЕ"]]]])
 
 
 (defn- hint-card
@@ -210,4 +196,4 @@
            (case (:variant footer-props)
              :success (success-footer footer-props)
              :error   (error-footer footer-props))
-           (input-footer (presenter/input-props state))))])))
+           (input-footer)))])))

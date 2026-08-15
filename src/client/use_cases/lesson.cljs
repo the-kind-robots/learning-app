@@ -97,22 +97,6 @@
             {:error :lesson-save-failed :lesson-state lesson-state}))))))
 
 
-(defn ^:async retry!
-  "Return the current trial to the input state without touching the trial
-   pool. Returns {:lesson-state ...} or {:error ...}."
-  [{:keys [progress-store]}]
-  (let [lesson-state (await (state progress-store))]
-    (if-not lesson-state
-      {:error :lesson-not-found}
-      (let [next-state (assoc lesson-state :last-result nil)]
-        (try
-          (let [{:keys [rev]} (await ((:progress-store/save-lesson! progress-store) next-state))]
-            {:lesson-state (assoc next-state :_rev rev)})
-          (catch js/Error err
-            (log/error :retry-lesson/save-failed {:error (ex-message err)})
-            {:error :lesson-save-failed}))))))
-
-
 (defn ^:async advance!
   "Select the next trial. Returns {:lesson-state ...} or {:error ...}."
   [{:keys [progress-store]}]

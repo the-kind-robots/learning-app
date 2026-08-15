@@ -18,11 +18,6 @@
   (domain/progress state))
 
 
-(defn input-props
-  [state]
-  {:prefill (:lesson/retry-answer state)})
-
-
 (defn- open-hint-segment
   [state]
   (when-let [open-index (:lesson/open-hint-index state)]
@@ -62,13 +57,11 @@
   (let [lesson-state (:lesson/state state)]
     (when-let [result (domain/last-result lesson-state)]
       (let [trial (domain/current-trial lesson-state)]
-        (cond-> {:variant        (if (:correct? result) :success :error)
-                 :correct-answer (domain/expected-answer lesson-state)
-                 :correct-answer-segments (when (domain/example-trial? trial)
-                                            (answer-segments
-                                             trial
-                                             (:lesson/open-hint-index state)))
-                 :user-answer    (:answer result)
-                 :finished?      (domain/finished? lesson-state)}
-          (and (not (:correct? result)) (domain/phrase-trial? trial))
-          (assoc :retry? true :retry-answer (:answer result)))))))
+        {:variant        (if (:correct? result) :success :error)
+         :correct-answer (domain/expected-answer lesson-state)
+         :correct-answer-segments (when (domain/example-trial? trial)
+                                    (answer-segments
+                                     trial
+                                     (:lesson/open-hint-index state)))
+         :user-answer    (:answer result)
+         :finished?      (domain/finished? lesson-state)}))))

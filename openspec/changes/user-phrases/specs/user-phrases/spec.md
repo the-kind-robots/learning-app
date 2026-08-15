@@ -73,12 +73,12 @@ A phrase trial SHALL present the translation as prompt and require typing the fu
 - **WHEN** the user replaces a word of the phrase with a different word
 - **THEN** the answer is graded incorrect
 
-### Requirement: Phrase errors preserve the answer for a retry
-On an incorrect phrase answer, the error state SHALL show the typed answer and the reference as plain text. A primary retry action SHALL return to the input with the previous answer preserved; a secondary action SHALL move on (trial stays in the pool). Marking up where the answer differs is out of scope: it has to work for word and example trials too, over one grading normalization.
+### Requirement: A wrong phrase answer uses the existing error footer
+On an incorrect phrase answer, the error state SHALL show the typed answer and the reference as plain text and offer the same single action every other trial type offers. The footer SHALL NOT gain a phrase-specific action, and where the answer differs SHALL NOT be marked up: both belong to a redesign that covers word and example trials as well.
 
-#### Scenario: Retry keeps the typed text
-- **WHEN** the user chooses "ИСПРАВИТЬ"
-- **THEN** the answer field contains the previous answer with the cursor at the end
+#### Scenario: Wrong phrase answer ends the attempt
+- **WHEN** the user answers a phrase trial incorrectly
+- **THEN** the footer shows the answer, the reference, and the same continue action as a word trial
 
 ### Requirement: Phrase reviews are written at most once per trial per lesson
 Only the first graded attempt of a phrase trial within a lesson SHALL write a review document; later attempts of the same trial in that lesson SHALL NOT write reviews.
