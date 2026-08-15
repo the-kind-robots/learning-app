@@ -4,7 +4,6 @@
    [clojure.core :as clojure]
    [db.pouch :as dbs]
    [domain.lesson :as lesson]
-   [domain.phrase :as phrase]
    [domain.retention :as retention]
    [domain.vocabulary :as vocabulary]
    [utils :as utils]))
@@ -81,22 +80,15 @@
 
 
 (defn- ^:async learnable-docs
-  "All vocab and phrase docs. Two queries on purpose: db routing keys on a
-   single :type value, so a $in selector would route nowhere."
+  "Everything a lesson can draw from. Words and phrases are one document type
+   that differ by `:kind`, so one query answers for both."
   [dbs]
-  (let [{vocab :docs}   (await (find-all dbs "vocab"))
-        {phrases :docs} (await (find-all dbs "phrase"))]
-    (into vocab phrases)))
+  (:docs (await (find-all dbs "vocab"))))
 
 
 (defn ^:async find-word-by-value
   [dbs value]
   (await (dbs/get dbs "vocab" (vocabulary/vocab-id value))))
-
-
-(defn ^:async find-phrase-by-value
-  [dbs value]
-  (await (dbs/get dbs "phrase" (phrase/phrase-id value))))
 
 
 (defn ^:async get-word

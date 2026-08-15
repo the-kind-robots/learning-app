@@ -108,17 +108,12 @@
                     db/find
                     (fn [_ query]
                       (swap! find-calls conj query)
-                      ;; count-words unions vocab and phrase queries; only the
-                      ;; vocab one carries docs here.
                       (js/Promise.resolve
-                       {:docs (if (= "vocab" (get-in query [:selector :type]))
-                                (vec (repeat doc-count {:type "vocab"}))
-                                [])}))]
+                       {:docs (vec (repeat doc-count {:type "vocab"}))}))]
         (let [cnt (await (sut/count (test-capabilities {:user/db :fake})))
               q   (first @find-calls)]
           (is (= doc-count cnt))
-          ;; one info+find pass per doc type in the vocab ∪ phrase union
-          (is (= 2 @info-calls))
+          (is (= 1 @info-calls))
           (is (= doc-count (:limit q)))
           (is (nil? (:skip q))))))))
 

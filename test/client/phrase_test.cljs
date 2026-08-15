@@ -55,14 +55,14 @@
             {:keys [word-id created?]} (await (sut/add! (test-capabilities dbs example-requests)
                                                         "Entschuldigung, dass ich zu spät komme"
                                                         "Извини, что я опоздал."))
-            phrases (await (db-queries/fetch-by-type (:user/db dbs) "phrase"))
+            entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
             reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (is (true? created?))
-        (is (= 1 (count phrases)))
-        (is (= word-id (:_id (first phrases))))
-        (is (= "Entschuldigung, dass ich zu spät komme" (:value (first phrases))))
+        (is (= 1 (count entries)))
+        (is (= word-id (:_id (first entries))))
+        (is (= "Entschuldigung, dass ich zu spät komme" (:value (first entries))))
         (is (= [{:lang "ru" :value "Извини, что я опоздал."}]
-               (:translation (first phrases))))
+               (:translation (first entries))))
         (is (= 1 (count reviews)))
         (is (= word-id (:word-id (first reviews))))
         (is (empty? @example-requests)))))))
@@ -77,12 +77,12 @@
             capabilities     (test-capabilities dbs example-requests)]
         (await (sut/add! capabilities "auf jeden Fall" "во всяком случае"))
         (let [{:keys [created?]} (await (sut/add! capabilities "Auf jeden Fall" "обязательно, точно"))
-              phrases (await (db-queries/fetch-by-type (:user/db dbs) "phrase"))]
+              entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
           (is (false? created?))
-          (is (= 1 (count phrases)))
+          (is (= 1 (count entries)))
           (is (= [{:lang "ru" :value "во всяком случае"}
                   {:lang "ru" :value "обязательно, точно"}]
-                 (:translation (first phrases))))))))))
+                 (:translation (first entries))))))))))
 
 
 (deftest add-rejects-blank-translation

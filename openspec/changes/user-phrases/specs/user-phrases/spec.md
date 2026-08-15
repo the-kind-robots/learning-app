@@ -30,7 +30,7 @@ Both the German input and the translation input SHALL be auto-growing multi-line
 - **THEN** the field grows to show the content up to the maximum height without horizontal scrolling
 
 ### Requirement: Adding a phrase creates a phrase document without example generation
-Submitting the form in phrase mode SHALL create a `phrase` document with the translation stored as a single entry (never split on punctuation), seed an initial review, and add the phrase to the active collection. No LLM example fetch SHALL be queued for phrases. Re-adding an existing phrase SHALL merge translations as whole entries and add it to the active collection.
+Submitting the form in phrase mode SHALL create a vocabulary document of the `"phrase"` kind with the translation stored as a single entry (never split on punctuation), seed an initial review, and add it to the active collection. No LLM example fetch SHALL be queued for phrases. Re-adding an existing value SHALL merge translations as whole entries and add it to the active collection.
 
 #### Scenario: Phrase with sentence translation survives punctuation
 - **WHEN** the user adds "Entschuldigung, dass ich zu spät komme" with translation "Извини, что я опоздал."
@@ -38,15 +38,15 @@ Submitting the form in phrase mode SHALL create a `phrase` document with the tra
 - **AND** no example-fetch task is queued
 
 #### Scenario: Duplicate phrase merges
-- **WHEN** the user adds a phrase whose normalized value already exists as a phrase document
+- **WHEN** the user adds a phrase whose normalized value already exists
 - **THEN** the translations are merged as whole entries and the document count does not grow
 
-### Requirement: A phrase and a word may share a value
-A word and a phrase carrying the same normalized value are distinct learnable entities in distinct id namespaces. Submitting a phrase whose value already exists as a word SHALL create it without a warning, a confirmation, or a second press.
+### Requirement: One value is one entry
+A value identifies one vocabulary document whatever its kind. Submitting a phrase whose value already exists SHALL merge the translation into that document, without a warning, a confirmation, or a second press, and SHALL leave its kind unchanged.
 
-#### Scenario: Phrase matching an existing multi-word vocab word
-- **WHEN** the user submits a phrase whose normalized value equals an existing `vocab:` document's value
-- **THEN** the phrase document is created on the first submit and both entries keep their own review logs
+#### Scenario: Phrase matching an existing word
+- **WHEN** the user submits a phrase whose normalized value equals an existing document's value
+- **THEN** the translation merges into it, its kind is untouched, and no second document appears
 
 ### Requirement: Phrases appear in the words list
 The words page SHALL show phrases in the same list as words, sorted by the same retention order, and wrapped over multiple lines instead of truncated. Search and word counts SHALL include phrases. No type label is shown: the list reads as one vocabulary, and how a row is laid out is what tells the two apart. The type decision SHALL be computed by the presenter, not the view.
@@ -88,7 +88,7 @@ Only the first graded attempt of a phrase trial within a lesson SHALL write a re
 - **THEN** exactly one review document is written for that trial (the first, failed attempt)
 
 ### Requirement: Phrase conflicts and import merge without splitting
-The client conflict resolver SHALL resolve `phrase:` documents with the same strategy as vocab (translation union) while keeping translation entries whole. Data import SHALL apply last-write-wins merging to `phrase` documents as it does for vocab.
+The client conflict resolver SHALL resolve phrase documents in the same pass and with the same strategy as any other vocabulary document (translation union) while keeping translation entries whole. Data import SHALL apply the same last-write-wins merging.
 
 #### Scenario: Two devices add the same phrase
 - **WHEN** two devices add the same phrase with different translations and sync

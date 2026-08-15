@@ -6,15 +6,17 @@
 
 
 (defn ^:async find-duplicate
-  "Find an existing phrase doc with the same value, or nil."
+  "Find an existing entry with the same value, whatever its kind, or nil."
   [{:keys [progress-store]} value]
-  (await ((:progress-store/find-phrase-by-value progress-store) value)))
+  (await ((:progress-store/find-word-by-value progress-store) value)))
 
 
 (defn ^:async add!
   "Adds a phrase with an initial review. The translation stays one whole
    entry — never split on punctuation — and no example fetch is queued: a
-   phrase is its own example. Returns {:word-id id :created? bool} or
+   phrase is its own example. An entry with this value already there takes
+   the translation and keeps its kind: changing what something is belongs to
+   the editor, not to a second add. Returns {:word-id id :created? bool} or
    {:error :empty-translations}."
   [{:keys [collections progress-store] :as capabilities} value translation]
   (let [translation (domain/collapsed translation)]

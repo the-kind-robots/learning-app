@@ -11,14 +11,12 @@
       (str/trim)))
 
 
-(defn phrase-id
-  [value]
-  (str "phrase:" (vocabulary/normalize-value value)))
-
-
 (defn phrase-doc?
+  "A phrase is a vocabulary document that says so. Documents without `:kind`
+   are words — that is what every document written before phrases existed
+   looks like."
   [doc]
-  (= "phrase" (:type doc)))
+  (= "phrase" (:kind doc)))
 
 
 (defn translation-entry
@@ -27,10 +25,14 @@
 
 
 (defn new-phrase
+  "A phrase shares the vocabulary namespace: the id is the value, so the same
+   text is one entry whichever kind it is, and the kind can be corrected later
+   without rebuilding the document."
   [value translation]
-  {:_id         (phrase-id value)
+  {:_id         (vocabulary/vocab-id value)
+   :kind        "phrase"
    :translation [(translation-entry translation)]
-   :type        "phrase"
+   :type        "vocab"
    :value       (collapsed value)})
 
 

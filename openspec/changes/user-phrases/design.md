@@ -21,10 +21,10 @@ In-force ADRs constraining this design: 0008 (content-addressed ids, frozen `nor
 
 ## Decisions
 
-1. **Doc type `phrase`, id `phrase:<normalize-german(value)>`** (extends ADR-0008 to a second namespace). Content-addressing keeps cross-device dedup free; spaces stay in the id. Alternative — `phrase:<uuid>` with editable text — rejected: second id discipline, manual dedup, and vocab already fixed value-immutability (GH-96).
+1. **A phrase is a vocabulary document with `kind: "phrase"`** (ADR-0011). The id stays `vocab:<normalize-german(value)>`, so cross-device dedup is free and spaces stay in the id. The alternative — a `phrase:` namespace of its own — was built first and rejected on review: it made the kind part of the identity, so a mis-detected kind could never be corrected, and the only thing it bought (one text held as both a word and a phrase) has no use anyone could name — four values in a 158k-lemma dictionary, all interjections. `phrase:<uuid>` with editable text stays rejected: vocab already fixed value-immutability (GH-96).
 2. **Translation is a single entry, never split.** `parse-translations` (splits on `[,;.]`) is bypassed on add, conflict merge, and edit — a sentence translation must survive punctuation. Conflict resolution unions translation entries (ADR-0008 semantics) without splitting values.
-3. **Registration over branching:** `"phrase"` joins the doc-type→db map (`db/pouch.cljs`) routing to user-db; replication, export, collections (`:word-ids` hold opaque ids) work unchanged. Vocab-only selects in `adapters/progress_store.cljs` become unions of two `find-all` calls (Mango `$in` breaks `db-for` routing). Client conflict resolver adds a `phrase:` range pass; import LWW branch admits `"phrase"`.
-4. **Separate use-case `phrase-add!`** rather than flags inside `vocabulary/add!`: dedup in the phrase namespace, single-entry translation merge, initial review seed, collection membership, and no `examples/request!` (a phrase is its own example; also avoids backend `same-lemma?` validation burning LLM retries on multi-word lemmas).
+3. **Nothing to register:** storage routing, replication, export, collections, progress-store queries and the conflict scan already speak `vocab`, and a phrase is one. Uniqueness cannot live anywhere else anyway — `_id` is CouchDB's only unique key, Mango indexes are secondary and non-unique, and dedup between devices works precisely because both compute the same `_id`.
+4. **Separate use-case `phrase-add!`** rather than flags inside `vocabulary/add!`: dedup by value, single-entry translation merge that leaves an existing document's kind alone, initial review seed, collection membership, and no `examples/request!` (a phrase is its own example; also avoids backend `same-lemma?` validation burning LLM retries on multi-word lemmas).
 5. **Automatic mode detection, no manual toggle.** Space in trimmed input → phrase, except article+word (der/die/das/ein/eine), `sich`+word, or input matching a non-phrase dictionary lemma from already-fetched completions; picking a suggestion decides by its pos (multi-word pos=phrase → phrase). Tappable chip appears only when phrase is detected, as override until the form clears. Both fields are always auto-growing textareas (rows=1 compact) so a mode flip never remounts inputs or loses text. Mode flip must clear open suggestions and guard stale async completion responses. Alternative — explicit segment toggle — rejected by owner as tiresome.
 6. **Grading normalization is a new function, `normalize-for-grading`** in shared utils — `normalize-german` is a frozen id contract (ADR-0008) and must not change. Forgiveness is typography-only: apostrophes (U+0027/U+2019/U+02BC) deleted, unicode quotes/dashes → space. Words are never forgiven.
 7. **No markup of where the answer differs.** The error footer shows the typed answer and the reference as plain text. A token diff was built and then dropped from this change: it has to serve word and example trials too, and those grade through `normalize-german` while the diff would normalize through `normalize-for-grading` — a token could read as matched while the grader called it wrong. Designed from scratch in its own change.
@@ -36,14 +36,13 @@ In-force ADRs constraining this design: 0008 (content-addressed ids, frozen `nor
 - [Space heuristic misfires on multi-word lemmas not in completions yet] → article/`sich` exceptions + suggestion-pos override + chip escape hatch; wrong mode costs one tap.
 - [Phrases fail more often and dominate the 3-slot lesson pick] → observe; a per-lesson phrase quota is a one-line follow-up.
 - [Self-typed long answers frustrate users] → the correct answer stays visible in the existing error footer. Getting a second attempt without retyping, and showing where the mistake is, come later — both have to serve every trial type, not phrases alone.
-- [Union rewrite of progress-store selects regresses word queries] → unit tests over union queries; browser pass on /words and lesson start.
 - [Autogrow via `field-sizing: content` unsupported on Safari] → JS scrollHeight fallback is part of v1, not an afterthought.
-- [Cross-type duplicates (word "auf jeden Fall" + phrase)] → both exist, each with its own review log; no warning, no conversion in v1.
+- [One value cannot be held as both a word and a phrase] → accepted: nobody could name a case for it. In exchange the kind became correctable, which a namespace could never offer.
 
 ## Migration Plan
 
-None required: new doc type only, no existing data rewritten. Rollback = revert; phrase docs left in user-db are ignored by older clients except in generic export (type-agnostic, harmless).
+None required: existing documents have no `kind` and are read as words. Rollback = revert; a phrase written by a newer client reads as an ordinary word on an older one, which is the least surprising way to degrade.
 
 ## Open Questions
 
-- Whether ADR step should record an amendment ADR extending 0008's content-addressing contract to the `phrase:` namespace (recommended: yes, small ADR referencing 0008 rather than superseding it).
+- None open. The namespace question was settled on review: ADR-0011 records it.

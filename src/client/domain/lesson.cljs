@@ -41,7 +41,7 @@
   "A word or a phrase becomes the trial its type calls for. `:word-id` keeps
    its name because reviews and examples are stored under it."
   [learnable]
-  {:type    (if (= "phrase" (:type learnable))
+  {:type    (if (= "phrase" (:kind learnable))
               trial-type-phrase
               trial-type-word)
    :word-id (:id learnable)

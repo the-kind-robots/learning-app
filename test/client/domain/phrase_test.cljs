@@ -4,21 +4,28 @@
    [domain.phrase :as sut]))
 
 
-(deftest phrase-id-is-content-addressed
-  (testing "id keeps spaces and normalizes like vocab ids"
-    (is (= "phrase:auf jeden fall" (sut/phrase-id "Auf jeden Fall")))
+(deftest new-phrase-shares-the-vocabulary-namespace
+  (testing "id is the value, so a phrase and a word cannot both hold it"
+    (is (= "vocab:auf jeden fall" (:_id (sut/new-phrase "Auf jeden Fall" "перевод"))))
     ;; the frozen id normalization turns the apostrophe into a space —
-    ;; typography forgiveness lives only in grading, not in ids (ADR-0011)
-    (is (= "phrase:wie geht s" (sut/phrase-id "Wie geht's?")))))
+    ;; typography forgiveness lives only in grading, not in ids (ADR-0008)
+    (is (= "vocab:wie geht s" (:_id (sut/new-phrase "Wie geht's?" "перевод"))))))
 
 
 (deftest new-phrase-collapses-whitespace-and-keeps-translation-whole
   (testing "value whitespace collapses, translation stays one entry"
     (let [doc (sut/new-phrase "auf  jeden\n Fall" "во всяком случае, обязательно.")]
-      (is (= "phrase:auf jeden fall" (:_id doc)))
-      (is (= "phrase" (:type doc)))
+      (is (= "vocab:auf jeden fall" (:_id doc)))
+      (is (= "vocab" (:type doc)))
+      (is (= "phrase" (:kind doc)))
       (is (= "auf jeden Fall" (:value doc)))
       (is (= [{:lang "ru" :value "во всяком случае, обязательно."}] (:translation doc))))))
+
+
+(deftest phrase-doc-detection-treats-a-missing-kind-as-a-word
+  (testing "documents written before phrases existed are words"
+    (is (true? (sut/phrase-doc? {:kind "phrase" :type "vocab"})))
+    (is (false? (sut/phrase-doc? {:type "vocab"})))))
 
 
 (deftest phrase-value-detection

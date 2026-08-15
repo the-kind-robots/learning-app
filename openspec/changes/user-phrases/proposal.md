@@ -4,12 +4,12 @@ Users meet useful German multi-word expressions ("auf jeden Fall", "Wie geht's?"
 
 ## What Changes
 
-- New replicated document type `phrase` (`phrase:<normalized>`) with its own review log; translation stored as a single string (never split by `parse-translations`).
+- A phrase is a vocabulary document with `kind: "phrase"` (ADR-0011): same `vocab:<normalized>` id, same review log, translation stored as a single string (never split by `parse-translations`). A document without a kind is a word, so nothing is migrated.
 - The home add form detects word vs phrase automatically (space heuristic with article/`sich`/dictionary-lemma exceptions; picking a suggestion decides by its pos) with a tappable chip as override. Both inputs become auto-growing textareas.
 - Dictionary completions stop discarding `:pos`; multi-word pos=phrase suggestions get a badge and switch the form into phrase mode.
 - Words page shows phrases in the same list with line wrapping and no type label; counts, search, and collections include them.
 - Lesson gains a phrase trial: exact typing required (RU→DE), grading through a new typography-only normalization (`normalize-for-grading`), and at most one review write per trial per lesson. The error footer is the existing one, unchanged.
-- No LLM example generation for phrases; client conflict resolver and import LWW extended to the `phrase` doc type.
+- No LLM example generation for phrases; the conflict resolver and import need no new branch, since a phrase is a vocabulary document.
 
 ## Capabilities
 
@@ -17,13 +17,13 @@ Users meet useful German multi-word expressions ("auf jeden Fall", "Wie geht's?"
 - `user-phrases`: phrase entity lifecycle — authoring with automatic word/phrase mode detection, storage and sync, words-list presence, phrase lesson trial with exact-typing grading, and per-lesson review discipline.
 
 ### Modified Capabilities
-- `data-model`: new replicated `phrase` document type with single-string translation semantics (no comma splitting), content-addressed id in the `phrase:` namespace.
+- `data-model`: vocabulary documents gain a `kind`; phrases are the `"phrase"` kind, with single-string translation semantics (no comma splitting) and the existing content-addressed id.
 - `lesson`: lesson word selection draws from vocab and phrases as one pool; phrase trials require an exact typed answer and write reviews to the phrase's own log.
 - `dictionary-storage`: the completions capability exposes `:pos` for each suggestion.
 
 ## Impact
 
-- Client: `db/pouch.cljs` (doc-type→db map), `domain/vocabulary.cljs` bypasses, new `domain/phrase.cljs` + `use_cases/phrase.cljs`, `adapters/progress_store.cljs` (union queries), `adapters/dictionary.cljs` + `ports/dictionary.cljs` (`:pos`), `sync.cljs` (conflict resolver), `data_export.cljs` (import LWW), pages `home`/`words`/`lesson`, `domain/lesson.cljs`, `shared/utils` (`normalize-for-grading`), CSS blocks `home`, `lesson`, `word-item`, `input`.
+- Client: new `domain/phrase.cljs` + `use_cases/phrase.cljs`, `domain/vocabulary.cljs` bypasses, `adapters/dictionary.cljs` + `ports/dictionary.cljs` (`:pos`), pages `home`/`words`/`lesson`, `domain/lesson.cljs`, `shared/utils` (`normalize-for-grading`), CSS blocks `home`, `lesson`, `word-item`, `input`. Storage, sync, routing and import are untouched: a phrase is a vocabulary document.
 - Backend: untouched (no example fetch for phrases means no new API).
 - Dictionary pipeline and SQLite artifact: untouched.
 - Sync: phrases replicate through the existing user-db replication; CouchDB schema unchanged.

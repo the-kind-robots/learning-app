@@ -406,9 +406,9 @@
 
 
 (def ^:private phrase-word
-  {:id          "phrase:wie gehts"
+  {:id          "vocab:wie geht s"
+   :kind        "phrase"
    :translation [{:lang "ru" :value "Как дела?"}]
-   :type        "phrase"
    :value       "Wie geht's?"})
 
 

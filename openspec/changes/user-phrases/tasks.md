@@ -2,13 +2,13 @@
 
 ## 1. Entity foundation
 
-- [x] 1.1 `domain/phrase.cljs`: phrase id (`phrase:<normalize-german>`), new-phrase doc constructor (single-entry translation, collapsed whitespace), phrase predicate
-- [x] 1.2 Register `"phrase"` → `:user/db` in the doc-type→db map (`db/pouch.cljs`)
-- [x] 1.3 `use_cases/phrase.cljs` `add!`: dedup in phrase namespace, whole-entry translation merge, initial review seed, active-collection membership, no example request
-- [x] 1.4 Progress-store union queries: `list-words`, `count-words`, `empty-vocab?`, `find-word-by-value`/`find-duplicate`, lesson selection — vocab ∪ phrase via two `find-all` (no `$in`)
-- [x] 1.5 Conflict resolver (`sync.cljs`): add `phrase:` range pass with translation union, entries kept whole
-- [x] 1.6 Import LWW (`data_export.cljs`): admit `"phrase"` type
-- [x] 1.7 Unit tests: phrase id/doc, `add!` (dedup, merge without split, no example task), union queries
+- [x] 1.1 `domain/phrase.cljs`: new-phrase doc constructor on the vocab id (single-entry translation, collapsed whitespace, `kind`), phrase predicate reading `kind`
+- [x] 1.2 No new doc type: storage routing, replication and export stay as they are
+- [x] 1.3 `use_cases/phrase.cljs` `add!`: dedup by value, whole-entry translation merge that leaves the kind alone, initial review seed, active-collection membership, no example request
+- [x] 1.4 Progress-store queries unchanged: one `vocab` query already answers for both kinds
+- [x] 1.5 Conflict resolver (`sync.cljs`): phrases resolve in the existing `vocab:` pass, entries kept whole
+- [x] 1.6 Import LWW (`data_export.cljs`): unchanged, phrases arrive as vocab documents
+- [x] 1.7 Unit tests: phrase doc shape and kind predicate, `add!` (dedup, merge without split, no example task)
 
 ## 2. Dictionary completions
 
@@ -39,7 +39,7 @@
 
 ## 6. ADR
 
-- [x] 6.1 ADR 0011: extend content-addressing contract (ADR-0008) to the `phrase:` namespace — references, not supersedes
+- [x] 6.1 ADR 0011: phrases share the vocabulary namespace and carry their kind — references ADR-0008, not supersedes
 
 ## 7. Verification
 

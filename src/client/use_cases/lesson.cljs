@@ -23,10 +23,10 @@
 
 
 (defn- lesson-learnable
-  [{id :_id type :type value :value translation :translation}]
+  [{id :_id kind :kind value :value translation :translation}]
   {:id          id
+   :kind        kind
    :translation translation
-   :type        type
    :value       value})
 
 
