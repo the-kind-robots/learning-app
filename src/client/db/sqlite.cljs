@@ -1,5 +1,6 @@
 (ns db.sqlite
   (:require
+   [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]))
 
 
@@ -37,9 +38,11 @@
 
 (defn init!
   [_deps]
+  (when goog/DEBUG
+    (instrumentation/dictionary-start!))
   (let [state  (atom {:ready? false :next-id 0})
         worker (js/Worker. (str "/js/sqlite3-worker.js?sqlite3.dir=/js"
-                                (when js/goog.DEBUG "&telemetry=1")))
+                                (when goog/DEBUG "&telemetry=1")))
         proxy  (make-exec-proxy worker state)]
     (..
      worker
@@ -47,12 +50,17 @@
       "message"
       (fn [^js e]
         (case (.. e -data -type)
-          "ready" (swap! state assoc :ready? true)
+          "ready" (do
+                    (swap! state assoc :ready? true)
+                    (when goog/DEBUG
+                      (instrumentation/dictionary-ready!)))
           "error" (log/error :dbs/sqlite3-worker-error {:message (.. e -data -message)})
           "phase" (let [d   (.. e -data)
                         ph  (.-phase d)
                         ms  (.-durationMs d)
                         ok? (= "ok" (.-status d))]
+                    (when goog/DEBUG
+                      (instrumentation/dictionary-phase! ph ms (.-status d)))
                     (if ok?
                       (log/info (keyword "dict-worker" ph) {:duration-ms ms})
                       (log/error (keyword "dict-worker" ph) {:duration-ms ms :reason (.-reason d)})))

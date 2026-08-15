@@ -1,29 +1,16 @@
-# repo-agent-infrastructure Specification
+## REMOVED Requirements
 
-## Purpose
-TBD - created by archiving change keep-only-codex-agent-files. Update Purpose after archive.
-## Requirements
-### Requirement: Backend port is overridable via environment variable
-The backend server SHALL read its listening port from the `LEARNING_APP_PORT` environment variable when set, falling back to 8083 when absent.
+### Requirement: Repository-owned agent infrastructure is Codex-only
+**Reason**: The repository outgrew it. `.claude/rules/`, `.claude/settings.json` and the `.claude/skills` symlink are already tracked, and the delivery guard this change adds has to be tracked too — a hook that only exists on one machine enforces nothing, and one that does not reach a worktree misses the place the workflow was skipped. Keeping the requirement would have meant the rule and the code disagreeing, with the code winning silently.
 
-#### Scenario: Backend starts with default port
-- **WHEN** `LEARNING_APP_PORT` is not set in the environment
-- **THEN** the backend listens on port 8083
+**Migration**: None. The tracked set already covered these files; this records it.
 
-#### Scenario: Backend starts on a custom port for a parallel worktree
-- **WHEN** `LEARNING_APP_PORT=8183` is set in the environment
-- **THEN** the backend listens on port 8183
+### Requirement: Local non-Codex agent artifacts do not reappear as repo noise
+**Reason**: Same drift, stated from the other side. "Non-Codex" is the wrong line to draw — it would put `.claude/rules/repo-delivery.md` among the artifacts to ignore, when it carries a repository rule. The line that matters is repository infrastructure versus a developer's local preferences.
 
-### Requirement: Worktrees live where the agent tool puts them
-Worktrees SHALL be created only through the agent's built-in mechanism, which keeps them under `.claude/worktrees/`. The repository SHALL NOT define a second location for them, and SHALL NOT carry permissions or ignore rules for locations of its own.
+**Migration**: None. `.gitignore` already draws the line this way, ignoring `/.claude/projects/`, `/.claude/settings.local.json` and `.claude/worktrees/` while tracking the rest.
 
-#### Scenario: Work needs isolation
-- **WHEN** a task is isolated in a worktree
-- **THEN** it is created by the built-in mechanism, and no worktree directory appears inside the repository tree
-
-#### Scenario: Work needs the full stand
-- **WHEN** a task touches sync, the dictionary, migrations, schema, or anything served through CouchDB or nginx
-- **THEN** it runs in the main worktree, because a worktree isolates files while ports, CouchDB and nginx stay shared
+## ADDED Requirements
 
 ### Requirement: Repository-owned agent infrastructure covers the agents the repo relies on
 
@@ -66,4 +53,3 @@ documented one.
 - **WHEN** an invocation refers to a user-global installation rather than a repository
   file
 - **THEN** it is left as it is, since it is not a repository path
-

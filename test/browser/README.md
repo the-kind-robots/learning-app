@@ -39,6 +39,38 @@ uploads `test-results/` (traces) and the backend log as an artifact.
 - Each test gets a fresh browser context, so client-side storage starts empty
   and tests are order-independent.
 
+## Metrics
+
+A development build exposes measurements on the page. `metrics.spec.js` reads
+them; so can any CDP eval.
+
+- `window.__metrics()` — synchronous snapshot.
+- `window.__metricsReset()` — clears our copy of the counters.
+- `window.__storage()` — a **promise** of `{usage, quota, usage-details}`.
+  Separate because `navigator.storage.estimate()` is asynchronous.
+
+Keys are kebab-case. `clj->js` keeps ClojureScript keyword names as written,
+so it is `long-frames`, never `longFrames`; reading the camelCase spelling
+yields `undefined` silently.
+
+| Key | What it holds |
+|---|---|
+| `renders`, `dispatches`, `nested-dispatches`, `frames` | app-level counters; no web metric covers these |
+| `web-vitals` | `{cls, fcp, inp, lcp, ttfb}`, each `{value, rating, attribution}` |
+| `long-frames` | `long-animation-frame` entries: `blocking-duration`, `duration`, `start-time`, `scripts` |
+| `dictionary` | `ready-ms` plus the worker's own `phases` |
+
+Two caveats worth knowing before writing an assertion:
+
+- The web-vitals figures accumulate over the page's whole life. `__metricsReset()`
+  clears our copy but does not rewind CLS or INP — the library keeps its own state.
+- `ready-ms` is absent, not zero, when the dictionary never opens. A test that
+  reads it must wait for it rather than compare against `0`.
+
+`long-animation-frame` is Chrome-only. Elsewhere `long-frames` stays empty
+instead of raising, so a spec asserting entries exist must run under Chrome —
+which the suite does (`channel: "chrome"`).
+
 ## Out of scope
 
 - **Service worker / offline** — not asserted here.
