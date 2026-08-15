@@ -74,12 +74,23 @@ upstream_clean_of_couch_headers() {
         https://sprecha.de/ >/dev/null 2>&1
     kill "${nc_pid}" 2>/dev/null
     wait "${nc_pid}" 2>/dev/null
+    # Put the stand back the way it was found: the assertions after this one --
+    # and the restore drill after them -- expect a JVM that already answers.
     systemctl start learning-app-run.service
+    for _ in $(seq 1 90); do
+        curl -sf -o /dev/null http://127.0.0.1:8083/ && break
+        sleep 1
+    done
     # A capture that never happened must not read as clean.
     grep -qi '^GET ' "${capture}" && ! grep -qi 'x-auth-couchdb' "${capture}"
 }
 check "nginx: a client's proxy-auth header does not reach the upstream" \
     upstream_clean_of_couch_headers
+
+# Named on its own, so a stand left broken by the capture above is reported
+# here instead of surfacing as an unrelated failure further down.
+app_answers_again() { test "$(http_code http://127.0.0.1:8083/)" = 200; }
+check "app: answers again after the proxy-auth capture" app_answers_again
 
 # The same boundary read off the installed config, so a new location that
 # forgets the snippet fails here even though the assertion above only exercises
