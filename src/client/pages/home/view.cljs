@@ -23,7 +23,7 @@
 
 
 (defn- add-form
-  [{:keys [add-error copy show-chip? suggestions translation word]}]
+  [{:keys [add-error copy suggestions translation word]}]
   (let [{:keys [items active]} suggestions]
     [:form.home__add-form
      {:id "home-add-form"
@@ -39,14 +39,7 @@
       [:div.home__add-form-row
        [:div.autocomplete
         [:div.home__add-label-row
-         [:label.home__add-form-label {:for "new-word-value"} (:value-label copy)]
-         (when show-chip?
-           [:button.home__mode-chip
-            {:type "button"
-             :on   {:click       [[:action/toggle-add-mode]]
-                    ;; Keep input focus through the tap, as with suggestions.
-                    :pointerdown [[:effect/prevent-default]]}}
-            (:chip-label copy)])]
+         [:label.home__add-form-label {:for "new-word-value"} (:value-label copy)]]
         [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-value"
           :name         "value"

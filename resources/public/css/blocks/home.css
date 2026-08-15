@@ -208,25 +208,6 @@
   resize: none;
 }
 
-/* Height reserved for the chip, which only mounts in phrase mode: without it
-   the detection would shove the input down mid-word. */
-.home__add-label-row {
-  display: flex;
-  justify-content: flex-end;
-  min-height: 28px;
-}
-
-.home__mode-chip {
-  background: rgb(var(--color-iguana));
-  border: 1px solid rgb(var(--color-anchovy));
-  border-radius: 999px;
-  color: rgb(var(--color-eel));
-  cursor: pointer;
-  font: var(--text-body-weight) 12px / 1 din-round, sans-serif;
-  margin-bottom: 4px;
-  padding: 5px 12px;
-}
-
 .home__add-form-submit.big-button {
   height: 52px;
   margin-top: 4px;

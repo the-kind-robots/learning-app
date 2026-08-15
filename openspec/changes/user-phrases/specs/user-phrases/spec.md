@@ -3,20 +3,20 @@
 ## ADDED Requirements
 
 ### Requirement: Phrases are added from the home form with automatic mode detection
-The home add form SHALL detect whether the input is a word or a phrase without a manual toggle. When an already-fetched completion is the input itself, its pos SHALL decide: `phrase` selects phrase mode, anything else word mode. Otherwise input containing a space (after trim) SHALL be treated as a phrase, EXCEPT when it is an article (der/die/das/ein/eine) or `sich` followed by a single token. Selecting an autocomplete suggestion SHALL set the mode from the suggestion: multi-word pos=phrase suggestions select phrase mode, all others word mode. A tappable chip SHALL appear when phrase mode is detected and SHALL let the user override the detected mode until the form is cleared.
+The home add form SHALL detect whether the input is a word or a phrase without a manual toggle. When an already-fetched completion is the input itself, its pos SHALL decide: `phrase` selects phrase mode, anything else word mode. Otherwise input containing a space (after trim) SHALL be treated as a phrase, EXCEPT when it is an article (der/die/das/ein/eine) or `sich` followed by a single token. Selecting an autocomplete suggestion SHALL set the mode from the suggestion: multi-word pos=phrase suggestions select phrase mode, all others word mode. The form SHALL offer no control over the mode: the panel legend and the field label are what state it. A multi-word noun is entered as a word by typing it with its article, as the dictionary lists it.
 
 #### Scenario: Space switches to phrase mode
 - **WHEN** the user types "auf jeden Fall" into the German field
-- **THEN** the form enters phrase mode and shows the tappable "фраза" chip
+- **THEN** the form enters phrase mode, and the legend and the field label say so
 - **AND** open suggestions are cleared and stale async completion responses do not prefill the translation
 
 #### Scenario: Article plus noun stays a word
 - **WHEN** the user types "der Tisch" or "sich freuen"
 - **THEN** the form stays in word mode and autocomplete keeps working
 
-#### Scenario: Chip overrides detection
-- **WHEN** the user taps the "фраза" chip
-- **THEN** the mode flips to word and the override persists until the form is cleared
+#### Scenario: An article decides a multi-word noun
+- **WHEN** the user types "das Tiny House"
+- **THEN** the form stays in word mode, which is how a multi-word noun is entered
 
 #### Scenario: Mode flip preserves input
 - **WHEN** the detected mode changes while the user is typing

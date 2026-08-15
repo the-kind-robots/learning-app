@@ -25,12 +25,12 @@
 
 
 (def ^:private mode-copy
-  {:phrase {:chip-label  "фраза"
-            :legend      "Добавить фразу"
+  "The mode has no control of its own: the legend and the label are how the
+   form says which of the two it is about to save."
+  {:phrase {:legend      "Добавить фразу"
             :placeholder "Новая фраза"
             :value-label "Фраза (немецкий)"}
-   :word   {:chip-label  "слово"
-            :legend      "Добавить слово"
+   :word   {:legend      "Добавить слово"
             :placeholder "Новое слово"
             :value-label "Слово (немецкий)"}})
 
@@ -42,7 +42,6 @@
                               (:home/mode-override state))]
     {:add-error   (:home/add-error state)
      :copy        (mode-copy mode)
-     :show-chip?  (or (= :phrase mode) (some? (:home/mode-override state)))
      :suggestions (suggestions-props state)
      :translation (:home/translation state)
      :word        (:home/word state)}))

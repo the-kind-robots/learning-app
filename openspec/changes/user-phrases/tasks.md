@@ -19,7 +19,7 @@
 - [x] 3.1 Autogrow textarea for both fields: rows=1, `field-sizing: content` + scrollHeight JS fallback, max-height + inner scroll, ≥16px font, existing input attrs
 - [x] 3.2 Mode detection in presenter: space heuristic with article/`sich`/non-phrase-lemma exceptions; suggestion pos override; paste with spaces → phrase; state `:home/add-mode` + override
 - [x] 3.3 Phrase-mode mechanics: clear open suggestions on mode flip, guard stale async completion responses against current input
-- [x] 3.4 Chip UI: appears on detected phrase mode, tappable override until form clear; phrase-mode layout (vertical, full width), copy (legend/labels/placeholders)
+- [x] 3.4 No mode control: the legend, labels and placeholders follow the mode; the form is one column at every width
 - [x] 3.5 Suggestion badge for multi-word pos=phrase items; selecting one sets phrase mode and fills fields
 - [x] 3.6 Submit routing: phrase mode → `phrase/add!`; a value that also exists as a word is created without a warning; success clears form+override, refocuses
 - [x] 3.7 Enter behavior: German field → focus translation; translation → submit; line breaks collapse to spaces on submit
@@ -44,6 +44,6 @@
 ## 7. Verification
 
 - [x] 7.1 Run client unit test suite (shadow-cljs node tests)
-- [x] 7.2 Browser pass (learning-app-cdp): add phrase (auto mode, exceptions, chip, autogrow), words list wrap, phrase lesson trial, duplicates, pos=phrase suggestion
+- [x] 7.2 Browser pass (learning-app-cdp): add phrase (auto mode, exceptions, autogrow), words list wrap, phrase lesson trial, duplicates, pos=phrase suggestion
 - [x] 7.3 Sync check: phrase replicates to CouchDB; conflicting translations union (main stand)
 - [x] 7.4 Screenshots for the PR (test data only)

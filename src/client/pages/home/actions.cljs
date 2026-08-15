@@ -111,14 +111,6 @@
      [:effect/suggest-completions value]]))
 
 
-(nxr/register-action! :action/toggle-add-mode
-  (fn toggle-add-mode [state]
-    (let [mode (phrase/add-mode (:home/word state)
-                                (:suggestions/items (:home/suggestions state))
-                                (:home/mode-override state))]
-      [[:effect/save {:home/mode-override (if (= :phrase mode) :word :phrase)}]])))
-
-
 (nxr/register-action! :action/submit-if-enter
   (fn submit-if-enter [_ {:keys [key shift?]}]
     (when (and (= "Enter" key) (not shift?))

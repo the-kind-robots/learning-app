@@ -5,7 +5,7 @@ Users meet useful German multi-word expressions ("auf jeden Fall", "Wie geht's?"
 ## What Changes
 
 - A phrase is a vocabulary document with `kind: "phrase"` (ADR-0011): same `vocab:<normalized>` id, same review log, translation stored as a single string (never split by `parse-translations`). A document without a kind is a word, so nothing is migrated.
-- The home add form detects word vs phrase automatically (space heuristic with article/`sich`/dictionary-lemma exceptions; picking a suggestion decides by its pos) with a tappable chip as override. Both inputs become auto-growing textareas.
+- The home add form detects word vs phrase automatically (space heuristic with article/`sich`/dictionary-lemma exceptions; picking a suggestion decides by its pos), with no control of its own — the legend and the label state the mode. Both inputs become auto-growing textareas.
 - Dictionary completions stop discarding `:pos`; multi-word pos=phrase suggestions get a badge and switch the form into phrase mode.
 - Words page shows phrases in the same list with line wrapping and no type label; counts, search, and collections include them.
 - Lesson gains a phrase trial: exact typing required (RU→DE), grading through a new typography-only normalization (`normalize-for-grading`), and a review written per graded attempt, as words already do. The error footer is the existing one, unchanged.

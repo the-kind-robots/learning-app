@@ -31,11 +31,10 @@ test('the value field stays put when the input becomes a phrase', async ({ page 
   await page.getByLabel(value()).fill('Haus');
   const before = await page.getByLabel(value()).boundingBox();
 
-  // The space flips detection to phrase mode, which mounts the chip and
-  // rewrites every label on the form — including this field's own, so the
-  // locator has to follow the copy while the element stays the same one.
+  // The space flips detection to phrase mode, which rewrites every label on
+  // the form — including this field's own, so the locator has to follow the
+  // copy while the element stays the same one.
   await page.getByLabel(value()).fill('auf jeden Fall');
-  await expect(page.getByRole('button', { name: 'фраза' })).toBeVisible();
   const after = await page.getByLabel('Фраза (немецкий)').boundingBox();
 
   expect(after.y).toBe(before.y);
