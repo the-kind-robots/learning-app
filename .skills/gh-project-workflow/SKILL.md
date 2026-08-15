@@ -45,7 +45,7 @@ gh auth refresh -s project
 Run this when the user wants to create a new item and begin implementation.
 
 ```bash
-.codex/skills/gh-project-workflow/scripts/start_issue_flow.sh \
+.skills/gh-project-workflow/scripts/start_issue_flow.sh \
   --title "Add offline start screen" \
   --body "Allow basic lesson entry without network" \
   --area "Backend" \
@@ -75,7 +75,7 @@ Important behavior:
 Run this when coding is complete and user asks to wrap up.
 
 ```bash
-.codex/skills/gh-project-workflow/scripts/finish_issue_flow.sh \
+.skills/gh-project-workflow/scripts/finish_issue_flow.sh \
   --issue 142 \
   --base master \
   --merge-method squash
@@ -97,13 +97,13 @@ If the worktree contains unrelated local changes, prefer manual Git/PR steps ins
 Run only on explicit user request.
 
 ```bash
-.codex/skills/gh-project-workflow/scripts/deploy.sh
+.skills/gh-project-workflow/scripts/deploy.sh
 ```
 
 Or override command:
 
 ```bash
-.codex/skills/gh-project-workflow/scripts/deploy.sh --cmd "./infra/deploy.sh staging"
+.skills/gh-project-workflow/scripts/deploy.sh --cmd "./infra/deploy.sh staging"
 ```
 
 ## Command-Approval Strategy
