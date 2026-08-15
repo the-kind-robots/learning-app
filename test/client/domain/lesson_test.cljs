@@ -398,3 +398,42 @@
                   lesson-state
                   (recur (sut/advance lesson-state) (dec attempts)))))]
         (is (empty? (:remaining-trials final-state)))))))
+
+
+;; =============================================================================
+;; Phrase trials
+;; =============================================================================
+
+
+(def ^:private phrase-word
+  {:id          "vocab:wie geht s"
+   :kind        "phrase"
+   :translation [{:lang "ru" :value "Как дела?"}]
+   :value       "Wie geht's?"})
+
+
+(deftest generate-trials-creates-phrase-trials
+  (testing "a phrase item produces a phrase trial without examples"
+    (let [trials (sut/generate-trials [phrase-word] [])]
+      (is (= 1 (count trials)))
+      (is (true? (sut/phrase-trial? (first trials))))
+      (is (= "Wie geht's?" (:answer (first trials))))
+      (is (= "Как дела?" (:prompt (first trials)))))))
+
+
+(deftest phrase-answers-forgive-typography-only
+  (testing "apostrophes and case are forgiven, words are not"
+    (let [state (sut/initial-state [phrase-word] [] :first)]
+      (is (true? (-> state (sut/check-answer "wie gehts") sut/last-result :correct?)))
+      (is (true? (-> state (sut/check-answer "Wie geht's") sut/last-result :correct?)))
+      (is (false? (-> state (sut/check-answer "wie stehts") sut/last-result :correct?))))))
+
+
+(deftest a-failed-phrase-trial-comes-back-in-the-same-lesson
+  (testing "a wrong answer keeps the trial in the pool, so it can be graded again"
+    (let [state (sut/initial-state [phrase-word] [] :first)
+          wrong (sut/check-answer state "wie stehts")
+          right (sut/check-answer wrong "wie gehts")]
+      (is (= 1 (count (:remaining-trials wrong))))
+      (is (true? (-> right sut/last-result :correct?)))
+      (is (zero? (count (:remaining-trials right)))))))

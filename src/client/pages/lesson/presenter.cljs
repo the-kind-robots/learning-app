@@ -7,7 +7,10 @@
   [state]
   (let [trial (domain/current-trial state)]
     {:prompt      (:prompt trial)
-     :is-example? (domain/example-trial? trial)}))
+     :instruction (cond
+                    (domain/example-trial? trial) "Переведите предложение на немецкий"
+                    (domain/phrase-trial? trial)  "Переведите фразу на немецкий"
+                    :else                         "Переведите слово на немецкий")}))
 
 
 (defn progress-props

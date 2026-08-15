@@ -7,13 +7,16 @@
 (def lesson-id "lesson")
 
 
-(def default-words-per-lesson 3)
+(def default-vocab-per-lesson 3)
 
 
 (def default-trial-selector rand-nth)
 
 
 (def trial-type-word "word")
+
+
+(def trial-type-phrase "phrase")
 
 
 (def trial-type-example "example")
@@ -29,15 +32,24 @@
   (= (:type trial) trial-type-word))
 
 
-(defn- word->trial
-  [word]
-  {:type    trial-type-word
-   :word-id (:id word)
-   :prompt  (->> (:translation word)
+(defn phrase-trial?
+  [trial]
+  (= (:type trial) trial-type-phrase))
+
+
+(defn- vocab->trial
+  "A word or a phrase becomes the trial its kind calls for. `:word-id` keeps
+   its name because reviews and examples are stored under it."
+  [vocab]
+  {:type    (if (= "phrase" (:kind vocab))
+              trial-type-phrase
+              trial-type-word)
+   :word-id (:id vocab)
+   :prompt  (->> (:translation vocab)
                  (filter #(= "ru" (:lang %)))
                  (map :value)
                  (str/join ", "))
-   :answer  (:value word)
+   :answer  (:value vocab)
    :locked? false})
 
 
@@ -52,8 +64,8 @@
 
 
 (defn generate-trials
-  [words examples]
-  (into (mapv word->trial words)
+  [vocab examples]
+  (into (mapv vocab->trial vocab)
         (map example->trial examples)))
 
 
@@ -89,8 +101,8 @@
 
 
 (defn initial-state
-  [words examples trial-selector]
-  (let [trials (generate-trials words examples)]
+  [vocab examples trial-selector]
+  (let [trials (generate-trials vocab examples)]
     {:_id           lesson-id
      :type          "lesson"
      :options       {:trial-selector trial-selector}
@@ -110,6 +122,15 @@
   (utils/normalize-german (or answer "")))
 
 
+(defn- trial-normalized
+  "Phrase trials grade through the typography-forgiving normalization; word
+   and example trials keep the id-grade one."
+  [trial answer]
+  (if (phrase-trial? trial)
+    (utils/normalize-for-grading (or answer ""))
+    (normalized-answer answer)))
+
+
 (defn remove-trial
   [remaining-trials trial]
   (vec (remove #(= % trial) remaining-trials)))
@@ -119,8 +140,8 @@
   [state answer]
   (let [current-trial  (:current-trial state)
         correct-answer (expected-answer state)
-        correct?       (= (normalized-answer answer)
-                          (normalized-answer correct-answer))
+        correct?       (= (trial-normalized current-trial answer)
+                          (trial-normalized current-trial correct-answer))
         remaining      (cond-> (:remaining-trials state)
                          correct? (remove-trial current-trial))
         remaining      (if (and correct? (word-trial? current-trial))

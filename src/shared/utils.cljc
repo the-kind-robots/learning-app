@@ -58,6 +58,19 @@
       (str/replace #"ß" "ss")))
 
 
+(defn normalize-for-grading
+  "Grading-only German normalization: everything `normalize-german` forgives,
+   plus typography — apostrophe variants vanish before sanitizing (geht's ≡
+   gehts, not \"geht s\") and unicode quotes/dashes read as spaces. Never used
+   for ids: `normalize-german` is a frozen id contract (ADR-0008)."
+  [text]
+  (-> text
+      (or "")
+      (str/replace #"['’ʼ]" "")
+      (str/replace #"[«»„“”‚‘‹›–—]" " ")
+      (normalize-german)))
+
+
 (defn includes?
   [word pattern]
   (let [word    (normalize-german word)

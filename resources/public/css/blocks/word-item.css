@@ -42,6 +42,10 @@
   font-weight: 700;
 }
 
+.word-item__value--phrase {
+  overflow-wrap: anywhere;
+}
+
 .word-item__translation {
   color: rgb(var(--color-wolf));
   font-size: 15px;

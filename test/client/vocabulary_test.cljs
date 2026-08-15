@@ -108,7 +108,8 @@
                     db/find
                     (fn [_ query]
                       (swap! find-calls conj query)
-                      (js/Promise.resolve {:docs (vec (repeat doc-count {:type "vocab"}))}))]
+                      (js/Promise.resolve
+                       {:docs (vec (repeat doc-count {:type "vocab"}))}))]
         (let [cnt (await (sut/count (test-capabilities {:user/db :fake})))
               q   (first @find-calls)]
           (is (= doc-count cnt))

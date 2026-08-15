@@ -6,6 +6,7 @@
    [client.support.test :refer [async-testing]])
   (:require
    [cljs.test :refer-macros [deftest is testing]]
+   [clojure.string :as str]
    [nexus.registry :as nxr]
    [pages.home.actions]
    [pages.home.effects]
@@ -33,6 +34,10 @@
 
 
 (nxr/register-effect! :effect/focus
+  (fn [_ _ _]))
+
+
+(nxr/register-effect! :effect/clear-autogrow
   (fn [_ _ _]))
 
 
@@ -70,7 +75,7 @@
 (deftest second-keystroke-keeps-suggestions
   (testing "typing another character leaves the previous list in place"
     (let [{:keys [store] :as system} (test-system {"hu" [hund]})]
-      (nxr/dispatch system {} [[:action/update-suggestions [hund]]])
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value nil}]])
       (nxr/dispatch system {} [[:action/update-word "hu"]])
       (is (= "hu" (:home/word @store)))
       (is (= [hund] (suggestion-items store))))))
@@ -79,7 +84,7 @@
 (deftest dictionary-answer-replaces-suggestions
   (async-testing "the debounced dictionary answer replaces the kept list"
     (let [{:keys [store] :as system} (test-system {"hut" [hut]})]
-      (nxr/dispatch system {} [[:action/update-suggestions [hund]]])
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value nil}]])
       (nxr/dispatch system {} [[:action/update-word "hut"]])
       (is (= [hund] (suggestion-items store)))
       (await (debounce-elapsed))
@@ -90,7 +95,7 @@
 (deftest emptied-input-clears-suggestions
   (async-testing "an emptied input clears the list through the dictionary's [] answer"
     (let [{:keys [store] :as system} (test-system {})]
-      (nxr/dispatch system {} [[:action/update-suggestions [hund]]])
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value nil}]])
       (nxr/dispatch system {} [[:action/update-word ""]])
       (await (debounce-elapsed))
       (is (empty? (suggestion-items store))))))
@@ -103,7 +108,7 @@
                   vocabulary/count (fn [_]
                                      (js/Promise.resolve 1))]
       (let [{:keys [store] :as system} (test-system {})]
-        (nxr/dispatch system {} [[:action/update-suggestions [hund]]])
+        (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value nil}]])
         (nxr/dispatch system {} [[:action/add-word {:value "Hund" :translation "пёс"}]])
         (await (debounce-elapsed))
         (is (nil? (:home/suggestions @store)))
@@ -114,7 +119,7 @@
 (deftest picking-a-kept-suggestion-uses-its-own-data
   (testing "a pick from a list kept across keystrokes fills word and translation from the entry itself"
     (let [{:keys [store] :as system} (test-system {})]
-      (nxr/dispatch system {} [[:action/update-suggestions [hund]]])
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value nil}]])
       (nxr/dispatch system {} [[:action/update-word "hut"]])
       (nxr/dispatch system {} [[:action/select-suggestion (assoc hund :focus-id nil)]])
       (is (= "Hund" (:home/word @store)))
@@ -134,13 +139,61 @@
 (deftest arrival-never-clobbers-a-typed-translation
   (testing "late dictionary answers do not overwrite the user's own text"
     (let [{:keys [store] :as system} (test-system {})]
-      (nxr/dispatch system {} [[:effect/save {:home/translation "мой перевод"}]])
-      (nxr/dispatch system {} [[:action/update-suggestions [hund]]])
+      (nxr/dispatch system {} [[:action/update-translation "мой перевод"]])
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value nil}]])
       (is (= "мой перевод" (:home/translation @store))))))
 
 
-(deftest an-empty-answer-leaves-the-translation-alone
+(deftest a-typed-translation-survives-further-typing-in-the-german-field
+  (testing "the translation field neither blanks nor refills while the word is typed"
+    (let [{:keys [store] :as system} (test-system {"hu" [hund]})]
+      (nxr/dispatch system {} [[:action/update-translation "мой перевод"]])
+      (nxr/dispatch system {} [[:action/update-word "hu"]])
+      (is (= "мой перевод" (:home/translation @store)))
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value "hu"}]])
+      (is (= "мой перевод" (:home/translation @store))))))
+
+
+(deftest a-prefilled-translation-leaves-when-the-input-becomes-a-phrase
+  (async-testing "the word's translation does not linger under an unrelated phrase"
+    (let [{:keys [store] :as system} (test-system {"hätte" [{:lemma "hätte" :translations ["иметь"]}]})]
+      (nxr/dispatch system {} [[:action/update-word "hätte"]])
+      (await (debounce-elapsed))
+      (is (= "иметь" (:home/translation @store)))
+      (nxr/dispatch system {} [[:action/update-word "hätte hätte fahrad kätte"]])
+      (await (debounce-elapsed))
+      (is (= "" (:home/translation @store))))))
+
+
+(deftest an-emptied-translation-may-be-prefilled-again
+  (async-testing "clearing the field hands it back to the dictionary"
+    (let [{:keys [store] :as system} (test-system {"hund" [hund]})]
+      (nxr/dispatch system {} [[:action/update-translation "мой перевод"]])
+      (nxr/dispatch system {} [[:action/update-translation ""]])
+      (nxr/dispatch system {} [[:action/update-word "hund"]])
+      (await (debounce-elapsed))
+      (is (= "пёс, собака" (:home/translation @store))))))
+
+
+(deftest a-picked-suggestion-owns-the-translation
+  (testing "a later dictionary answer does not overwrite what the pick filled in"
+    (let [{:keys [store] :as system} (test-system {})]
+      (nxr/dispatch system {} [[:action/select-suggestion (assoc hund :focus-id nil)]])
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hut] :value "Hund"}]])
+      (is (= "пёс, собака" (:home/translation @store))))))
+
+
+(deftest stale-answer-is-ignored
+  (testing "an answer queried for an outdated value neither shows nor prefills"
+    (let [{:keys [store] :as system} (test-system {})]
+      (nxr/dispatch system {} [[:effect/save {:home/word "auf jeden"}]])
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value "auf"}]])
+      (is (nil? (suggestion-items store)))
+      (is (nil? (:home/translation @store))))))
+
+
+(deftest an-empty-answer-leaves-the-translation-blank
   (testing "no suggestions, nothing to fill"
     (let [{:keys [store] :as system} (test-system {})]
-      (nxr/dispatch system {} [[:action/update-suggestions []]])
-      (is (nil? (:home/translation @store))))))
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [] :value nil}]])
+      (is (str/blank? (:home/translation @store))))))

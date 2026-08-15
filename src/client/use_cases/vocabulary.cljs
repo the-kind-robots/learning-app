@@ -1,6 +1,7 @@
 (ns use-cases.vocabulary
   (:refer-clojure :exclude [list count get])
   (:require
+   [domain.phrase :as phrase]
    [domain.vocabulary :as domain]))
 
 
@@ -78,7 +79,9 @@
   "Updates a word's translation. Returns updated row, or nil if not found."
   [{:keys [progress-store] :as capabilities} word-id translation]
   (when-let [word (await ((:progress-store/get-word progress-store) word-id))]
-    (let [updated (domain/update-word word translation)]
+    (let [updated (if (phrase/phrase-doc? word)
+                    (phrase/update-phrase word translation)
+                    (domain/update-word word translation))]
       (await ((:progress-store/save-word! progress-store) updated))
       (await (get capabilities word-id)))))
 

@@ -4,23 +4,26 @@
 
 
 (defn- suggestion-item
-  [{:keys [lemma translations exact?]} active?]
+  [{:keys [lemma phrase? translations exact?]} active?]
   [:li.suggestions__item
    {:role        "option"
     :data-active (when active? "")
     :data-exact  (when exact? "")
     :on          {:click       [[:action/select-suggestion
                                  {:lemma        lemma
+                                  :phrase?      phrase?
                                   :translations translations
                                   :focus-id     "new-word-translation"}]]
                   ;; Keep input focus during the click so :blur on the input
                   ;; doesn't fire and clear the suggestions before :click runs.
                   :pointerdown [[:effect/prevent-default]]}}
-   [:span {:lang "de"} lemma]])
+   [:span {:lang "de"} lemma]
+   (when phrase?
+     [:span.suggestions__badge "фраза"])])
 
 
 (defn- add-form
-  [{:keys [add-error suggestions translation word]}]
+  [{:keys [add-error copy suggestions translation word]}]
   (let [{:keys [items active]} suggestions]
     [:form.home__add-form
      {:id "home-add-form"
@@ -32,54 +35,61 @@
                       :translation [:event.form.field/value "translation"]
                       :focus-id    "new-word-value"}]]}}
      [:fieldset.home__add-fieldset
-      [:legend.home__add-legend "Добавить слово"]
+      [:legend.home__add-legend (:legend copy)]
       [:div.home__add-form-row
        [:div.autocomplete
-        [:label.home__add-form-label {:for "new-word-value"} "Слово (немецкий)"]
-        [:input.home__add-form-input
+        [:div.home__add-label-row
+         [:label.home__add-form-label {:for "new-word-value"} (:value-label copy)]]
+        [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-value"
           :name         "value"
+          :rows         1
           :autocapitalize "none"
           :autocomplete "off"
           :autocorrect  "off"
           :enterkeyhint "next"
           :spellcheck   "false"
           :required     true
+          :maxlength    200
           :lang         "de"
           :value        word
-          :placeholder  "Новое слово"
-          ;; keydown is only wired when suggestions are visible — skipping
-          ;; the listener on key-repeat avoids a render that would reset
-          ;; :value and cause cursor jitter under held backspace.
+          :placeholder  (:placeholder copy)
           :on           {:blur    [[:action/dismiss-suggestions]]
-                         :input   [[:action/update-word [:event.target/value]]]
-                         :keydown (when (seq items)
-                                    [[:action/handler-word-keydown
-                                      {:key      [:event.keyboard/key]
-                                       :shift?   [:event.keyboard/shift?]
-                                       :focus-id "new-word-translation"
-                                       :scroll-selector ".suggestions [data-active]"}]])}}]
+                         :focus   [[:effect/autogrow-target]]
+                         :input   [[:action/update-word [:event.target/value]]
+                                   [:effect/autogrow-target]]
+                         :keydown [[:action/handler-word-keydown
+                                    {:key      [:event.keyboard/key]
+                                     :shift?   [:event.keyboard/shift?]
+                                     :focus-id "new-word-translation"
+                                     :scroll-selector ".suggestions [data-active]"}]]}}]
         [:ul.suggestions
          (for [item items]
            (suggestion-item item (= item active)))]]
-       [:span.home__add-form-arrow "→"]
        [:div.home__add-translation
         [:label.home__add-form-label {:for "new-word-translation"} "Перевод (русский)"]
-        [:input.home__add-form-input
+        [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-translation"
           :name         "translation"
+          :rows         1
           :autocapitalize "none"
           :autocomplete "off"
           :autocorrect  "off"
           :enterkeyhint "done"
           :spellcheck   "false"
+          :maxlength    500
           :lang         "ru"
           :value        translation
-          :placeholder  (or (first (:translations active)) "Перевод")
+          :placeholder  "Перевод"
           :required     true
           :class        (when (= :empty-translations add-error)
                           "home__add-form-input--error")
-          :on           {:input [[:action/update-translation [:event.target/value]]]}}]]]
+          :on           {:focus   [[:effect/autogrow-target]]
+                         :input   [[:action/update-translation [:event.target/value]]
+                                   [:effect/autogrow-target]]
+                         :keydown [[:action/submit-if-enter
+                                    {:key    [:event.keyboard/key]
+                                     :shift? [:event.keyboard/shift?]}]]}}]]]
       [:button.home__add-form-submit.big-button.big-button--request-stable
        {:type "submit"} "ДОБАВИТЬ"]]]))
 
@@ -116,7 +126,7 @@
       [:section#home-add-panel.home__add
        {:replicant/on-mount [[:action/focus-word-input "new-word-value"]]}
        [:header.home__add-header
-        [:h2.home__panel-title "Добавить слово"]
+        [:h2.home__panel-title (get-in form [:copy :legend])]
         [:button#home-words-button.home__words-button
          {:type        "button"
           :class       (when empty-vocab? "home__words-button--hidden")

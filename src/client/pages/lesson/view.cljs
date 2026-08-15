@@ -46,7 +46,8 @@
       :maxlength   1000
       :lang        "de"
       :spellcheck  "false"
-      :on          {:keydown [[:action/submit-if-ctrl-enter
+      :on          {:input   [[:effect/autogrow-target]]
+                    :keydown [[:action/submit-if-ctrl-enter
                                {:key   [:event.keyboard/key]
                                 :ctrl? [:event.keyboard/ctrl?]}]]}}]
     [:div.lesson__action.page-footer__action
@@ -146,13 +147,10 @@
 
 (defn challenge
   [lesson-state]
-  (let [{:keys [prompt is-example?]} (presenter/challenge-props lesson-state)]
+  (let [{:keys [prompt instruction]} (presenter/challenge-props lesson-state)]
     [:div#lesson-challenge.lesson__challenge
      [:h2.lesson__prompt {:lang "ru"} prompt]
-     [:p.lesson__instruction
-      (if is-example?
-        "Переведите предложение на немецкий"
-        "Переведите слово на немецкий")]]))
+     [:p.lesson__instruction instruction]]))
 
 
 (defn empty-state

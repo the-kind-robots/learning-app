@@ -35,11 +35,13 @@
   gap: 10px;
 }
 
+/* Anchored to the top on purpose: centring turns every height change below —
+   a suggestion list, a growing field — into a move of the whole panel. */
 .home__content {
   display: flex;
   flex: 1;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .home__subtitle {
@@ -150,22 +152,18 @@
   padding: 0;
 }
 
+/* One column at every width: the row layout used to flip to a column the
+   moment the input became a phrase, relaying out the form under the cursor. */
 .home__add-form-row {
-  align-items: center;
+  align-items: stretch;
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .home__add-translation {
   flex: 1;
   min-width: 0;
-}
-
-.home__add-form-arrow {
-  color: rgb(var(--color-wolf));
-  font-size: 18px;
-  font-weight: 700;
-  opacity: 0.6;
 }
 
 .home__add-form-input {
@@ -199,6 +197,15 @@
 
 .home__add-form-input--error {
   border-color: rgb(var(--color-fire-ant));
+}
+
+.home__add-form-textarea {
+  field-sizing: content;
+  height: auto;
+  max-height: 136px;
+  min-height: 52px;
+  overflow-y: auto;
+  resize: none;
 }
 
 .home__add-form-submit.big-button {
@@ -240,16 +247,6 @@
 @media (max-width: 600px) {
   .home__add {
     box-shadow: 0 6px 16px rgb(0 0 0 / 0.08);
-  }
-
-  .home__add-form-row {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .home__add-form-arrow {
-    display: none;
   }
 
   .home__add-form-submit,
