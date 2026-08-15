@@ -49,9 +49,25 @@
             (db/insert local-db {:_id "l1" :type "lesson" :trials []})]))))
 
 
+(def ^:private page-size
+  "pouchdb-find's default `limit`. Seeding past it is what makes truncation visible."
+  25)
+
+
+(defn ^:async seed-many!
+  [db doc-type n]
+  (await (js/Promise.all
+          (into-array
+           (for [i (range n)]
+             (db/insert db
+                        {:_id   (str doc-type "-" i)
+                         :type  doc-type
+                         :value (str doc-type " " i)}))))))
+
+
 (defn ^:async fetch-by-type
   [db doc-type]
-  (let [{:keys [docs]} (await (db/find db {:selector {:type doc-type}}))]
+  (let [{:keys [docs]} (await (db/find-all db {:selector {:type doc-type}}))]
     docs))
 
 
@@ -72,6 +88,18 @@
         (is (= 1 (count device-tasks)))
         (is (= 1 (count device-exs)))
         (is (= 1 (count device-lessons))))))))
+
+
+(deftest run-local-db-split-copies-past-the-default-page
+  (async-testing "copies every document of a type, not only the first page"
+    (with-test-dbs
+     (^:async fn
+      [{:keys [local-db user-db]}]
+      (let [total (+ page-size 5)]
+        (await (seed-many! local-db "vocab" total))
+        (await (#'sut/run-local-db-split!))
+        (let [vocabs (await (fetch-by-type user-db "vocab"))]
+          (is (= total (count vocabs)))))))))
 
 
 (deftest run-local-db-split-writes-migration-marker
@@ -108,6 +136,98 @@
       (let [vocabs (await (fetch-by-type user-db "vocab"))]
         (is (= 2 (count vocabs)))
         (is (every? :_rev vocabs)))))))
+
+
+(defn ^:async record-truncated-split!
+  "Reproduces what the first release left behind: one page of a type copied, and the
+   marker written as though the whole type had been."
+  [local-db dest-db device-db doc-type]
+  (let [{:keys [docs]} (await (db/find local-db {:selector {:type doc-type}}))]
+    (await (js/Promise.all
+            (into-array (map #(db/insert dest-db (dissoc % :_rev)) docs))))
+    (await (db/insert device-db
+                      {:_id          "migration:local-db-split"
+                       :type         "migration"
+                       :migration-id "local-db-split"
+                       :created-at   (utils/now-iso)}))
+    (count docs)))
+
+
+(deftest repair-copies-what-a-truncated-run-left-behind
+  (async-testing "copies documents stranded by a run that recorded a partial copy"
+    (with-test-dbs
+     (^:async fn
+      [{:keys [local-db user-db device-db]}]
+      (let [total  (+ page-size 5)
+            _ (await (seed-many! local-db "vocab" total))
+            copied (await (record-truncated-split! local-db user-db device-db "vocab"))]
+        (is (= page-size copied) "an unbounded find stops at the default page")
+        (is (= :already-complete (await (#'sut/run-local-db-split!)))
+            "the marker makes the original migration skip the rest forever")
+        (await (#'sut/run-truncated-copy-repair!))
+        (let [vocabs (await (fetch-by-type user-db "vocab"))]
+          (is (= total (count vocabs)))))))))
+
+
+(deftest repair-does-not-resurrect-a-deleted-word
+  (async-testing "a word deleted after the truncated run stays deleted"
+    (with-test-dbs
+     (^:async fn
+      [{:keys [local-db user-db]}]
+      (await (seed-many! local-db "vocab" 3))
+      (await (#'sut/run-local-db-split!))
+      (await (db/remove user-db (await (db/get user-db "vocab-0"))))
+      (await (#'sut/run-truncated-copy-repair!))
+      (let [vocabs (await (fetch-by-type user-db "vocab"))]
+        (is (= 2 (count vocabs)))
+        (is (nil? (await (db/get user-db "vocab-0")))))))))
+
+
+(deftest repair-keeps-edits-made-after-the-copy
+  (async-testing "a document edited in the destination keeps its own version"
+    (with-test-dbs
+     (^:async fn
+      [{:keys [local-db user-db]}]
+      (await (seed-many! local-db "vocab" 3))
+      (await (#'sut/run-local-db-split!))
+      (let [word (await (db/get user-db "vocab-0"))]
+        (await (db/insert user-db (assoc word :value "edited"))))
+      (await (#'sut/run-truncated-copy-repair!))
+      (is (= "edited" (:value (await (db/get user-db "vocab-0")))))))))
+
+
+(deftest repair-writes-marker-and-runs-once
+  (async-testing "records its own marker and returns :already-complete afterwards"
+    (with-test-dbs
+     (^:async fn
+      [{:keys [device-db]}]
+      (is (= :complete (await (#'sut/run-truncated-copy-repair!))))
+      (let [marker (await (db/get device-db "migration:local-db-split-repair"))]
+        (is (some? marker))
+        (is (= "migration" (:type marker))))
+      (is (= :already-complete (await (#'sut/run-truncated-copy-repair!))))))))
+
+
+(deftest run-task-data-payload-rewrites-past-the-default-page
+  (async-testing "rewrites every legacy task, not only the first page"
+    (with-test-dbs
+     (^:async fn
+      [{:keys [device-db]}]
+      (let [total (+ page-size 5)]
+        (await (js/Promise.all
+                (into-array
+                 (for [i (range total)]
+                   (db/insert device-db
+                              {:_id       (str "task-" i)
+                               :type      "task"
+                               :attempts  0
+                               :task-type "example-fetch"
+                               :word-id   (str "w" i)})))))
+        (await (#'sut/run-task-data-payload!))
+        (let [tasks (await (fetch-by-type device-db "task"))]
+          (is (= total (count tasks)))
+          (is (every? :data tasks))
+          (is (not-any? :word-id tasks))))))))
 
 
 (deftest run-task-data-payload-rewrites-legacy-tasks
