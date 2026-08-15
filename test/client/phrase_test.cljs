@@ -8,6 +8,7 @@
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [ports.progress-store :as progress-store]
    [use-cases.phrase :as sut]
+   [use-cases.vocabulary :as vocabulary]
    [utils :as utils]))
 
 
@@ -83,6 +84,24 @@
           (is (= [{:lang "ru" :value "во всяком случае"}
                   {:lang "ru" :value "обязательно, точно"}]
                  (:translation (first entries))))))))))
+
+
+(deftest adding-a-phrase-over-a-word-merges-and-keeps-its-kind
+  (async-testing "one value is one entry, and a second add does not change what it is"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (let [example-requests (atom [])
+            capabilities     (test-capabilities dbs example-requests)]
+        (await (vocabulary/add! capabilities "Guten Morgen" "доброе утро"))
+        (let [{:keys [created?]} (await (sut/add! capabilities "guten Morgen" "доброго утра"))
+              entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
+          (is (false? created?))
+          (is (= 1 (count entries)))
+          (is (nil? (:kind (first entries)))
+              "it was entered as a word and stays one")
+          (is (= ["доброе утро" "доброго утра"]
+                 (mapv :value (:translation (first entries)))))))))))
 
 
 (deftest add-rejects-blank-translation
