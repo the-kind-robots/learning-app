@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: actions/download-artifact@v4.3.0
+      - uses: actions/download-artifact@v8.0.1
         with:
           name: app-jar
           path: target
@@ -61,7 +61,7 @@ jobs:
         shell: bash
         run: bash infra/staging/run.sh 2>&1 | tee smoke-output.log
 
-      - uses: actions/upload-artifact@v4.6.2
+      - uses: actions/upload-artifact@v7.0.1
         if: failure()
         with:
           name: staging-smoke-output
