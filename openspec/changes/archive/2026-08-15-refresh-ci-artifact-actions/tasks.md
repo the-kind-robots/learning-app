@@ -17,5 +17,5 @@
 
 - [x] 4.1 Workflow YAML parses and the action references resolve to existing tags — all eight workflows parse; `v7.0.1` and `v8.0.1` resolve upstream
 - [x] 4.2 `clojure -T:build uber` builds the jar with the aligned Clojure version — jar produced; the `:build` classpath carries `clojure-1.12.5.jar` and the jar's own `clojure/version.properties` reads 1.12.5
-- [ ] 4.3 The pull request exercises both artifact consumers end to end: build → upload → download → smoke — cannot be run locally; the staging smoke counts a change to `build-jar.yml` or to itself as relevant, so this branch triggers it. Confirm on the PR checks
+- [x] 4.3 The pull request exercises both artifact consumers end to end: build → upload → download → smoke — every check on PR #303 passed, container smoke included. Its download step logged `digest-mismatch: error`, an expected digest, and a matching computed digest before unzipping, so the new integrity requirement is exercised rather than assumed
 - [x] 4.4 `openspec validate refresh-ci-artifact-actions --strict`
