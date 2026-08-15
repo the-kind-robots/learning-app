@@ -78,13 +78,13 @@
       (do
         (log/warn :lesson/check-answer-missing {:answer answer})
         {:error :lesson-not-found :lesson-state nil})
-      (let [current-trial  (domain/current-trial current-state)
-            checked        (domain/check-answer current-state answer)
-            phrase-review? (domain/phrase-review-due? current-state current-trial)
-            lesson-state   (cond-> checked
-                             phrase-review? (domain/mark-trial-reviewed current-trial))]
+      (let [current-trial (domain/current-trial current-state)
+            lesson-state  (domain/check-answer current-state answer)]
         (try
-          (when (or (domain/word-trial? current-trial) phrase-review?)
+          ;; Every graded attempt is written, however many a lesson holds: a
+          ;; run of lapses is the log being honest, not noise. Example trials
+          ;; keep writing nothing — they grade a word already reviewed here.
+          (when-not (domain/example-trial? current-trial)
             (await (vocabulary/add-review
                     capabilities
                     (:word-id current-trial)

@@ -136,20 +136,6 @@
   (vec (remove #(= % trial) remaining-trials)))
 
 
-(defn phrase-review-due?
-  "True when this graded attempt should write a review: phrase trials write
-   one per trial per lesson (the first attempt decides), tracked in state
-   rather than on the trial — `remove-trial` compares trials by value."
-  [state trial]
-  (and (phrase-trial? trial)
-       (not (some #{(trial-id trial)} (:reviewed-trial-ids state)))))
-
-
-(defn mark-trial-reviewed
-  [state trial]
-  (update state :reviewed-trial-ids (fnil conj []) (trial-id trial)))
-
-
 (defn check-answer
   [state answer]
   (let [current-trial  (:current-trial state)

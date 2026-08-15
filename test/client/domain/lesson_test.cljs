@@ -429,16 +429,11 @@
       (is (false? (-> state (sut/check-answer "wie stehts") sut/last-result :correct?))))))
 
 
-(deftest phrase-review-once-per-trial
-  (testing "only the first graded attempt of a phrase trial is review-due"
+(deftest a-failed-phrase-trial-comes-back-in-the-same-lesson
+  (testing "a wrong answer keeps the trial in the pool, so it can be graded again"
     (let [state (sut/initial-state [phrase-word] [] :first)
-          trial (sut/current-trial state)]
-      (is (true? (sut/phrase-review-due? state trial)))
-      (let [marked (sut/mark-trial-reviewed state trial)]
-        (is (false? (sut/phrase-review-due? marked trial)))))))
-
-
-(deftest word-trials-are-never-phrase-review-due
-  (testing "word trials keep their own review path"
-    (let [state (sut/initial-state fixtures/lesson-words [] :first)]
-      (is (false? (sut/phrase-review-due? state (sut/current-trial state)))))))
+          wrong (sut/check-answer state "wie stehts")
+          right (sut/check-answer wrong "wie gehts")]
+      (is (= 1 (count (:remaining-trials wrong))))
+      (is (true? (-> right sut/last-result :correct?)))
+      (is (zero? (count (:remaining-trials right)))))))

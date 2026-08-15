@@ -80,12 +80,12 @@ On an incorrect phrase answer, the error state SHALL show the typed answer and t
 - **WHEN** the user answers a phrase trial incorrectly
 - **THEN** the footer shows the answer, the reference, and the same continue action as a word trial
 
-### Requirement: Phrase reviews are written at most once per trial per lesson
-Only the first graded attempt of a phrase trial within a lesson SHALL write a review document; later attempts of the same trial in that lesson SHALL NOT write reviews.
+### Requirement: Every graded phrase attempt writes a review
+A phrase trial SHALL write a review document on every graded attempt, as a word trial does. A trial answered wrongly stays in the pool and may be graded again in the same lesson, and each of those attempts SHALL be recorded.
 
-#### Scenario: Repeated failures count once
-- **WHEN** the user fails the same phrase trial three times and then succeeds within one lesson
-- **THEN** exactly one review document is written for that trial (the first, failed attempt)
+#### Scenario: A correction within the lesson is recorded
+- **WHEN** the user fails a phrase trial and later succeeds at it within the same lesson
+- **THEN** both attempts are written as reviews
 
 ### Requirement: Phrase conflicts and import merge without splitting
 The client conflict resolver SHALL resolve phrase documents in the same pass and with the same strategy as any other vocabulary document (translation union) while keeping translation entries whole. Data import SHALL apply the same last-write-wins merging.
