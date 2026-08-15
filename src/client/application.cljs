@@ -96,8 +96,9 @@
 
 (defn- css-sized?
   "Whether the browser sizes this textarea itself through `field-sizing`.
-   Read as a string: under :advanced the property accessor would be renamed
-   and the release build would silently take the measuring path."
+   Asked by the CSS property name: `fieldSizing` is missing from Closure's
+   externs, so the dotted accessor survives :advanced only as long as extern
+   inference keeps resolving it. A string never has to be resolved."
   [node]
   (-> (js/getComputedStyle node)
       (.getPropertyValue "field-sizing")
