@@ -112,6 +112,19 @@ creation SHALL be denied. A pull request SHALL be denied from a branch that carr
 issue number, and allowed from a branch created for an issue. Each refusal SHALL name the
 command to use instead.
 
+The branch a pull request is judged on SHALL be the branch the command names when it names
+one, and the current branch only when it does not. Judging a pull request by the working
+directory's own branch decides about something other than what the command does: under the
+coordinator rule the session that opens the pull request sits in the main checkout on the
+default branch, which is now the normal configuration, so the current-branch test refuses
+every correct invocation. Both the long and the short spelling of the flag SHALL be
+recognised, in their separated and joined forms, and a fork owner prefix SHALL be stripped
+before the branch is judged.
+
+The invariant SHALL NOT weaken: the branch, wherever its name came from, SHALL still carry
+an issue number, and a pull request named onto a branch without one SHALL be refused with
+the same explanation.
+
 #### Scenario: Issue created by hand
 
 - **WHEN** an agent runs a raw issue-creation command
@@ -130,6 +143,19 @@ command to use instead.
 - **THEN** opening the pull request by hand is allowed, which is what a dirty worktree
   requires anyway
 
+#### Scenario: Pull request that names its source branch
+
+- **WHEN** the command names an issue branch explicitly while the working directory is on a
+  branch that carries no issue number
+- **THEN** the call is allowed, because the branch the pull request would actually be opened
+  from is the one that was named
+
+#### Scenario: Pull request named onto a branch with no issue
+
+- **WHEN** the command names a branch that carries no issue number
+- **THEN** the call is denied with the same explanation as an untracked current branch,
+  because moving where the name comes from does not move the invariant
+
 #### Scenario: The owner asks for the raw command
 
 - **WHEN** the user explicitly wants the bypassed command
@@ -138,15 +164,27 @@ command to use instead.
 
 ### Requirement: A branch for tracked work is linked to its issue
 
-Tracked work SHALL happen on a branch created from its issue, including when the work is
-isolated in a worktree. The repository SHALL record the order that satisfies both the
-branch rule and the worktree rule.
+Tracked work SHALL happen on a branch created from its issue, including when the work is isolated in a worktree. The repository SHALL record, for each situation it puts agents in, an order that satisfies both the branch rule and the worktree rule and that runs to a pushed branch without a refused command. Where an agent cannot create a worktree beside its own, the recorded order SHALL say so and give the one that works, naming the tool that must not be used and why. A session that coordinates tracked work SHALL delegate repository edits rather than making them and SHALL stay in the main checkout, because an agent launched from a worktree inherits that pin and can no longer place its own work in a worktree of its own.
 
 #### Scenario: Work is isolated in a worktree
 
 - **WHEN** a task needs a worktree
-- **THEN** the issue branch is created first and the worktree is placed on that branch,
-  so the issue keeps its development link
+- **THEN** the issue branch is created first and the worktree is placed on that branch, so the issue keeps its development link
+
+#### Scenario: An agent is launched pinned to a worktree
+
+- **WHEN** work that must land its own issue branch is delegated to an agent
+- **THEN** that agent is launched without worktree isolation, because a pinned agent cannot reach a worktree created beside its own
+
+#### Scenario: A pinned agent must deliver anyway
+
+- **WHEN** an agent already pinned to a worktree has to land a different issue branch
+- **THEN** it creates the issue branch first, adds a linked worktree inside its own worktree, works there with plain directory changes, and reaches a pushed branch with no refused command
+
+#### Scenario: The session that coordinates the work
+
+- **WHEN** a coordinating session needs a repository edit
+- **THEN** it delegates that edit and stays in the main checkout, so the agent it launches can create its own `.claude/worktrees/<slug>` from the issue branch and work there
 
 ### Requirement: Filing an issue stays within a small share of the API budget
 
@@ -177,4 +215,37 @@ found and converted into the issue rather than duplicated.
 
 - **WHEN** the script finishes a run
 - **THEN** it reports what that run cost against the GraphQL budget
+
+### Requirement: A refusal stops the work and is reported
+
+A refusal from a delivery guard or from workspace isolation SHALL stop the work that hit it
+and SHALL produce a report to the owner naming the action attempted, what was refused, and
+the verbatim text of the refusal. The owner decides what happens next.
+
+A refusal SHALL NOT be circumvented. In particular:
+
+- a commit SHALL NOT be assembled in a side or detached worktree and pushed straight to the
+  branch ref because ordinary writes were blocked;
+- a command SHALL NOT be reworded to slip past a static check instead of being run the
+  permitted way;
+- `DELIVERY_GUARD=off` SHALL NOT be set on the agent's own judgement, only on a direct
+  request from the owner.
+
+The guards inspect command text and the working directory, so they protect against accident,
+not against intent. An agent that circumvents one does not defeat the protection — it defeats
+the assurance that delivered work went down a verified path. Where the harness flags a move
+only after the fact rather than preventing it, the absence of prevention SHALL NOT be read as
+permission.
+
+#### Scenario: An agent hits a refusal
+
+- **WHEN** a guard or workspace isolation refuses a command or an edit
+- **THEN** the agent stops that line of work and reports the action, the refusal and its
+  verbatim text
+- **AND** it does not retry the same intent by another route
+
+#### Scenario: A route that is merely unguarded
+
+- **WHEN** a path exists that the guard does not cover, such as a tool the matcher never sees
+- **THEN** it is not used to accomplish what was just refused
 

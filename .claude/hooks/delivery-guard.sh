@@ -22,6 +22,35 @@ decide() { # decide <allow|deny|ask> <reason>
 
 command -v jq >/dev/null 2>&1 || exit 0
 
+# `gh pr create` may name its source branch explicitly. Judge the branch the command
+# actually pushes from, not the one this hook's own working directory happens to be on:
+# the coordinating session and the agents it raises sit in the main checkout on `master`,
+# and under the coordinator rule that is the NORMAL configuration, so a HEAD-only test
+# refuses every correct invocation. Found while trying to open the pull request for #346.
+#
+# The invariant is unchanged — the branch must still look like `<number>-<slug>`. Only the
+# source of the name moves.
+#
+# Words arrive already split (heredoc bodies stripped, `set -f` so no globbing), so quoting
+# is gone by this point: a `--head` inside a quoted title would look like a flag. A candidate
+# carrying a quote character is therefore not treated as a branch name, which covers the
+# common prose case and nothing more.
+head_branch() { # head_branch <words...> -> branch named by --head/-H, empty when absent
+  local w cand
+  while [ "$#" -gt 0 ]; do
+    w=$1; shift
+    case "$w" in
+      --head=*) cand=${w#--head=} ;;
+      -H=*)     cand=${w#-H=} ;;
+      --head|-H) cand=${1:-} ;;
+      *) continue ;;
+    esac
+    case "$cand" in ''|-*|*[\"\']*) continue ;; esac
+    printf '%s' "${cand#*:}"   # a fork's head is `owner:branch`
+    return
+  done
+}
+
 cmd=$(jq -r '.tool_input.command // empty' 2>/dev/null || true)
 [ -n "$cmd" ] || exit 0
 
@@ -84,10 +113,17 @@ That one call creates the issue, reuses an existing item of the same title, puts
 If the owner asked for the raw command, re-run it prefixed with DELIVERY_GUARD=off." ;;
 
     "pr create")
-      case "$branch" in
+      named=$(head_branch "$@")
+      source_branch=${named:-$branch}
+      if [ -n "$named" ]; then
+        where="--head names '$named'"
+      else
+        where="HEAD is '${branch:-unknown}'"
+      fi
+      case "$source_branch" in
         [0-9]*-*) ;;  # issue-linked branch from `gh issue develop` — allowed
         *)
-          decide deny "Refused: HEAD is '${branch:-unknown}', which carries no issue number, so this pull request would have no issue and no board entry behind it.
+          decide deny "Refused: $where, which carries no issue number, so this pull request would have no issue and no board entry behind it.
 
 Get the issue and its branch first:
   $START --title \"...\" --priority Major --status \"In progress\" --base master
