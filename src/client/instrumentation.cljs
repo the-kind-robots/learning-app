@@ -1,9 +1,10 @@
 (ns instrumentation
   "In-page measurement for development. Answers, with numbers, what the
    browser did: how many times the app rendered, how many dispatches ran and
-   how they nested, what the standard web metrics say, which frames blocked
-   the main thread and who blocked them, how long the dictionary took to
-   become usable, and how much storage it occupies.
+   how they nested, what the standard web metrics say, how much layout
+   shifted including the input-caused shifts CLS excludes, which frames
+   blocked the main thread and who blocked them, how long the dictionary
+   took to become usable, and how much storage it occupies.
 
    Installed only under goog.DEBUG — a release build eliminates the whole
    namespace. Read from the page as `window.__metrics()`, reset with
@@ -26,6 +27,7 @@
   {:dictionary        {}
    :dispatches        0
    :frames            0
+   :layout-shift      {:entries [] :input-excluded 0.0 :score 0.0}
    :long-frames       []
    :nested-dispatches 0
    :renders           0
@@ -205,6 +207,30 @@
                         ctx)})
 
   (count-frames!)
+
+  ;; CLS is defined to ignore what follows the user's own interaction: every
+  ;; layout-shift entry within 500 ms of input carries hadRecentInput, and the
+  ;; score skips it. Typing is input, so a form that jumps under the finger
+  ;; while a word is entered scores zero — web-vitals reports zero and is
+  ;; right to. Hence a second counter off the same stream: :score sums every
+  ;; entry regardless, and :input-excluded is the part CLS discarded, which on
+  ;; a form measured while typing is all of it.
+  (observe! "layout-shift"
+            (fn [entry]
+              (let [recent-input? (.-hadRecentInput ^js entry)
+                    value (.-value ^js entry)]
+                (swap! metrics update
+                  :layout-shift
+                  (fn [shift]
+                    (cond-> (-> shift
+                                (update :entries
+                                        conj
+                                        {:had-recent-input? recent-input?
+                                         :start-time (.-startTime ^js entry)
+                                         :value      value})
+                                (update :score + value))
+                      recent-input? (update :input-excluded + value))))))
+            {})
 
   ;; A long animation frame is the whole frame — script, style, layout, paint
   ;; — where a long task was only the script inside it. `blockingDuration` is

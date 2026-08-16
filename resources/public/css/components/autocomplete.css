@@ -53,37 +53,18 @@
   vertical-align: middle;
 }
 
+/* Phones overlay the list too (#289). It used to open in flow here, animating
+   184px of height into the page — and since `.home__content` centres the add
+   panel, that height went both ways: the value field being typed into rose
+   92px out from under the finger while the submit button sank 92px. Measured
+   over five runs it scored 0.053-0.058 unfiltered layout shift, past the 0.05
+   budget, and every point of it was invisible to CLS because typing is recent
+   input. As an overlay the list moves nothing at all.
+
+   What the phone still needs is a shorter list: the software keyboard takes
+   roughly a third of the screen, which the viewport units account for. */
 @media (hover: none), (pointer: coarse), (max-width: 600px) {
-  .autocomplete {
-    display: flex;
-    flex-direction: column;
-  }
-
   .suggestions {
-    position: static;
-    left: auto;
-    right: auto;
-    height: 0;
-    max-height: none;
-    margin-top: 0;
-    opacity: 0;
-    overflow: hidden auto;
-    transition: height 180ms ease-out, opacity 140ms ease-out, margin-top 180ms ease-out;
-  }
-
-  .suggestions:empty {
-    display: block;
-    padding-top: 0;
-    padding-bottom: 0;
-    border-width: 0;
-  }
-
-  .autocomplete:has(.suggestions:not(:empty)) .suggestions {
-    border-width: 1px;
-    height: min(176px, 34svh);
-    margin-top: 8px;
-    opacity: 1;
-    padding-top: 4px;
-    padding-bottom: 4px;
+    max-height: min(240px, 34svh);
   }
 }

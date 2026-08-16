@@ -1,0 +1,74 @@
+;; The dictionary the browser suite serves (#289). Built into
+;; target/test-dictionary by `clojure -X:dictionary-fixture`, served by a
+;; backend started with LEARNING_APP__DICTIONARY_DIR.
+;;
+;; Why not the shipped dictionary: it is 37 MB, every Playwright test gets a
+;; fresh context, and the SQLite worker imports the whole file into an empty
+;; OPFS before the first suggestion can appear.
+;;
+;; Two properties the specs depend on — do not break them casually:
+;;
+;;   - every prefix of "Fenster" (f, fe, fen, fens, fenst, fenste, fenster)
+;;     matches at least one surface form, so the list opens once and never
+;;     collapses mid-word: one clean open to measure;
+;;   - "fenster" matches exactly two lemmas, which is how a spec tells this
+;;     fixture apart from the shipped dictionary. Forget the environment
+;;     variable and the suite fails loudly instead of quietly crawling.
+;;
+;; Shape is what dictionary.materialize/build-table-data consumes. Surface
+;; forms are derived from :value and :forms by the same materializer the real
+;; build runs, so normalization can never drift from what the client queries.
+;; Ranks are distinct: ordering is `rank DESC, value ASC`.
+[{:value        "das Fenster"
+  :pos          "noun"
+  :rank         900
+  :forms        ["Fensters" "Fenstern"]
+  :translations [{:lang "ru" :value "окно"}]}
+
+ {:value        "die Fensterbank"
+  :pos          "noun"
+  :rank         300
+  :forms        ["Fensterbänke"]
+  :translations [{:lang "ru" :value "подоконник"}]}
+
+ {:value        "der Fehler"
+  :pos          "noun"
+  :rank         850
+  :forms        ["Fehlers" "Fehlern"]
+  :translations [{:lang "ru" :value "ошибка"}]}
+
+ {:value        "das Feld"
+  :pos          "noun"
+  :rank         800
+  :forms        ["Feldes" "Felder" "Feldern"]
+  :translations [{:lang "ru" :value "поле"}]}
+
+ {:value        "die Frage"
+  :pos          "noun"
+  :rank         880
+  :forms        ["Fragen"]
+  :translations [{:lang "ru" :value "вопрос"}]}
+
+ {:value        "finden"
+  :pos          "verb"
+  :rank         870
+  :forms        ["findet" "fand" "gefunden"]
+  :translations [{:lang "ru" :value "находить"}]}
+
+ {:value        "fahren"
+  :pos          "verb"
+  :rank         860
+  :forms        ["fährt" "fuhr" "gefahren"]
+  :translations [{:lang "ru" :value "ехать"}]}
+
+ {:value        "das Haus"
+  :pos          "noun"
+  :rank         890
+  :forms        ["Hauses" "Häuser" "Häusern"]
+  :translations [{:lang "ru" :value "дом"}]}
+
+ {:value        "der Hund"
+  :pos          "noun"
+  :rank         840
+  :forms        ["Hundes" "Hunde" "Hunden"]
+  :translations [{:lang "ru" :value "пёс"}]}]
