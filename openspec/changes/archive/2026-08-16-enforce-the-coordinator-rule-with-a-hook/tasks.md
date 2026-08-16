@@ -27,4 +27,29 @@
       the main checkout and a passing executor edit in a worktree.
 - [x] Verify: confirm the executor sequence — issue branch, worktree on it, edits — runs with
       no refusal from this hook.
+- [x] Register the same hook on `Bash`, as a second independent entry, because the editor
+      matcher was the only guarded route and the unguarded one beside it was used three times
+      while this change was being built.
+- [x] Make the Bash decision `ask` and never `deny`: an editor target is given in the payload,
+      a shell target is parsed out of a string. Write the reason for that asymmetry into the
+      header comment.
+- [x] Emit `ask` or nothing on the Bash event — never `allow` — so this hook cannot undercut
+      the refusals `delivery-guard.sh` returns for `gh issue create` and `gh pr create` on the
+      same event.
+- [x] Scope the Bash check to the coordinator only, to a short list of write shapes, and to
+      targets that look like they are inside the repository. Reuse `delivery-guard.sh`'s
+      heredoc stripping and statement splitting so prose in an issue or pull request body is
+      never parsed as a command.
+- [x] State in the header comment that the list of Bash write shapes is knowingly incomplete
+      and cannot be completed, that anything not on it reaches the repository unchallenged,
+      and that the guarantee is the stop-and-report rule with the hook as its tripwire.
+- [x] Fix `delivery-guard.sh`: judge `gh pr create` by the branch named with `--head`/`-H`
+      when the command names one — separated and joined forms, fork `owner:` prefix stripped —
+      and by the current branch only when it does not. Found while trying to open this pull
+      request: under the coordinator rule the opening session sits in the main checkout on
+      `master`, so the current-branch test refused every correct invocation.
+- [x] Verify both hooks with crafted payloads: `--head` accepted and refused, the no-`--head`
+      path and the `gh issue create` / `git checkout -b` / `DELIVERY_GUARD=off` decisions
+      unchanged, the Bash matcher asking on repository writes, staying silent on `/tmp` and on
+      subagents, and never emitting `allow`.
 - [x] Archive the change on the delivery branch before opening the pull request.
