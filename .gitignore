@@ -80,3 +80,7 @@ test-app.db*
 /.tmp/
 /src/client/sqlite3_cjs.js
 .claude/worktrees/
+# A worktree an agent pinned to another worktree had to nest inside it (#346).
+# Without this, staging everything in the parent records the inner checkout as
+# an embedded repository.
+/wt-*/
