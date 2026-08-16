@@ -42,6 +42,28 @@
             "statusMessage": "Checking delivery flow..."
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'g=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/coordinator-guard.sh\"; [ -r \"$g\" ] || g=.claude/hooks/coordinator-guard.sh; [ -r \"$g\" ] || exit 0; exec bash \"$g\"'",
+            "timeout": 10,
+            "statusMessage": "Checking who is writing..."
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'g=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/coordinator-guard.sh\"; [ -r \"$g\" ] || g=.claude/hooks/coordinator-guard.sh; [ -r \"$g\" ] || exit 0; exec bash \"$g\"'",
+            "timeout": 10,
+            "statusMessage": "Checking who is editing..."
+          }
+        ]
       }
     ]
   }
