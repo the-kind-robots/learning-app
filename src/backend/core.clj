@@ -514,12 +514,19 @@
                  (response/header "X-Auth-Token" (hmac-sign (str user-id) db-auth-secret)))
              {:status 401})))}]
 
+     ;; Every answer here costs money at the provider, so the token is checked
+     ;; before the parameters are: an anonymous caller does not even get told
+     ;; which parameter it forgot.
      ["/api/examples"
       {:get
        (fn [request]
          (let [{:keys [context word translation]} (:params request)
                context (utils/non-blank context)]
            (cond
+             (nil? (on-connection [db db-spec]
+                     (authenticated-user-id db (request-token request))))
+             {:status 401 :body ""}
+
              (str/blank? word)
              {:status  400
               :headers {"Content-Type" "application/json"}

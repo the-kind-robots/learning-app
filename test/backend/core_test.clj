@@ -4,6 +4,7 @@
    [clojure.test :refer [deftest is testing]]
    [core :as sut]
    [db :as db]
+   [examples :as examples]
    [migrations :as migrations]
    [next.jdbc :as jdbc]
    [next.jdbc.result-set :as result-set]
@@ -122,6 +123,42 @@
           (is (nil? @sut/server))))
       (finally
        (sut/stop-server!)))))
+
+
+(deftest example-generation-answers-only-an-authenticated-session
+  (let [db (migrated-db)
+        generations (atom 0)]
+    (add-account! db 1 "token-of-one")
+    (with-redefs [sut/db-spec db
+                  examples/generate-one! (fn [_]
+                                           (swap! generations inc)
+                                           {:translation "У дома есть сад."
+                                            :value       "Das Haus hat einen Garten."})]
+      (sut/start-server! sut/app-handler 0)
+      (try
+        (let [port (server/server-port @sut/server)
+              ask  (fn [cookie query]
+                     @(client/request
+                       (cond-> {:method :get
+                                :url    (str "http://localhost:" port "/api/examples" query)}
+                         cookie (assoc :headers {"Cookie" (str "auth-token=" cookie)}))))]
+          (testing "a request with no session is refused"
+            (is (= 401 (:status (ask nil "?word=Haus")))))
+          (testing "a token nobody minted is refused"
+            (is (= 401 (:status (ask "invented" "?word=Haus")))))
+          (testing "an anonymous caller is not even told which parameter is missing"
+            (is (= 401 (:status (ask nil "")))))
+          (testing "nothing was generated for any of them"
+            (is (zero? @generations)))
+          (testing "the session that owns an account is served"
+            (let [response (ask "token-of-one" "?word=Haus")]
+              (is (= 200 (:status response)))
+              (is (str/includes? (:body response) "Das Haus hat einen Garten."))
+              (is (= 1 @generations))))
+          (testing "and an authenticated caller still gets its validation error"
+            (is (= 400 (:status (ask "token-of-one" ""))))))
+        (finally
+         (sut/stop-server!))))))
 
 
 (deftest the-build-and-the-server-agree-on-where-the-version-lives

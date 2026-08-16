@@ -45,7 +45,12 @@
         url      (if (utils/non-blank collection-name)
                    (str url "&context=" (js/encodeURIComponent collection-name))
                    url)
-        response (await (js/fetch url))]
+        ;; The endpoint authenticates by the session cookie, so the request
+        ;; must carry it. Relative and same-origin, the browser would attach it
+        ;; under the default anyway; "include" keeps it attached even if the URL
+        ;; ever gains an origin, where the default would silently stop sending
+        ;; it and every example would come back 401.
+        response (await (js/fetch url #js {:credentials "include"}))]
     (if (.-ok response)
       (let [json (try
                    (await (.json response))
