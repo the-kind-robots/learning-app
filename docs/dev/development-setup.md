@@ -184,10 +184,17 @@ Restart CouchDB after copying the config.
 
 ### 4. Install the Nginx config
 
+The site config `include`s a snippet, so copy both — nginx refuses to start when
+an included file is missing. The include is relative, and nginx resolves it
+against the directory holding `nginx.conf`.
+
 ```bash
 # macOS
+mkdir -p /opt/homebrew/etc/nginx/snippets
+cp infra/development/etc/nginx/snippets/couchdb-proxy-auth-strip.conf /opt/homebrew/etc/nginx/snippets/
 cp infra/development/etc/nginx/sites-available/sprecha.localhost.conf /opt/homebrew/etc/nginx/servers/
 # Ubuntu/WSL
+sudo cp infra/development/etc/nginx/snippets/couchdb-proxy-auth-strip.conf /etc/nginx/snippets/
 sudo cp infra/development/etc/nginx/sites-available/sprecha.localhost.conf /etc/nginx/sites-available/
 sudo ln -sf /etc/nginx/sites-available/sprecha.localhost.conf /etc/nginx/sites-enabled/
 ```
