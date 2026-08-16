@@ -166,6 +166,8 @@ the same explanation.
 
 Tracked work SHALL happen on a branch created from its issue, including when the work is isolated in a worktree. The repository SHALL record, for each situation it puts agents in, an order that satisfies both the branch rule and the worktree rule and that runs to a pushed branch without a refused command. Where an agent cannot create a worktree beside its own, the recorded order SHALL say so and give the one that works, naming the tool that must not be used and why. A session that coordinates tracked work SHALL delegate repository edits rather than making them and SHALL stay in the main checkout, because an agent launched from a worktree inherits that pin and can no longer place its own work in a worktree of its own.
 
+Where the coordinating session runs in the background, the repository SHALL record that no third option exists, next to the delegation rule itself rather than leaving it to be discovered when a write is refused. The coordinator stays in the main checkout, and the harness refuses a background session's writes to the shared checkout; together those leave exactly one destination, so every delegated edit SHALL be placed in a worktree on the issue branch. An agent delegated such an edit SHALL be launched with worktree isolation, or the coordinator SHALL enter a worktree before launching it; otherwise the agent stops on its first write having done nothing.
+
 #### Scenario: Work is isolated in a worktree
 
 - **WHEN** a task needs a worktree
@@ -185,6 +187,12 @@ Tracked work SHALL happen on a branch created from its issue, including when the
 
 - **WHEN** a coordinating session needs a repository edit
 - **THEN** it delegates that edit and stays in the main checkout, so the agent it launches can create its own `.claude/worktrees/<slug>` from the issue branch and work there
+
+#### Scenario: A background coordinating session delegates an edit
+
+- **WHEN** the coordinating session runs in the background and delegates a repository edit
+- **THEN** the edit is placed in a worktree, because writes to the shared checkout are refused for a background session and the coordinator does not make the edit itself
+- **AND** that constraint is already stated with the delegation rule, so it is not first learned from the refusal
 
 ### Requirement: Filing an issue stays within a small share of the API budget
 
