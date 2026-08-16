@@ -53,7 +53,7 @@
 
 (defn ^:async copy-type!
   [local-db dest-db doc-type]
-  (let [{:keys [docs]} (await (db/find local-db {:selector {:type doc-type}}))]
+  (let [{:keys [docs]} (await (db/find-all local-db {:selector {:type doc-type}}))]
     (when (seq docs)
       (log/info :db-migrations/copy-type {:type doc-type :count (count docs)}))
     (await (js/Promise.all (into-array (map #(copy-doc! dest-db %) docs))))))
@@ -94,10 +94,10 @@
         (log/info :db-migrations/already-complete {:id task-data-migration-id})
         :already-complete)
       (do
-        (let [{:keys [docs]} (await (db/find device-db
-                                             {:selector {:type    "task"
-                                                         :word-id {:$exists true}
-                                                         :data    {:$exists false}}}))]
+        (let [{:keys [docs]} (await (db/find-all device-db
+                                                 {:selector {:type    "task"
+                                                             :word-id {:$exists true}
+                                                             :data    {:$exists false}}}))]
           (doseq [task docs]
             (await (db/insert device-db
                               (-> task
