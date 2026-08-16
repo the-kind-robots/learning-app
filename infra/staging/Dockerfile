@@ -15,11 +15,14 @@ RUN printf '%s\n' \
         'Acquire::https::Timeout "30";' \
     > /etc/apt/apt.conf.d/80-staging-timeouts
 
-# systemd as PID 1 plus tooling for the repo setup below.
+# systemd as PID 1 plus tooling for the repo setup below. netcat-openbsd is for
+# the smoke alone: it stands in for an upstream so an assertion can read the
+# request nginx actually forwards. It never enters the production deb.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         systemd systemd-sysv dbus \
         curl ca-certificates gnupg apt-transport-https openssl \
+        netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # CouchDB apt repository — the same source admin-setup.sh --bootstrap adds.
