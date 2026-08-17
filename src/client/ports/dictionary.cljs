@@ -7,7 +7,4 @@
   [{:keys [db]}]
   {:dictionary/completions (fn completions
                              [prefix]
-                             (dictionary/completions db prefix))
-   :dictionary/ready?      (fn ready?
-                             []
-                             (dictionary/ready? db))})
+                             (dictionary/completions db prefix))})

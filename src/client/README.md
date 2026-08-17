@@ -52,6 +52,8 @@ src/client/
 
 **Dictionary worker** — SQLite WASM runs in a dedicated Web Worker (`resources/public/`). `ports/dictionary.cljs` exposes the app-facing capability; `adapters/dictionary.cljs` executes SQL through the worker proxy. Never query the dictionary from the main thread directly.
 
+Every tab has a worker, but the dictionary belongs to the tab being typed into: `opfs-sahpool` admits a single holder, so a tab takes the `sqlite-opfs-sahpool` Web Lock when it comes to the foreground — on screen *and* holding the keyboard — and gives it back when it leaves (`sqlite3-dictionary.js`, ADR-0012). Visibility alone would not do: two tabs can be visible side by side and only one is being used. A tab holds the queries asked of it until its turn starts, which is normally the tab you just switched to, still loading, with the user already typing — so never gate a call on readiness; just ask.
+
 **IndexedDB** — lessons, retention scores, and vocabulary lists. Migrations run at startup via `db_migrations.cljs`. `lib/db` macros abstract the IDB API.
 
 **Service worker** — plain JS (`resources/public/`). Caches static assets; does not run ClojureScript.

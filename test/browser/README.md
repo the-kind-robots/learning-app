@@ -45,6 +45,22 @@ the fixture's words too — but slowly, and
 `add-form-stability.mobile.spec.js` fails on its match count, which is there
 to say so out loud.
 
+### Several tabs at once
+
+`dictionary-focus.spec.js` opens more than one page in the same context on
+purpose: only one tab can hold `opfs-sahpool`, and which one it is follows
+visibility (#351, ADR-0012). Pages of *different* contexts share nothing —
+separate storage, separate lock — so they prove nothing here.
+
+Playwright cannot hide a page: every page reports `visible`,
+`bringToFront()` does not change that, and
+`Emulation.setPageVisibilityOverride` is gone from the protocol. All three
+were checked against this Chrome. So that spec shims `document.hidden` and
+dispatches the real `visibilitychange`, which drives the whole app path —
+page listener, worker message, lock, pool, database. It does not reproduce
+Android freezing a backgrounded tab, which is the reason the rule exists;
+nothing here covers that.
+
 ## CI
 
 The `Browser Tests` job in `.github/workflows/integration.yml` runs the same
@@ -56,6 +72,13 @@ uploads `test-results/` (traces) and the backend log as an artifact.
 
 - Role- and label-based locators (`getByRole`, `getByLabel`) with auto-waiting
   assertions. No `waitForTimeout`, no CSS-class locators.
+  - One exception, and it needs the reason stated at the call site:
+    asserting that something *never* appears. Auto-waiting expresses "wait
+    until true", so there is nothing for it to wait for, and the only way to
+    establish a negative is to let time pass first. `dictionary-focus.spec.js`
+    does this through a named `nothingHappensFor` helper — a bare
+    `waitForTimeout` before a positive assertion is still a flake waiting to
+    happen and still banned.
 - Each test gets a fresh browser context, so client-side storage starts empty
   and tests are order-independent.
 - Geometry and performance specs additionally read `boundingBox()` and

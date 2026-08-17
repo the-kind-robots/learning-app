@@ -18,8 +18,12 @@
    (fn ^:async suggest!
      [dispatch dictionary value]
      (try
-       (when-let [completions (when ((:dictionary/ready? dictionary))
-                                (await ((:dictionary/completions dictionary) value)))]
+       ;; No readiness check: this tab's worker holds a query asked before it
+       ;; has the database open and answers it when its turn comes, so the
+       ;; first keystrokes of a cold start get suggestions late instead of
+       ;; never (#351). A worker that could not open it rejects, which the
+       ;; catch below reports.
+       (let [completions (await ((:dictionary/completions dictionary) value))]
          ;; The queried value rides along so the action can drop answers that
          ;; arrive after further typing (stale list, stale translation prefill).
          (dispatch [[:action/update-suggestions {:completions completions :value value}]]))
