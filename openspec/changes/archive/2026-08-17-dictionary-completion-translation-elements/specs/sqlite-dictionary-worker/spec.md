@@ -1,36 +1,4 @@
-# sqlite-dictionary-worker Specification
-
-## Purpose
-TBD - created by archiving change replicant-nexus-migration. Update Purpose after archive.
-## Requirements
-### Requirement: Dictionary SQLite runs in a Dedicated Worker
-The system SHALL run the SQLite dictionary (`opfs-sahpool` VFS) inside a Dedicated Worker; the main thread SHALL NOT access SQLite synchronously.
-
-#### Scenario: Worker initialises on boot
-- **WHEN** the main thread boots
-- **THEN** it spawns the dictionary Dedicated Worker
-- **AND** the worker initialises official SQLite WASM and `opfs-sahpool`
-- **AND** it fetches `/dictionary/manifest`
-- **AND** if the local pool does not contain the current hash file, the worker fetches and imports it
-- **AND** it opens the dictionary database
-
-#### Scenario: Worker initialisation failure is non-fatal
-- **WHEN** the dictionary worker fails to initialise (e.g. network unavailable, OPFS quota)
-- **THEN** the error is logged
-- **AND** autocomplete does not block the UI
-
-### Requirement: Main thread queries the worker via postMessage RPC
-The system SHALL provide a worker proxy on the main thread that sends SQL exec messages to the worker and returns Promises resolved by matching request id.
-
-#### Scenario: Exec call over RPC
-- **WHEN** the dictionary repo needs completions for a prefix
-- **THEN** it sends a SQL `exec` request with a unique request id to the worker proxy
-- **AND** the Promise resolves when the worker posts the matching response
-
-#### Scenario: Completion before worker ready
-- **WHEN** the home suggest effect runs before the worker has finished initialising
-- **THEN** it does not issue the SQL request
-- **AND** no completion suggestions are written
+## MODIFIED Requirements
 
 ### Requirement: Worker completion result supports home autocomplete
 The system SHALL return completion rows that the home add-word form can render and use to prefill translation. Each row's translations SHALL be carried as discrete elements from the query to the caller, so that no character occurring inside a translation can change how many translations a lemma has. The client SHALL NOT split a completion's translations on any separator.
@@ -75,4 +43,3 @@ The completions SQL SHALL select the ten winning lemmas before joining translati
 - **WHEN** the translation aggregate is changed
 - **THEN** its cost is measured against the shipped dictionary on the prefixes `f`, `fe`, `fen`, `sch`, `hau` and `a`
 - **AND** the before and after figures are recorded with the change
-
