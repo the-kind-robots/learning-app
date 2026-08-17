@@ -149,11 +149,14 @@
   ;; Picking a suggestion decides the mode by its pos, overriding the space
   ;; heuristic: a multi-word pos=phrase lemma is a phrase, anything else a
   ;; word. Click payloads carry a precomputed :phrase?, keyboard selection
-  ;; hands the raw completion with :pos — accept either.
+  ;; hands the raw completion with :pos — accept either. The lemma is stored
+  ;; with it: the decision was about that lemma and expires when the value
+  ;; stops being it (GH-358).
   [[:effect/save
-    {:home/mode-override (if (or (:phrase? item) (phrase/phrase-suggestion? item))
-                           :phrase
-                           :word)
+    {:home/mode-override {:mode  (if (or (:phrase? item) (phrase/phrase-suggestion? item))
+                                   :phrase
+                                   :word)
+                          :value lemma}
      :home/suggestions   empty-suggestions
      :home/translation   (str/join ", " translations)
      ;; A deliberate pick owns the field: later dictionary answers must not

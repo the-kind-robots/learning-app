@@ -66,12 +66,30 @@
     (is (false? (sut/phrase-suggestion? {:lemma "sich freuen" :pos "verb"})))))
 
 
-(deftest add-mode-override-wins
-  (testing "override beats the heuristic in both directions"
-    (is (= :word (sut/add-mode "auf jeden Fall" [] :word)))
-    (is (= :phrase (sut/add-mode "Fenster" [] :phrase)))
+(deftest add-mode-without-a-pick-follows-the-value
+  (testing "nothing picked leaves the heuristic alone"
     (is (= :phrase (sut/add-mode "auf jeden Fall" [] nil)))
-    (is (= :word (sut/add-mode "Fenster" [] nil)))))
+    (is (= :word (sut/add-mode "Fenster" [] nil)))
+    (is (= :word (sut/add-mode "" [] nil)))))
+
+
+(deftest add-mode-pick-beats-the-heuristic-on-its-own-lemma
+  (testing "a pick decides both directions for the lemma it was made for"
+    (is (= :word (sut/add-mode "auf jeden Fall" [] {:mode :word :value "auf jeden Fall"})))
+    ;; the suggestions are cleared by the pick, so nothing but the pick knows
+    ;; this article pair is a phrase
+    (is (= :phrase (sut/add-mode "das heißt" [] {:mode :phrase :value "das heißt"}))))
+  (testing "the value is the vocabulary identity, not the typed characters"
+    (is (= :phrase (sut/add-mode "Das Heißt " [] {:mode :phrase :value "das heißt"})))))
+
+
+(deftest add-mode-pick-expires-when-the-value-is-edited
+  (testing "typing a phrase onto a picked word re-runs the heuristic (GH-358)"
+    (is (= :phrase (sut/add-mode "das Haus ist gross" [] {:mode :word :value "das Haus"}))))
+  (testing "the picked lemma itself still decides while it is unchanged"
+    (is (= :word (sut/add-mode "das Haus" [] {:mode :word :value "das Haus"}))))
+  (testing "shortening away from a picked phrase falls back to the value"
+    (is (= :word (sut/add-mode "das" [] {:mode :phrase :value "das heißt"})))))
 
 
 (deftest update-phrase-replaces-translation-whole
