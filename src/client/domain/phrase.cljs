@@ -84,10 +84,17 @@
 
 
 (defn add-mode
-  "The add form's mode: an explicit override wins, otherwise the value itself
-   decides against the completions on screen."
-  [value completions override]
-  (or override
+  "The add form's mode. A picked suggestion settles it for the lemma picked —
+   `das heißt` is a phrase the article exception would call a word, and the
+   suggestions it came from are gone by then — but only while the value still
+   is that lemma. Typing on turns it into something nobody picked, so the value
+   decides again against the completions on screen (GH-358). Same lemma means
+   the same normalized value: that is what makes one vocabulary document."
+  [value completions {picked-mode :mode picked-value :value}]
+  (or (when (and picked-mode
+                 (= (vocabulary/normalize-value value)
+                    (vocabulary/normalize-value picked-value)))
+        picked-mode)
       (if (phrase-value? value completions) :phrase :word)))
 
 
