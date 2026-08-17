@@ -8,6 +8,21 @@
 (def ^:private empty-suggestions nil)
 
 
+(defn- prefill-text
+  "The text a completion puts into the translation field. The dictionary hands
+   its translations over as one `GROUP_CONCAT` string that the adapter splits on
+   `,` (#362), which leaves the space after the comma on the next piece. Trimming
+   before rejoining gives the stored text back: `без того, чтобы` arrives whole
+   instead of as `без того,  чтобы`, and several translations still read as
+   `пёс, собака`. It matters more than it used to — whatever the field holds is
+   now stored as one translation, so what is shown here is what is saved."
+  [translations]
+  (->> translations
+       (map str/trim)
+       (remove str/blank?)
+       (str/join ", ")))
+
+
 (nxr/register-action! :action/go-to-home
   (fn go-to-home [_]
     [[:effect/navigate :page/home]]))
@@ -82,7 +97,7 @@
         [[:effect/save
           (cond-> {:home/suggestions (suggestions completions)}
             (not (:home/translation-typed? state))
-            (assoc :home/translation (str/join ", " translations)))]]))))
+            (assoc :home/translation (prefill-text translations)))]]))))
 
 
 (nxr/register-action! :action/show-word-error
@@ -109,13 +124,6 @@
         (and (str/blank? value) (not (:home/translation-typed? state)))
         (assoc :home/translation ""))]
      [:effect/suggest-completions value]]))
-
-
-(nxr/register-action! :action/submit-if-enter
-  (fn submit-if-enter [_ {:keys [key shift?]}]
-    (when (and (= "Enter" key) (not shift?))
-      [[:effect/prevent-default]
-       [:effect/request-submit]])))
 
 
 (nxr/register-action! :action/update-translation
@@ -155,7 +163,7 @@
                            :phrase
                            :word)
      :home/suggestions   empty-suggestions
-     :home/translation   (str/join ", " translations)
+     :home/translation   (prefill-text translations)
      ;; A deliberate pick owns the field: later dictionary answers must not
      ;; overwrite what the user chose.
      :home/translation-typed? true
@@ -190,7 +198,9 @@
          [:effect/save {:home/suggestions empty-suggestions}]]
 
         ;; No suggestions on screen: Enter moves on to the translation field —
-        ;; the phrase flow's typing rhythm (phrase, Enter, translation, Enter).
+        ;; the phrase flow's typing rhythm (phrase, Enter, translation, and
+        ;; then Ctrl/Cmd+Enter or the button, since Enter belongs to the text
+        ;; in a field that takes several lines).
         (and (zero? n) (= key "Enter"))
         [[:effect/prevent-default]
          [:effect/focus focus-id]]))))

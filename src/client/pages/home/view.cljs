@@ -87,9 +87,13 @@
           :on           {:focus   [[:effect/autogrow-target]]
                          :input   [[:action/update-translation [:event.target/value]]
                                    [:effect/autogrow-target]]
-                         :keydown [[:action/submit-if-enter
-                                    {:key    [:event.keyboard/key]
-                                     :shift? [:event.keyboard/shift?]}]]}}]]]
+                         ;; A translation may span several lines, so a bare
+                         ;; Enter belongs to the text. Submitting takes a
+                         ;; modifier — or the button, the only path on a phone.
+                         :keydown [[:action/submit-if-ctrl-enter
+                                    {:key   [:event.keyboard/key]
+                                     :ctrl? [:event.keyboard/ctrl?]
+                                     :meta? [:event.keyboard/meta?]}]]}}]]]
       [:button.home__add-form-submit.big-button.big-button--request-stable
        {:type "submit"} "ДОБАВИТЬ"]]]))
 

@@ -49,6 +49,12 @@
   {:lemma "Hut" :translations ["шляпа"] :exact? true})
 
 
+(def ohne
+  "One stored translation, `без того, чтобы`, as the transport delivers it —
+   `GROUP_CONCAT`ed and split back on `,` by the adapter (#362)."
+  {:lemma "ohne" :translations ["без того" " чтобы"] :exact? true})
+
+
 (defn- test-system
   "System whose stub dictionary answers from `completions-by-prefix`;
    unknown prefixes (including the empty one) answer [], like the adapter."
@@ -190,6 +196,21 @@
       (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value "auf"}]])
       (is (nil? (suggestion-items store)))
       (is (nil? (:home/translation @store))))))
+
+
+(deftest a-prefill-hands-over-the-stored-text
+  (async-testing "the form invents no separator: what it shows is stored as one translation (GH-365)"
+    (let [{:keys [store] :as system} (test-system {"ohne" [ohne]})]
+      (nxr/dispatch system {} [[:action/update-word "ohne"]])
+      (await (debounce-elapsed))
+      (is (= "без того, чтобы" (:home/translation @store))))))
+
+
+(deftest a-picked-suggestion-hands-over-the-stored-text
+  (testing "picking the entry fills the field with the same text"
+    (let [{:keys [store] :as system} (test-system {})]
+      (nxr/dispatch system {} [[:action/select-suggestion (assoc ohne :focus-id nil)]])
+      (is (= "без того, чтобы" (:home/translation @store))))))
 
 
 (deftest an-empty-answer-leaves-the-translation-blank
