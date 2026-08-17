@@ -5,14 +5,12 @@
 
 
 (nxr/register-action! :action/show-words
-  (fn show-words [_ {:keys [words total search]}]
+  (fn show-words [_ words]
     [[:effect/save
-      {:page/current  :page/words
-       :page/load     [:effect/load-words]
-       :words/items   (presenter/word-list-props words)
-       :words/total   total
-       :words/search  search
-       :words/editing nil}]]))
+      (merge {:page/current  :page/words
+              :page/load     [:effect/load-words]
+              :words/editing nil}
+             (presenter/page-state words))]]))
 
 
 (nxr/register-action! :action/open-word-edit

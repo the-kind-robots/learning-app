@@ -41,3 +41,37 @@
           items (sut/word-list-props rows)]
       (is (= 2 (count items)))
       (is (= ["word-1" "word-2"] (mapv :id items))))))
+
+
+(def ^:private rows
+  [{:_id "word-1" :value "der Hund" :translation [{:lang "ru" :value "пёс"}] :retention-level 10}])
+
+
+(deftest an-empty-vocabulary-invites-a-first-word
+  (testing "no words in scope at all"
+    (let [props (sut/page-state {:search "" :total 0 :words []})]
+      (is (= "Слов пока нет" (:text (:words/empty-state props))))
+      (is (= "Добавить слово" (:cta (:words/empty-state props)))
+          "the first-run state keeps its call to action")
+      (is (false? (:words/vocabulary? props))
+          "the page chrome is dropped — nothing to search or study"))))
+
+
+(deftest a-filter-with-no-matches-does-not-claim-the-vocabulary-is-empty
+  (testing "words in scope, none of them matching"
+    (let [props (sut/page-state {:search "zzz" :total 1 :words []})]
+      (is (= "Ничего не найдено" (:text (:words/empty-state props))))
+      (is (= "Попробуйте другой запрос" (:hint (:words/empty-state props))))
+      (is (nil? (:cta (:words/empty-state props)))
+          "no invitation to add a first word")
+      (is (true? (:words/vocabulary? props))
+          "the search box stays, so the query can be edited or cleared")
+      (is (= "zzz" (:words/search props))))))
+
+
+(deftest a-filter-with-matches-leaves-no-empty-state
+  (testing "matching rows reach the view"
+    (let [props (sut/page-state {:search "Hund" :total 1 :words rows})]
+      (is (nil? (:words/empty-state props)))
+      (is (= ["word-1"] (mapv :id (:words/items props))))
+      (is (true? (:words/vocabulary? props))))))

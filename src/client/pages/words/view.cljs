@@ -85,23 +85,29 @@
       "Удалить"]]]])
 
 
+(defn- empty-state
+  [{:keys [cta hint text]}]
+  [:div.vocabulary__empty-state
+   [:p.vocabulary__empty-state-text text]
+   [:p.vocabulary__empty-state-hint hint]
+   (when cta
+     [:button.vocabulary__empty-state-cta
+      {:on {:click [[:action/go-to-home]]}}
+      cta])])
+
+
 (defn page
   [state]
-  (let [{:words/keys [items search editing]} state]
+  (let [{:words/keys [items search editing vocabulary?] placeholder :words/empty-state} state]
     [:div.vocabulary
      {:data-vk-overlay true}
      (when editing (edit-dialog editing))
-     (if (empty? items)
+     (if-not vocabulary?
        [:div.vocabulary__list
         [:ul.word-list
          {:id "word-list"}
          [:li.word-list__empty.word-list__empty--no-words
-          [:div.vocabulary__empty-state
-           [:p.vocabulary__empty-state-text "Слов пока нет"]
-           [:p.vocabulary__empty-state-hint "Добавьте первое слово на главной странице"]
-           [:button.vocabulary__empty-state-cta
-            {:on {:click [[:action/go-to-home]]}}
-            "Добавить слово"]]]]]
+          (empty-state placeholder)]]]
        (list
         [:header.vocabulary__header
          [:button.vocabulary__back
@@ -121,22 +127,14 @@
             :enterkeyhint   "search"
             :placeholder    "Поиск"
             :spellcheck     "false"
-            :default-value  (or search "")
+            :default-value  search
             :on             {:input [[:action/search-words [:event.target/value]]]}}]]]
         [:div.vocabulary__list
          [:ul.word-list
           {:id "word-list"}
-          (if (seq items)
-            (for [word items] (word-list-item word))
-            [:li.word-list__empty
-             [:div.vocabulary__empty-state
-              (if (and search (not= "" search))
-                (list
-                 [:p.vocabulary__empty-state-text "Ничего не найдено"]
-                 [:p.vocabulary__empty-state-hint "Попробуйте другой запрос"])
-                (list
-                 [:p.vocabulary__empty-state-text "Слов пока нет"]
-                 [:p.vocabulary__empty-state-hint "Добавьте первое слово на главной странице"]))]])]]
+          (if placeholder
+            [:li.word-list__empty (empty-state placeholder)]
+            (for [word items] (word-list-item word)))]]
         [:footer.vocabulary__footer.page-footer
          [:div.page-footer__action
           [:button.vocabulary__start.big-button.green-button
