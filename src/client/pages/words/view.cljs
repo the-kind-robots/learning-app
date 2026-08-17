@@ -45,34 +45,30 @@
      {:class (when phrase? "word-edit-dialog__inputs--phrase")}
      [:span.word-edit-dialog__value {:lang "de"} value]
      [:span.word-edit-dialog__arrow {:aria-hidden "true"} "→"]
-     (if phrase?
-       [:textarea.word-edit-dialog__input.word-edit-dialog__input--phrase
-        {:name         "translation"
-         :rows         2
-         :autocapitalize "none"
-         :autocomplete "off"
-         :autocorrect  "off"
-         :enterkeyhint "done"
-         :lang         "ru"
-         :placeholder  "Перевод"
-         :spellcheck   "false"
-         :autofocus    true
-         :replicant/on-mount [[:action/move-cursor-to-end]]
-         :on           {:input [[:effect/autogrow-target]]}}
-        ;; textarea ignores a value attribute — the default rides as child text
-        translation]
-       [:input.word-edit-dialog__input
-        {:name           "translation"
-         :autocapitalize "none"
-         :autocomplete   "off"
-         :autocorrect    "off"
-         :enterkeyhint   "done"
-         :lang           "ru"
-         :placeholder    "Перевод"
-         :spellcheck     "false"
-         :default-value  translation
-         :autofocus      true
-         :replicant/on-mount [[:action/move-cursor-to-end]]}])]
+     ;; A textarea for both kinds: a word's translation may span several lines
+     ;; too (GH-365), and an `input` silently swallows the line breaks it is
+     ;; given. Enter therefore belongs to the text here — Ctrl/Cmd+Enter and
+     ;; the save button submit, as on the add form.
+     [:textarea.word-edit-dialog__input.word-edit-dialog__input--multiline
+      {:name         "translation"
+       :rows         (if phrase? 2 1)
+       :class        (when phrase? "word-edit-dialog__input--phrase")
+       :autocapitalize "none"
+       :autocomplete "off"
+       :autocorrect  "off"
+       :enterkeyhint "done"
+       :lang         "ru"
+       :placeholder  "Перевод"
+       :spellcheck   "false"
+       :autofocus    true
+       :replicant/on-mount [[:action/move-cursor-to-end]]
+       :on           {:input   [[:effect/autogrow-target]]
+                      :keydown [[:action/submit-if-ctrl-enter
+                                 {:key   [:event.keyboard/key]
+                                  :ctrl? [:event.keyboard/ctrl?]
+                                  :meta? [:event.keyboard/meta?]}]]}}
+      ;; textarea ignores a value attribute — the default rides as child text
+      translation]]
     [:div.word-edit-dialog__actions
      [:button.word-edit-dialog__save {:type "submit"} "Сохранить"]
      [:button.word-edit-dialog__cancel
