@@ -72,12 +72,16 @@ const interactionLatency = async (page) => {
   return page.evaluate(() => window.__metrics()['web-vitals'].inp.value);
 };
 
-// Nothing animates the list today — the height transition that #289 measured
-// is not in master, so the box reaches its final size in one frame. Two frames
-// is therefore a render sync rather than a wait for an animation, and the
-// `getAnimations()` half stays as a guard: if a transition is ever added back,
-// this settles on it instead of racing it. A cancelled transition rejects —
-// that is a re-render retargeting the same height, not a failure.
+// The list animates its opening over 180 ms — `interpolate-size` makes
+// `height: auto` interpolable, so the box grows to its rows rather than to a
+// fixed height. Shifts therefore arrive spread over a dozen frames and the
+// last lands after the final render. Waiting on the transitions themselves is
+// exact where a timeout would be a guess: two frames for a just-started
+// transition to register, then the browser's own completion promises. A
+// cancelled transition rejects — that is a re-render retargeting the same
+// height, not a failure. Note the list *resizing* does not animate at all:
+// `auto` -> `auto` is no change of computed value, so nothing to wait for
+// there either.
 const settleSuggestions = (page) =>
   page.locator('.suggestions').evaluate(async (list) => {
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -265,19 +269,28 @@ test('the suggestion list fits its rows and pushes the form no further', async (
   // this one is red — it is the open question of #373, not a flake.
   //
   // The unfiltered score is the only shift number that can see typing at all.
-  // Measured on this change: 0.0566 over three entries, [0.0416, 0.0008,
-  // 0.0142], stable across runs. The first is the list opening to its ceiling
-  // and it is *the same shift the phone already produces today* — the fixed
-  // height scored 0.0416 in one entry. The other two are the list narrowing
-  // from six matches to two as the word is typed, which is precisely the
-  // behaviour this issue asks for: a box that shrinks moves the page every
-  // time it shrinks.
+  // Measured on this change with the height animation in place: 0.0502,
+  // 0.0502, 0.0544 over three runs, ten to eleven entries, the last of them
+  // always 0.0142. Without the animation the same typing scored 0.0566 over
+  // three entries, [0.0416, 0.0008, 0.0142].
   //
-  // The 0.05 budget comes from #289, where the in-flow list scored 0.028 — and
-  // it did so with a 180 ms height transition spreading each move over a dozen
-  // frames. Master has no such transition, so the movement lands in one frame
-  // and costs more. The budget is kept at the number it was set to: whether
-  // flow is worth 0.0566, or worth reintroducing the animation for, is a
-  // decision to take against this measurement rather than around it.
+  // So the animation buys 0.006, not the 0.028 that #289 measured, and the
+  // reason is in those entry lists. It animates the *opening* — 0 -> auto is a
+  // change of computed value — spreading 0.0416 into nine entries totalling
+  // 0.036. It cannot animate the list *resizing* as the matches narrow:
+  // `auto` -> `auto` is not a style change, the used height follows the
+  // content, and no transition fires. That last 0.0142 entry is identical with
+  // the animation and without it. #289's 0.028 was one animated move of a box
+  // whose open height was fixed and therefore never resized again — the very
+  // thing this issue is about.
+  //
+  // Splitting a move into frames only helps through the impact fraction, which
+  // is why nine entries cost 0.036 rather than nothing: measured, a 13 %
+  // saving. Applied to the whole 0.0566 that is ~0.049 — the budget is within
+  // the noise of what this layout can reach at all, animated or not.
+  //
+  // The budget is therefore left exactly where #289 set it and this assertion
+  // is red. Whether a content-sized list in the flow is worth 0.0502 is a
+  // decision to take against these numbers, not around them.
   expect(shift.score).toBeLessThan(0.05);
 });

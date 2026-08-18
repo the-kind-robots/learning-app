@@ -37,9 +37,23 @@
       proposal, tasks — that the overlay is superseded by #373, leaving its
       reasoning intact
 
-## 5. Verify
+## 5. Height animation
 
-- [x] 5.1 Measured after, stable over four runs: `submitPush` 94 px,
+- [x] 5.1 Bring the transition back against the content height, not a fixed
+      one: `interpolate-size: allow-keywords` with `height: auto` open and
+      `height: 0` closed, inside `@supports` so unsupported browsers keep the
+      flow, the ceiling and the content height with no animation
+- [x] 5.2 Keep `:empty` displayed with zeroed border and padding on the phone —
+      a `display: none` box cannot transition
+- [x] 5.3 Measure what it reaches: 0.0502 / 0.0502 / 0.0544 over three runs
+      against 0.0566 without. The opening spreads into nine entries totalling
+      0.036; the list *resizing* does not animate at all (`auto` -> `auto` is
+      no change of computed value) and keeps its 0.0142 entry unchanged.
+      300 ms was worse than 180 ms (0.0533), so duration is not a lever.
+
+## 6. Verify
+
+- [x] 6.1 Measured after, stable over four runs: `submitPush` 94 px,
       `listHeight` 90 px (88 px of rows, 1 px border each side), `renders` 14,
       `inp` 48-56 ms — and `shiftScore` **0.0566**, three entries
       `[0.0416, 0.0008, 0.0142]`.
@@ -52,12 +66,20 @@
       each time it shrinks.
 
       The 0.05 budget was set in #289 against an in-flow list that scored 0.028
-      *with a 180 ms height transition*, which spread each move over a dozen
-      frames. Master has no such transition. The budget is left at 0.05 and the
-      spec is red on it: whether flow is worth 0.0566, or worth reintroducing
-      the animation for, is the owner's decision and it needs the real number.
-- [x] 5.2 Rest of the browser suite green: 17 passed, the one failure being the
+      *with a 180 ms height transition*. The transition is now back (task 5),
+      run against the content height rather than a fixed one, and it brings the
+      score to **0.0502** — still over the budget. #289's 0.028 does not
+      reproduce because that box's open height was fixed and never resized
+      again; a content-sized box resizes on every change of match count, and a
+      CSS transition cannot see a resize driven by content.
+
+      The budget is left at 0.05 and the spec is red on it. That is reported,
+      not adjusted: the owner chose the animation on the strength of 0.028, and
+      0.028 is not what this layout produces.
+- [x] 6.2 Rest of the browser suite green: 17 passed, the one failure being the
       budget assertion above (moved last in the spec so everything else is still
       evaluated and reported)
-- [x] 5.3 Screenshots at 390x844 on the fixture dictionary: the device's fixed
-      height (two rows in a 176 px box), master's overlay, and the list in flow
+- [x] 6.3 Screenshots at 390x844 on the fixture dictionary: the device's fixed
+      height (two rows in a 176 px box), master's overlay, and the list in flow.
+      Re-shot with the animation: the resting picture is pixel-identical, since
+      the animation changes how the box gets to its height, not the height

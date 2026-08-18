@@ -71,7 +71,41 @@ height animation, which spread the movement over a dozen frames. That animation
 does not exist in master — there is no `height: 0`, no `transition: height`
 left to remove. So the score should not be expected to fall in proportion with
 the displacement. Measurements are in `tasks.md` and in the pull request, in
-both directions, whatever they say.
+both directions, whatever they say. It did not fall in proportion, and the
+animation was then brought back to try — see the next section for what that
+could and could not reach.
+
+### The height animation returns, and only half the movement is animatable
+
+The owner chose to bring back the height transition #289 removed, on the
+strength of that change's 0.028 against this one's 0.0566. Returning it as it
+was is not available: the old rule animated `height` to `min(176px, 34svh)`,
+and a fixed open height is the defect this change exists to remove. An
+animation must therefore run to the *content*.
+
+`transition: height` interpolates between two values, and `auto` is not one
+until `interpolate-size: allow-keywords` makes it one — shipped in Chrome 129,
+and this is a Chromium phone PWA. So the open state is `height: auto` with the
+transition on it, and the closed state stays what it was before #289: height 0,
+opacity 0, no border, no padding, `:empty` displayed rather than hidden because
+a `display: none` box cannot transition. The whole animation sits inside
+`@supports (interpolate-size: allow-keywords)`; where that is missing the block
+is skipped and the list keeps the flow, the ceiling and the content height, with
+the sizing landing in one frame. Nothing about #373's acceptance depends on the
+animation — no emptiness at rest or at the end of the transition either way.
+
+What the measurement then showed, and it is the point: **the animation covers
+the opening and cannot cover the resizing.** `0 -> auto` is a change of
+computed value and animates. `auto -> auto` is not a change of style at all —
+the used height moves because the content changed — so no transition fires and
+the list narrowing from six matches to two lands in a single frame, exactly as
+it did without the animation. Its 0.0142 entry is identical in both.
+
+That is why #289's 0.028 does not reproduce here. That number was one animated
+move of a box whose open height was fixed, so it never resized again; a
+content-sized box resizes on every keystroke that changes the match count, and
+those are the shifts CSS cannot reach. Only JavaScript could, by writing an
+explicit height, and an explicit height is what this issue is about not having.
 
 ### The mobile spec is rewritten, not relaxed
 
@@ -102,14 +136,18 @@ It is replaced by assertions about the property that actually matters now:
 - **The form moves while typing.** By design now. Bounded at 180 px, which is
   what the phone already does, and it buys back the translation field the
   overlay covered.
-- **The shift score rises from zero, and past the budget.** Measured: 0.0566
-  over three entries, `[0.0416, 0.0008, 0.0142]`, stable across runs. The first
-  is the list opening to its ceiling and is the same shift the device already
-  produces (0.0416 in one entry); the other two are the list narrowing from six
-  matches to two, which is the shrinking the issue asks for. So the total is
-  above the 0.05 budget while every individual move is no worse than today's.
-  The budget is left where #289 set it and the spec is red on it — that is the
-  decision, not a flake.
+- **The shift score rises from zero, and stays past the budget even animated.**
+  Without the animation: 0.0566 over three entries, `[0.0416, 0.0008, 0.0142]`.
+  With it: 0.0502, 0.0502, 0.0544 over three runs, the opening spread into nine
+  entries totalling 0.036 and the narrowing keeping its 0.0142 untouched.
+  Splitting a move across frames only helps through the impact fraction — a
+  measured 13 % — so even a hypothetical animation covering every shift lands
+  near 0.049. The budget is within the noise of what this layout can reach at
+  all. It is left where #289 set it and the spec is red on it: that is the
+  finding, not a flake.
+- **A longer transition does not help.** 300 ms scored 0.0533 against 180 ms's
+  0.0502 — more entries, no less total travel. Measured before settling on
+  180 ms.
 - **`svh` still ignores the keyboard.** Unchanged from before, and unchanged by
   this: `svh` is the small viewport height, deliberately the conservative one.
 
@@ -120,10 +158,12 @@ worker involvement.
 
 ## Open Questions
 
-- Whether 0.0566 justifies flow over the overlay, given that the displacement
+- Whether 0.0502 justifies flow over the overlay, given that the displacement
   fell from 180 px to 94 px and that no single shift is worse than the device's
-  present one. Owner's decision.
-- If the budget is to hold, the lever is the height transition #289 measured:
-  the same in-flow layout scored 0.028 with 180 ms of animation spreading each
-  move over a dozen frames. Not reintroduced here — it was not asked for, and
-  an animation makes a shift cheaper without making it smaller.
+  present one. Owner's decision, and the animation lever has now been spent:
+  it was worth 0.006, not the 0.028 the earlier change reported.
+- If the 0.05 budget must be met, what remains is not a CSS lever. Either the
+  ceiling comes down (less travel, less shift, a shorter list), or the resize
+  is animated from JavaScript by writing an explicit height per render — which
+  reintroduces the explicit height this issue exists to remove, this time
+  computed. Neither is taken here.

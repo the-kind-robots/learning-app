@@ -77,4 +77,58 @@
     position: static;
     right: auto;
   }
+
+  /* The height animation, back from before #289 — but animating to the
+     content, not to a fixed height. `transition: height` needs two values it
+     can interpolate, and the open height here has to be the content's, so
+     `interpolate-size: allow-keywords` is what makes `height: auto` such a
+     value. Chrome has had it since 129 and this is a Chromium phone PWA.
+
+     What it does and does not cover, measured rather than assumed. It
+     animates the opening, 0 -> auto, and that is a change of computed value.
+     It does *not* animate the list resizing as the word narrows the matches:
+     `auto` -> `auto` is not a style change at all, the used height moves
+     because the content did, and a transition never fires. Measured over the
+     word `Fenster`: the opening spreads across nine entries totalling 0.036
+     where it cost 0.0416 in one frame, while the narrowing keeps its 0.0142
+     entry unchanged, animation or not. Total 0.0502 against 0.0566 without.
+
+     Where `interpolate-size` is not supported the `@supports` block is skipped
+     whole and the list keeps the flow, the ceiling and the content height from
+     the rule above: every assertion of #373 still holds, the sizing simply
+     lands in one frame. That is this change without its animation, not a
+     return to the fixed height.
+
+     `:empty` stays displayed here, against the base rule that hides it: a
+     `display: none` box cannot transition, and zeroed padding and border make
+     it invisible anyway. */
+  @supports (interpolate-size: allow-keywords) {
+    .suggestions {
+      height: 0;
+      interpolate-size: allow-keywords;
+      margin-top: 0;
+      opacity: 0;
+      overflow: hidden auto;
+      transition:
+        height 180ms ease-out,
+        margin-top 180ms ease-out,
+        opacity 140ms ease-out;
+    }
+
+    .suggestions:empty {
+      border-width: 0;
+      display: block;
+      padding-bottom: 0;
+      padding-top: 0;
+    }
+
+    .autocomplete:has(.suggestions:not(:empty)) .suggestions {
+      border-width: 1px;
+      height: auto;
+      margin-top: 4px;
+      opacity: 1;
+      padding-bottom: 4px;
+      padding-top: 4px;
+    }
+  }
 }
