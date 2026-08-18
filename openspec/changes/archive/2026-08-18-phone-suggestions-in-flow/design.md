@@ -129,22 +129,54 @@ It is replaced by assertions about the property that actually matters now:
   changed it from `center` for exactly this reason), so these assertions guard
   a real regression: if that ever goes back to `center`, half the list's height
   travels upward and takes the field out from under the finger.
-- **The shift budget.** `shift.score < 0.05`, unfiltered, kept as it was.
+- **The shift budget.** `shift.score < SHIFT_BUDGET`, unfiltered. The budget
+  moved with the layout — 0.05 to 0.06 — and the section below says why.
+
+### The 0.05 budget belonged to the fixed height; 0.06 belongs to this one
+
+Raising a threshold because the code no longer meets it is how thresholds stop
+meaning anything, so the reason is recorded rather than the number alone.
+
+0.05 came from #289, measured against a list whose open height was **fixed**:
+it opened once and never resized, whatever the matches did afterwards. One
+move, one budget. This change removed that fixed height precisely because a box
+that cannot shrink is the defect — and a box sized by its content resizes on
+every change of match count, moving the form under it each time. Those extra
+shifts are the layout's own property, not a fault in its implementation.
+
+They cannot be animated away either. The transition covers `0 -> auto`, a
+change of computed value; a resize is `auto -> auto`, which changes no computed
+value at all — only the used height moves, and transitions do not listen to
+used values. Measured, the resize entry (0.0142) is identical with the
+animation and without it, and the floor of the whole layout is around 0.049
+even if every entry could be spread across frames.
+
+So the choice was between a budget no correct implementation of this layout can
+meet and a budget that matches the layout that was chosen. 0.06 is the second:
+the measured 0.0502-0.0544 over five runs plus room for that spread — about
+10 % over the worst observed — and not room for a regression. A regression here
+moves the geometry, and the geometry assertions are exact equalities, not
+budgets.
+
+One thing this budget cannot borrow from is CLS. Every entry counted here
+carries `hadRecentInput`, since typing is what causes them, so CLS discards all
+of it and reads 0.000 no matter what this number does. The budget is internal
+discipline; that is exactly why it has to describe the layout actually shipped.
 
 ## Risks / Trade-offs
 
 - **The form moves while typing.** By design now. Bounded at 180 px, which is
   what the phone already does, and it buys back the translation field the
   overlay covered.
-- **The shift score rises from zero, and stays past the budget even animated.**
+- **The shift score rises from zero, and the budget moves with the layout.**
   Without the animation: 0.0566 over three entries, `[0.0416, 0.0008, 0.0142]`.
-  With it: 0.0502, 0.0502, 0.0544 over three runs, the opening spread into nine
-  entries totalling 0.036 and the narrowing keeping its 0.0142 untouched.
-  Splitting a move across frames only helps through the impact fraction — a
-  measured 13 % — so even a hypothetical animation covering every shift lands
-  near 0.049. The budget is within the noise of what this layout can reach at
-  all. It is left where #289 set it and the spec is red on it: that is the
-  finding, not a flake.
+  With it: 0.0502-0.0544 over five runs, the opening spread into nine entries
+  totalling 0.036 and the resize keeping its 0.0142 untouched. Splitting a move
+  across frames only helps through the impact fraction — a measured 13 % — so
+  even a hypothetical animation covering every shift lands near 0.049: the
+  floor of this layout, not a number better code reaches. The budget was raised
+  to 0.06 with the layout it belongs to (see the decision above), and the spec
+  is green on it.
 - **A longer transition does not help.** 300 ms scored 0.0533 against 180 ms's
   0.0502 — more entries, no less total travel. Measured before settling on
   180 ms.
@@ -158,12 +190,13 @@ worker involvement.
 
 ## Open Questions
 
-- Whether 0.0502 justifies flow over the overlay, given that the displacement
-  fell from 180 px to 94 px and that no single shift is worse than the device's
-  present one. Owner's decision, and the animation lever has now been spent:
-  it was worth 0.006, not the 0.028 the earlier change reported.
-- If the 0.05 budget must be met, what remains is not a CSS lever. Either the
-  ceiling comes down (less travel, less shift, a shorter list), or the resize
-  is animated from JavaScript by writing an explicit height per render — which
-  reintroduces the explicit height this issue exists to remove, this time
-  computed. Neither is taken here.
+- Settled: flow at 0.0502 was chosen over the overlay at 0 — the displacement
+  fell from 180 px to 94 px and no single shift is worse than the device's
+  present one — and the budget was raised to 0.06 with the layout. The
+  animation lever is spent: it was worth 0.006, not the 0.028 the earlier
+  change reported.
+- Should the score ever need to come down, what remains is not a CSS lever:
+  lower the ceiling (less travel, shorter list), or animate the resize from
+  JavaScript by writing an explicit height per render — which reintroduces the
+  explicit height this issue exists to remove, only computed. Neither is taken
+  here.

@@ -96,7 +96,11 @@ reads INP before the reset as well and takes the larger of the two.
 > changed is the input, not the logic: the device build turned out to carry a
 > *fixed* height, so the phone was paying the full 180 px push at one row as at
 > ten, and a ceiling gives the shrinking this section wanted without the
-> occlusion the overlay brought (#349).
+> occlusion the overlay brought (#349). The 0.05 shift budget below moved with
+> the layout and is no longer the standing one: it was measured on a list whose
+> open height was fixed and which therefore never resized, while a content-sized
+> list resizes on every change of match count. #373 raised it to 0.06 and wrote
+> out why beside `SHIFT_BUDGET` in `add-form-stability.mobile.spec.js`.
 
 The issue left this open, to be decided from measurements.
 

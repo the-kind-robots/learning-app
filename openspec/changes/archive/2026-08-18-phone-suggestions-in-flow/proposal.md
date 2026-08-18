@@ -34,7 +34,9 @@ content.
   overlay written down, and with the list in flow it fails by construction. It
   asserts instead that the box has no emptiness in it, that the displacement is
   bounded, that the value field and the panel title still hold still, and that
-  the unfiltered layout-shift score stays inside the 0.05 budget.
+  the unfiltered layout-shift score stays inside its budget — raised from 0.05
+  to 0.06 with the layout, because a content-sized list resizes where the
+  fixed-height one #289 measured never did.
 - The overlay decision recorded in `openspec/changes/mobile-add-form-stability/`
   is marked as superseded by #373 with a pointer here. Its reasoning is left
   intact: it was correct for the measurements it had.

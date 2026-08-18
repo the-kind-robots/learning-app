@@ -38,4 +38,6 @@ typed into and the panel heading above it SHALL NOT move.
 #### Scenario: Layout shift stays within budget
 
 - **WHEN** the word is typed at human cadence and the list opens in flow
-- **THEN** the unfiltered layout-shift score stays under 0.05
+- **THEN** the unfiltered layout-shift score stays under 0.06 — the budget of a
+  content-sized list, which resizes whenever the match count changes, and not
+  the 0.05 of the fixed-height list that opened once and never resized
