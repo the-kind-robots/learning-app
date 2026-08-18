@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SAH Pool Control</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#101014">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  html, body { margin: 0; height: 100%; background: #101014; color: #e6e6ea;
+               font: 16px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  main { padding: max(16px, env(safe-area-inset-top)) 16px 16px; }
+  #state { color: #9aa0a6; }
+  #counters { font-size: 22px; margin-top: 8px; }
+  b { color: #7ee787; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <div id="state">starting</div>
+  <div id="counters">queries <b id="queries">0</b> &middot; alive <b id="alive">0</b>s</div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
