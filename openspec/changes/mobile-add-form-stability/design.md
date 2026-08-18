@@ -89,6 +89,19 @@ reads INP before the reset as well and takes the larger of the two.
 
 ## Why the list overlays instead of staying in flow
 
+> **Superseded by #373** (`openspec/changes/phone-suggestions-in-flow/`). The
+> overlay is gone on phones: the list opens in the flow again, bounded by
+> `max-height: min(176px, 34svh)` instead of a fixed height. The reasoning
+> below is left as it was — it was right about the measurements it had. What
+> changed is the input, not the logic: the device build turned out to carry a
+> *fixed* height, so the phone was paying the full 180 px push at one row as at
+> ten, and a ceiling gives the shrinking this section wanted without the
+> occlusion the overlay brought (#349). The 0.05 shift budget below moved with
+> the layout and is no longer the standing one: it was measured on a list whose
+> open height was fixed and which therefore never resized, while a content-sized
+> list resizes on every change of match count. #373 raised it to 0.06 and wrote
+> out why beside `SHIFT_BUDGET` in `add-form-stability.mobile.spec.js`.
+
 The issue left this open, to be decided from measurements.
 
 Re-measured after merging master, because master moved the ground. When this
