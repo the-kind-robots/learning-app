@@ -31,8 +31,12 @@
 
 - [x] 5.1 Overlay the suggestion list on phones; in flow it dropped the
       translation field and the submit button 184 px mid-typing
+      — **superseded by #373**: in flow under a `176px` ceiling the drop is the
+      list's own height (94 px at two rows), bounded at the 180 px the device
+      already produced
 - [x] 5.2 File the overlay's own cost — it covers the translation field — as
       #349 rather than settling it here
+      — dissolved by #373: a list in the flow covers nothing
 
 ## 6. Verify
 

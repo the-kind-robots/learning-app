@@ -53,18 +53,28 @@
   vertical-align: middle;
 }
 
-/* Phones overlay the list too (#289). It used to open in flow here, animating
-   184px of height into the page — and since `.home__content` centres the add
-   panel, that height went both ways: the value field being typed into rose
-   92px out from under the finger while the submit button sank 92px. Measured
-   over five runs it scored 0.053-0.058 unfiltered layout shift, past the 0.05
-   budget, and every point of it was invisible to CLS because typing is recent
-   input. As an overlay the list moves nothing at all.
+/* The phone keeps the list in the page flow (#373). It used to open in flow
+   here as well, but with a *fixed* `height: min(176px, 34svh)`, so the box
+   held 176px at one suggestion, at two and at ten — which is what the issue
+   reports as a list that will not shrink. #289 replaced that with the desktop
+   overlay: it shrinks, but it covers the translation field underneath (#349).
+   A ceiling instead of a height gives both — 49px at one row, 89px at two,
+   and nothing covered.
 
-   What the phone still needs is a shorter list: the software keyboard takes
-   roughly a third of the screen, which the viewport units account for. */
+   Why 176px here and 240px on desktop. In flow the ceiling is the maximum
+   displacement of everything below the list: the translation field and the
+   submit button drop by the list's height plus its 4px margin. At 240px the
+   worst case would be a 244px push, worse than the 180px this phone already
+   lives with; at 176px the worst case is exactly that same 180px, so the
+   change is no worse than before in any case and better in the short ones.
+
+   `34svh` stays for the reason it arrived: the software keyboard takes
+   roughly a third of the screen, and `svh` is the small viewport height. */
 @media (hover: none), (pointer: coarse), (max-width: 600px) {
   .suggestions {
-    max-height: min(240px, 34svh);
+    left: auto;
+    max-height: min(176px, 34svh);
+    position: static;
+    right: auto;
   }
 }

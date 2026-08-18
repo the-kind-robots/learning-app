@@ -26,7 +26,9 @@ away by definition, not failing.
   the entries themselves. The standard CLS stays exactly as
   `standard-page-metrics` left it.
 - The phone suggestion list becomes an overlay, as it already is on desktop.
-  It now moves nothing; the shift score is 0.
+  It now moves nothing; the shift score is 0. **Superseded by #373**: the
+  phone list is back in the flow under a `176px` ceiling — see
+  `openspec/changes/phone-suggestions-in-flow/`.
 - `playwright.config.js` gains two projects: `desktop` (default viewport, every
   spec that does not opt out) and `mobile` (390x844, `hasTouch`,
   `*.mobile.spec.js`). `mobile` depends on `desktop` so timing is measured on a
@@ -60,7 +62,8 @@ away by definition, not failing.
 
 - `src/client/instrumentation.cljs` — second counter on the same observer.
 - `src/backend/core.clj` — the `Dictionary` section: env-configured source.
-- `resources/public/css/components/autocomplete.css` — phone list overlays.
+- `resources/public/css/components/autocomplete.css` — phone list overlays
+  (superseded by #373; the phone list is in flow again under a ceiling).
 - `playwright.config.js`, `test/browser/add-form-stability.mobile.spec.js`,
   `test/browser/README.md` — the projects and the spec.
 - `test/fixtures/dictionary/lemmas.edn`,
