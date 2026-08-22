@@ -43,30 +43,36 @@
 
 
 (defn ready?
+  "Whether this tab has the dictionary right now, for a caller that has to say
+   so. Nothing on the query path reads it."
   [db]
   (sqlite/ready? db))
 
 
 (defn ^:async completions
-  "Returns a vec of completion maps {:lemma :translations :exact? :pos} from SQLite."
+  "Returns a vec of completion maps {:lemma :translations :exact? :pos} from SQLite.
+
+   No readiness gate in front of the query: a tab without the database answers
+   with no rows on its own, so a gate here would only duplicate the decision
+   (#351). An empty vec therefore means either — `ready?` is what separates
+   them. The caller drops answers the user has typed past."
   [db prefix]
-  (if (ready? db)
-    (let [prefix-start (utils/normalize-german (or prefix ""))]
-      (if (empty? prefix-start)
-        []
-        (let [prefix-end (str prefix-start \z)
-              rows       (js->clj
-                          (await
-                           (sqlite/exec db
-                                        #js {:sql         completions-sql
-                                             :bind        #js [prefix-start prefix-end prefix-start]
-                                             :returnValue "resultRows"
-                                             :rowMode     "object"}))
-                          :keywordize-keys
-                          true)]
-          (for [{:keys [lemma translations has_exact pos]} rows]
-            {:lemma        lemma
-             :pos          pos
-             :translations (str/split (or translations "") #",")
-             :exact?       (pos? has_exact)}))))
-    []))
+  (let [prefix-start (utils/normalize-german (or prefix ""))]
+    (if (empty? prefix-start)
+      []
+      (let [prefix-end (str prefix-start \z)
+            rows       (js->clj
+                        (await
+                         (sqlite/exec db
+                                      #js {:sql         completions-sql
+                                           :bind        #js [prefix-start prefix-end prefix-start]
+                                           :returnValue "resultRows"
+                                           :rowMode     "object"}))
+                        :keywordize-keys
+                        true)]
+        (mapv (fn [{:keys [lemma translations has_exact pos]}]
+                {:exact?       (pos? has_exact)
+                 :lemma        lemma
+                 :pos          pos
+                 :translations (str/split (or translations "") #",")})
+              rows)))))
