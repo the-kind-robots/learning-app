@@ -38,8 +38,8 @@ The active home autocomplete flow SHALL query SQLite through the worker proxy an
 call the legacy PouchDB dictionary lookup path. Completion results SHALL include each
 suggestion's part of speech.
 
-A completion request issued while this context has no database SHALL be answered when it
-gets one, rather than resolving empty. The main thread SHALL NOT gate the request on
+A completion request issued while this context has no database SHALL resolve empty at once
+rather than being queued for a later turn. The main thread SHALL NOT gate the request on
 readiness.
 
 #### Scenario: Completion query resolves via the worker
@@ -51,5 +51,5 @@ readiness.
 #### Scenario: Query issued while this context is waiting its turn
 - **WHEN** the home suggest effect receives a non-empty German prefix and this context does not hold the database
 - **THEN** no PouchDB fallback query is attempted
-- **AND** the request waits in the worker and is answered when this context takes its turn
+- **AND** the worker resolves the request with no completions instead of holding it
 - **AND** the home page shows the answer only if the input still matches the queried value

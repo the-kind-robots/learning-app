@@ -3,9 +3,9 @@
 
    Every tab has a worker of its own and the workers never speak to each
    other; which of them has the SQLite file open is decided by the browser's
-   lock manager, and a worker without the lock holds its queries until its
-   turn comes (#351). So nothing here can tell the two apart, and nothing
-   here should try."
+   lock manager (#351). A worker without it answers with no completions, so
+   the answer alone cannot say whether the prefix has none or the dictionary
+   is elsewhere — `ready?` is what tells those apart."
   (:require
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]))
@@ -38,28 +38,41 @@
   (.exec (:proxy db) opts))
 
 
-(defn- handle-lifecycle!
-  "Where the worker is and what its startup cost. A tab waiting for another
-   one to give the database up says nothing at all meanwhile; when its turn
-   comes, what arrives is its own phases and its own ready.
+(defn ready?
+  "Whether this tab has the dictionary right now. Not a gate in front of a
+   query — the worker answers either way — but the only thing that can tell an
+   empty answer from a prefix with no completions (#312)."
+  [db]
+  @(:holding? db))
 
-   Nothing on this side keeps the state: a query is sent whatever the worker
-   says, because the worker holds one it cannot answer yet. What these
-   messages feed is the measurement and the log."
-  [^js e]
+
+(defn- handle-lifecycle!
+  "Where the worker is: it takes the database on every turn and gives it back
+   when the tab leaves the foreground, and says so each time.
+
+   Queries are sent whatever it says — nothing here gates them, because a
+   worker without the database answers empty by itself. What is kept is the
+   reading `ready?` returns, for a caller that has to describe the difference
+   (#312); the rest feeds the measurement and the log."
+  [holding? ^js e]
   (case (.. e -data -type)
-    "ready" (when goog/DEBUG
-              (instrumentation/dictionary-ready!))
-    "error" (log/error :dbs/sqlite3-worker-error {:message (.. e -data -message)})
-    "phase" (let [d   (.. e -data)
-                  ph  (.-phase d)
-                  ms  (.-durationMs d)
-                  ok? (= "ok" (.-status d))]
-              (when goog/DEBUG
-                (instrumentation/dictionary-phase! ph ms (.-status d)))
-              (if ok?
-                (log/info (keyword "dict-worker" ph) {:duration-ms ms})
-                (log/error (keyword "dict-worker" ph) {:duration-ms ms :reason (.-reason d)})))
+    "loading" (reset! holding? false)
+    "ready"   (do
+                (reset! holding? true)
+                (when goog/DEBUG
+                  (instrumentation/dictionary-ready!)))
+    "error"   (do
+                (reset! holding? false)
+                (log/error :dbs/sqlite3-worker-error {:message (.. e -data -message)}))
+    "phase"   (let [d   (.. e -data)
+                    ph  (.-phase d)
+                    ms  (.-durationMs d)
+                    ok? (= "ok" (.-status d))]
+                (when goog/DEBUG
+                  (instrumentation/dictionary-phase! ph ms (.-status d)))
+                (if ok?
+                  (log/info (keyword "dict-worker" ph) {:duration-ms ms})
+                  (log/error (keyword "dict-worker" ph) {:duration-ms ms :reason (.-reason d)})))
     nil))
 
 
@@ -68,17 +81,20 @@
    the protocol can be driven from a test, in a runtime with no workers to
    spawn."
   [worker]
-  ;; The atom is the request counter and nothing else — it is not in the
-  ;; returned component because nobody outside the proxy has anything to read
-  ;; from it.
-  (let [requests (atom {:next-id 0})]
-    (.addEventListener worker "message" handle-lifecycle!)
+  ;; Two atoms because they answer to two different things: `requests` is the
+  ;; id counter the proxy needs and nobody outside it reads, `holding?` is the
+  ;; reading `ready?` hands out.
+  (let [requests (atom {:next-id 0})
+        holding? (atom false)]
+    (.addEventListener worker "message" (partial handle-lifecycle! holding?))
     (.addEventListener worker
                        "error"
                        (fn [^js e]
+                         (reset! holding? false)
                          (log/error :dbs/sqlite3-worker-crashed {:error (str e)})))
-    {:proxy  (make-exec-proxy worker requests)
-     :worker worker}))
+    {:holding? holding?
+     :proxy    (make-exec-proxy worker requests)
+     :worker   worker}))
 
 
 (defn- foreground?

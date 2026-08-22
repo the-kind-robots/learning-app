@@ -42,14 +42,20 @@
    ORDER BY top.rank DESC, lemma ASC")
 
 
+(defn ready?
+  "Whether this tab has the dictionary right now, for a caller that has to say
+   so. Nothing on the query path reads it."
+  [db]
+  (sqlite/ready? db))
+
+
 (defn ^:async completions
   "Returns a vec of completion maps {:lemma :translations :exact? :pos} from SQLite.
 
-   No readiness gate in front of the query. This tab's worker holds a request
-   that arrives before it has the database open and answers it when its turn
-   comes, so an early keystroke waits instead of resolving to an empty list
-   that looks exactly like a word the dictionary does not have (#351). The
-   caller drops answers the user has typed past."
+   No readiness gate in front of the query: a tab without the database answers
+   with no rows on its own, so a gate here would only duplicate the decision
+   (#351). An empty vec therefore means either — `ready?` is what separates
+   them. The caller drops answers the user has typed past."
   [db prefix]
   (let [prefix-start (utils/normalize-german (or prefix ""))]
     (if (empty? prefix-start)

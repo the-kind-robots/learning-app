@@ -37,8 +37,9 @@ keyboard. The condition is `visibilityState === "visible" && hasFocus()`.
   database and serves itself. When it leaves the foreground it closes the database, pauses
   the pool and releases the lock. The lock is requested without `ifAvailable`, so a tab that
   does not win waits its turn instead of failing.
-- A tab waiting its turn has no dictionary of its own and holds the queries asked of it
-  until it has one. Nothing is answered from another tab and nothing crosses a tab boundary.
+- A tab waiting its turn has no dictionary of its own and answers the queries asked of it
+  with no completions, keeping nothing for later. Nothing is answered from another tab and
+  nothing crosses a tab boundary.
 - The page tells its worker what it is, as one boolean: `visibilitychange`, `focus` and
   `blur` are forwarded, and the current
   state is sent once at startup so a tab that boots in the background never takes a database
@@ -48,11 +49,10 @@ keyboard. The condition is `visibilityState === "visible" && hasFocus()`.
   costs 1 ms, and a whole focus switch ~14 ms.
 - The engine is loaded on a tab's first turn rather than at startup, so a tab that never
   comes to the front never pays for it.
-- The readiness gate in front of the query goes, and `:dictionary/ready?` goes with it. A
-  caller has nothing to decide with it now that an early query is held rather than dropped,
-  and the accessor chain behind it — `adapters.dictionary/ready?`, `db.sqlite/ready?`, the
-  `:ready?` flag the lifecycle messages wrote, the `:state` entry the component exposed only
-  so that flag could be read — has no other reader.
+- The readiness gate in front of the query goes: the worker answers empty by itself, so a
+  gate would re-decide one hop away what has already been decided. `:dictionary/ready?`
+  stays on the port as a reading — an empty answer alone cannot say whether the prefix has
+  no completions or this tab has no dictionary, and that is what #312 has to describe.
 - Removed with it: the `another-tab-open` error and its user-facing message. There is no
   losing tab left to describe.
 
@@ -73,8 +73,8 @@ None.
 
 ## Impact
 
-- `resources/public/js/sqlite3-dictionary.js` (new) — the lock, the pool, the turn, and the
-  queue of requests made between turns.
+- `resources/public/js/sqlite3-dictionary.js` (new) — the lock, the pool, the turn, and
+  what a request is answered with inside one and outside one.
 - `resources/public/js/sqlite3-worker.js` — reduced to the page-facing host, carrying the
   visibility message through.
 - `resources/public/js/sw.js` — the new file joins `PRECACHE_URLS`.

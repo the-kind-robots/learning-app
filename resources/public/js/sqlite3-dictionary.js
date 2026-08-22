@@ -11,15 +11,12 @@
 // turns it has no database at all.
 //
 // Coming to the foreground and having the database are not the same instant,
-// and queries asked in the gap wait for it. A tab's first turn has to load the
-// engine and install the pool (~94 ms); a later one waits for the tab in front
-// to hand the lock back (~14 ms). The user is typing through all of it — this
-// is the tab they are looking at — so what waits is mostly the *active* tab's
-// own keystrokes, not some background tab hoarding work. A tab that has just
-// left the foreground can add a straggler or two, where a query was in flight
-// or the suggest debounce ticked over after it left. Either way the request
-// waits for the turn and is never dropped — see `request` for why that matters
-// more than it looks.
+// and a query asked in the gap is answered with what the tab has at that
+// instant: nothing. Nothing is queued and nothing is replayed — see `request`.
+// A tab's first turn has to load the engine and install the pool (~94 ms); a
+// later one waits for the tab in front to hand the lock back (~14 ms). Both
+// are shorter than the 100 ms debounce in front of the query, so a warm start
+// has almost always finished before the first query arrives.
 //
 // On screen alone is not enough. Two tabs can be visible at the same time —
 // split screen, two windows side by side — and only one of them is being
@@ -79,16 +76,9 @@ let yieldTurn = null;
 
 // Where this worker is, as the message its page is sent. `loading` covers both
 // "starting up" and "waiting for another tab to finish", because from the
-// page's side they are the same thing: no dictionary yet, ask anyway.
+// page's side they are the same thing: no dictionary here, so no completions
+// from here either.
 let lifecycle = { type: "loading" };
-
-// One promise that every request waiting for a turn awaits, and the resolve
-// that fires it. Shared on purpose: a second request arriving while the first
-// is still waiting joins the same promise instead of adding another, so
-// `announceSettled` always belongs to the `settling` currently in hand and
-// there is never a second one to overwrite it.
-let settling = null;
-let announceSettled = null;
 
 let broadcast = () => {};
 
@@ -186,7 +176,7 @@ async function close() {
 }
 
 
-function answer(msg) {
+function answer(db, msg) {
   try {
     return { id: msg.id, result: db.exec(msg) };
   } catch (err) {
@@ -195,44 +185,42 @@ function answer(msg) {
 }
 
 
-// What to say to one request, or null if this tab cannot say anything yet.
-// Only the decision — who receives it, and when, is the caller's business.
-function respond(msg) {
-  if (db) return answer(msg);
+// What to say to one request, given what this tab has. An empty result is the
+// same shape a real empty answer has — `resultRows` is an array — so the page
+// reads it as a prefix with no completions. An error is not flattened into
+// one: a dictionary this tab could not open has to stay distinguishable from
+// a word it does not contain (#312).
+function respond(db, lifecycle, msg) {
+  if (db) return answer(db, msg);
   if (lifecycle.type === "error") return { id: msg.id, error: lifecycle.message };
-  return null;
+  return { id: msg.id, result: [] };
 }
 
 
-// What everything waiting for a turn blocks on, created on first demand.
-function whenSettled() {
-  if (!settling) settling = new Promise((resolve) => { announceSettled = resolve; });
-  return settling;
+// The response to one request, decided from what this tab has at that instant.
+// Nothing is queued and nothing is replayed: without a turn the answer is an
+// empty list, and being asked again takes another keystroke.
+//
+// What that loses is bounded by the debounce in front of it. Taking the lock
+// back from the tab in front costs ~14 ms and a first turn ~94 ms, against a
+// 100 ms trailing debounce and a keystroke every 120-180 ms, so on a warm
+// start the turn has begun before the query is sent. A cold start is the one
+// window a user actually sees: the dictionary is still downloading, and every
+// keystroke until it lands gets an empty list. Holding those queries buys
+// that one case and costs a mechanism to do it; the empty answer is accepted
+// for now, and #312 is where "the dictionary is not here" stops looking like
+// "no such word".
+function request(msg) {
+  return respond(db, lifecycle, msg);
 }
 
 
-// The response to one request: given straight back if this tab has a turn,
-// otherwise awaited until it gets one and asked again. Never dropped —
-// answering early with an empty list looks exactly like a word the dictionary
-// does not have.
-async function request(msg) {
-  const now = respond(msg);
-  if (now) return now;
-  await whenSettled();
-  return respond(msg);
-}
-
-
-// Call only with a decided state — `ready` or `error`. Everything waiting
-// wakes and asks `respond` again, so a `loading` passed here would hand those
-// requests an answer that does not exist yet.
-function settle(state) {
+// Where this worker is, told to the page. It feeds the page's log and its
+// instrumentation and nothing here waits on it, so `loading` is as reportable
+// as `ready` and `error`.
+function report(state) {
   lifecycle = state;
   broadcast(state);
-  const wake = announceSettled;
-  announceSettled = null;
-  settling = null;
-  if (wake) wake();
 }
 
 
@@ -258,23 +246,22 @@ function acquire() {
       } catch (ignored) { /* nothing better to try */ }
       // Released by returning: this tab could not open the database, and the
       // next one — online where this one was not, say — deserves its turn.
-      settle({ type: "error", message: String(err) });
+      report({ type: "error", message: String(err) });
       return;
     }
     // Left the foreground while the database was opening. Nothing has been
     // promised to the page yet, so it just goes straight back.
     if (foreground) {
-      settle({ type: "ready" });
+      report({ type: "ready" });
       // Assigned with no await in between, so no report from the page can
       // slip past between the check above and this handle existing.
       await new Promise((done) => { yieldTurn = done; });
       yieldTurn = null;
     }
     await close();
-    // Back to waiting: queries asked from here on are held, not answered from
-    // a database this tab no longer has.
-    lifecycle = { type: "loading" };
-    broadcast(lifecycle);
+    // Back to waiting: queries asked from here on are answered empty, not
+    // from a database this tab no longer has.
+    report({ type: "loading" });
     // In front again already — the tab came back while this turn was being
     // wound up. The request queues behind this callback and is granted as
     // soon as it returns, so nothing is lost to the gap.

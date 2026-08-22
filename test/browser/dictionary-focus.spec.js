@@ -4,8 +4,9 @@ const { test, expect } = require('@playwright/test');
 //
 // `opfs-sahpool` admits one holder, so a tab takes the pool lock when it comes
 // to the foreground — on screen and holding the keyboard — and gives it back
-// when it leaves. A tab waiting its turn has no dictionary and holds the
-// queries asked of it until it does.
+// when it leaves. A tab waiting its turn has no dictionary, and a query asked
+// of it then is answered with no completions and forgotten; getting an answer
+// after the turn arrives takes another keystroke.
 //
 // How the foreground is driven here, and what that costs in confidence:
 // Playwright can reproduce neither half. Every page reports `visible` and
@@ -34,6 +35,10 @@ const TURN_MS = 20000;
 // Long enough that a dictionary that was going to answer would have, but not
 // so long that the spec pays for it when the answer never comes.
 const SILENCE_MS = 3000;
+
+// One attempt: the 100 ms suggest debounce, the round trip and the render.
+// Measured at 9-44 ms past the debounce (#195), so this is loose on purpose.
+const ANSWER_MS = 1000;
 
 const valueField = (page) => page.getByLabel('Слово (немецкий)');
 const options = (page) => page.getByRole('option');
@@ -93,10 +98,26 @@ const suggestions = (page, word) => options(page).filter({ hasText: word });
 // establish.
 const nothingHappensFor = (page, ms) => page.waitForTimeout(ms);
 
+// A query is answered from what the tab has when it arrives, and nothing is
+// kept: one sent while the turn is still being taken comes back empty and is
+// never replayed. A user looking at an empty list types the word again, and so
+// does this — until the answer comes or the turn never does.
+const typeUntilAnswered = async (page, word, count) => {
+  const deadline = Date.now() + TURN_MS;
+  for (;;) {
+    await type(page, word);
+    try {
+      await expect(suggestions(page, word)).toHaveCount(count, { timeout: ANSWER_MS });
+      return;
+    } catch (error) {
+      if (Date.now() >= deadline) throw error;
+    }
+  }
+};
+
 test('the foreground tab has the dictionary and a background one does not', async ({ context }) => {
   const first = await openHome(context);
-  await type(first, 'Fenster');
-  await expect(suggestions(first, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES, { timeout: TURN_MS });
+  await typeUntilAnswered(first, 'Fenster', FIXTURE_FENSTER_MATCHES);
 
   // The second tab opens in front, so the first steps aside and the second
   // takes over. Then the keyboard goes back, and the second is left visible
@@ -116,39 +137,45 @@ test('two visible tabs: the one with the keyboard gets the dictionary', async ({
   const right = await openHome(context);
 
   await focusOnly(left, right);
-  await type(left, 'Fenster');
-  await expect(suggestions(left, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES, { timeout: TURN_MS });
+  await typeUntilAnswered(left, 'Fenster', FIXTURE_FENSTER_MATCHES);
   await type(right, 'Frage');
   await nothingHappensFor(right, SILENCE_MS);
   await expect(options(right)).toHaveCount(0);
 
   // The user clicks into the other pane. Nothing changed about what is on
-  // screen; the dictionary still has to move.
+  // screen; the dictionary still has to move, and the word has to be asked
+  // again — the answer given while the pane was idle was an empty one.
   await focusOnly(right, left);
-  await expect(suggestions(right, 'Frage')).toHaveCount(1, { timeout: TURN_MS });
+  await typeUntilAnswered(right, 'Frage', 1);
 });
 
-test('the query asked while waiting is answered when the turn comes', async ({ context }) => {
+test('the query asked while waiting comes back empty and is not replayed', async ({ context }) => {
   const first = await openHome(context);
-  await type(first, 'Fenster');
-  await expect(suggestions(first, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES, { timeout: TURN_MS });
+  await typeUntilAnswered(first, 'Fenster', FIXTURE_FENSTER_MATCHES);
 
   const second = await openHome(context);
   await focusOnly(first, second);
+
+  // Asked of a tab with no turn: answered, and answered with nothing. The
+  // wait is what says it was answered rather than left pending — a held query
+  // would land here once the turn came.
   await type(second, 'Fenster');
+  await nothingHappensFor(second, SILENCE_MS);
   await expect(options(second)).toHaveCount(0);
 
-  // No further typing after this point. The query the second tab already sent
-  // has to survive the wait and be answered once it has a database.
+  // The turn arrives with nothing waiting for it. No typing since, so nothing
+  // is asked again and the list stays as it was.
   await focusOnly(second, first);
+  await nothingHappensFor(second, SILENCE_MS);
+  await expect(options(second)).toHaveCount(0);
 
-  await expect(suggestions(second, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES, { timeout: TURN_MS });
+  // Typing is what asks, and now there is a dictionary to answer.
+  await typeUntilAnswered(second, 'Fenster', FIXTURE_FENSTER_MATCHES);
 });
 
 test('the tab that leaves the foreground gives the dictionary back', async ({ context }) => {
   const first = await openHome(context);
-  await type(first, 'Fenster');
-  await expect(suggestions(first, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES, { timeout: TURN_MS });
+  await typeUntilAnswered(first, 'Fenster', FIXTURE_FENSTER_MATCHES);
 
   const second = await openHome(context);
 
@@ -156,22 +183,19 @@ test('the tab that leaves the foreground gives the dictionary back', async ({ co
   await hide(first);
   await blur(first);
   await focus(second);
-  await type(second, 'Frage');
-  await expect(suggestions(second, 'Frage')).toHaveCount(1, { timeout: TURN_MS });
+  await typeUntilAnswered(second, 'Frage', 1);
 
   // And back again: the first tab returns, the second steps aside.
   await hide(second);
   await blur(second);
   await show(first);
   await focus(first);
-  await type(first, 'Fehler');
-  await expect(suggestions(first, 'Fehler')).toHaveCount(1, { timeout: TURN_MS });
+  await typeUntilAnswered(first, 'Fehler', 1);
 });
 
 test('focus flickering back and forth leaves the foreground tab working', async ({ context }) => {
   const first = await openHome(context);
-  await type(first, 'Fenster');
-  await expect(suggestions(first, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES, { timeout: TURN_MS });
+  await typeUntilAnswered(first, 'Fenster', FIXTURE_FENSTER_MATCHES);
   const second = await openHome(context);
   await focusOnly(first, second);
 
@@ -186,14 +210,12 @@ test('focus flickering back and forth leaves the foreground tab working', async 
     await focus(first);
   }
 
-  await type(first, 'Haus');
-  await expect(suggestions(first, 'Haus')).toHaveCount(1, { timeout: TURN_MS });
+  await typeUntilAnswered(first, 'Haus', 1);
 });
 
 test('with no tab in the foreground, the first one back takes the dictionary', async ({ context }) => {
   const first = await openHome(context);
-  await type(first, 'Fenster');
-  await expect(suggestions(first, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES, { timeout: TURN_MS });
+  await typeUntilAnswered(first, 'Fenster', FIXTURE_FENSTER_MATCHES);
   const second = await openHome(context);
 
   // The whole browser window goes behind something else: both tabs still
@@ -204,8 +226,7 @@ test('with no tab in the foreground, the first one back takes the dictionary', a
   await nothingHappensFor(second, 500);
 
   await focus(second);
-  await type(second, 'Hund');
-  await expect(suggestions(second, 'Hund')).toHaveCount(1, { timeout: TURN_MS });
+  await typeUntilAnswered(second, 'Hund', 1);
 });
 
 // What this pins is the outcome, not the mechanism: a tab that was never in
@@ -229,19 +250,17 @@ test('a tab that boots in the background has no dictionary until it is looked at
 
   await show(page);
   await focus(page);
-  await expect(suggestions(page, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES, { timeout: TURN_MS });
+  await typeUntilAnswered(page, 'Fenster', FIXTURE_FENSTER_MATCHES);
 });
 
 test('closing the tab that holds the dictionary releases it', async ({ context }) => {
   const holder = await openHome(context);
-  await type(holder, 'Fenster');
-  await expect(suggestions(holder, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES, { timeout: TURN_MS });
+  await typeUntilAnswered(holder, 'Fenster', FIXTURE_FENSTER_MATCHES);
 
   const successor = await openHome(context);
   // Killed rather than backgrounded: no handler of ours runs, and the lock has
   // to come back from the browser.
   await holder.close();
 
-  await type(successor, 'Fenster');
-  await expect(suggestions(successor, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES, { timeout: TURN_MS });
+  await typeUntilAnswered(successor, 'Fenster', FIXTURE_FENSTER_MATCHES);
 });

@@ -22,14 +22,14 @@
 ## 4. No readiness gate, and no readiness accessor
 
 - [x] 4.1 Drop the gate from `adapters.dictionary/completions` and from the suggest effect in `pages/home/effects.cljs`.
-- [x] 4.2 Drop `:dictionary/ready?` from the port, and with it `adapters.dictionary/ready?`, `db.sqlite/ready?`, the `:ready?` flag and the `:state` entry that existed only to be read through them.
+- [x] 4.2 Keep `:dictionary/ready?` on the port as a reading rather than a gate: it is the only thing that separates an empty answer from a missing dictionary (#312).
 - [x] 4.3 Split `db.sqlite/attach` out of `init!` so the page protocol can be driven where there is no `Worker`.
 
 ## 5. Verification
 
 - [x] 5.1 Measure both handover paths — pool kept and paused, versus installed again — and choose on the numbers.
 - [x] 5.2 Node unit tests for the page protocol: id matching, lifecycle messages leaving the response matcher alone, exec resolution and rejection, and a query issued with no readiness message received.
-- [x] 5.3 Browser spec: visible tab has it, waiting tab does not, a query asked while waiting is answered when the turn comes, the tab that goes away gives it back, rapid switching leaves the visible tab working, all tabs away then one returns, closing the holder releases it.
+- [x] 5.3 Browser spec: visible tab has it, waiting tab does not, a query asked while waiting comes back empty and is not replayed, the tab that goes away gives it back, rapid switching leaves the visible tab working, all tabs away then one returns, closing the holder releases it.
 - [x] 5.4 Node test build and the full browser suite against a local stand with the fixture dictionary.
 
 ## 6. Documentation

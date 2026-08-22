@@ -40,9 +40,18 @@ The dictionary belongs to the tab being typed into. A tab takes the
 `sqlite-opfs-sahpool` lock when it comes to the foreground, opens the database and serves
 only itself; when it leaves the foreground it closes the database, pauses the pool and
 releases the lock. One stretch of holding that lock, from grant to release, is a *turn*; a
-tab has no database outside its turns. A tab waiting for one holds the queries asked of it
-until it starts — mostly its own, since the tab waiting is usually the one just brought to
-the front and already being typed into.
+tab has no database outside its turns. A tab waiting for one answers the queries asked of
+it with no completions and keeps nothing: the answer is what it has at that instant, and
+being asked again takes another keystroke.
+
+Not queueing them is a choice, and the measurements are what make it a cheap one. The
+windows a query can fall into are ~14 ms to take the lock back from the tab in front and
+~94 ms for a tab's first turn, against a 100 ms trailing suggest debounce and a keystroke
+every 120-180 ms — so on a warm start the turn has begun before the query is sent. The one
+window a user can actually see is a cold start, where the dictionary is still being
+downloaded and every keystroke until it lands gets an empty list. Holding queries buys that
+case and costs a mechanism to do it; the empty answer is accepted for now, and revisiting
+it is a separate decision.
 
 Foreground means on screen **and** holding the keyboard: `visibilityState === "visible" &&
 hasFocus()`. Visibility alone does not identify the tab being used — two tabs can be
@@ -81,8 +90,10 @@ database, and nothing here overturns a decision it did not make.
   moves as the user clicks between them. When the browser window itself is behind something
   else no tab holds it — there is nobody to ask, and the first tab to come back takes it in
   ~14 ms.
-- A tab that has not had a turn yet has no dictionary, and that is a state the UI must be
-  able to describe rather than show as an empty list (#312).
+- A tab that has not had a turn yet has no dictionary and says so by answering with no
+  completions, which is indistinguishable from a prefix that has none. Telling the two
+  apart is what `:dictionary/ready?` is on the port for, and describing it to the user is
+  #312.
 - Turns change hands more often than they would on visibility alone: a click in the address
   bar or in devtools is a `blur`, so it costs a round trip. ~14 ms per switch once a tab has
   had a turn, ~94 ms for its first. Both are far below the ~100 ms suggest debounce, and the

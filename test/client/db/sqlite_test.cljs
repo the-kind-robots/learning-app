@@ -84,10 +84,10 @@
           (is (= "Missing required OPFS APIs." (ex-message err))))))))
 
 
-(deftest completions-are-queried-before-the-dictionary-is-ready
-  (async-testing "GH-351: the query goes out with no readiness message received, and its answer is used"
-    ;; Nothing has said "ready" and nothing here would have listened if it
-    ;; had: the query is sent regardless and the worker holds it.
+(deftest completions-are-queried-with-no-readiness-message
+  (async-testing "GH-351: the query goes out before anything says ready, and its answer is used"
+    ;; Nothing has said "ready" and nothing here would have gated on it: the
+    ;; worker answers with whatever it has, so the query is always sent.
     (let [{:keys [deliver! posted target]} (stub-worker)
           db     (sut/attach target)
           answer (dictionary/completions db "Hund")]
@@ -101,6 +101,33 @@
                :pos          "noun"
                :translations ["собака" "пёс"]}]
              (await answer))))))
+
+
+(deftest a-tab-without-the-dictionary-answers-no-completions
+  (async-testing "GH-351: no rows is an ordinary answer, not a rejection and not a wait"
+    (let [{:keys [deliver! target]} (stub-worker)
+          db     (sut/attach target)
+          answer (dictionary/completions db "Hund")]
+      (await (pending-work))
+      (deliver! {:id 1 :result []})
+      (is (= [] (await answer))))))
+
+
+(deftest ready-reports-whether-this-tab-has-the-dictionary
+  (async-testing "GH-351: a turn taken and given back, read through the port's predicate"
+    (let [{:keys [crash! deliver! target]} (stub-worker)
+          db (sut/attach target)]
+      (is (false? (dictionary/ready? db)) "nothing has said ready yet")
+      (deliver! {:type "ready"})
+      (is (true? (dictionary/ready? db)) "this tab took its turn")
+      (deliver! {:type "loading"})
+      (is (false? (dictionary/ready? db)) "and gave it back")
+      (deliver! {:type "ready"})
+      (deliver! {:message "Missing required OPFS APIs." :type "error"})
+      (is (false? (dictionary/ready? db)) "a context that could not open it has nothing")
+      (deliver! {:type "ready"})
+      (crash!)
+      (is (false? (dictionary/ready? db)) "and neither has a crashed worker"))))
 
 
 (deftest an-empty-prefix-asks-the-worker-nothing

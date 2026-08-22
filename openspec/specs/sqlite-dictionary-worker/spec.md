@@ -41,7 +41,7 @@ it, and SHALL load the SQLite engine on its first turn rather than at startup.
 - **WHEN** a context is visible but is not the one in the foreground, or another context holds the lock
 - **THEN** it waits its turn
 - **AND** it does not open, download or import anything
-- **AND** it shows no completions until its turn comes
+- **AND** it answers the queries asked of it with no completions
 
 #### Scenario: Context killed without warning
 - **WHEN** the context holding the database is closed rather than backgrounded
@@ -63,9 +63,12 @@ it, and SHALL load the SQLite engine on its first turn rather than at startup.
 The system SHALL provide a worker proxy on the main thread that sends SQL exec messages to
 its own worker and returns Promises resolved by matching request id.
 
-A worker SHALL hold a request made while it has no database and SHALL settle it when its
-turn comes. A request SHALL NOT be discarded for arriving early, and the main thread SHALL
-NOT gate a request on readiness.
+A worker SHALL answer every request from what its context has at that moment, and SHALL
+NOT queue one for later. A request made while it has no database SHALL be answered with an
+empty result, in the shape a real empty answer has; a request made after the context failed
+to open the database SHALL be rejected with that failure, so a broken dictionary stays
+distinguishable from a prefix with no completions. The main thread SHALL NOT gate a request
+on readiness.
 
 #### Scenario: Exec call over RPC
 - **WHEN** the dictionary repo needs completions for a prefix
@@ -74,9 +77,9 @@ NOT gate a request on readiness.
 
 #### Scenario: Query asked while waiting for a turn
 - **WHEN** a completion request is made in a context that does not hold the database
-- **THEN** the worker holds it
-- **AND** answers it when that context takes its turn, with no further prompting from the page
-- **AND** the home page discards the answer if the input has changed since
+- **THEN** the worker answers it at once with an empty result
+- **AND** it does not keep the request, so the answer is not repeated when the turn comes
+- **AND** the next keystroke is what asks again
 
 #### Scenario: Query when the database cannot be opened
 - **WHEN** a completion request is issued and this context failed to open the database

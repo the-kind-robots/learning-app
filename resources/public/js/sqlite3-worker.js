@@ -1,8 +1,7 @@
 // The page's end of the dictionary. Every tab has one of these and they never
 // speak to each other; which of them has the database open is decided by the
-// browser's lock manager, and one without the lock holds its queries until
-// its turn comes. Neither this file nor the page can tell the two apart —
-// that is the point of #351.
+// browser's lock manager, and one without the lock answers with no
+// completions rather than queueing the query.
 //
 // The page does have to say one thing about itself: whether it is the tab in
 // front. Only that tab may hold the database — a backgrounded one is frozen
@@ -18,5 +17,5 @@ self.addEventListener("message", (e) => {
     dictionary.pageIsForeground(e.data.foreground);
     return;
   }
-  dictionary.request(e.data).then((response) => self.postMessage(response));
+  self.postMessage(dictionary.request(e.data));
 });
