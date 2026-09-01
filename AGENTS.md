@@ -62,18 +62,19 @@ Always use `:reload` when requiring namespaces to pick up changes.
 
 # Branches and Worktrees
 
-- Create branches only with `gh issue develop <number> --checkout`, so the branch is linked to its issue on GitHub. Never `git checkout -b` for tracked work.
-- The coordinating session stays in the main checkout and never enters a worktree. It files the issues, hands them out and watches the board; the code is written by whoever got the task, including an edit the coordinator would rather make itself.
-- An agent launched from the main checkout inherits no pin, so it runs the order below in full and works in a directory of its own — one task, one `.claude/worktrees/<slug>`. Let the coordinator move into a worktree first and every agent it launches inherits that pin: the order stops working for them, and what is left is someone else's branch in someone else's worktree, or a nested one (#346).
-- Working in the main checkout, plain `gh issue develop <number> --checkout` is enough.
-- From a session that can create worktrees freely: the built-in mechanism branches from `master` on its own, which would leave the issue with no development link — that is how #289 ended up on a branch GitHub does not know about. Order that satisfies both rules: `gh issue develop <number>` first, then `git worktree add .claude/worktrees/<slug> <branch>`, then enter that path with `EnterWorktree` (it takes an existing worktree path, not only a new name).
-- Pinned to a worktree, with work that must land another branch: `gh issue develop <number>` without `--checkout`, then `git worktree add ./wt-<number> <branch>` **inside your own worktree**, then plain `cd` there in Bash. Do not call `EnterWorktree` here: it moves your file access but not the isolation guard, so every later Bash call is refused — `pwd` included — and `ExitWorktree` is not available to a pinned agent, so the move cannot be undone. Entering your own worktree by path again restores Bash. Measured 2026-08-15; the guard belongs to the harness and no repo setting relaxes it, so if it ever starts following `EnterWorktree`, delete this paragraph.
-- `wt-*` at a worktree root is gitignored on purpose: `git add -A` in the parent stages the inner checkout as an embedded repository, and the finish script stages everything.
-- A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared, and a fresh checkout costs about a gigabyte here plus a cold shadow-cljs cache.
-  - **Main worktree** — anything needing the full stand: sync, dictionary, migrations, schema, anything talking to CouchDB or nginx.
-  - **Worktree** — work needing only the compiler and tests: refactors, style, docs, skills, tests, small UI fixes.
-- Worktrees come from the built-in mechanism (`EnterWorktree` / `ExitWorktree`), which keeps them in `.claude/worktrees/`. Do not create them by hand and do not invent other locations. The pinned-agent fallback above is the one exception, and it exists because nothing else runs.
-- On merge, delete the branch and remove the worktree — a nested `wt-<number>` included. Both accumulate silently otherwise.
+**One rule: everything under your own worktree root is yours, nothing outside it is.** A worktree nested under your root is writable, editor tools included. A sibling is not: `EnterWorktree` onto one claims success and moves nothing — every later Bash call is refused, `pwd` included, until you re-enter your own path. `git -C <path outside your worktree>` is refused on the string; drop the redirect and the same command runs.
+
+- Branches come from `gh issue develop <number>` only, so the branch is linked to its issue. Never `git checkout -b`, and never let the worktree mechanism make the branch — it branches from `master` and leaves the issue with no development link (#289).
+- The coordinating session stays in the main checkout and delegates every repository edit, including one it would rather make itself.
+- Hand work out by spawning the executor with `isolation: "worktree"`. Without it an agent cannot reach a worktree at all: `EnterWorktree` is refused by `path` (cwd is the repository root) and by `name` (cwd override), and its editor tools are refused repository-wide, even into a worktree it just created. Only shell writes land.
+- In the main checkout, `gh issue develop <number> --checkout` is enough.
+- Pinned to a worktree and needing another branch: `gh issue develop <number>` without `--checkout`, `git worktree add ./wt-<number> <branch>` **inside your own worktree**, then plain `cd`. Not `EnterWorktree`. Ordinary worktrees stay under `.claude/worktrees/`; this nested one is the exception, and `/wt-*/` is gitignored so `git add -A` in the parent cannot stage the inner checkout as an embedded repository.
+- A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared.
+  - **Main worktree** — the full stand: sync, dictionary, migrations, schema, anything through CouchDB or nginx.
+  - **Worktree** — compiler and tests only: refactors, style, docs, skills, tests, small UI fixes.
+- On merge, delete the branch and remove the worktree, a nested `wt-<number>` included.
+
+Measured 2026-08-31 on Claude Code 2.1.251; the boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` in `.claude/settings.json` is the owner's lever over it, not yours. Re-measure after a CLI update.
 
 # Browser / PWA Verification
 
