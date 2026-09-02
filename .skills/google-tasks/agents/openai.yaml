@@ -1,0 +1,6 @@
+interface:
+  display_name: "Google Tasks"
+  short_description: "Pull notes captured on the phone into tracked work, then close them"
+  default_prompt: "Read the open notes in Google Tasks with the skill's CLI, decide for each whether it is work a pull request can close, a bug, a decision worth recording, or a finding on work already tracked; file the first three through start_issue_flow.sh and the last as a comment on the existing issue; then mark each handled task done so it is not read twice."
+policy:
+  allow_implicit_invocation: false
