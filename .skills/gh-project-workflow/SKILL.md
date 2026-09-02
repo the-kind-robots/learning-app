@@ -17,7 +17,8 @@ In this repo it is often used as a sub-skill of the higher-level tracked-deliver
 ```bash
 gh auth refresh -s project
 ```
-2. Load repo-level defaults from `references/config.env.example` (or your own env file).
+2. Load repo-level defaults from `references/config.env.example` (or your own env file). Despite the
+   name it is the live config this repo sources, not a sample to copy — edit it when the board moves.
 3. Run `scripts/start_issue_flow.sh` to create and classify work and start coding branch.
 4. Run `scripts/finish_issue_flow.sh` to commit, push, create PR, and merge.
 5. Run `scripts/deploy.sh` only when the user explicitly asks to deploy.
@@ -25,12 +26,12 @@ gh auth refresh -s project
 ## One-Time Setup
 
 - Set these environment variables before running scripts:
-  - `GHWF_OWNER` (project owner login)
-  - `GHWF_REPO` (`owner/repo`)
-  - `GHWF_PROJECT_NUMBER` (Project V2 number; this repo uses `2` for the `Learning app` project)
+  - `GHWF_OWNER` (project owner login; this repo uses the organization `the-kind-robots`)
+  - `GHWF_REPO` (`owner/repo`; `the-kind-robots/learning-app`)
+  - `GHWF_PROJECT_NUMBER` (Project V2 number; this repo uses `11` for the org `Learning app` project)
 - Optionally set:
   - `GHWF_AREA_FIELD` (default: `Area`, optional if your project does not expose it)
-  - `GHWF_PRIORITY_FIELD` (default: `Priority`)
+  - `GHWF_PRIORITY_FIELD` (default: `Priority`; the organization's native **issue** field, options `Urgent`/`High`/`Medium`/`Low`)
   - `GHWF_SIZE_FIELD` (default: `Size`)
   - `GHWF_STATUS_FIELD` (default: `Status`)
   - `GHWF_DEFAULT_ASSIGNEES` (default: `@me`)
@@ -49,7 +50,7 @@ Run this when the user wants to create a new item and begin implementation.
   --title "Add offline start screen" \
   --body "Allow basic lesson entry without network" \
   --area "Backend" \
-  --priority "Major" \
+  --priority "High" \
   --status "In progress" \
   --assignees "@me" \
   --labels "enhancement,offline" \
@@ -64,7 +65,9 @@ Important behavior:
 - Default mode (`--mode issue`) creates an issue only when no reusable project item or issue exists, adds it to project, sets fields, and creates/checks out a dev branch.
 - Draft mode (`--mode draft-convert`) creates a draft item only when no reusable item exists, sets fields, converts it to an issue, then creates/checks out branch.
 - Branch creation uses `gh issue develop <number> --checkout`.
-- Requested optional fields like `Area`, `Priority`, and `Size` are skipped with a warning when the target project does not expose them.
+- `Area`, `Size` and `Status` are ordinary project fields, set by name through `gh project item-edit`; `Area` and `Size` are skipped with a warning when the target project does not expose them.
+- `Priority` is not a project field. It is the organization's native issue field, written with the `setIssueFieldValue` mutation — `updateProjectV2ItemFieldValue` refuses a column backed by an issue field. Valid options are `Urgent`, `High`, `Medium`, `Low`; the retired `Blocker`/`Critical`/`Major`/`Minor`/`Trivial` are rejected with the replacement named.
+- Reading Priority back needs the `ProjectV2ItemIssueFieldValue` fragment. A plain `ProjectV2ItemFieldSingleSelectValue` query returns nothing for it, which looks exactly like "unset" and is not.
 - Missing labels are skipped with a warning instead of aborting issue creation.
 - If no assignee or status is provided, the workflow defaults to `@me` and `Backlog`.
 - For active work, pass `--status "In progress"` explicitly.
