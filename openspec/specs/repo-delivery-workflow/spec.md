@@ -112,6 +112,13 @@ creation SHALL be denied. A pull request SHALL be denied from a branch that carr
 issue number, and allowed from a branch created for an issue. Each refusal SHALL name the
 command to use instead.
 
+The guard SHALL judge only invocations that can create work. A statement carrying a
+standalone help flag prints documentation and mutates nothing, so it SHALL pass untouched —
+neither denied nor prompted — and that test SHALL live once, ahead of the per-command
+dispatch, so every rule the guard carries is covered by it rather than by a rule-specific
+exemption. The flag SHALL be matched as a whole word, because a statement reaches the guard
+already split on whitespace.
+
 The branch a pull request is judged on SHALL be the branch the command names when it names
 one, and the current branch only when it does not. Judging a pull request by the working
 directory's own branch decides about something other than what the command does: under the
@@ -130,6 +137,20 @@ the same explanation.
 - **WHEN** an agent runs a raw issue-creation command
 - **THEN** the call is denied and the refusal names the workflow script that creates the
   issue, places it on the board and sets its fields
+
+#### Scenario: A command's documentation is read
+
+- **WHEN** a statement that would otherwise be refused or prompted carries a standalone help
+  flag, such as an issue-creation or pull-request command asked for its usage text
+- **THEN** the statement passes untouched, because reading documentation creates no issue,
+  no pull request and no branch
+
+#### Scenario: Help text quoted inside an argument
+
+- **WHEN** a help flag appears as a word inside a quoted argument rather than as a flag
+- **THEN** the guard's judgement is undefined for that statement, because word-splitting has
+  already erased the argument boundary by the time the guard sees it — the same blind spot
+  the branch-name test already documents
 
 #### Scenario: Pull request from an untracked branch
 
