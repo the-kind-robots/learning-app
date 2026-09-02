@@ -28,6 +28,10 @@
       "Bash(mv *)",
       "Bash(kill *)",
       "WebSearch"
+    ],
+    "ask": [
+      "Bash(git checkout -b *)",
+      "Bash(git switch -c *)"
     ]
   },
   "hooks": {
