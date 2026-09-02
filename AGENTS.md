@@ -13,8 +13,9 @@
 - The flow: issue on the board -> branch from that issue -> OpenSpec change -> implement -> verify -> archive -> PR -> merge -> Done -> cleanup.
 - `repo-task-delivery` is the entrypoint. It delegates GitHub to `gh-project-workflow` and specs to the OpenSpec skills. Do not start at a sub-skill; they assume the flow is already underway.
 - Issues come from the workflow, never by hand:
-  `bash .skills/gh-project-workflow/scripts/start_issue_flow.sh --title "..." --priority Major --status "In progress" --base master`
-  One call creates the issue, reuses an existing item of the same title, puts it on project `Learning app` (2), sets Status and Priority, and runs `gh issue develop --checkout`.
+  `bash .skills/gh-project-workflow/scripts/start_issue_flow.sh --title "..." --priority High --status "In progress" --base master`
+  One call creates the issue, reuses an existing item of the same title, puts it on the org project `Learning app` (`the-kind-robots`, number 11), sets Status and Priority, and runs `gh issue develop --checkout`.
+- Priority is **Urgent/High/Medium/Low** and lives on the organization's native issue field, not on the board. The project refuses to write a column backed by an issue field, so the script sets it with `setIssueFieldValue`; reading it back needs the `ProjectV2ItemIssueFieldValue` fragment, or the value looks unset when it is not. The retired `Blocker/Critical/Major/Minor/Trivial` are rejected by name.
 - A raw `gh issue create` makes an issue that is on no board, with no Status and no Priority — work nobody can see. #288, #289, #290 and #292 were made that way and had to be added by hand afterwards. A `PreToolUse` hook now refuses the raw form and names the script instead.
 - The board is the owner's only window into the work. An issue that is not on it does not exist.
 - The delegation rule under **Branches and Worktrees** is enforced, not left to memory. A second `PreToolUse` hook, `.claude/hooks/coordinator-guard.sh`, refuses `Edit`/`Write`/`NotebookEdit` from a session with no subagent id when the target is inside the repository, and asks instead of refusing when the target's worktree is on an issue branch, since that is also what legitimate full-stand work looks like. Subagents pass untouched. The same hook also watches `Bash`, where it only ever asks: an editor target is given in the payload, a shell target is guessed from a string, and its list of shell write shapes is short and knowingly incomplete. Its header comment records what it cannot tell apart — read it before trusting it, and do not read it as a lock.
@@ -54,7 +55,7 @@ Always use `:reload` when requiring namespaces to pick up changes.
 
 - The repository is public. Never state production facts in issues, PRs, commits or specs — what its passwords are not, what is currently broken there. Run such checks, report the results privately, and keep the tracker wording neutral ("a packaged deployment cannot override the dev credentials").
 - Issues form a shallow DAG. Dependency is the native blocked-by relation, visible on the issue and the board:
-  `gh api graphql -f query='mutation($i: ID!, $b: ID!) { addBlockedBy(input: {issueId: $i, blockingIssueId: $b}) { issue { number } } }' -f i=$(gh api repos/u473t8/learning-app/issues/<child> --jq .node_id) -f b=$(gh api repos/u473t8/learning-app/issues/<blocker> --jq .node_id)`
+  `gh api graphql -f query='mutation($i: ID!, $b: ID!) { addBlockedBy(input: {issueId: $i, blockingIssueId: $b}) { issue { number } } }' -f i=$(gh api repos/the-kind-robots/learning-app/issues/<child> --jq .node_id) -f b=$(gh api repos/the-kind-robots/learning-app/issues/<blocker> --jq .node_id)`
   A `Needs: #N` body line may mirror it for grep. No cycles.
 - An issue exists only for work a pull request can close, a bug, or a decision worth recording. Findings, measurements and design notes are comments on the existing issue — never a new issue.
 - Before filing, search open issues for an existing home; one issue may host several PRs.
