@@ -17,7 +17,7 @@
   One call creates the issue, reuses an existing item of the same title, puts it on project `Learning app` (2), sets Status and Priority, and runs `gh issue develop --checkout`.
 - A raw `gh issue create` makes an issue that is on no board, with no Status and no Priority — work nobody can see. #288, #289, #290 and #292 were made that way and had to be added by hand afterwards. A `PreToolUse` hook now refuses the raw form and names the script instead.
 - The board is the owner's only window into the work. An issue that is not on it does not exist.
-- The delegation rule under **Branches and Worktrees** is enforced, not left to memory. A second `PreToolUse` hook, `.claude/hooks/coordinator-guard.sh`, refuses `Edit`/`Write`/`NotebookEdit` from a session with no subagent id when the target is inside the repository, and asks instead of refusing when the target's worktree is on an issue branch, since that is also what legitimate full-stand work looks like. Subagents pass untouched. The same hook also watches `Bash`, where it only ever asks: an editor target is given in the payload, a shell target is guessed from a string, and its list of shell write shapes is short and knowingly incomplete. Its header comment records what it cannot tell apart — read it before trusting it, and do not read it as a lock.
+- The delegation rule under **Branches and Worktrees** is enforced, not left to memory. A second `PreToolUse` hook, `.claude/hooks/coordinator-guard.sh`, refuses `Edit`/`Write`/`NotebookEdit` from a session with no subagent id when the target is inside the repository, and asks instead of refusing when the target's worktree is on an issue branch, since that is also what legitimate full-stand work looks like. Subagents pass untouched. The same hook also watches `Bash`, where it only ever asks: an editor target is given in the payload, a shell target is guessed from a string, and its list of shell write shapes is short and knowingly incomplete. Its header comment records what it cannot tell apart — read it before trusting it, and do not read it as a lock. Since 2.1.143 `worktree.bgIsolation` refuses a background coordinator's editor writes natively; the hook's own coverage is the interactive session and shell writes.
 
 Do not start the flow when the user asks a question, wants only reading or measuring, is continuing an issue that is already active, or says to skip GitHub/OpenSpec. Everything else goes through it — bug, refactor, docs, skills, config. "It is small" is not an exception; it is the usual excuse, and it is what produced four issues nobody could see.
 
@@ -64,17 +64,16 @@ Always use `:reload` when requiring namespaces to pick up changes.
 
 **One rule: everything under your own worktree root is yours, nothing outside it is.** A worktree nested under your root is writable, editor tools included. A sibling is not: `EnterWorktree` onto one claims success and moves nothing — every later Bash call is refused, `pwd` included, until you re-enter your own path. `git -C <path outside your worktree>` is refused on the string; drop the redirect and the same command runs.
 
-- Branches come from `gh issue develop <number>` only, so the branch is linked to its issue. Never `git checkout -b`, and never let the worktree mechanism make the branch — it branches from `master` and leaves the issue with no development link (#289).
+- Branches come from `gh issue develop <number>` only, so the branch is linked to its issue. Never `git checkout -b` or `git switch -c` — a permission rule in `.claude/settings.json` asks on both — and never let the worktree mechanism make the branch: it branches from `master` and leaves the issue with no development link (#289).
 - The coordinating session stays in the main checkout and delegates every repository edit, including one it would rather make itself.
-- Hand work out by spawning the executor with `isolation: "worktree"`. Without it an agent cannot reach a worktree at all: `EnterWorktree` is refused by `path` (cwd is the repository root) and by `name` (cwd override), and its editor tools are refused repository-wide, even into a worktree it just created. Only shell writes land.
+- Hand work to the `executor` agent (`.claude/agents/executor.md`). Its definition carries the worktree isolation and the branch recipe, the nested `wt-<number>` fallback included; `/wt-*/` is gitignored so the inner checkout cannot be staged from the parent.
 - In the main checkout, `gh issue develop <number> --checkout` is enough.
-- Pinned to a worktree and needing another branch: `gh issue develop <number>` without `--checkout`, `git worktree add ./wt-<number> <branch>` **inside your own worktree**, then plain `cd`. Not `EnterWorktree`. Ordinary worktrees stay under `.claude/worktrees/`; this nested one is the exception, and `/wt-*/` is gitignored so `git add -A` in the parent cannot stage the inner checkout as an embedded repository.
 - A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared.
-  - **Main worktree** — the full stand: sync, dictionary, migrations, schema, anything through CouchDB or nginx.
-  - **Worktree** — compiler and tests only: refactors, style, docs, skills, tests, small UI fixes.
+  - **Main checkout** — the full stand: sync, dictionary, migrations, schema, anything through CouchDB or nginx.
+  - **Executor** — compiler and tests only: refactors, style, docs, skills, tests, small UI fixes.
 - On merge, delete the branch and remove the worktree, a nested `wt-<number>` included.
 
-Measured 2026-08-31 on Claude Code 2.1.251; the boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` in `.claude/settings.json` is the owner's lever over it, not yours. Re-measure after a CLI update.
+Measured 2026-09-02 on Claude Code 2.1.258; the boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` in `.claude/settings.json` is the owner's lever over it, not yours. Re-measure after a CLI update.
 
 # Browser / PWA Verification
 

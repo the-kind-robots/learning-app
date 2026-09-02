@@ -91,12 +91,6 @@ while IFS= read -r st; do
   head=${1:-}; sub=${2:-}; verb=${3:-}
 
   case "$head" in
-    git)
-      case "$sub $verb" in
-        "checkout -b"|"switch -c")
-          decide ask "AGENTS.md, Branches: a tracked branch comes from \`gh issue develop <n> --checkout\`, so GitHub links it to its issue. A branch made this way leaves the issue with no development link and drops out of every cleanup. Approve only for throwaway local work." ;;
-      esac
-      continue ;;
     gh|*/gh) ;;
     *) continue ;;
   esac
