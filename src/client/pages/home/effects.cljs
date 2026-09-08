@@ -11,15 +11,23 @@
 ;; Measured end to end (#195): past the debounce, worker + SQLite + render
 ;; cost 9-44 ms (one-letter prefix worst). And since the list now keeps its
 ;; previous answer until the next one arrives (#178), a mid-burst answer
-;; replaces smoothly instead of flashing. 100 ms still coalesces fast typing
-;; (120-180 ms per key) and puts suggestions ~110-145 ms after the pause.
+;; replaces smoothly instead of flashing. 100 ms does not coalesce typing at
+;; the measured cadence — 120-180 ms per key is longer than the wait, so a
+;; trailing debounce expires between keys and every keystroke gets a query of
+;; its own. What it does buy is the burst faster than that, and suggestions
+;; ~110-145 ms after the typing stops.
 (def ^:private suggest!
   (gfn/debounce
    (fn ^:async suggest!
      [dispatch dictionary value]
      (try
-       (when-let [completions (when ((:dictionary/ready? dictionary))
-                                (await ((:dictionary/completions dictionary) value)))]
+       ;; No readiness check, and none is coming back: the worker answers
+       ;; with what this tab has — the database if it holds it, no rows if it
+       ;; does not (#351) — so a gate here would only re-decide what has
+       ;; already been decided one hop away. `:dictionary/ready?` stays on the
+       ;; port as the reading #312 needs to say why a list is empty. A worker
+       ;; that could not open the database rejects, which the catch reports.
+       (let [completions (await ((:dictionary/completions dictionary) value))]
          ;; The queried value rides along so the action can drop answers that
          ;; arrive after further typing (stale list, stale translation prefill).
          (dispatch [[:action/update-suggestions {:completions completions :value value}]]))

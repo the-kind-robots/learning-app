@@ -1,95 +1,21 @@
-let db = null;
+// The page's end of the dictionary. Every tab has one of these and they never
+// speak to each other; which of them has the database open is decided by the
+// browser's lock manager, and one without the lock answers with no
+// completions rather than queueing the query.
+//
+// The page does have to say one thing about itself: whether it is the tab in
+// front. Only that tab may hold the database — a backgrounded one is frozen
+// with it, and a merely visible one is not necessarily the one being typed
+// into. How the page decides is the page's business; here it is one boolean.
 
-const telemetry = new URL(self.location.href).searchParams.has("telemetry");
+importScripts("sqlite3-dictionary.js");
 
-async function measure(phase, fn, extras) {
-  if (!telemetry) return fn();
-  const t0 = performance.now();
-  try {
-    const result = await fn();
-    const msg = { type: "phase", phase, status: "ok", durationMs: Math.round(performance.now() - t0) };
-    if (extras) Object.assign(msg, extras(result));
-    self.postMessage(msg);
-    return result;
-  } catch (err) {
-    self.postMessage({ type: "phase", phase, status: "error",
-                       durationMs: Math.round(performance.now() - t0), reason: String(err) });
-    throw err;
+dictionary.start((msg) => self.postMessage(msg));
+
+self.addEventListener("message", (e) => {
+  if (e.data.type === "foreground") {
+    dictionary.pageIsForeground(e.data.foreground);
+    return;
   }
-}
-
-// Hold the OPFS SAH pool lock for the worker's entire lifetime.
-// `ifAvailable: true` makes a second tab fail fast instead of hanging:
-// it gets null and we report a clear "another tab open" error.
-async function withSahPoolLock(initFn) {
-  return navigator.locks.request(
-    "sprecha-sqlite-opfs-sahpool",
-    { ifAvailable: true },
-    async (lock) => {
-      if (lock === null) {
-        self.postMessage({
-          type:    "error",
-          code:    "another-tab-open",
-          message: "Приложение уже открыто в другой вкладке. Закройте её и обновите страницу."
-        });
-        return;
-      }
-      try {
-        await initFn();
-        self.postMessage({ type: "ready" });
-      } catch (err) {
-        self.postMessage({ type: "error", message: String(err) });
-        return;
-      }
-      // Keep the lock alive for the rest of the worker's life;
-      // the browser releases it automatically when the worker terminates.
-      await new Promise(() => {});
-    });
-}
-
-
-async function init() {
-  const params = new URL(self.location.href).searchParams;
-  const dir = params.get("sqlite3.dir");
-  importScripts(dir ? `${dir}/sqlite3.js` : "sqlite3.js");
-
-  const sqlite3 = await measure("wasm-init", () => sqlite3InitModule());
-  const pool    = await measure("pool-install", () =>
-    sqlite3.installOpfsSAHPoolVfs({ name: "opfs-sahpool", initialCapacity: 3 }));
-
-  const manifest = await measure("manifest", () =>
-    fetch("/dictionary/manifest").then(r => r.json()));
-  const hash12   = manifest.hash.slice(0, 12);
-  const poolFile = `/dict.${hash12}.sqlite`;
-
-  // Unlink stale versions first so their handles become available for import.
-  for (const name of pool.getFileNames()) {
-    if (name !== poolFile && name.startsWith("/dict.") && name.endsWith(".sqlite"))
-      pool.unlink(name);
-  }
-
-  if (!pool.getFileNames().includes(poolFile)) {
-    const buffer = await measure("download",
-      () => fetch(`/dictionary/${manifest.filename}`).then(r => r.arrayBuffer()),
-      ab => ({ bytes: ab.byteLength }));
-    await measure("import", () => pool.importDb(poolFile, new Uint8Array(buffer)));
-  } else {
-    if (telemetry) self.postMessage({ type: "phase", phase: "cache-hit", status: "ok", durationMs: 0, hash12 });
-  }
-
-  await measure("cleanup", () => pool.reduceCapacity(1));
-
-  db = await measure("db-open", () =>
-    new sqlite3.oo1.DB({ filename: poolFile, vfs: "opfs-sahpool" }));
-}
-
-self.addEventListener("message", e => {
-  const msg = e.data;
-  try {
-    self.postMessage({ id: msg.id, result: db.exec(msg) });
-  } catch (err) {
-    self.postMessage({ id: msg.id, error: String(err) });
-  }
+  self.postMessage(dictionary.request(e.data));
 });
-
-withSahPoolLock(() => measure("init", init));
