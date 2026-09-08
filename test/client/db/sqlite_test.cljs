@@ -6,13 +6,18 @@
    [client.support.test :refer [async-testing]])
   (:require
    [adapters.dictionary :as dictionary]
-   [cljs.test :refer-macros [deftest is]]
+   [cljs.test :refer-macros [deftest is testing]]
    [db.sqlite :as sut]))
 
 
 (defn- stub-worker
-  "A message target with the two halves a test needs: `posted` collects what
-   the page sent, `deliver!` plays a message back from the worker."
+  "A message target with the halves a test needs. `posted` collects what the
+   page sent, each entry the message and the port it arrived with; `reply!`
+   answers one of them on that port, the way the worker does; `deliver!` plays
+   a status message back over the worker's own port.
+
+   The ports are real `MessageChannel` ports — Node has those even though it
+   has no `Worker` — so a reply travels the path it travels in a browser."
   []
   (let [listeners (atom {})
         posted    (atom [])
@@ -23,8 +28,12 @@
                        (fn [event handler]
                          (swap! listeners update event (fn [hs] (vec (remove #{handler} hs)))))
                        :postMessage
-                       (fn [msg]
-                         (swap! posted conj msg))}]
+                       (fn [msg transfer]
+                         (swap! posted conj {:msg msg :port (aget transfer 0)}))}
+        reply!    (fn reply!
+                    ([message] (reply! 0 message))
+                    ([n message]
+                     (.postMessage (:port (nth @posted n)) (clj->js message))))]
     {:crash!   (fn []
                  (doseq [handler (get @listeners "error")]
                    (handler #js {})))
@@ -32,6 +41,7 @@
                  (doseq [handler (get @listeners "message")]
                    (handler #js {:data (clj->js message)})))
      :posted   posted
+     :reply!   reply!
      :target   target}))
 
 
@@ -43,40 +53,55 @@
   (js/Promise. (fn [resolve] (js/setTimeout resolve 0))))
 
 
-(deftest lifecycle-messages-leave-the-request-protocol-alone
+(deftest holding-state-reads-one-message
+  (testing "what a message says about this tab holding the database, and nothing else"
+    (is (true? (sut/holding-state #js {:type "ready"})))
+    (is (false? (sut/holding-state #js {:type "loading"})))
+    (is (false? (sut/holding-state #js {:message "Missing required OPFS APIs." :type "error"})))
+    (is (nil? (sut/holding-state #js {:durationMs 12 :phase "db-open" :status "ok" :type "phase"}))
+        "a phase report is not about ownership")
+    (is (nil? (sut/holding-state #js {:result []}))
+        "and neither is anything without a type")))
+
+
+(deftest status-messages-do-not-disturb-a-query
   (async-testing "loading, phases, ready, error and a crash all pass through, and the answer still lands"
-    (let [{:keys [crash! deliver! target]} (stub-worker)
+    (let [{:keys [crash! deliver! reply! target]} (stub-worker)
           db     (sut/attach target)
           answer (sut/exec db #js {:sql "SELECT 1"})]
-      ;; These carry no `id`, so the response matcher must ignore them rather
-      ;; than read `undefined` and resolve the wrong promise.
+      ;; Status arrives on the worker's own port and the reply on the
+      ;; query's, so these cannot be mistaken for it — which is the point of
+      ;; giving each query a channel.
       (deliver! {:type "loading"})
       (deliver! {:durationMs 12 :phase "db-open" :status "ok" :type "phase"})
       (deliver! {:type "ready"})
       (deliver! {:message "Missing required OPFS APIs." :type "error"})
       (crash!)
-      (deliver! {:id 1 :result [{:lemma "Hund"}]})
+      (reply! {:result [{:lemma "Hund"}]})
       (is (= [{:lemma "Hund"}] (js->clj (await answer) :keywordize-keys true))))))
 
 
-(deftest exec-resolves-the-response-with-the-matching-id
-  (async-testing "an answer for another request is ignored, the matching one resolves"
-    (let [{:keys [deliver! posted target]} (stub-worker)
-          db     (sut/attach target)
-          answer (sut/exec db #js {:sql "SELECT 1"})]
-      (is (= 1 (count @posted)))
-      (is (= 1 (.-id (first @posted))))
-      (deliver! {:id 99 :result [{:wrong true}]})
-      (deliver! {:id 1 :result [{:lemma "Hund"}]})
-      (is (= [{:lemma "Hund"}] (js->clj (await answer) :keywordize-keys true))))))
+(deftest two-queries-in-flight-get-their-own-answers
+  (async-testing "each query is answered on its own port, so the replies cannot be swapped"
+    (let [{:keys [posted reply! target]} (stub-worker)
+          db    (sut/attach target)
+          hund  (sut/exec db #js {:sql "SELECT 1"})
+          katze (sut/exec db #js {:sql "SELECT 2"})]
+      (is (= 2 (count @posted)))
+      ;; Answered out of order on purpose: nothing about the order is what
+      ;; pairs a reply with its query.
+      (reply! 1 {:result [{:lemma "Katze"}]})
+      (reply! 0 {:result [{:lemma "Hund"}]})
+      (is (= [{:lemma "Hund"}] (js->clj (await hund) :keywordize-keys true)))
+      (is (= [{:lemma "Katze"}] (js->clj (await katze) :keywordize-keys true))))))
 
 
 (deftest exec-rejects-when-the-worker-reports-an-error
   (async-testing "the failure reaches the caller instead of an empty answer"
-    (let [{:keys [deliver! target]} (stub-worker)
+    (let [{:keys [reply! target]} (stub-worker)
           db     (sut/attach target)
           answer (sut/exec db #js {:sql "SELECT 1"})]
-      (deliver! {:error "Missing required OPFS APIs." :id 1})
+      (reply! {:error "Missing required OPFS APIs."})
       (try
         (await answer)
         (is false "should have rejected")
@@ -88,14 +113,13 @@
   (async-testing "GH-351: the query goes out before anything says ready, and its answer is used"
     ;; Nothing has said "ready" and nothing here would have gated on it: the
     ;; worker answers with whatever it has, so the query is always sent.
-    (let [{:keys [deliver! posted target]} (stub-worker)
+    (let [{:keys [posted reply! target]} (stub-worker)
           db     (sut/attach target)
           answer (dictionary/completions db "Hund")]
       (await (pending-work))
       (is (= 1 (count @posted))
           "no readiness gate swallowed the query")
-      (deliver! {:id     1
-                 :result [{:has_exact 1 :lemma "Hund" :pos "noun" :translations "собака,пёс"}]})
+      (reply! {:result [{:has_exact 1 :lemma "Hund" :pos "noun" :translations "собака,пёс"}]})
       (is (= [{:exact?       true
                :lemma        "Hund"
                :pos          "noun"
@@ -105,11 +129,11 @@
 
 (deftest a-tab-without-the-dictionary-answers-no-completions
   (async-testing "GH-351: no rows is an ordinary answer, not a rejection and not a wait"
-    (let [{:keys [deliver! target]} (stub-worker)
+    (let [{:keys [reply! target]} (stub-worker)
           db     (sut/attach target)
           answer (dictionary/completions db "Hund")]
       (await (pending-work))
-      (deliver! {:id 1 :result []})
+      (reply! {:result []})
       (is (= [] (await answer))))))
 
 

@@ -61,7 +61,10 @@ it, and SHALL load the SQLite engine on its first turn rather than at startup.
 
 ### Requirement: Main thread queries the worker via postMessage RPC
 The system SHALL provide a worker proxy on the main thread that sends SQL exec messages to
-its own worker and returns Promises resolved by matching request id.
+its own worker and returns a Promise for each. A query SHALL carry a message channel of
+its own and SHALL be answered on that channel, so a reply is paired with its query by the
+channel it arrived on rather than by an identifier either side has to track. The worker's
+own port SHALL carry only the worker's status messages to its own page.
 
 A worker SHALL answer every request from what its context has at that moment, and SHALL
 NOT queue one for later. A request made while it has no database SHALL be answered with an
@@ -72,8 +75,9 @@ on readiness.
 
 #### Scenario: Exec call over RPC
 - **WHEN** the dictionary repo needs completions for a prefix
-- **THEN** it sends a SQL `exec` request with a unique request id to the worker proxy
-- **AND** the Promise resolves when the worker posts the matching response
+- **THEN** it sends a SQL `exec` request to the worker proxy, carrying a channel of its own
+- **AND** the Promise resolves when the worker answers on that channel
+- **AND** two requests in flight cannot be answered into each other's Promise
 
 #### Scenario: Query asked while waiting for a turn
 - **WHEN** a completion request is made in a context that does not hold the database

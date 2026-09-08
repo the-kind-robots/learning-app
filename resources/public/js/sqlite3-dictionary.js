@@ -80,7 +80,9 @@ let yieldTurn = null;
 // from here either.
 let lifecycle = { type: "loading" };
 
-let broadcast = () => {};
+// How this worker speaks to the page that made it — that one page, never
+// another tab. Set by `start`, called from `report` and `measure`.
+let notifyPage = () => {};
 
 
 // Every phase the page's instrumentation reports, startup and per-turn alike.
@@ -92,11 +94,11 @@ async function measure(phase, fn, extras) {
     const result = await fn();
     const msg = { type: "phase", phase, status: "ok", durationMs: Math.round(performance.now() - t0) };
     if (extras) Object.assign(msg, extras(result));
-    broadcast(msg);
+    notifyPage(msg);
     return result;
   } catch (err) {
-    broadcast({ type: "phase", phase, status: "error",
-                durationMs: Math.round(performance.now() - t0), reason: String(err) });
+    notifyPage({ type: "phase", phase, status: "error",
+                 durationMs: Math.round(performance.now() - t0), reason: String(err) });
     throw err;
   }
 }
@@ -138,7 +140,7 @@ async function installPool() {
       ab => ({ bytes: ab.byteLength }));
     await measure("import", () => pool.importDb(poolFile, new Uint8Array(buffer)));
   } else if (telemetry) {
-    broadcast({ type: "phase", phase: "cache-hit", status: "ok", durationMs: 0, hash12 });
+    notifyPage({ type: "phase", phase: "cache-hit", status: "ok", durationMs: 0, hash12 });
   }
 
   await measure("cleanup", () => pool.reduceCapacity(1));
@@ -178,9 +180,9 @@ async function close() {
 
 function answer(db, msg) {
   try {
-    return { id: msg.id, result: db.exec(msg) };
+    return { result: db.exec(msg) };
   } catch (err) {
-    return { id: msg.id, error: String(err) };
+    return { error: String(err) };
   }
 }
 
@@ -192,8 +194,8 @@ function answer(db, msg) {
 // a word it does not contain (#312).
 function respond(db, lifecycle, msg) {
   if (db) return answer(db, msg);
-  if (lifecycle.type === "error") return { id: msg.id, error: lifecycle.message };
-  return { id: msg.id, result: [] };
+  if (lifecycle.type === "error") return { error: lifecycle.message };
+  return { result: [] };
 }
 
 
@@ -220,7 +222,7 @@ function request(msg) {
 // as `ready` and `error`.
 function report(state) {
   lifecycle = state;
-  broadcast(state);
+  notifyPage(state);
 }
 
 
@@ -294,8 +296,8 @@ function pageIsForeground(next) {
 }
 
 
-function start(emit) {
-  broadcast = emit;
+function start(notify) {
+  notifyPage = notify;
 }
 
 
