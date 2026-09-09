@@ -2,7 +2,7 @@
 The data model spec defines the required document shapes stored in the local database.
 ## Requirements
 ### Requirement: Vocabulary documents are stored
-The system SHALL store vocabulary documents with translations and ISO 8601 timestamps for creation and modification.
+The system SHALL store vocabulary documents with translations and ISO 8601 timestamps for creation and modification. A translation SHALL be stored as it was entered: the entered text becomes one `translation` entry and SHALL NOT be split on punctuation. `translation` stays a vector, so a document written before this rule keeps its several entries and is read as it is.
 
 #### Scenario: Vocabulary document shape
 - **WHEN** a vocabulary word is stored
@@ -18,6 +18,27 @@ Example:
   "modified-at": "2026-01-20T10:10:00.000Z"
 }
 ```
+
+#### Scenario: A translation containing punctuation stays whole
+- **WHEN** a word is added with the translation `без того, чтобы`
+- **THEN** its `translation` holds one entry whose value is `без того, чтобы`
+- **AND** the same holds for a translation containing `;`, `.` or `/`
+
+#### Scenario: A translation spanning several lines stays whole
+- **WHEN** a word is added with a translation typed over several lines
+- **THEN** its `translation` holds one entry carrying the line breaks as typed
+
+#### Scenario: An edited translation follows the same rule
+- **WHEN** an existing word document's translation is replaced with `без того, чтобы`
+- **THEN** its `translation` holds one entry whose value is `без того, чтобы`
+
+#### Scenario: A blank translation stores nothing
+- **WHEN** a word is submitted with a translation that is empty or only whitespace
+- **THEN** no translation entry is produced and the add is rejected as empty
+
+#### Scenario: Documents written before the rule are read unchanged
+- **WHEN** a stored word document holds several `translation` entries
+- **THEN** it is read as it is, with no migration and no merging of its entries
 
 ### Requirement: A vocabulary document carries its kind
 The system SHALL store phrases as vocabulary documents: `type` `"vocab"`, the content-addressed `_id` of ADR-0008 (`vocab:` plus the normalized value, spaces preserved), and `kind` `"phrase"`. A document without `kind` SHALL be read as a word, so documents written before phrases existed need no migration. A phrase's `value` SHALL have its whitespace collapsed and its `translation` entries SHALL be whole strings, never split on punctuation. Review documents SHALL reference phrases through the existing `word-id` field.
@@ -213,3 +234,4 @@ storage layer's default result limit.
 
 - **WHEN** a migration runs against a source database that holds no documents
 - **THEN** it completes without error and copies nothing
+

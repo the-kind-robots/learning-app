@@ -15,4 +15,4 @@
 ## 3. Closeout
 
 - [ ] 3.1 Delete the superseded branch `add-claude-github-actions-1786896889717`
-- [ ] 3.2 Archive the change and open the pull request
+- [x] 3.2 Archive the change and open the pull request

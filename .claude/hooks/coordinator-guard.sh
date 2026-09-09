@@ -75,13 +75,18 @@
 # visible and diagnosable within one session, not a blocked repository.
 #
 # The harness has a write guard of its own, and it does not agree with this one. Measured
-# 2026-08-16: it keys on the PARENT session, not on the caller and not on the target —
-# Edit/Write/NotebookEdit were refused repository-wide with "this subagent's parent bg
-# session hasn't isolated yet, so writes to the shared checkout are blocked", including for
-# a write aimed at a worktree the agent had just created for itself. Bash is outside it
-# entirely: `git worktree add` wrote 731 files in the same session that could not write one
-# file through Edit. So an allow from this hook is not a promise the write will land, and a
-# refusal the reader sees may be the harness's rather than this one's. Check the wording.
+# 2026-08-31 on Claude Code 2.1.251. For a subagent whose parent session has not isolated it
+# keys on that PARENT, not on the caller and not on the target: Edit/Write/NotebookEdit are
+# refused repository-wide with "this subagent's parent bg session hasn't isolated yet, so
+# writes to the shared checkout are blocked", including for a write aimed at a worktree the
+# agent had just created for itself. For an agent that IS pinned to a worktree the boundary
+# is a path prefix on its own root — a nested `wt-<n>` worktree it adds there is writable
+# through the editor tools, which it was not when this was last measured on 2026-08-16,
+# while a sibling worktree and the shared checkout stay out of reach. Bash is outside the
+# harness guard entirely: `git worktree add` wrote 731 files in the same session that could
+# not write one file through Edit. So an allow from this hook is not a promise the write
+# will land, and a refusal the reader sees may be the harness's rather than this one's.
+# Check the wording.
 #
 # This hook warns and leaves a trace. It reads a payload, a command string and a branch name,
 # so it stops an accident, not an intent. Do not read a refusal here as an obstacle to get
@@ -245,7 +250,7 @@ if [ "$tool" = "Bash" ]; then
 The coordinator files work and hands it to an executor; it does not edit the repository itself (AGENTS.md, # Delivery). A shell write is the same edit an Edit/Write refusal would have caught, taken by a route the editor matcher never sees.
 
 If you are here because an edit was just refused: stop, and report the action and the refusal verbatim to the owner — do not complete it through the shell. Otherwise hand the edit to an executor, which works on an issue branch in its own worktree:
-  $START --title \"...\" --priority <Blocker|Critical|Major|Minor|Trivial> --status \"In progress\" --base master
+  $START --title \"...\" --priority <Urgent|High|Medium|Low> --status \"In progress\" --base master
 
 This check reads a command string, so it guesses. Approve it if the guess is wrong."
     done <<CANDIDATES
@@ -289,7 +294,7 @@ Approve only if this session owns that issue. Otherwise hand the work to an exec
 The coordinator files work and hands it to an executor; it does not edit the repository itself (AGENTS.md, # Delivery). Editing here is how the pin in #346 happened.
 
 File the issue, then raise an executor for it:
-  $START --title \"...\" --priority <Blocker|Critical|Major|Minor|Trivial> --status \"In progress\" --base master
+  $START --title \"...\" --priority <Urgent|High|Medium|Low> --status \"In progress\" --base master
 
 The executor creates its branch with \`gh issue develop <n>\` and works in its own worktree.
 
