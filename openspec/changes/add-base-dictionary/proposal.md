@@ -16,4 +16,4 @@ Users should be able to add words quickly with canonical spelling, autocomplete,
 - Notes: Dictionary is public read-only via CouchDB, no authentication required for sync. CouchDB sync handles interruptions and retries natively.
 
 ## Links
-- Issue: https://github.com/u473t8/learning-app/issues/63
+- Issue: https://github.com/the-kind-robots/learning-app/issues/63

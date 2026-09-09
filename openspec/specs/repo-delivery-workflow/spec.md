@@ -112,6 +112,13 @@ creation SHALL be denied. A pull request SHALL be denied from a branch that carr
 issue number, and allowed from a branch created for an issue. Each refusal SHALL name the
 command to use instead.
 
+The guard SHALL judge only invocations that can create work. A statement carrying a
+standalone help flag prints documentation and mutates nothing, so it SHALL pass untouched —
+neither denied nor prompted — and that test SHALL live once, ahead of the per-command
+dispatch, so every rule the guard carries is covered by it rather than by a rule-specific
+exemption. The flag SHALL be matched as a whole word, because a statement reaches the guard
+already split on whitespace.
+
 The branch a pull request is judged on SHALL be the branch the command names when it names
 one, and the current branch only when it does not. Judging a pull request by the working
 directory's own branch decides about something other than what the command does: under the
@@ -130,6 +137,20 @@ the same explanation.
 - **WHEN** an agent runs a raw issue-creation command
 - **THEN** the call is denied and the refusal names the workflow script that creates the
   issue, places it on the board and sets its fields
+
+#### Scenario: A command's documentation is read
+
+- **WHEN** a statement that would otherwise be refused or prompted carries a standalone help
+  flag, such as an issue-creation or pull-request command asked for its usage text
+- **THEN** the statement passes untouched, because reading documentation creates no issue,
+  no pull request and no branch
+
+#### Scenario: Help text quoted inside an argument
+
+- **WHEN** a help flag appears as a word inside a quoted argument rather than as a flag
+- **THEN** the guard's judgement is undefined for that statement, because word-splitting has
+  already erased the argument boundary by the time the guard sees it — the same blind spot
+  the branch-name test already documents
 
 #### Scenario: Pull request from an untracked branch
 
@@ -164,17 +185,17 @@ the same explanation.
 
 ### Requirement: A branch for tracked work is linked to its issue
 
-Tracked work SHALL happen on a branch created from its issue, including when the work is isolated in a worktree. The repository SHALL record, for each situation it puts agents in, an order that satisfies both the branch rule and the worktree rule and that runs to a pushed branch without a refused command. Where an agent cannot create a worktree beside its own, the recorded order SHALL say so and give the one that works, naming the tool that must not be used and why. A session that coordinates tracked work SHALL delegate repository edits rather than making them and SHALL stay in the main checkout, because an agent launched from a worktree inherits that pin and can no longer place its own work in a worktree of its own.
+Tracked work SHALL happen on a branch created from its issue, including when the work is isolated in a worktree. The repository SHALL record, for each situation it puts agents in, an order that satisfies both the branch rule and the worktree rule and that runs to a pushed branch without a refused command. That record SHALL rest on one invariant — everything under an agent's own worktree root is reachable to it, and nothing outside that root is — and SHALL name the tool that must not be used and why. A session that coordinates tracked work SHALL delegate repository edits rather than making them and SHALL stay in the main checkout.
 
 #### Scenario: Work is isolated in a worktree
 
 - **WHEN** a task needs a worktree
 - **THEN** the issue branch is created first and the worktree is placed on that branch, so the issue keeps its development link
 
-#### Scenario: An agent is launched pinned to a worktree
+#### Scenario: Work is delegated to an executor
 
 - **WHEN** work that must land its own issue branch is delegated to an agent
-- **THEN** that agent is launched without worktree isolation, because a pinned agent cannot reach a worktree created beside its own
+- **THEN** that agent is launched with worktree isolation, because an agent launched without it can neither enter a worktree nor write into the repository through the editor tools
 
 #### Scenario: A pinned agent must deliver anyway
 
@@ -184,7 +205,7 @@ Tracked work SHALL happen on a branch created from its issue, including when the
 #### Scenario: The session that coordinates the work
 
 - **WHEN** a coordinating session needs a repository edit
-- **THEN** it delegates that edit and stays in the main checkout, so the agent it launches can create its own `.claude/worktrees/<slug>` from the issue branch and work there
+- **THEN** it delegates that edit and stays in the main checkout, and the agent it launches is given a worktree of its own
 
 ### Requirement: Filing an issue stays within a small share of the API budget
 

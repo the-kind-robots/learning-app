@@ -45,34 +45,30 @@
      {:class (when phrase? "word-edit-dialog__inputs--phrase")}
      [:span.word-edit-dialog__value {:lang "de"} value]
      [:span.word-edit-dialog__arrow {:aria-hidden "true"} "→"]
-     (if phrase?
-       [:textarea.word-edit-dialog__input.word-edit-dialog__input--phrase
-        {:name         "translation"
-         :rows         2
-         :autocapitalize "none"
-         :autocomplete "off"
-         :autocorrect  "off"
-         :enterkeyhint "done"
-         :lang         "ru"
-         :placeholder  "Перевод"
-         :spellcheck   "false"
-         :autofocus    true
-         :replicant/on-mount [[:action/move-cursor-to-end]]
-         :on           {:input [[:effect/autogrow-target]]}}
-        ;; textarea ignores a value attribute — the default rides as child text
-        translation]
-       [:input.word-edit-dialog__input
-        {:name           "translation"
-         :autocapitalize "none"
-         :autocomplete   "off"
-         :autocorrect    "off"
-         :enterkeyhint   "done"
-         :lang           "ru"
-         :placeholder    "Перевод"
-         :spellcheck     "false"
-         :default-value  translation
-         :autofocus      true
-         :replicant/on-mount [[:action/move-cursor-to-end]]}])]
+     ;; A textarea for both kinds: a word's translation may span several lines
+     ;; too (GH-365), and an `input` silently swallows the line breaks it is
+     ;; given. Enter therefore belongs to the text here — Ctrl/Cmd+Enter and
+     ;; the save button submit, as on the add form.
+     [:textarea.word-edit-dialog__input.word-edit-dialog__input--multiline
+      {:name         "translation"
+       :rows         (if phrase? 2 1)
+       :class        (when phrase? "word-edit-dialog__input--phrase")
+       :autocapitalize "none"
+       :autocomplete "off"
+       :autocorrect  "off"
+       :enterkeyhint "done"
+       :lang         "ru"
+       :placeholder  "Перевод"
+       :spellcheck   "false"
+       :autofocus    true
+       :replicant/on-mount [[:action/move-cursor-to-end]]
+       :on           {:input   [[:effect/autogrow-target]]
+                      :keydown [[:action/submit-if-ctrl-enter
+                                 {:key   [:event.keyboard/key]
+                                  :ctrl? [:event.keyboard/ctrl?]
+                                  :meta? [:event.keyboard/meta?]}]]}}
+      ;; textarea ignores a value attribute — the default rides as child text
+      translation]]
     [:div.word-edit-dialog__actions
      [:button.word-edit-dialog__save {:type "submit"} "Сохранить"]
      [:button.word-edit-dialog__cancel
@@ -85,23 +81,29 @@
       "Удалить"]]]])
 
 
+(defn- empty-state
+  [{:keys [cta hint text]}]
+  [:div.vocabulary__empty-state
+   [:p.vocabulary__empty-state-text text]
+   [:p.vocabulary__empty-state-hint hint]
+   (when cta
+     [:button.vocabulary__empty-state-cta
+      {:on {:click [[:action/go-to-home]]}}
+      cta])])
+
+
 (defn page
   [state]
-  (let [{:words/keys [items search editing]} state]
+  (let [{:words/keys [items search editing vocabulary?] placeholder :words/empty-state} state]
     [:div.vocabulary
      {:data-vk-overlay true}
      (when editing (edit-dialog editing))
-     (if (empty? items)
+     (if-not vocabulary?
        [:div.vocabulary__list
         [:ul.word-list
          {:id "word-list"}
          [:li.word-list__empty.word-list__empty--no-words
-          [:div.vocabulary__empty-state
-           [:p.vocabulary__empty-state-text "Слов пока нет"]
-           [:p.vocabulary__empty-state-hint "Добавьте первое слово на главной странице"]
-           [:button.vocabulary__empty-state-cta
-            {:on {:click [[:action/go-to-home]]}}
-            "Добавить слово"]]]]]
+          (empty-state placeholder)]]]
        (list
         [:header.vocabulary__header
          [:button.vocabulary__back
@@ -121,22 +123,14 @@
             :enterkeyhint   "search"
             :placeholder    "Поиск"
             :spellcheck     "false"
-            :default-value  (or search "")
+            :default-value  search
             :on             {:input [[:action/search-words [:event.target/value]]]}}]]]
         [:div.vocabulary__list
          [:ul.word-list
           {:id "word-list"}
-          (if (seq items)
-            (for [word items] (word-list-item word))
-            [:li.word-list__empty
-             [:div.vocabulary__empty-state
-              (if (and search (not= "" search))
-                (list
-                 [:p.vocabulary__empty-state-text "Ничего не найдено"]
-                 [:p.vocabulary__empty-state-hint "Попробуйте другой запрос"])
-                (list
-                 [:p.vocabulary__empty-state-text "Слов пока нет"]
-                 [:p.vocabulary__empty-state-hint "Добавьте первое слово на главной странице"]))]])]]
+          (if placeholder
+            [:li.word-list__empty (empty-state placeholder)]
+            (for [word items] (word-list-item word)))]]
         [:footer.vocabulary__footer.page-footer
          [:div.page-footer__action
           [:button.vocabulary__start.big-button.green-button

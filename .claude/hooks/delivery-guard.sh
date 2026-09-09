@@ -90,6 +90,19 @@ while IFS= read -r st; do
   set -- $st
   head=${1:-}; sub=${2:-}; verb=${3:-}
 
+  # Reading a command's documentation is not running it: `--help` prints text and creates no
+  # issue, no pull request and no branch, so neither a deny nor an ask has anything to
+  # protect. Matched as a whole word, and only when the statement carries no quote character:
+  # words arrive already split, so a `--help` inside a quoted title is indistinguishable from
+  # a real flag — the same blind spot `head_branch` documents above. Quotes present, the
+  # statement is judged exactly as before.
+  case "$st" in
+    *[\"\']*) ;;
+    *) for w in "$@"; do
+         case "$w" in --help|-h) continue 2 ;; esac
+       done ;;
+  esac
+
   case "$head" in
     git)
       case "$sub $verb" in
@@ -128,7 +141,7 @@ If the owner asked for the raw command, re-run it prefixed with DELIVERY_GUARD=o
 Get the issue and its branch first:
   $START --title \"...\" --priority Major --status \"In progress\" --base master
 or, when the issue already exists:
-  gh issue develop <n> -R u473t8/learning-app --checkout --base master
+  gh issue develop <n> -R the-kind-robots/learning-app --checkout --base master
 
 From a <number>-<slug> branch \`gh pr create\` is allowed. To commit, push, open the PR and set Status in one step:
   $FINISH --issue <n> --base master
