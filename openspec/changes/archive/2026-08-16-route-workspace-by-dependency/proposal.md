@@ -25,7 +25,6 @@ agent stopped on its first write having done nothing.
 - Record, where the delegation rule already lives, that a background coordinating session has
   no third option — the coordinator stays in the main checkout and background writes to the
   shared checkout are blocked, so every delegated edit lands in a worktree.
-- Keep `.claude/rules/repo-delivery.md` consistent with AGENTS.md; it restates the same rule.
 
 ## Capabilities
 
@@ -42,6 +41,5 @@ None.
 
 ## Impact
 
-- `AGENTS.md`, section **Branches and Worktrees** (workspace choice) and the delegation bullet.
-- `.claude/rules/repo-delivery.md`, the delegation paragraph.
+- `AGENTS.md`, section **Branches and Worktrees** (workspace choice) and the delegation bullet. The duplicate rules file that once restated it was removed by #388, so `AGENTS.md` is the only place the rule lives.
 - Documentation only. No application code, build or runtime behaviour changes.

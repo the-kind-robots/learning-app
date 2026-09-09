@@ -90,13 +90,20 @@ while IFS= read -r st; do
   set -- $st
   head=${1:-}; sub=${2:-}; verb=${3:-}
 
+  # Reading a command's documentation is not running it: `--help` prints text and creates no
+  # issue, no pull request and no branch, so neither a deny nor an ask has anything to
+  # protect. Matched as a whole word, and only when the statement carries no quote character:
+  # words arrive already split, so a `--help` inside a quoted title is indistinguishable from
+  # a real flag — the same blind spot `head_branch` documents above. Quotes present, the
+  # statement is judged exactly as before.
+  case "$st" in
+    *[\"\']*) ;;
+    *) for w in "$@"; do
+         case "$w" in --help|-h) continue 2 ;; esac
+       done ;;
+  esac
+
   case "$head" in
-    git)
-      case "$sub $verb" in
-        "checkout -b"|"switch -c")
-          decide ask "AGENTS.md, Branches: a tracked branch comes from \`gh issue develop <n> --checkout\`, so GitHub links it to its issue. A branch made this way leaves the issue with no development link and drops out of every cleanup. Approve only for throwaway local work." ;;
-      esac
-      continue ;;
     gh|*/gh) ;;
     *) continue ;;
   esac
@@ -106,9 +113,9 @@ while IFS= read -r st; do
       decide deny "Refused: a raw \`gh issue create\` produces an issue that is on no board, with no Status and no Priority. #288, #289, #290 and #292 were lost that way.
 
 Use the flow — invoke the \`repo-task-delivery\` skill, or run its GitHub step directly:
-  $START --title \"...\" --body-file <path> --priority <Blocker|Critical|Major|Minor|Trivial> --status \"In progress\" --base master
+  $START --title \"...\" --body-file <path> --priority <Urgent|High|Medium|Low> --status \"In progress\" --base master
 
-That one call creates the issue, reuses an existing item of the same title, puts it on project 'Learning app' (2), sets the fields, and runs \`gh issue develop --checkout\`.
+That one call creates the issue, reuses an existing item of the same title, puts it on the org project 'Learning app' (the-kind-robots, 11), sets the fields, and runs \`gh issue develop --checkout\`.
 
 If the owner asked for the raw command, re-run it prefixed with DELIVERY_GUARD=off." ;;
 
@@ -126,9 +133,9 @@ If the owner asked for the raw command, re-run it prefixed with DELIVERY_GUARD=o
           decide deny "Refused: $where, which carries no issue number, so this pull request would have no issue and no board entry behind it.
 
 Get the issue and its branch first:
-  $START --title \"...\" --priority Major --status \"In progress\" --base master
+  $START --title \"...\" --priority High --status \"In progress\" --base master
 or, when the issue already exists:
-  gh issue develop <n> -R u473t8/learning-app --checkout --base master
+  gh issue develop <n> -R the-kind-robots/learning-app --checkout --base master
 
 From a <number>-<slug> branch \`gh pr create\` is allowed. To commit, push, open the PR and set Status in one step:
   $FINISH --issue <n> --base master
