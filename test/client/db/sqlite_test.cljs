@@ -119,7 +119,7 @@
       (await (pending-work))
       (is (= 1 (count @posted))
           "no readiness gate swallowed the query")
-      (reply! {:result [{:has_exact 1 :lemma "Hund" :pos "noun" :translations "собака,пёс"}]})
+      (reply! {:result [{:has_exact 1 :lemma "Hund" :pos "noun" :translations "[\"собака\",\"пёс\"]"}]})
       (is (= [{:exact?       true
                :lemma        "Hund"
                :pos          "noun"

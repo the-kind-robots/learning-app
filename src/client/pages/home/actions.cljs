@@ -9,13 +9,13 @@
 
 
 (defn- prefill-text
-  "The text a completion puts into the translation field. The dictionary hands
-   its translations over as one `GROUP_CONCAT` string that the adapter splits on
-   `,` (#362), which leaves the space after the comma on the next piece. Trimming
-   before rejoining gives the stored text back: `без того, чтобы` arrives whole
-   instead of as `без того,  чтобы`, and several translations still read as
-   `пёс, собака`. It matters more than it used to — whatever the field holds is
-   now stored as one translation, so what is shown here is what is saved."
+  "The text a completion puts into the translation field. Several translations
+   read as `пёс, собака`; one arrives and is handed over untouched. Each piece
+   is trimmed before rejoining: the dictionary now carries translations as
+   elements (#362), but a stored value may still have its own padding, and a
+   completion that predates the rebuild may still arrive split. It matters more
+   than it used to — whatever the field holds is stored as one translation, so
+   what is shown here is what is saved."
   [translations]
   (->> translations
        (map str/trim)
