@@ -102,11 +102,11 @@ test('typing a word does not move the form under the cursor', async ({ page }) =
   // returning to its resting y is the end of the collapse — so the measured
   // window starts with the page genuinely at rest.
   //
-  // Deliberately no reload in between: sqlite3-worker.js holds the
-  // `sprecha-sqlite-opfs-sahpool` web lock with `ifAvailable` for the worker's
-  // whole life, and a reload races the old worker's teardown against the new
-  // worker's request. Losing that race answers "another tab open" and the
-  // dictionary never becomes ready.
+  // Deliberately no reload in between: it costs a fresh worker and another
+  // trip through the pool lock for nothing this spec measures. (It used to
+  // cost more — the lock was taken `ifAvailable`, so a reload racing the old
+  // worker's teardown answered "another tab open" and the dictionary never
+  // became ready. That is #351, fixed.)
   await field.pressSequentially(PROBE);
   await expect(options(page).first()).toBeVisible();
   await field.fill('');

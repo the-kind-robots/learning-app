@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-05-08
+- Superseded in part by: ADR-0012
 
 ## Context
 
@@ -17,4 +18,4 @@ The SQLite file is opened exclusively inside a dedicated Web Worker using `SyncA
 - `attach-translations` and `suggest` in `dictionary.cljs` become async `postMessage` shims — no semantic change for callers.
 - Cross-browser compatibility is ensured from the start without a future re-architecture.
 - sql.js adds ~60 MB heap pressure; acceptable on modern devices, monitored via telemetry.
-- WASM cold-start latency is off the critical path: the Worker initialises in the background on app boot.
+- ~~WASM cold-start latency is off the critical path: the Worker initialises in the background on app boot.~~ No longer holds — superseded by ADR-0012, which loads the engine on a tab's first turn with the dictionary rather than at app boot.

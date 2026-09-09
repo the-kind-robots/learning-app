@@ -56,6 +56,7 @@ const PRECACHE_URLS = [
   "/icons/ue-dev-192.png",
   "/icons/ue-dev-512.png",
   "/js/app/main.js",
+  "/js/sqlite3-dictionary.js",
   "/js/sqlite3-worker.js",
   "/js/sqlite3.js",
   "/js/sqlite3.wasm",
