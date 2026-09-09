@@ -141,7 +141,7 @@ If the owner asked for the raw command, re-run it prefixed with DELIVERY_GUARD=o
 Get the issue and its branch first:
   $START --title \"...\" --priority Major --status \"In progress\" --base master
 or, when the issue already exists:
-  gh issue develop <n> -R u473t8/learning-app --checkout --base master
+  gh issue develop <n> -R the-kind-robots/learning-app --checkout --base master
 
 From a <number>-<slug> branch \`gh pr create\` is allowed. To commit, push, open the PR and set Status in one step:
   $FINISH --issue <n> --base master
