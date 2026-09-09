@@ -114,20 +114,34 @@
 
 
 (defn dictionary-ready!
-  "Closes the readiness interval. Records a User Timing measure, so the
-   interval shows up in a performance trace, and keeps its duration."
+  "Closes the readiness interval, and only the first one.
+
+   The worker reports ready on every turn it takes, not just its first: the
+   dictionary belongs to the visible tab, so a tab that is left and returned
+   to opens the database again and says so again. This interval is measured
+   from a mark laid once at page load, so a second reading would not be what
+   the dictionary cost — it would be how long the page had been open when the
+   user came back. The first reading is the one that answers the question, and
+   `:phases` carries what each later turn cost."
   []
-  (let [^js measure (try
-                      (.measure js/performance "dictionary-ready" "dictionary-start")
-                      (catch :default _ nil))]
-    (when measure
-      (swap! metrics assoc-in [:dictionary :ready-ms] (.-duration measure)))))
+  (when-not (get-in @metrics [:dictionary :ready-ms])
+    (let [^js measure (try
+                        (.measure js/performance "dictionary-ready" "dictionary-start")
+                        (catch :default _ nil))]
+      (when measure
+        (swap! metrics assoc-in [:dictionary :ready-ms] (.-duration measure))))))
 
 
 (defn dictionary-phase!
-  "Keeps one startup phase the worker reported. The worker already times
-   every phase for the log; this only carries the numbers into the metrics.
-   `cache-hit` among them is what separates a warm start from a cold one."
+  "Keeps one phase the worker reported. The worker already times every phase
+   for the log; this only carries the numbers into the metrics. `cache-hit`
+   among them is what separates a warm start from a cold one.
+
+   Startup and per-turn phases land here together and the list accumulates:
+   the startup ones (`wasm-init`, `pool-install`, `download`, `import`) happen
+   once per tab, and `pause` and `unpause` repeat every time the dictionary
+   changes tabs. Both are wanted — the per-turn pair is what the cost of a
+   focus change is read from."
   [phase duration-ms status]
   (swap! metrics update-in
     [:dictionary :phases]

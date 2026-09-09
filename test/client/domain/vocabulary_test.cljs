@@ -21,6 +21,44 @@
       (is (= "лиса" (-> updated :translation first :value))))))
 
 
+(deftest a-translation-is-kept-as-it-was-typed
+  (testing "punctuation belongs to the translation, not to a separator (GH-365)"
+    (is (= [{:lang "ru" :value "без того, чтобы"}]
+           (sut/parse-translations "без того, чтобы")))
+    (is (= [{:lang "ru" :value "хотя..,но.."}]
+           (sut/parse-translations "хотя..,но..")))
+    (is (= [{:lang "ru" :value "решать; решить"}]
+           (sut/parse-translations "решать; решить")))
+    (is (= [{:lang "ru" :value "и/или"}]
+           (sut/parse-translations "и/или"))))
+  (testing "several lines are one translation"
+    (is (= [{:lang "ru" :value "пёс\nсобака"}]
+           (sut/parse-translations "пёс\nсобака"))))
+  (testing "surrounding whitespace is dropped"
+    (is (= [{:lang "ru" :value "пёс"}]
+           (sut/parse-translations "  пёс  "))))
+  (testing "nothing typed is no translation, so the add form can refuse it"
+    (is (= [] (sut/parse-translations "")))
+    (is (= [] (sut/parse-translations "   ")))
+    (is (= [] (sut/parse-translations nil)))))
+
+
+(deftest editing-keeps-the-translation-as-it-was-typed
+  (testing "the edit path shares parse-translations, so it inherits the rule"
+    (let [word    (sut/new-word "ohne" [{:lang "ru" :value "без"}])
+          updated (sut/update-word word "без того, чтобы")]
+      (is (= [{:lang "ru" :value "без того, чтобы"}] (:translation updated))))))
+
+
+(deftest a-word-written-before-the-rule-is-read-as-it-is
+  (testing "several stored entries survive a merge untouched — no migration"
+    (let [stored [{:lang "ru" :value "пёс"} {:lang "ru" :value "собака"}]]
+      (is (= [{:lang "ru" :value "пёс"}
+              {:lang "ru" :value "собака"}
+              {:lang "ru" :value "пёс, собака"}]
+             (sut/merge-translations stored (sut/parse-translations "пёс, собака")))))))
+
+
 (deftest new-review-doc-creates-review-document
   (testing "user reviews a word"
     (let [review (sut/new-review "word-1" true "пёс")]
