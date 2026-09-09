@@ -15,8 +15,8 @@ prefix_rule(
     decision = "allow",
     justification = "Allow reading repository metadata through gh.",
     match = [
-        "gh repo view u473t8/learning-app",
-        "gh repo view u473t8/learning-app --json id,name,defaultBranchRef",
+        "gh repo view the-kind-robots/learning-app",
+        "gh repo view the-kind-robots/learning-app --json id,name,defaultBranchRef",
     ],
 )
 
@@ -44,8 +44,8 @@ prefix_rule(
     decision = "allow",
     justification = "Allow listing GitHub issues through gh.",
     match = [
-        "gh issue list -R u473t8/learning-app",
-        "gh issue list -R u473t8/learning-app --limit 20",
+        "gh issue list -R the-kind-robots/learning-app",
+        "gh issue list -R the-kind-robots/learning-app --limit 20",
     ],
 )
 
@@ -54,8 +54,8 @@ prefix_rule(
     decision = "allow",
     justification = "Allow reading GitHub issue details through gh.",
     match = [
-        "gh issue view 90 -R u473t8/learning-app",
-        "gh issue view 90 -R u473t8/learning-app --json title,body,state",
+        "gh issue view 90 -R the-kind-robots/learning-app",
+        "gh issue view 90 -R the-kind-robots/learning-app --json title,body,state",
     ],
 )
 
@@ -64,8 +64,8 @@ prefix_rule(
     decision = "allow",
     justification = "Allow listing pull requests through gh.",
     match = [
-        "gh pr list -R u473t8/learning-app",
-        "gh pr list -R u473t8/learning-app --limit 20",
+        "gh pr list -R the-kind-robots/learning-app",
+        "gh pr list -R the-kind-robots/learning-app --limit 20",
     ],
 )
 
@@ -74,7 +74,7 @@ prefix_rule(
     decision = "allow",
     justification = "Allow reading pull request details through gh.",
     match = [
-        "gh pr view 91 -R u473t8/learning-app",
-        "gh pr view 91 -R u473t8/learning-app --json title,body,state",
+        "gh pr view 91 -R the-kind-robots/learning-app",
+        "gh pr view 91 -R the-kind-robots/learning-app --json title,body,state",
     ],
 )

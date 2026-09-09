@@ -96,3 +96,87 @@ Suggestions SHALL appear within ~150 ms of a typing pause, and continuous typing
 - **WHEN** keystrokes arrive faster than the debounce
 - **THEN** lookups coalesce and the visible list never blanks between answers
 
+### Requirement: The translation field takes several lines and submits on a modifier
+The translation field SHALL accept a multi-line translation. A bare `Enter` SHALL insert a newline and SHALL NOT submit the form; `Ctrl`+`Enter` or `Cmd`+`Enter` SHALL submit it. The submit button SHALL keep submitting the form, since it is the only path on a phone, where neither modifier can be typed. `Enter` on the German word input keeps its own meaning and SHALL NOT be affected.
+
+#### Scenario: Enter inserts a newline
+- **WHEN** the translation field has focus
+- **AND** the user presses `Enter` with no modifier
+- **THEN** the form is not submitted
+- **AND** the field takes a newline
+
+#### Scenario: Ctrl+Enter submits
+- **WHEN** the translation field has focus
+- **AND** the user presses `Enter` while `Ctrl` is held
+- **THEN** the form is submitted
+- **AND** the keystroke's default action is suppressed, so the form is submitted once
+
+#### Scenario: Cmd+Enter submits
+- **WHEN** the translation field has focus
+- **AND** the user presses `Enter` while `Cmd` (meta) is held
+- **THEN** the form is submitted
+
+#### Scenario: The button submits without a keyboard
+- **WHEN** the user activates the add button
+- **THEN** the form is submitted, whatever the translation field holds
+
+#### Scenario: The German input keeps its Enter
+- **WHEN** the German word input has focus
+- **AND** the user presses `Enter`
+- **THEN** the existing behaviour applies — the highlighted suggestion is picked, or the form submits when there is none
+
+### Requirement: The prefilled translation is the dictionary's text as stored
+When the dictionary fills the translation field — on a suggestion arriving for an untouched field, or on the user picking a suggestion — the field SHALL receive the dictionary's translation text as the dictionary holds it. The transport splits a lemma's translations on `,` and leaves the following space on the next piece, so the form SHALL trim the pieces before rejoining them on `, `. What the field shows is what gets stored, so the reconstruction SHALL neither drop nor double a space.
+
+#### Scenario: A stored translation containing a comma is prefilled whole
+- **WHEN** the dictionary's translation for a lemma is `без того, чтобы`
+- **AND** that lemma's suggestion fills the translation field
+- **THEN** the field holds `без того, чтобы`, with no doubled space after the comma
+
+#### Scenario: Several translations stay readable
+- **WHEN** a lemma has the translations `пёс` and `собака`
+- **THEN** the field holds `пёс, собака`
+
+#### Scenario: Picking a suggestion fills the same text
+- **WHEN** the user picks a suggestion from the list
+- **THEN** the translation field receives that entry's translation text by the same rule
+
+### Requirement: The phone suggestion list is as tall as its rows
+
+On a phone the suggestion list SHALL occupy the height of the rows it holds,
+up to a ceiling. It SHALL NOT reserve a fixed height, so one row is one row
+high and the box has no emptiness under its last suggestion. Beyond the
+ceiling the list SHALL scroll inside itself rather than grow.
+
+#### Scenario: One or two suggestions
+
+- **WHEN** the list on a phone is down to one or two rows
+- **THEN** its rendered height equals its content height and is well under the
+  ceiling
+
+#### Scenario: More rows than fit
+
+- **WHEN** the dictionary answers with more rows than the ceiling allows
+- **THEN** the list stops at the ceiling and scrolls inside itself
+
+### Requirement: The list's ceiling bounds how far it moves the form
+
+The phone suggestion list SHALL open in the page flow, and its ceiling SHALL be
+chosen as the maximum displacement acceptable for the controls below it: the
+translation field and the submit button move down by the list's height plus its
+margin, and by no more than the ceiling plus that margin. The value field being
+typed into and the panel heading above it SHALL NOT move.
+
+#### Scenario: Typing a word with two matches
+
+- **WHEN** a word matching two lemmas is typed into the value field on a phone
+- **THEN** the submit button moves down by exactly the list's height plus its
+  4 px margin, and by no more than 180 px
+- **AND** the value field and the panel heading stay where they were
+
+#### Scenario: Layout shift stays within budget
+
+- **WHEN** the word is typed at human cadence and the list opens in flow
+- **THEN** the unfiltered layout-shift score stays under 0.06 — the budget of a
+  content-sized list, which resizes whenever the match count changes, and not
+  the 0.05 of the fixed-height list that opened once and never resized
