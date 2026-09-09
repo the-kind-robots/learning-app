@@ -49,6 +49,9 @@
 .word-item__translation {
   color: rgb(var(--color-wolf));
   font-size: 15px;
+  /* A translation is stored as it was typed, line breaks included (GH-365).
+     `pre-line` keeps them and still collapses the runs of spaces HTML would. */
+  white-space: pre-line;
 }
 
 .word-item__arrow {
