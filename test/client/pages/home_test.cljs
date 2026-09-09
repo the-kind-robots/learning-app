@@ -56,8 +56,9 @@
 
 
 (def ohne
-  "One stored translation, `без того, чтобы`, as the transport delivers it —
-   `GROUP_CONCAT`ed and split back on `,` by the adapter (#362)."
+  "One stored translation, `без того, чтобы`, arriving as two padded pieces —
+   the shape the adapter produced before #362 made translations elements. Kept
+   split on purpose: it is what pins the trim-and-rejoin in `prefill-text`."
   {:lemma "ohne" :translations ["без того" " чтобы"] :exact? true})
 
 

@@ -555,6 +555,12 @@ if [[ -n "$checked_out_branch" ]]; then
   echo "Checked Out Branch: $checked_out_branch"
 fi
 
+# Name the Claude Code session after the issue. No-op outside a session; never fails the flow.
+if [[ -n "$issue_number" ]]; then
+  session_title="$(gh issue view "$issue_number" -R "$repo" --json title --jq '.title' 2>/dev/null || true)"
+  bash "$(dirname "${BASH_SOURCE[0]}")/rename_session.sh" "$issue_number" "${session_title:-$title}" || true
+fi
+
 # A run that quietly eats a tenth of the hourly budget is only noticed an hour later, when
 # the next run is refused. Print the price.
 if [[ -n "$graphql_budget_before" ]]; then
