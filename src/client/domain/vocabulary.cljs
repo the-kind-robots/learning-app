@@ -10,11 +10,17 @@
 
 
 (defn parse-translations
+  "The entered text is one translation. It used to be split on `[,;.]`, which put
+   the separator inside the data — `без того, чтобы` became two translations —
+   while nothing read the pieces: grading compares against the German value and
+   display glued them back with the separator they were cut on. Phrases never
+   split; words no longer do either. Still a vector, so documents written before
+   this are read as they are."
   [s]
-  (->> (str/split (str s) #"[,;.]")
-       (map str/trim)
-       (remove str/blank?)
-       (mapv (fn [v] {:lang "ru" :value v}))))
+  (let [value (str/trim (str s))]
+    (if (str/blank? value)
+      []
+      [{:lang "ru" :value value}])))
 
 
 (defn merge-translations
