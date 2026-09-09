@@ -236,6 +236,11 @@
     (some-> (:replicant/dom-event dispatch-data) .-ctrlKey)))
 
 
+(nxr/register-placeholder! :event.keyboard/meta?
+  (fn [dispatch-data]
+    (some-> (:replicant/dom-event dispatch-data) .-metaKey)))
+
+
 (nxr/register-placeholder! :event.keyboard/shift?
   (fn [dispatch-data]
     (some-> (:replicant/dom-event dispatch-data) .-shiftKey)))
@@ -247,10 +252,15 @@
       (= (.-target e) (.-currentTarget e)))))
 
 
+;; The modifier is what tells a submit from a newline in a multi-line field, so
+;; `Cmd` counts too — it is the one a Mac keyboard offers. The default is
+;; suppressed because a browser that submits on `Ctrl`+`Enter` by itself would
+;; submit the form twice.
 (nxr/register-action! :action/submit-if-ctrl-enter
-  (fn submit-if-ctrl-enter [_ {:keys [key ctrl?]}]
-    (when (and (= "Enter" key) ctrl?)
-      [[:effect/request-submit]])))
+  (fn submit-if-ctrl-enter [_ {:keys [key ctrl? meta?]}]
+    (when (and (= "Enter" key) (or ctrl? meta?))
+      [[:effect/prevent-default]
+       [:effect/request-submit]])))
 
 
 (nxr/register-action! :action/open-sync-menu
