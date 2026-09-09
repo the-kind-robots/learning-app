@@ -55,7 +55,7 @@
   display: none;
 }
 
-.word-edit-dialog__input--phrase {
+.word-edit-dialog__input--multiline {
   box-sizing: border-box;
   field-sizing: content;
   height: auto;
@@ -63,6 +63,9 @@
   min-height: 48px;
   overflow-y: auto;
   resize: none;
+}
+
+.word-edit-dialog__input--phrase {
   width: 100%;
 }
 

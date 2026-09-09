@@ -10,6 +10,8 @@
    [nexus.registry :as nxr]
    [pages.home.actions]
    [pages.home.effects]
+   [pages.home.presenter :as presenter]
+   [use-cases.phrase :as phrase]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -49,14 +51,24 @@
   {:lemma "Hut" :translations ["шляпа"] :exact? true})
 
 
+(def haus
+  {:lemma "das Haus" :pos "noun" :translations ["дом"] :exact? true})
+
+
+(def ohne
+  "One stored translation, `без того, чтобы`, arriving as two padded pieces —
+   the shape the adapter produced before #362 made translations elements. Kept
+   split on purpose: it is what pins the trim-and-rejoin in `prefill-text`."
+  {:lemma "ohne" :translations ["без того" " чтобы"] :exact? true})
+
+
 (defn- test-system
   "System whose stub dictionary answers from `completions-by-prefix`;
    unknown prefixes (including the empty one) answer [], like the adapter."
   [completions-by-prefix]
   {:store        (atom {})
    :capabilities {:collections {:collections/active-id (fn [] nil)}
-                  :dictionary  {:dictionary/ready?      (fn [] true)
-                                :dictionary/completions (fn [prefix]
+                  :dictionary  {:dictionary/completions (fn [prefix]
                                                           (js/Promise.resolve
                                                            (get completions-by-prefix prefix [])))}}})
 
@@ -64,6 +76,12 @@
 (defn- suggestion-items
   [store]
   (get-in @store [:home/suggestions :suggestions/items]))
+
+
+(defn- form-legend
+  "What the form says it is about to save — the only place the mode shows."
+  [store]
+  (get-in (presenter/page-props @store) [:form :copy :legend]))
 
 
 (defn- debounce-elapsed
@@ -183,6 +201,38 @@
       (is (= "пёс, собака" (:home/translation @store))))))
 
 
+(deftest typing-on-from-a-picked-word-switches-to-phrase-mode
+  (testing "GH-358: the pick decides for its own lemma, the value decides after an edit"
+    (let [{:keys [store] :as system} (test-system {})]
+      (nxr/dispatch system {} [[:action/select-suggestion (assoc haus :focus-id nil)]])
+      (is (= "Добавить слово" (form-legend store)))
+      (nxr/dispatch system {} [[:action/update-word "das Haus ist gross"]])
+      (is (= "Добавить фразу" (form-legend store))))))
+
+
+(deftest typing-on-from-a-picked-word-is-saved-as-a-phrase
+  (async-testing "GH-358: the submitted document follows the re-evaluated mode"
+    (let [saved-as (atom nil)]
+      (with-redefs [phrase/add!      (fn [_ _ _]
+                                       (reset! saved-as :phrase)
+                                       (js/Promise.resolve {:word-id "p1" :created? true}))
+                    vocabulary/add!  (fn [_ _ _]
+                                       (reset! saved-as :word)
+                                       (js/Promise.resolve {:word-id "w1" :created? true}))
+                    vocabulary/count (fn [_]
+                                       (js/Promise.resolve 1))]
+        (let [system (test-system {})]
+          (nxr/dispatch system {} [[:action/select-suggestion (assoc haus :focus-id nil)]])
+          (nxr/dispatch system {} [[:action/update-word "das Haus ist gross"]])
+          (nxr/dispatch system
+                        {}
+                        [[:action/add-word
+                          {:value       "das Haus ist gross"
+                           :translation "дом большой"}]])
+          (await (debounce-elapsed))
+          (is (= :phrase @saved-as)))))))
+
+
 (deftest stale-answer-is-ignored
   (testing "an answer queried for an outdated value neither shows nor prefills"
     (let [{:keys [store] :as system} (test-system {})]
@@ -190,6 +240,21 @@
       (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value "auf"}]])
       (is (nil? (suggestion-items store)))
       (is (nil? (:home/translation @store))))))
+
+
+(deftest a-prefill-hands-over-the-stored-text
+  (async-testing "the form invents no separator: what it shows is stored as one translation (GH-365)"
+    (let [{:keys [store] :as system} (test-system {"ohne" [ohne]})]
+      (nxr/dispatch system {} [[:action/update-word "ohne"]])
+      (await (debounce-elapsed))
+      (is (= "без того, чтобы" (:home/translation @store))))))
+
+
+(deftest a-picked-suggestion-hands-over-the-stored-text
+  (testing "picking the entry fills the field with the same text"
+    (let [{:keys [store] :as system} (test-system {})]
+      (nxr/dispatch system {} [[:action/select-suggestion (assoc ohne :focus-id nil)]])
+      (is (= "без того, чтобы" (:home/translation @store))))))
 
 
 (deftest an-empty-answer-leaves-the-translation-blank

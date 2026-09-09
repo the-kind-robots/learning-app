@@ -16,8 +16,7 @@
   [rows calls]
   {:proxy #js {:exec (fn [opts]
                        (swap! calls conj opts)
-                       (js/Promise.resolve (clj->js rows)))}
-   :state (atom {:ready? true})})
+                       (js/Promise.resolve (clj->js rows)))}})
 
 
 (defn- row
@@ -95,12 +94,4 @@
   (async-testing "a blank prefix never reaches the worker"
     (let [calls (atom [])]
       (is (= [] (await (sut/completions (stub-db [] calls) "   "))))
-      (is (= [] @calls)))))
-
-
-(deftest an-unready-dictionary-asks-nothing
-  (async-testing "an unready dictionary answers empty without an exec"
-    (let [calls (atom [])
-          db    (assoc (stub-db [] calls) :state (atom {:ready? false}))]
-      (is (= [] (await (sut/completions db "hund"))))
       (is (= [] @calls)))))

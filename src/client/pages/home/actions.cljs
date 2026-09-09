@@ -8,6 +8,21 @@
 (def ^:private empty-suggestions nil)
 
 
+(defn- prefill-text
+  "The text a completion puts into the translation field. Several translations
+   read as `пёс, собака`; one arrives and is handed over untouched. Each piece
+   is trimmed before rejoining: the dictionary now carries translations as
+   elements (#362), but a stored value may still have its own padding, and a
+   completion that predates the rebuild may still arrive split. It matters more
+   than it used to — whatever the field holds is stored as one translation, so
+   what is shown here is what is saved."
+  [translations]
+  (->> translations
+       (map str/trim)
+       (remove str/blank?)
+       (str/join ", ")))
+
+
 (nxr/register-action! :action/go-to-home
   (fn go-to-home [_]
     [[:effect/navigate :page/home]]))
@@ -82,7 +97,7 @@
         [[:effect/save
           (cond-> {:home/suggestions (suggestions completions)}
             (not (:home/translation-typed? state))
-            (assoc :home/translation (str/join ", " translations)))]]))))
+            (assoc :home/translation (prefill-text translations)))]]))))
 
 
 (nxr/register-action! :action/show-word-error
@@ -109,13 +124,6 @@
         (and (str/blank? value) (not (:home/translation-typed? state)))
         (assoc :home/translation ""))]
      [:effect/suggest-completions value]]))
-
-
-(nxr/register-action! :action/submit-if-enter
-  (fn submit-if-enter [_ {:keys [key shift?]}]
-    (when (and (= "Enter" key) (not shift?))
-      [[:effect/prevent-default]
-       [:effect/request-submit]])))
 
 
 (nxr/register-action! :action/update-translation
@@ -149,13 +157,16 @@
   ;; Picking a suggestion decides the mode by its pos, overriding the space
   ;; heuristic: a multi-word pos=phrase lemma is a phrase, anything else a
   ;; word. Click payloads carry a precomputed :phrase?, keyboard selection
-  ;; hands the raw completion with :pos — accept either.
+  ;; hands the raw completion with :pos — accept either. The lemma is stored
+  ;; with it: the decision was about that lemma and expires when the value
+  ;; stops being it (GH-358).
   [[:effect/save
-    {:home/mode-override (if (or (:phrase? item) (phrase/phrase-suggestion? item))
-                           :phrase
-                           :word)
+    {:home/mode-override {:mode  (if (or (:phrase? item) (phrase/phrase-suggestion? item))
+                                   :phrase
+                                   :word)
+                          :value lemma}
      :home/suggestions   empty-suggestions
-     :home/translation   (str/join ", " translations)
+     :home/translation   (prefill-text translations)
      ;; A deliberate pick owns the field: later dictionary answers must not
      ;; overwrite what the user chose.
      :home/translation-typed? true
@@ -190,7 +201,9 @@
          [:effect/save {:home/suggestions empty-suggestions}]]
 
         ;; No suggestions on screen: Enter moves on to the translation field —
-        ;; the phrase flow's typing rhythm (phrase, Enter, translation, Enter).
+        ;; the phrase flow's typing rhythm (phrase, Enter, translation, and
+        ;; then Ctrl/Cmd+Enter or the button, since Enter belongs to the text
+        ;; in a field that takes several lines).
         (and (zero? n) (= key "Enter"))
         [[:effect/prevent-default]
          [:effect/focus focus-id]]))))
