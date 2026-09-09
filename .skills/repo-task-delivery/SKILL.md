@@ -54,7 +54,7 @@ In those cases, use the narrower workflow skill directly.
    - Branches come from `gh issue develop <number> --checkout` and nothing else, so every branch is linked to its issue. A branch made with `git checkout -b` leaves the issue with no development link and drops out of every cleanup.
    - The project board is the owner's window into the work; a status that lies is a process bug. Starting work moves the issue to **In progress** (`gh-project-workflow`'s `start_issue_flow.sh --status "In progress"`, or `gh project item-add` + `item-edit`). An issue filed but not started stays **Backlog**.
    - Filing an issue is not done until it is on the board with a **Priority** (Blocker/Critical/Major/Minor/Trivial — judge it, do not leave it empty) and its dependencies declared as native blocked-by relations (see AGENTS.md, Issues). The DAG on the board is only as true as the edges filed with the work.
-   - Decide where the work happens: full-stand work (sync, dictionary, migrations, schema, anything talking to CouchDB or nginx) happens in the main checkout; everything else is handed to the `executor` agent (`.claude/agents/executor.md`), which is isolated in a worktree by definition. See AGENTS.md.
+   - Decide where the work happens: full-stand work happens in the main checkout; everything else is handed to the `executor` agent (`.claude/agents/executor.md`), which is isolated in a worktree by definition. AGENTS.md gives the test.
 
 3. Start OpenSpec.
    - Use `openspec-propose-change` to create the change and first artifact.
