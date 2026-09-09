@@ -55,8 +55,7 @@
   [completions-by-prefix]
   {:store        (atom {})
    :capabilities {:collections {:collections/active-id (fn [] nil)}
-                  :dictionary  {:dictionary/ready?      (fn [] true)
-                                :dictionary/completions (fn [prefix]
+                  :dictionary  {:dictionary/completions (fn [prefix]
                                                           (js/Promise.resolve
                                                            (get completions-by-prefix prefix [])))}}})
 
