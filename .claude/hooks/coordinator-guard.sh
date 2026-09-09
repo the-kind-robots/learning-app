@@ -86,7 +86,9 @@
 # harness guard entirely: `git worktree add` wrote 731 files in the same session that could
 # not write one file through Edit. So an allow from this hook is not a promise the write
 # will land, and a refusal the reader sees may be the harness's rather than this one's.
-# Check the wording.
+# Check the wording. Since 2.1.143 `worktree.bgIsolation` refuses a BACKGROUND coordinator's
+# editor writes natively, so this hook's unique coverage is the interactive session and the
+# shell writes; an interactive coordinator is held by this hook alone.
 #
 # This hook warns and leaves a trace. It reads a payload, a command string and a branch name,
 # so it stops an accident, not an intent. Do not read a refusal here as an obstacle to get
