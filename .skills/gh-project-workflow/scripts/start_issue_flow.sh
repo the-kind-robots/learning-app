@@ -16,7 +16,8 @@ Options:
   --issue <number>              Reuse existing issue number instead of creating one
   --area <option>               Area field option to set
   --category <option>           Deprecated alias for --area
-  --priority <option>           Priority field option to set
+  --priority <option>           Priority to set on the issue: Urgent|High|Medium|Low
+                                (native org issue field, not a project field)
   --size <option>               Size field option to set
   --status <option>             Status field option to set
   --mode <issue|draft-convert>  Default: issue
@@ -25,7 +26,7 @@ Options:
   --project-number <number>     Project number (default: GHWF_PROJECT_NUMBER)
   --area-field <name>           Field name (default: GHWF_AREA_FIELD or Area)
   --category-field <name>       Deprecated alias for --area-field
-  --priority-field <name>       Field name (default: GHWF_PRIORITY_FIELD or Priority)
+  --priority-field <name>       Issue field name (default: GHWF_PRIORITY_FIELD or Priority)
   --size-field <name>           Field name (default: GHWF_SIZE_FIELD or Size)
   --status-field <name>         Field name (default: GHWF_STATUS_FIELD or Status)
   --base <branch>               Base branch for dev branch (default: GHWF_DEFAULT_BASE or master)
@@ -52,54 +53,96 @@ graphql_remaining() {
   gh api rate_limit --jq '.resources.graphql.remaining' 2>/dev/null || true
 }
 
-normalize_fields_json() {
-  local raw_json="$1"
-  jq -c 'if type == "array" then . else (.fields // []) end' <<<"$raw_json"
-}
-
-find_field_id() {
-  local fields_json="$1"
-  local field_name="$2"
-  jq -r --arg field_name "$field_name" '.[] | select(.name == $field_name) | .id' <<<"$fields_json" | head -n1
-}
-
-find_option_id() {
-  local fields_json="$1"
-  local field_name="$2"
-  local option_name="$3"
-  jq -r --arg field_name "$field_name" --arg option_name "$option_name" '.[] | select(.name == $field_name) | .options[]? | select(.name == $option_name) | .id' <<<"$fields_json" | head -n1
-}
-
-apply_single_select_field() {
-  local item_id="$1"
-  local project_id="$2"
-  local fields_json="$3"
-  local field_name="$4"
-  local option_name="$5"
-  local required="${6:-true}"
+# gh 2.98.0 resolves a project field and its option by name, so the id-lookup layer this
+# script used to carry is gone. The project number is POSITIONAL here; `--number` means a
+# numeric field value.
+apply_project_field() {
+  local field_name="$1"
+  local option_name="$2"
+  local required="${3:-true}"
 
   [[ -n "$option_name" ]] || return 0
 
+  local output
+  if output="$(gh project item-edit "$project_number" \
+                 --owner "$owner" \
+                 --url "$issue_url" \
+                 --field "$field_name" \
+                 --value "$option_name" 2>&1)"; then
+    return 0
+  fi
+
+  [[ "$required" != "true" ]] || die "Failed to set '$field_name' to '$option_name': $output"
+  echo "Warning: Failed to set '$field_name' to '$option_name', skipping: $output" >&2
+}
+
+# The old five-value scale died with the personal board. Name the replacement, because
+# "not found" reads as a broken script when it is really a retired vocabulary.
+retired_priority_replacement() {
+  case "$1" in
+    Blocker|Critical) printf 'Urgent' ;;
+    Major)            printf 'High' ;;
+    Minor)            printf 'Medium' ;;
+    Trivial)          printf 'Low' ;;
+  esac
+}
+
+# Priority is no longer a project field. It is the organization's native issue field, and
+# `updateProjectV2ItemFieldValue` refuses to write it — the board's `Priority` column is fed
+# by the issue, so it must be set on the issue with `setIssueFieldValue`. The project still
+# exposes a `Priority` field with no options, which is why the old lookup died with
+# "Option 'High' not found in field 'Priority'".
+apply_issue_priority() {
+  local field_name="$1"
+  local option_name="$2"
+
+  [[ -n "$option_name" ]] || return 0
+
+  local org="${repo%%/*}"
+  local field_query='
+    query($login: String!) {
+      organization(login: $login) {
+        issueFields(first: 50) {
+          nodes {
+            ... on IssueFieldSingleSelect { id name options { id name } }
+          }
+        }
+      }
+    }'
+
+  local field_json
+  field_json="$(gh api graphql -f query="$field_query" -F login="$org" \
+                 | jq -c --arg field_name "$field_name" \
+                     '[.data.organization.issueFields.nodes[] | select(.name == $field_name)] | .[0] // {}')"
+
   local field_id
-  field_id="$(find_field_id "$fields_json" "$field_name")"
+  field_id="$(jq -r '.id // empty' <<<"$field_json")"
   if [[ -z "$field_id" ]]; then
-    if [[ "$required" == "true" ]]; then
-      die "Field '$field_name' not found in project"
-    else
-      echo "Warning: Field '$field_name' not found in project, skipping requested option '$option_name'" >&2
-      return 0
-    fi
+    echo "Warning: Issue field '$field_name' not found in organization '$org', skipping requested option '$option_name'" >&2
+    return 0
   fi
 
   local option_id
-  option_id="$(find_option_id "$fields_json" "$field_name" "$option_name")"
-  [[ -n "$option_id" ]] || die "Option '$option_name' not found in field '$field_name'"
+  option_id="$(jq -r --arg option_name "$option_name" '.options[]? | select(.name == $option_name) | .id' <<<"$field_json" | head -n1)"
+  if [[ -z "$option_id" ]]; then
+    local available
+    available="$(jq -r '[.options[]?.name] | join("/")' <<<"$field_json")"
+    die "Option '$option_name' not found in issue field '$field_name'. Available: ${available:-none}"
+  fi
 
-  gh project item-edit \
-    --id "$item_id" \
-    --project-id "$project_id" \
-    --field-id "$field_id" \
-    --single-select-option-id "$option_id" >/dev/null
+  local issue_id
+  issue_id="$(gh issue view "$issue_number" -R "$repo" --json id --jq '.id')"
+  [[ -n "$issue_id" ]] || die "Unable to resolve node id for issue #$issue_number"
+
+  local set_query='
+    mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
+      setIssueFieldValue(input: {issueId: $issueId,
+                                 issueFields: [{fieldId: $fieldId, singleSelectOptionId: $optionId}]}) {
+        clientMutationId
+      }
+    }'
+  gh api graphql -f query="$set_query" \
+    -F issueId="$issue_id" -F fieldId="$field_id" -F optionId="$option_id" >/dev/null
 }
 
 # `gh project item-list` asks for every field value of every item — 203 points of the 5000
@@ -398,31 +441,12 @@ done
 [[ -n "$project_number" ]] || die "--project-number or GHWF_PROJECT_NUMBER is required"
 [[ "$mode" == "issue" || "$mode" == "draft-convert" ]] || die "--mode must be 'issue' or 'draft-convert'"
 
+# Checked before anything is created: a run that files the issue and then dies on the
+# priority leaves half-tracked work behind.
+retired_priority="$(retired_priority_replacement "$priority_option")"
+[[ -z "$retired_priority" ]] || die "Priority '$priority_option' was retired with the old board; the scale is now Urgent/High/Medium/Low. Use '$retired_priority'."
+
 graphql_budget_before="$(graphql_remaining)"
-
-# `gh project field-list` pulls every option of every field (102 points); the script reads the
-# ids of single-select fields and their options. One query answers that and the project id.
-project_query='
-  query($owner: String!, $number: Int!) {
-    owner: repositoryOwner(login: $owner) {
-      ... on ProjectV2Owner {
-        projectV2(number: $number) {
-          id
-          fields(first: 50) {
-            nodes {
-              ... on ProjectV2FieldCommon { id name }
-              ... on ProjectV2SingleSelectField { id name options { id name } }
-            }
-          }
-        }
-      }
-    }
-  }'
-project_json="$(gh api graphql -f query="$project_query" -F owner="$owner" -F number="$project_number")"
-
-project_id="$(jq -r '.data.owner.projectV2.id // empty' <<<"$project_json")"
-[[ -n "$project_id" ]] || die "Unable to resolve project id"
-fields_json="$(normalize_fields_json "$(jq -c '[.data.owner.projectV2.fields.nodes[] | select(.id)]' <<<"$project_json")")"
 
 issue_url=""
 issue_number=""
@@ -509,10 +533,10 @@ if [[ -n "$issue_number" ]]; then
   fi
 fi
 
-apply_single_select_field "$item_id" "$project_id" "$fields_json" "$area_field" "$area_option" false
-apply_single_select_field "$item_id" "$project_id" "$fields_json" "$priority_field" "$priority_option" false
-apply_single_select_field "$item_id" "$project_id" "$fields_json" "$size_field" "$size_option" false
-apply_single_select_field "$item_id" "$project_id" "$fields_json" "$status_field" "$status_option" true
+apply_project_field "$area_field" "$area_option" false
+apply_issue_priority "$priority_field" "$priority_option"
+apply_project_field "$size_field" "$size_option" false
+apply_project_field "$status_field" "$status_option" true
 
 checked_out_branch=""
 if [[ "$skip_branch" -eq 0 ]]; then

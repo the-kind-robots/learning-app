@@ -250,7 +250,7 @@ if [ "$tool" = "Bash" ]; then
 The coordinator files work and hands it to an executor; it does not edit the repository itself (AGENTS.md, # Delivery). A shell write is the same edit an Edit/Write refusal would have caught, taken by a route the editor matcher never sees.
 
 If you are here because an edit was just refused: stop, and report the action and the refusal verbatim to the owner — do not complete it through the shell. Otherwise hand the edit to an executor, which works on an issue branch in its own worktree:
-  $START --title \"...\" --priority <Blocker|Critical|Major|Minor|Trivial> --status \"In progress\" --base master
+  $START --title \"...\" --priority <Urgent|High|Medium|Low> --status \"In progress\" --base master
 
 This check reads a command string, so it guesses. Approve it if the guess is wrong."
     done <<CANDIDATES
@@ -294,7 +294,7 @@ Approve only if this session owns that issue. Otherwise hand the work to an exec
 The coordinator files work and hands it to an executor; it does not edit the repository itself (AGENTS.md, # Delivery). Editing here is how the pin in #346 happened.
 
 File the issue, then raise an executor for it:
-  $START --title \"...\" --priority <Blocker|Critical|Major|Minor|Trivial> --status \"In progress\" --base master
+  $START --title \"...\" --priority <Urgent|High|Medium|Low> --status \"In progress\" --base master
 
 The executor creates its branch with \`gh issue develop <n>\` and works in its own worktree.
 

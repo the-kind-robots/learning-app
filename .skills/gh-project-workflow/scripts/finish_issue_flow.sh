@@ -42,56 +42,9 @@ trim() {
   printf '%s' "$value"
 }
 
-normalize_fields_json() {
-  local raw_json="$1"
-  jq -c 'if type == "array" then . else (.fields // []) end' <<<"$raw_json"
-}
-
-find_field_id() {
-  local fields_json="$1"
-  local field_name="$2"
-  jq -r --arg field_name "$field_name" '.[] | select(.name == $field_name) | .id' <<<"$fields_json" | head -n1
-}
-
-find_option_id() {
-  local fields_json="$1"
-  local field_name="$2"
-  local option_name="$3"
-  jq -r --arg field_name "$field_name" --arg option_name "$option_name" '.[] | select(.name == $field_name) | .options[]? | select(.name == $option_name) | .id' <<<"$fields_json" | head -n1
-}
-
-apply_single_select_field() {
-  local item_id="$1"
-  local project_id="$2"
-  local fields_json="$3"
-  local field_name="$4"
-  local option_name="$5"
-  local required="${6:-true}"
-
-  [[ -n "$option_name" ]] || return 0
-
-  local field_id
-  field_id="$(find_field_id "$fields_json" "$field_name")"
-  if [[ -z "$field_id" ]]; then
-    if [[ "$required" == "true" ]]; then
-      die "Field '$field_name' not found in project"
-    else
-      echo "Warning: Field '$field_name' not found in project, skipping requested option '$option_name'" >&2
-      return 0
-    fi
-  fi
-
-  local option_id
-  option_id="$(find_option_id "$fields_json" "$field_name" "$option_name")"
-  [[ -n "$option_id" ]] || die "Option '$option_name' not found in field '$field_name'"
-
-  gh project item-edit \
-    --id "$item_id" \
-    --project-id "$project_id" \
-    --field-id "$field_id" \
-    --single-select-option-id "$option_id" >/dev/null
-}
-
+# Status is an ordinary project field, and gh 2.98.0 resolves the field and its option by
+# name, so the project id, the field-list query and the item lookup this used to need are
+# gone. The project number is POSITIONAL; `--number` means a numeric field value.
 mark_issue_status_in_project() {
   local owner="$1"
   local project_number="$2"
@@ -101,26 +54,21 @@ mark_issue_status_in_project() {
 
   [[ -n "$owner" && -n "$project_number" && -n "$issue_number" && -n "$status" ]] || return 0
 
-  local project_id
-  project_id="$(gh project view "$project_number" --owner "$owner" --format json --jq '.id' 2>/dev/null || true)"
-  [[ -n "$project_id" ]] || {
-    echo "Warning: Unable to resolve project id, skipping status update" >&2
+  local issue_url
+  issue_url="$(gh issue view "$issue_number" -R "$repo" --json url --jq '.url' 2>/dev/null || true)"
+  [[ -n "$issue_url" ]] || {
+    echo "Warning: Unable to resolve URL for issue #$issue_number, skipping status update" >&2
     return 0
   }
 
-  local fields_json
-  fields_json="$(normalize_fields_json "$(gh project field-list "$project_number" --owner "$owner" --format json)")"
-
-  local item_json item_id
-  item_json="$(gh project item-list "$project_number" --owner "$owner" --limit "${GHWF_ITEM_LIMIT:-200}" --format json)"
-  item_id="$(jq -r --argjson issue_number "$issue_number" '.items[] | select(.content.number? == $issue_number) | .id' <<<"$item_json" | head -n1)"
-
-  [[ -n "$item_id" ]] || {
-    echo "Warning: Project item for issue #$issue_number not found, skipping status update" >&2
-    return 0
-  }
-
-  apply_single_select_field "$item_id" "$project_id" "$fields_json" "$status_field" "$status" true
+  local output
+  if ! output="$(gh project item-edit "$project_number" \
+                   --owner "$owner" \
+                   --url "$issue_url" \
+                   --field "$status_field" \
+                   --value "$status" 2>&1)"; then
+    echo "Warning: Failed to set '$status_field' to '$status' for issue #$issue_number, skipping: $output" >&2
+  fi
 }
 
 infer_repo_from_origin() {
