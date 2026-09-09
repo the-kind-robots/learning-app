@@ -92,7 +92,7 @@ New work, a bug, or a decision:
 
 ```bash
 bash .skills/gh-project-workflow/scripts/start_issue_flow.sh \
-  --title "..." --priority Major --status "In progress" --base master
+  --title "..." --priority High --status "In progress" --base master
 ```
 
 Never a raw `gh issue create`: a `PreToolUse` hook refuses it, because it makes an issue that
