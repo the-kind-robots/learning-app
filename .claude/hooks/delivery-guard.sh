@@ -104,12 +104,6 @@ while IFS= read -r st; do
   esac
 
   case "$head" in
-    git)
-      case "$sub $verb" in
-        "checkout -b"|"switch -c")
-          decide ask "AGENTS.md, Branches: a tracked branch comes from \`gh issue develop <n> --checkout\`, so GitHub links it to its issue. A branch made this way leaves the issue with no development link and drops out of every cleanup. Approve only for throwaway local work." ;;
-      esac
-      continue ;;
     gh|*/gh) ;;
     *) continue ;;
   esac
@@ -119,9 +113,9 @@ while IFS= read -r st; do
       decide deny "Refused: a raw \`gh issue create\` produces an issue that is on no board, with no Status and no Priority. #288, #289, #290 and #292 were lost that way.
 
 Use the flow — invoke the \`repo-task-delivery\` skill, or run its GitHub step directly:
-  $START --title \"...\" --body-file <path> --priority <Blocker|Critical|Major|Minor|Trivial> --status \"In progress\" --base master
+  $START --title \"...\" --body-file <path> --priority <Urgent|High|Medium|Low> --status \"In progress\" --base master
 
-That one call creates the issue, reuses an existing item of the same title, puts it on project 'Learning app' (2), sets the fields, and runs \`gh issue develop --checkout\`.
+That one call creates the issue, reuses an existing item of the same title, puts it on the org project 'Learning app' (the-kind-robots, 11), sets the fields, and runs \`gh issue develop --checkout\`.
 
 If the owner asked for the raw command, re-run it prefixed with DELIVERY_GUARD=off." ;;
 
@@ -139,7 +133,7 @@ If the owner asked for the raw command, re-run it prefixed with DELIVERY_GUARD=o
           decide deny "Refused: $where, which carries no issue number, so this pull request would have no issue and no board entry behind it.
 
 Get the issue and its branch first:
-  $START --title \"...\" --priority Major --status \"In progress\" --base master
+  $START --title \"...\" --priority High --status \"In progress\" --base master
 or, when the issue already exists:
   gh issue develop <n> -R the-kind-robots/learning-app --checkout --base master
 
