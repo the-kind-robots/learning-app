@@ -71,8 +71,8 @@ Always use `:reload` when requiring namespaces to pick up changes.
 - Hand work to the `executor` agent (`.claude/agents/executor.md`). Its definition carries the worktree isolation and the branch recipe, the nested `wt-<number>` fallback included; `/wt-*/` is gitignored so the inner checkout cannot be staged from the parent.
 - In the main checkout, `gh issue develop <number> --checkout` is enough.
 - A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared.
-  - **Main checkout** — the full stand: sync, dictionary, migrations, schema, anything through CouchDB or nginx.
-  - **Executor** — compiler and tests only: refactors, style, docs, skills, tests, small UI fixes.
+- Where to work is a dependency test, not a topic match. Name the shared thing the work needs — a live CouchDB, nginx routing, a migration over real data — and it stays in the main checkout. Cannot name one? It goes to the executor. Subsystems are examples, never the test: #351 was sent to the main checkout for touching the dictionary and needed nothing shared.
+- A worktree still proves browser behaviour on fixture data. It serves on `localhost`, a secure context, so OPFS, Web Locks, service workers and workers all run there; the browser tests' fixture dictionary is enough for anything that needs only one origin. Only the real data and the shared services stay behind — cold-start timing on the full dictionary, replication against a live CouchDB, nginx routing.
 - On merge, delete the branch and remove the worktree, a nested `wt-<number>` included.
 
 Measured 2026-09-02 on Claude Code 2.1.258; the boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` in `.claude/settings.json` is the owner's lever over it, not yours. Re-measure after a CLI update.

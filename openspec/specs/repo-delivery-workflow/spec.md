@@ -213,6 +213,8 @@ Tracked work SHALL happen on a branch created from its issue, including when the
 
 Delegated edits SHALL go to a named agent definition, `.claude/agents/executor.md`, that carries the worktree isolation in its frontmatter and the branch recipe in its body: plain `git checkout <branch>` inside the agent's own worktree, and a nested linked worktree only when another worktree already holds that branch. `AGENTS.md` SHALL point at that definition rather than restating the isolation flag or the recipe, so the two cannot drift apart.
 
+Where the coordinating session runs in the background, the repository SHALL record that no third option exists, next to the delegation rule itself rather than leaving it to be discovered when a write is refused. The coordinator stays in the main checkout, and the harness refuses a background session's writes to the shared checkout; together those leave exactly one destination, so every delegated edit SHALL be placed in a worktree on the issue branch. An agent delegated such an edit SHALL be launched with worktree isolation; otherwise the agent stops on its first write having done nothing.
+
 #### Scenario: Work is isolated in a worktree
 
 - **WHEN** a task needs a worktree
@@ -232,6 +234,12 @@ Delegated edits SHALL go to a named agent definition, `.claude/agents/executor.m
 
 - **WHEN** a coordinating session needs a repository edit
 - **THEN** it delegates that edit to the `executor` agent and stays in the main checkout
+
+#### Scenario: A background coordinating session delegates an edit
+
+- **WHEN** the coordinating session runs in the background and delegates a repository edit
+- **THEN** the edit is placed in a worktree, because writes to the shared checkout are refused for a background session and the coordinator does not make the edit itself
+- **AND** that constraint is already stated with the delegation rule, so it is not first learned from the refusal
 
 ### Requirement: Filing an issue stays within a small share of the API budget
 
