@@ -5,7 +5,7 @@
 
 (defn ^:async list-collections
   [dbs]
-  (let [{colls :docs} (await (dbs/find dbs {:selector {:type "collection"}}))]
+  (let [{colls :docs} (await (dbs/find-all dbs {:selector {:type "collection"}}))]
     (vec (sort-by :created-at colls))))
 
 

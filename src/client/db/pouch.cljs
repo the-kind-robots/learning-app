@@ -105,8 +105,36 @@
   (db/find-all (db-for dbs (get-in query [:selector :type])) query))
 
 
+(def ^:private user-db-indexes
+  "Every user-db query selects on :type, and reviews are looked up by
+   :word-id. Without these pouchdb-find scans the whole database and filters
+   in JS on the main thread (#404). Design-document ids sort `by-type` before
+   `by-type-word-id`, which is the tie-break pouchdb-find uses for a plain
+   {:type ..} selector."
+  [{:fields [:type] :name "by-type"}
+   {:fields [:type :word-id] :name "by-type-word-id"}])
+
+
+(defn- ^:async ensure-index!
+  "Idempotent, so running it on every start is what gives an installation
+   that predates the index its copy. A failure is logged, never raised: a
+   missing index slows queries down, it does not break them."
+  [db {:keys [fields] index-name :name}]
+  (try
+    (await (db/create-index db fields {:name index-name :ddoc index-name}))
+    (catch :default err
+      (log/error :db/index-error {:index index-name :error (str err)}))))
+
+
+(defn- ensure-user-db-indexes!
+  [db]
+  (js/Promise.all (into-array (map #(ensure-index! db %) user-db-indexes))))
+
+
 (defn ^:async init!
   [_deps]
   (await (db-migrations/ensure-migrated!))
-  {:device/db (device-db)
-   :user/db   (user-db)})
+  (let [user-db (user-db)]
+    (await (ensure-user-db-indexes! user-db))
+    {:device/db (device-db)
+     :user/db   user-db}))

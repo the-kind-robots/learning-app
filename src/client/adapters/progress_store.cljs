@@ -29,11 +29,11 @@
 
 
 (defn- ^:async word-retention-levels
+  "One indexed read of every review, grouped in memory. A `:word-id {:$in ids}`
+   selector cost a full scan times a linear `$in` check per document (#404)."
   [dbs word-ids now-ms-val]
   (if (seq word-ids)
-    (let [{reviews :docs}  (await (dbs/find-all dbs
-                                                {:selector {:type    "review"
-                                                            :word-id {:$in (vec word-ids)}}}))
+    (let [{reviews :docs}  (await (find-all dbs "review"))
           word-id->reviews (group-by :word-id reviews)]
       (mapv (fn [word-id]
               {:word-id word-id
@@ -105,16 +105,18 @@
         docs        (cond->> all-docs
                       (some? word-ids) (filter #((set word-ids) (:_id %))))
         total-count (clojure/count docs)
-        retention-levels (await (word-retention-levels dbs (mapv :_id docs) (now-ms clock)))
-        word-id->retention (->> retention-levels
-                                (map (juxt :word-id :retention-level))
-                                (into {}))
-        words       (cond->> docs
+        ;; The page is sorted by retention, so every candidate needs its
+        ;; level; only docs the filters exclude are spared the lookup.
+        candidates  (cond->> docs
                       (utils/non-blank search)
                       (filter (fn [{:keys [value translation]}]
                                 (or (utils/includes? value search)
                                     (some #(utils/includes? (:value %) search) translation)))))
-        words       (->> words
+        retention-levels (await (word-retention-levels dbs (mapv :_id candidates) (now-ms clock)))
+        word-id->retention (->> retention-levels
+                                (map (juxt :word-id :retention-level))
+                                (into {}))
+        words       (->> candidates
                          (map (fn [word]
                                 (assoc word :retention-level (word-id->retention (:_id word) 0))))
                          (sort-by :retention-level (if (= order :asc) < >)))

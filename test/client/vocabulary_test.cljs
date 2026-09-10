@@ -7,6 +7,7 @@
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
+   [domain.retention :as retention]
    [ports.progress-store :as progress-store]
    [use-cases.vocabulary :as sut]
    [utils :as utils]))
@@ -185,3 +186,54 @@
         (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
           (is (= 2 (count reviews)))
           (is (= 1 (count (filter (fn [r] (false? (:retained r))) reviews))))))))))
+
+
+(defn- ^:async seed-reviews!
+  "Seven reviews per word over the week before `test-now`, alternating
+   retained, so every word lands on a different retention level."
+  [dbs word-ids]
+  (await (js/Promise.all
+          (into-array
+           (for [[n word-id] (map-indexed vector word-ids)
+                 k (range 7)]
+             (db/insert (:user/db dbs)
+                        {:type       "review"
+                         :word-id    word-id
+                         :retained   (even? (+ n k))
+                         :created-at (utils/ms->iso (- (time/now-ms)
+                                                       (* (+ 1 n k) 6 3600 1000)))}))))))
+
+
+(deftest list-retention-matches-per-word-reviews-beyond-25-reviews
+  (async-testing "`list` retention equals retention over each word's own reviews when reviews exceed one page"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (await (db/create-index (:user/db dbs) [:type] {:name "by-type" :ddoc "by-type"}))
+      (await (db/create-index (:user/db dbs) [:type :word-id] {:name "by-type-word-id" :ddoc "by-type-word-id"}))
+      (let [word-ids (mapv #(str "vocab:wort-" %) (range 5))]
+        (await (js/Promise.all
+                (into-array
+                 (map (fn [word-id]
+                        (db/insert (:user/db dbs)
+                                   {:_id         word-id
+                                    :type        "vocab"
+                                    :value       (subs word-id 6)
+                                    :translation [{:lang "ru" :value "слово"}]
+                                    :created-at  time/test-now-iso
+                                    :modified-at time/test-now-iso}))
+                      word-ids))))
+        (await (seed-reviews! dbs word-ids))
+        (let [{reviews :docs} (await (db/find-all (:user/db dbs) {:selector {:type "review"}}))
+              expected (->> (group-by :word-id reviews)
+                            (map (fn [[word-id reviews]]
+                                   [word-id (retention/retention-level reviews (time/now-ms))]))
+                            (into {}))
+              {:keys [words]} (await (sut/list (test-capabilities dbs) {}))
+              actual (into {} (map (juxt :_id :retention-level)) words)
+              {subset :words} (await (sut/list (test-capabilities dbs) {:word-ids (take 2 word-ids)}))]
+          (is (= 35 (count reviews)))
+          (is (= 5 (count (distinct (vals expected)))))
+          (is (= expected actual))
+          (is (= (select-keys expected (take 2 word-ids))
+                 (into {} (map (juxt :_id :retention-level)) subset)))))))))
