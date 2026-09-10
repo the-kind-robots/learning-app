@@ -10,7 +10,7 @@
 # Delivery
 
 - Any task likely to end in a committed edit runs the full flow. Invoke the `repo-task-delivery` skill and let it drive — do not assemble the steps by hand.
-- The flow: issue on the board -> branch from that issue -> OpenSpec change -> implement -> verify -> archive -> PR -> merge -> Done -> cleanup.
+- The flow: issue on the board -> branch from that issue -> implement -> verify -> PR -> merge -> Done -> cleanup. Work that changes product behaviour adds an OpenSpec change before implementing and archives it on the branch before the PR; the test for that is below.
 - `repo-task-delivery` is the entrypoint. It delegates GitHub to `gh-project-workflow` and specs to the OpenSpec skills. Do not start at a sub-skill; they assume the flow is already underway.
 - Issues come from the workflow, never by hand:
   `bash .skills/gh-project-workflow/scripts/start_issue_flow.sh --title "..." --priority High --status "In progress" --base master`
@@ -21,7 +21,13 @@
 - The board is the owner's only window into the work. An issue that is not on it does not exist.
 - The delegation rule under **Branches and Worktrees** is enforced, not left to memory. A second `PreToolUse` hook, `.claude/hooks/coordinator-guard.sh`, refuses `Edit`/`Write`/`NotebookEdit` from a session with no subagent id when the target is inside the repository, and asks instead of refusing when the target's worktree is on an issue branch, since that is also what legitimate full-stand work looks like. Subagents pass untouched. The same hook also watches `Bash`, where it only ever asks: an editor target is given in the payload, a shell target is guessed from a string, and its list of shell write shapes is short and knowingly incomplete. Its header comment records what it cannot tell apart — read it before trusting it, and do not read it as a lock. Since 2.1.143 `worktree.bgIsolation` refuses a background coordinator's editor writes natively; the hook's own coverage is the interactive session and shell writes.
 
-Do not start the flow when the user asks a question, wants only reading or measuring, is continuing an issue that is already active, or says to skip GitHub/OpenSpec. Everything else goes through it — bug, refactor, docs, skills, config. "It is small" is not an exception; it is the usual excuse, and it is what produced four issues nobody could see.
+Do not start the flow when the user asks a question, wants only reading or measuring, is continuing an issue that is already active, or says to skip GitHub/OpenSpec. Everything else goes through it — bug, refactor, docs, skills, config. "It" is the issue, the branch and the pull request; whether an OpenSpec change joins them is the test below. "It is small" is not an exception; it is the usual excuse, and it is what produced four issues nobody could see.
+
+Whether the work also needs an OpenSpec change is a verifiability test, not a topic match. Name the behaviour this change alters that someone could check afterwards without reading the diff — a word that now syncs, a document shape the migration must produce, a screen that now answers differently. Can you name one? Write the OpenSpec change, and archive it on the branch before the PR. Cannot name one? There is no requirement to state, so there is no OpenSpec change: the work alters how the repository is worked, not what the product does. Subsystems are examples, never the test.
+
+Repository process fails that test by construction — agent rules, hooks, skills, scripts, CI configuration, documentation about how work is delivered. Until #400 every tracked edit needed a change anyway, and since `openspec validate` refuses a change with no delta, process work had to invent a normative requirement about itself to get delivered. It no longer does. Process rules are written down here instead: this file is loaded every session, and the one other copy was deleted for saying the same things twice (#388).
+
+Nothing else moves. The issue on the board, the branch from that issue, the guards, the pull request: unchanged, whichever side of the test the work falls on. Those are what make work visible — #288, #289, #290 and #292 were lost because they were never issues, not because they had no spec.
 
 If the user asks for a blocked command outright, prefix it with `DELIVERY_GUARD=off`. That turns the refusal into a normal approval prompt, so the owner still confirms. Never reach for it on your own judgement.
 

@@ -9,7 +9,7 @@ Use this skill to run the GitHub lifecycle in one repository.
 
 In this repo it is often used as a sub-skill of the higher-level tracked-delivery flow:
 
-`repo-task-delivery -> gh-project-workflow + OpenSpec skills`
+`repo-task-delivery -> gh-project-workflow + OpenSpec skills (when the work changes product behaviour)`
 
 ## Quick Start
 

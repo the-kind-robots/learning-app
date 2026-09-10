@@ -1,6 +1,6 @@
 ---
 name: repo-task-delivery
-description: "Use this when the user reports any problem, regression, warning, bug, improvement, or proposed repo change that is likely to result in a committed repository edit. Default to the full repo workflow: GitHub issue/project tracking, OpenSpec change, implementation, verification, pull request, merge, and closeout."
+description: "Use this when the user reports any problem, regression, warning, bug, improvement, or proposed repo change that is likely to result in a committed repository edit. Default to the full repo workflow: GitHub issue/project tracking, an OpenSpec change when product behaviour changes, implementation, verification, pull request, merge, and closeout."
 ---
 
 # Repo Task Delivery
@@ -19,7 +19,9 @@ This is the orchestration skill that turns a user report like:
 
 into the repo's standard delivery flow:
 
-`GitHub issue -> OpenSpec change -> implementation -> verify -> OpenSpec sync/archive -> PR/merge`
+`GitHub issue -> [OpenSpec change] -> implementation -> verify -> [OpenSpec sync/archive] -> PR/merge`
+
+The bracketed steps run only when the work changes product behaviour. Step 3 carries the test.
 
 ## When to use
 
@@ -41,7 +43,7 @@ In those cases, use the narrower workflow skill directly.
 ## Default Workflow
 
 1. Recognize new work.
-   - Treat any newly reported problem or proposed repo change as a new tracked task unless the user clearly says to avoid GitHub/OpenSpec.
+   - Treat any newly reported problem or proposed repo change as a new tracked task unless the user clearly says to avoid GitHub tracking.
    - If there is an obvious existing issue/change for the same problem, continue it instead of creating duplicates.
    - If it is not yet clear whether the user wants a tracked repo change, ask a short clarifying question before writing code.
 
@@ -56,17 +58,20 @@ In those cases, use the narrower workflow skill directly.
    - Filing an issue is not done until it is on the board with a **Priority** (Urgent/High/Medium/Low — judge it, do not leave it empty) and its dependencies declared as native blocked-by relations (see AGENTS.md, Issues). Priority is the organization's native issue field, not a project field, so the workflow script sets it on the issue; the board shows it as a column. The DAG on the board is only as true as the edges filed with the work.
    - Decide where the work happens: full-stand work happens in the main checkout; everything else is handed to the `executor` agent (`.claude/agents/executor.md`), which is isolated in a worktree by definition. AGENTS.md gives the test.
 
-3. Start OpenSpec.
-   - Use `openspec-propose-change` to create the change and first artifact.
+3. Decide whether this work needs an OpenSpec change, then start it if it does.
+   - The test is verifiability, not topic. Name the behaviour this work alters that someone could check afterwards without reading the diff — a word that now syncs, a document shape a migration must produce, a screen that now answers differently. Can you name one? It needs an OpenSpec change. Cannot name one? It does not, and there is nothing to write down as a requirement.
+   - Repository process fails that test by construction: agent rules, hooks, skills, scripts, CI configuration, documentation about how work is delivered. Such work skips the rest of this step and all of step 6, and goes straight to implementation. Where a process rule needs writing down, it goes in `AGENTS.md`.
+   - Skipping OpenSpec never skips the issue, the branch, the guards or the PR. Those are unchanged on both sides of the test.
+   - When the work does need a change: use `openspec-propose-change` to create it and the first artifact.
    - The change should describe the user-visible bug or feature outcome, not just an implementation detail.
    - Prefer proper OpenSpec delta specs under `openspec/changes/<name>/specs/**/spec.md`.
    - If this repo intentionally updates `openspec/specs/**` directly for a small change, record that as a deliberate direct-spec mode in the task notes so archive warnings about missing deltas are expected.
 
 4. Implement.
-   - Use `openspec-apply-change`.
-   - Read the change context first, then implement the scoped fix.
+   - With an OpenSpec change, use `openspec-apply-change` and read the change context first, then implement the scoped fix.
+   - Without one, implement the scoped fix directly; the issue body is the context.
    - Update task checkboxes as work is completed.
-   - Do not start repository code edits before issue + OpenSpec tracking exist, unless the user explicitly asks to skip the tracked flow.
+   - Do not start repository code edits before the issue and its branch exist — and, when step 3 called for an OpenSpec change, before that change exists — unless the user explicitly asks to skip the tracked flow.
 
 5. Verify.
    - Run the relevant automated checks.
@@ -77,14 +82,15 @@ In those cases, use the narrower workflow skill directly.
    - For visual or layout-quality bugs, do not treat DOM shape, HTMX events, or end-state screenshots as sufficient by themselves.
    - When the question is whether UI is visually stable, anchored, centered correctly, or free of jumps, verify the actual rendered layout with precise visual instrumentation: frame-by-frame geometry, performance/layout traces, animation tooling, or an equivalent browser-level measurement.
    - Be explicit about what was and was not proven. If you only proved the DOM state or swap path, say that you did not yet prove visual stability.
-   - Use `openspec-verify-change` when the change is implementation-complete.
+   - Use `openspec-verify-change` when there is an OpenSpec change and it is implementation-complete.
    - Run OpenSpec CLI commands with telemetry disabled unless the user explicitly opts in:
 
 ```bash
 OPENSPEC_TELEMETRY=0 openspec ...
 ```
 
-6. Close the OpenSpec loop.
+6. Close the OpenSpec loop, when step 3 opened one.
+   - Work that carries no OpenSpec change has nothing to close here; go to step 7.
    - Close OpenSpec before opening or merging the feature PR.
    - Use the proper OpenSpec tools: `openspec-sync-specs` when specs must be synced while the change stays active, or `openspec-archive-change` when the change is complete.
    - If the change is complete, archive it on the delivery branch before PR creation.
@@ -147,7 +153,8 @@ When finishing a task:
 - Do not silently switch to another browser tool just because the preferred repo-owned CDP workflow failed once; repair the preferred tooling first unless the user explicitly approves a fallback.
 - Do not archive OpenSpec after the feature PR is merged. Archive before PR merge so one PR contains implementation, spec updates, and archive.
 - Do not push archive commits directly to protected `master`; if late archive is unavoidable, create a separate PR and note the workflow miss.
-- Do not ignore OpenSpec "No deltas found" warnings unless the task explicitly used direct-spec mode.
+- Do not manufacture a requirement to satisfy `openspec validate`. "No deltas found" on work that changes product behaviour means the delta is missing; on repository process it means step 3 should not have created a change at all.
+- Do not open an OpenSpec change for a hook, skill, script, rules file or CI edit. That is the ceremony #400 removed.
 
 ## OpenSpec Telemetry
 
@@ -160,7 +167,7 @@ Run OpenSpec commands with `OPENSPEC_TELEMETRY=0` by default. Treat PostHog flus
 When this skill is used, the assistant should naturally move through:
 
 - issue creation
-- change creation
+- change creation, when product behaviour changes
 - implementation
 - verification
 - PR/merge
