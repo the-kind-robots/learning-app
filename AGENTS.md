@@ -74,14 +74,14 @@ Always use `:reload` when requiring namespaces to pick up changes.
 
 - Branches come from `gh issue develop <number>` only, so the branch is linked to its issue. Never `git checkout -b` or `git switch -c` — a permission rule in `.claude/settings.json` asks on both — and never let the worktree mechanism make the branch: it branches from `master` and leaves the issue with no development link (#289).
 - The coordinating session stays in the main checkout and delegates every repository edit, including one it would rather make itself.
-- Hand work to the `executor` agent (`.claude/agents/executor.md`). Its definition carries the worktree isolation and the branch recipe, the nested `wt-<number>` fallback included; `/wt-*/` is gitignored so the inner checkout cannot be staged from the parent.
+- Hand work to the `executor` agent (`.claude/agents/executor.md`). Its definition carries the worktree isolation and the branch recipe.
 - In the main checkout, `gh issue develop <number> --checkout` is enough.
 - A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared.
 - Where to work is a dependency test, not a topic match. Name the shared thing the work needs — a live CouchDB, nginx routing, a migration over real data — and it stays in the main checkout. Cannot name one? It goes to the executor. Subsystems are examples, never the test: #351 was sent to the main checkout for touching the dictionary and needed nothing shared.
 - A worktree still proves browser behaviour on fixture data. It serves on `localhost`, a secure context, so OPFS, Web Locks, service workers and workers all run there; the browser tests' fixture dictionary is enough for anything that needs only one origin. Only the real data and the shared services stay behind — cold-start timing on the full dictionary, replication against a live CouchDB, nginx routing.
-- On merge, delete the branch and remove the worktree, a nested `wt-<number>` included.
+- On merge, delete the branch and remove the worktree.
 
-Measured 2026-09-02 on Claude Code 2.1.258; the boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` in `.claude/settings.json` is the owner's lever over it, not yours. Re-measure after a CLI update.
+Measured 2026-09-10 on Claude Code 2.1.267; the boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` in `.claude/settings.json` is the owner's lever over it, not yours. Re-measure after a CLI update.
 
 # Browser / PWA Verification
 
