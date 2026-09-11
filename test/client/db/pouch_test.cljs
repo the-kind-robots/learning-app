@@ -70,7 +70,12 @@
        (await (db/insert local
                          {:type "review" :word-id "vocab:b" :retained true :created-at "2024-01-03T00:00:00.000Z"}))
        (await (db/insert local {:type "vocab" :_id "vocab:a" :value "a"}))
-       (let [{rows :rows} (await (db/query local sut/reviews-by-word-view {:keys ["vocab:a"]}))]
-         (is (= #{["vocab:a" ["2024-01-01T00:00:00.000Z" true]]
-                  ["vocab:a" ["2024-01-02T00:00:00.000Z" false]]}
-                (set (map (juxt :key :value) rows)))))))))
+       (let [dbs      {:user/db local}
+             by-word  (await (sut/reviews-by-word dbs ["vocab:a"]))
+             previews (await (sut/vocab-previews dbs nil))]
+         (is (= ["vocab:a"] (keys by-word)))
+         (is (= #{{:word-id "vocab:a" :created-at "2024-01-01T00:00:00.000Z" :retained true}
+                  {:word-id "vocab:a" :created-at "2024-01-02T00:00:00.000Z" :retained false}}
+                (set (by-word "vocab:a"))))
+         (is (= [{:_id "vocab:a" :kind nil :translation nil :value "a"}] previews))
+         (is (= [] (await (sut/vocab-previews dbs ["vocab:none"])))))))))

@@ -135,19 +135,53 @@
       (log/error :db/index-error {:index index-name :error (str err)}))))
 
 
-(def reviews-by-word-view
-  "View name for `db/query`: one row per review, keyed by word id, valued
-   `[created_at retained]` — what retention needs, without fetching the
-   review documents. The view is named without a dash because `clj->couch`
-   snake-cases map keys on the way in."
+(def ^:private reviews-by-word-view
+  "One row per review, keyed by word id, valued `[created_at retained]` —
+   what retention needs, without fetching the review documents. The view is
+   named without a dash because `clj->couch` snake-cases map keys on the way
+   in."
   "reviews-by-word/reviews")
 
 
-(def vocab-preview-view
-  "View name for `db/query`: one row per vocabulary document, keyed by id,
-   valued `[kind value translation]` — what a list of words shows, without
-   fetching the documents."
+(def ^:private vocab-preview-view
+  "One row per vocabulary document, keyed by id, valued
+   `[kind value translation]` — what a list of words shows, without fetching
+   the documents."
   "vocab-preview/preview")
+
+
+(defn ^:async reviews-by-word
+  "Reviews as `{:word-id :created-at :retained}`, grouped by word id. With
+   `word-ids` only those words are read, by key; nil reads the whole view,
+   which is the cheaper of the two when every word is wanted anyway
+   (#404: 800 keys 0.8 s, all rows 1.1 s, 1500 keys 1.5 s)."
+  [dbs word-ids]
+  (let [{rows :rows} (await (db/query (:user/db dbs)
+                                      reviews-by-word-view
+                                      (cond-> {} word-ids (assoc :keys (vec word-ids)))))]
+    (->> rows
+         (map (fn [{word-id :key [created-at retained] :value}]
+                {:created-at created-at
+                 :retained   retained
+                 :word-id    word-id}))
+         (group-by :word-id))))
+
+
+(defn ^:async vocab-previews
+  "Every word and phrase as `{:_id :kind :value :translation}` — what a list
+   shows — or only `word-ids` when given. Read from the vocab view, so no
+   document is fetched."
+  [dbs word-ids]
+  (let [{rows :rows} (await (db/query (:user/db dbs) vocab-preview-view {}))
+        wanted-ids   (some-> word-ids set)]
+    (->> rows
+         (filter (fn [{id :id}]
+                   (or (nil? wanted-ids) (contains? wanted-ids id))))
+         (mapv (fn [{id :id [kind value translation] :value}]
+                 {:_id         id
+                  :kind        kind
+                  :translation translation
+                  :value       value})))))
 
 
 (def ^:private user-db-design-docs
@@ -179,12 +213,6 @@
   [db]
   (js/Promise.all (into-array (concat (map #(ensure-index! db %) user-db-indexes)
                                       (map #(ensure-design-doc! db %) user-db-design-docs)))))
-
-
-(defn query
-  "Queries a mapreduce view on the database that owns `doc-type`."
-  [dbs doc-type view opts]
-  (db/query (db-for dbs doc-type) view opts))
 
 
 (defn ^:async init!

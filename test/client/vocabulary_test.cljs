@@ -115,7 +115,7 @@
         (let [cnt (await (sut/count (test-capabilities {:user/db :fake})))]
           (is (= row-count cnt))
           (is (= 0 @find-calls))
-          (is (= [[pouch/vocab-preview-view {}]] @query-calls)))))))
+          (is (= [["vocab-preview/preview" {}]] @query-calls)))))))
 
 
 (deftest list-and-count-return-all-words-beyond-25

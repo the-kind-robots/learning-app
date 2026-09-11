@@ -28,39 +28,6 @@
                    (some? word-id) (assoc-in [:selector :word-id] word-id)))))
 
 
-(defn- ^:async reviews-by-word
-  "Reviews grouped by word, read from the reviews view: one row per review
-   carrying only what retention needs, so no review document is fetched
-   (#404). `word-ids` bounds the read by key; nil reads every row, which is
-   the cheaper of the two when the caller wants every word anyway."
-  [dbs word-ids]
-  (let [{rows :rows} (await (dbs/query dbs
-                                       "review"
-                                       dbs/reviews-by-word-view
-                                       (cond-> {} word-ids (assoc :keys (vec word-ids)))))]
-    (->> rows
-         (map (fn [{word-id :key [created-at retained] :value}]
-                {:created-at created-at
-                 :retained   retained
-                 :word-id    word-id}))
-         (group-by :word-id))))
-
-
-(defn- ^:async word-retention-levels
-  "Retention level of every word in `word-ids`. `narrowed?` says the ids are
-   a subset of the vocabulary, so the review read is bounded to them."
-  [dbs word-ids narrowed? now-ms-val]
-  (if (seq word-ids)
-    (let [word-id->reviews (await (reviews-by-word dbs (when narrowed? word-ids)))]
-      (mapv (fn [word-id]
-              {:word-id word-id
-               :retention-level (retention/retention-level
-                                 (word-id->reviews word-id [])
-                                 now-ms-val)})
-            word-ids))
-    []))
-
-
 (defn- ^:async word-retention-level
   [dbs word-id now-ms-val]
   (let [{reviews :docs} (await (dbs/find-all dbs
@@ -96,21 +63,6 @@
     (nil? (:started-at lesson-state)) (assoc :started-at (now-iso clock))))
 
 
-(defn- ^:async vocab-docs
-  "Everything a lesson can draw from, as `{:_id :kind :value :translation}`
-   previews read from the vocab view — no document is fetched. Words and
-   phrases are one document type that differ by `:kind`, so one read answers
-   for both."
-  [dbs]
-  (let [{rows :rows} (await (dbs/query dbs "vocab" dbs/vocab-preview-view {}))]
-    (mapv (fn [{id :key [kind value translation] :value}]
-            {:_id         id
-             :kind        kind
-             :translation translation
-             :value       value})
-          rows)))
-
-
 (defn ^:async find-word-by-value
   [dbs value]
   (await (dbs/get dbs "vocab" (vocabulary/vocab-id value))))
@@ -126,38 +78,37 @@
   [dbs clock
    {:keys [order limit offset search word-ids]
     :or   {order :desc}}]
-  (let [all-docs         (await (vocab-docs dbs))
-        wanted?          (some-> word-ids set)
-        docs             (cond->> all-docs
-                           wanted? (filter #(wanted? (:_id %))))
-        total-count      (clojure/count docs)
+  (let [words        (await (dbs/vocab-previews dbs word-ids))
+        total-count  (clojure/count words)
         ;; The page is sorted by retention, so every candidate needs its
-        ;; level; only docs the filters exclude are spared the lookup.
-        candidates       (cond->> docs
-                           (utils/non-blank search)
-                           (filter (fn [{:keys [value translation]}]
-                                     (or (utils/includes? value search)
-                                         (some #(utils/includes? (:value %) search) translation)))))
-        narrowed?        (or (some? word-ids) (utils/non-blank search))
-        retention-levels (await (word-retention-levels dbs (mapv :_id candidates) narrowed? (now-ms clock)))
-        word-id->retention (->> retention-levels
-                                (map (juxt :word-id :retention-level))
-                                (into {}))
-        words            (->> candidates
-                              (map (fn [word]
-                                     (assoc word :retention-level (word-id->retention (:_id word) 0))))
-                              (sort-by :retention-level (if (= order :asc) < >)))
-        words            (cond->> words
-                           offset (drop offset)
-                           limit  (take limit))]
+        ;; level; only words the filters exclude are spared the lookup.
+        candidates   (cond->> words
+                       (utils/non-blank search)
+                       (filter (fn [{:keys [value translation]}]
+                                 (or (utils/includes? value search)
+                                     (some #(utils/includes? (:value %) search) translation)))))
+        ;; A narrowed list reads its reviews by key; the whole vocabulary reads
+        ;; the whole review view, which is cheaper than that many keys.
+        narrowed-ids (when (or (some? word-ids) (utils/non-blank search))
+                       (mapv :_id candidates))
+        word-id->reviews (await (dbs/reviews-by-word dbs narrowed-ids))
+        now          (now-ms clock)
+        words        (->> candidates
+                          (map (fn [word]
+                                 (assoc word
+                                        :retention-level
+                                        (retention/retention-level (word-id->reviews (:_id word) []) now))))
+                          (sort-by :retention-level (if (= order :asc) < >)))
+        words        (cond->> words
+                       offset (drop offset)
+                       limit  (take limit))]
     {:total total-count
      :words (vec words)}))
 
 
 (defn ^:async count-words
   [dbs]
-  (let [docs (await (vocab-docs dbs))]
-    (clojure/count docs)))
+  (clojure/count (await (dbs/vocab-previews dbs nil))))
 
 
 (defn save-word!
