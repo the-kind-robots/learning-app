@@ -7,6 +7,7 @@
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
+   [db.pouch :as pouch]
    [domain.retention :as retention]
    [ports.progress-store :as progress-store]
    [use-cases.vocabulary :as sut]
@@ -96,27 +97,25 @@
         (is (= "der Hund" (:value (first words)))))))))
 
 
-(deftest count-uses-db-doc-count-as-limit
-  (async-testing "`count` uses db/info doc-count for single find"
-    (let [info-calls (atom 0)
-          find-calls (atom [])
-          doc-count  26]
-      (with-redefs [db/info
-                    (fn [_]
-                      (swap! info-calls inc)
-                      (js/Promise.resolve {:doc-count doc-count}))
+(deftest count-reads-the-vocab-view-not-the-documents
+  (async-testing "`count` counts vocab view rows and runs no find"
+    (let [find-calls  (atom 0)
+          query-calls (atom [])
+          row-count   26]
+      (with-redefs [db/find
+                    (fn [_ _]
+                      (swap! find-calls inc)
+                      (js/Promise.resolve {:docs []}))
 
-                    db/find
-                    (fn [_ query]
-                      (swap! find-calls conj query)
+                    db/query
+                    (fn [_ view opts]
+                      (swap! query-calls conj [view opts])
                       (js/Promise.resolve
-                       {:docs (vec (repeat doc-count {:type "vocab"}))}))]
-        (let [cnt (await (sut/count (test-capabilities {:user/db :fake})))
-              q   (first @find-calls)]
-          (is (= doc-count cnt))
-          (is (= 1 @info-calls))
-          (is (= doc-count (:limit q)))
-          (is (nil? (:skip q))))))))
+                       {:rows (vec (repeat row-count {:id "vocab:x" :key "vocab:x" :value [nil "x" []]}))}))]
+        (let [cnt (await (sut/count (test-capabilities {:user/db :fake})))]
+          (is (= row-count cnt))
+          (is (= 0 @find-calls))
+          (is (= [[pouch/vocab-preview-view {}]] @query-calls)))))))
 
 
 (deftest list-and-count-return-all-words-beyond-25
@@ -209,8 +208,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (await (db/create-index (:user/db dbs) [:type] {:name "by-type" :ddoc "by-type"}))
-      (await (db/create-index (:user/db dbs) [:type :word-id] {:name "by-type-word-id" :ddoc "by-type-word-id"}))
+      (await (pouch/prepare-user-db! (:user/db dbs)))
       (let [word-ids (mapv #(str "vocab:wort-" %) (range 5))]
         (await (js/Promise.all
                 (into-array

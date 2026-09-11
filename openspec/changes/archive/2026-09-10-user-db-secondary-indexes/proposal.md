@@ -18,6 +18,10 @@ and 4669 ms and the screen first painted after 9 953 ms with one 3 519 ms long t
   are never priced. The retention sort itself still needs retention for every candidate.
 - `list-collections` reads all collections with `find-all` instead of `find`'s default page
   of 25 (#308).
+- user-db carries two mapreduce views, `reviews-by-word` (`word_id` → `[created_at retained]`)
+  and `vocab-preview` (`_id` → `[kind value translation]`); retention levels and word lists
+  are read from view rows, not from documents.
+- Design documents do not replicate: a sync pass filters `_design/` ids in both directions.
 
 ## Capabilities
 

@@ -516,6 +516,23 @@
                 (.allDocs ^js db))))))
 
 
+#?(:cljs
+   (defn query
+     "Queries a mapreduce view. `view` is `\"<ddoc>/<view>\"`; `opts` are the
+      PouchDB query options (`:keys`, `:startkey`, `:endkey`, `:include-docs`,
+      ...). Returns `{:rows [{:id .. :key .. :value ..}]}`."
+     [db view opts]
+     ;; Rows have a fixed shape, so they skip `couch->clj`'s per-key keyword
+     ;; work: over 9000 rows that pass cost as much as the query itself.
+     (.then (.query ^js db view (clj->couch opts))
+            (fn [result]
+              {:rows (mapv (fn [row]
+                             {:id    (.-id ^js row)
+                              :key   (couch->clj (.-key ^js row))
+                              :value (couch->clj (.-value ^js row))})
+                           (.-rows ^js result))}))))
+
+
 (defn bulk-docs
   "Create, update or delete multiple documents. The `docs` argument is an array of documents.
 
@@ -552,17 +569,21 @@
      ([db]
       (sync db {}))
      ([db
-       {:keys [remote-url live retry backoff-ms]
+       {:keys [remote-url live retry backoff-ms filter]
         :or   {live true retry true backoff-ms 60000}}]
       (let [dbname (.-name ^js db)
             remote (or remote-url
                        (str (.. js/globalThis -location -origin) "/db/" dbname))
-            opts   #js {:live  live
-                        :retry retry
-                        :back_off_function
-                        (fn [delay]
-                          (let [next (if (zero? delay) 1000 (min backoff-ms (* 2 delay)))]
-                            next))}]
+            ;; Top-level sync options apply to both directions (PouchDB's
+            ;; `sync` hands them to its push and pull replications alike), so
+            ;; one `filter` keeps a document out of both.
+            opts   (cond-> #js {:live  live
+                                :retry retry
+                                :back_off_function
+                                (fn [delay]
+                                  (let [next (if (zero? delay) 1000 (min backoff-ms (* 2 delay)))]
+                                    next))}
+                     filter (doto (aset "filter" filter)))]
         (PouchDB/sync dbname remote opts)))))
 
 

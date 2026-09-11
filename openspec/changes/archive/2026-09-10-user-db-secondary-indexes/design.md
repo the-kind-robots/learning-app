@@ -31,6 +31,22 @@ which is a scan times a linear `$in` check per document.
 - `list-words` applies `word-ids` and `search` before retention. `total` keeps its meaning
   (count after `word-ids`, before `search`).
 
+- Two mapreduce views, `_design/reviews-by-word` (`word_id` → `[created_at retained]`) and
+  `_design/vocab-preview` (`_id` → `[kind value translation]`), read without `include_docs`.
+  pouchdb-find's indexed path fetches every matching document by key; a view row read is
+  the same PouchDB per-row cost without the document, and the rows carry exactly what
+  retention and a word list need. Written at `init!` next to the indexes and rewritten only
+  when the stored map differs, so a changed map replaces the old one.
+- The reviews view is read by `keys` when the caller narrowed the words (`word-ids`, `search`)
+  and as a whole otherwise: on the seeded set 800 keys cost 0.77 s, all rows 1.1 s, 1500 keys
+  1.5 s — keys win for a subset and lose for the whole vocabulary.
+- `db/sync` takes a `filter`, and `sync-once!` passes one that drops `_design/` ids. It is the
+  top-level option, which PouchDB hands to both the push and the pull replication, so design
+  documents stay on the device in both directions: CouchDB builds an index for every design
+  document it receives and the server never queries user-db through one.
+- `db/query` converts rows itself (`id`, `key`, `value`) instead of running `couch->clj` over
+  the response: on 9000 rows that generic pass cost as much as the query.
+
 ## Risks / Trade-offs
 
 - [First query after the upgrade builds the index over every doc] → one-time cost on the

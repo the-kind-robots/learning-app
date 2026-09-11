@@ -28,13 +28,30 @@
                    (some? word-id) (assoc-in [:selector :word-id] word-id)))))
 
 
+(defn- ^:async reviews-by-word
+  "Reviews grouped by word, read from the reviews view: one row per review
+   carrying only what retention needs, so no review document is fetched
+   (#404). `word-ids` bounds the read by key; nil reads every row, which is
+   the cheaper of the two when the caller wants every word anyway."
+  [dbs word-ids]
+  (let [{rows :rows} (await (dbs/query dbs
+                                       "review"
+                                       dbs/reviews-by-word-view
+                                       (cond-> {} word-ids (assoc :keys (vec word-ids)))))]
+    (->> rows
+         (map (fn [{word-id :key [created-at retained] :value}]
+                {:created-at created-at
+                 :retained   retained
+                 :word-id    word-id}))
+         (group-by :word-id))))
+
+
 (defn- ^:async word-retention-levels
-  "One indexed read of every review, grouped in memory. A `:word-id {:$in ids}`
-   selector cost a full scan times a linear `$in` check per document (#404)."
-  [dbs word-ids now-ms-val]
+  "Retention level of every word in `word-ids`. `narrowed?` says the ids are
+   a subset of the vocabulary, so the review read is bounded to them."
+  [dbs word-ids narrowed? now-ms-val]
   (if (seq word-ids)
-    (let [{reviews :docs}  (await (find-all dbs "review"))
-          word-id->reviews (group-by :word-id reviews)]
+    (let [word-id->reviews (await (reviews-by-word dbs (when narrowed? word-ids)))]
       (mapv (fn [word-id]
               {:word-id word-id
                :retention-level (retention/retention-level
@@ -80,10 +97,18 @@
 
 
 (defn- ^:async vocab-docs
-  "Everything a lesson can draw from. Words and phrases are one document type
-   that differ by `:kind`, so one query answers for both."
+  "Everything a lesson can draw from, as `{:_id :kind :value :translation}`
+   previews read from the vocab view — no document is fetched. Words and
+   phrases are one document type that differ by `:kind`, so one read answers
+   for both."
   [dbs]
-  (:docs (await (find-all dbs "vocab"))))
+  (let [{rows :rows} (await (dbs/query dbs "vocab" dbs/vocab-preview-view {}))]
+    (mapv (fn [{id :key [kind value translation] :value}]
+            {:_id         id
+             :kind        kind
+             :translation translation
+             :value       value})
+          rows)))
 
 
 (defn ^:async find-word-by-value
@@ -101,28 +126,30 @@
   [dbs clock
    {:keys [order limit offset search word-ids]
     :or   {order :desc}}]
-  (let [all-docs    (await (vocab-docs dbs))
-        docs        (cond->> all-docs
-                      (some? word-ids) (filter #((set word-ids) (:_id %))))
-        total-count (clojure/count docs)
+  (let [all-docs         (await (vocab-docs dbs))
+        wanted?          (some-> word-ids set)
+        docs             (cond->> all-docs
+                           wanted? (filter #(wanted? (:_id %))))
+        total-count      (clojure/count docs)
         ;; The page is sorted by retention, so every candidate needs its
         ;; level; only docs the filters exclude are spared the lookup.
-        candidates  (cond->> docs
-                      (utils/non-blank search)
-                      (filter (fn [{:keys [value translation]}]
-                                (or (utils/includes? value search)
-                                    (some #(utils/includes? (:value %) search) translation)))))
-        retention-levels (await (word-retention-levels dbs (mapv :_id candidates) (now-ms clock)))
+        candidates       (cond->> docs
+                           (utils/non-blank search)
+                           (filter (fn [{:keys [value translation]}]
+                                     (or (utils/includes? value search)
+                                         (some #(utils/includes? (:value %) search) translation)))))
+        narrowed?        (or (some? word-ids) (utils/non-blank search))
+        retention-levels (await (word-retention-levels dbs (mapv :_id candidates) narrowed? (now-ms clock)))
         word-id->retention (->> retention-levels
                                 (map (juxt :word-id :retention-level))
                                 (into {}))
-        words       (->> candidates
-                         (map (fn [word]
-                                (assoc word :retention-level (word-id->retention (:_id word) 0))))
-                         (sort-by :retention-level (if (= order :asc) < >)))
-        words       (cond->> words
-                      offset (drop offset)
-                      limit  (take limit))]
+        words            (->> candidates
+                              (map (fn [word]
+                                     (assoc word :retention-level (word-id->retention (:_id word) 0))))
+                              (sort-by :retention-level (if (= order :asc) < >)))
+        words            (cond->> words
+                           offset (drop offset)
+                           limit  (take limit))]
     {:total total-count
      :words (vec words)}))
 

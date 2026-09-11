@@ -1,6 +1,7 @@
 (ns db.pouch
   (:refer-clojure :exclude [get find remove])
   (:require
+   [clojure.string :as str]
    [db :as db]
    [db-migrations :as db-migrations]
    [lambdaisland.glogi :as log]
@@ -49,6 +50,14 @@
     #(.cancel ^js feed)))
 
 
+(defn user-doc?
+  "Replication filter: design documents stay on the device. CouchDB builds
+   an index for every design document it receives, and the server never
+   queries user-db through one."
+  [doc]
+  (not (str/starts-with? (.-_id ^js doc) "_design/")))
+
+
 (defn sync-once!
   "Runs one bidirectional replication pass of db-key against the account's copy
    on the server. Resolves when the pass finishes and never rejects — a failed
@@ -60,7 +69,7 @@
                     ((db->remote-name db-key) account-id))]
     (js/Promise.
      (fn [resolve _reject]
-       (doto (db/sync (db-key dbs) {:live false :remote-url remote})
+       (doto (db/sync (db-key dbs) {:filter user-doc? :live false :remote-url remote})
          (.on "complete" (fn [_] (resolve true)))
          (.on "error"
               (fn [err]
@@ -126,15 +135,62 @@
       (log/error :db/index-error {:index index-name :error (str err)}))))
 
 
-(defn- ensure-user-db-indexes!
+(def reviews-by-word-view
+  "View name for `db/query`: one row per review, keyed by word id, valued
+   `[created_at retained]` — what retention needs, without fetching the
+   review documents. The view is named without a dash because `clj->couch`
+   snake-cases map keys on the way in."
+  "reviews-by-word/reviews")
+
+
+(def vocab-preview-view
+  "View name for `db/query`: one row per vocabulary document, keyed by id,
+   valued `[kind value translation]` — what a list of words shows, without
+   fetching the documents."
+  "vocab-preview/preview")
+
+
+(def ^:private user-db-design-docs
+  [{:_id   "_design/reviews-by-word"
+    :views {:reviews
+            {:map
+             "function (doc) { if (doc.type === 'review') emit(doc.word_id, [doc.created_at, doc.retained]); }"}}}
+   {:_id   "_design/vocab-preview"
+    :views {:preview
+            {:map
+             "function (doc) { if (doc.type === 'vocab') emit(doc._id, [doc.kind, doc.value, doc.translation]); }"}}}])
+
+
+(defn- ^:async ensure-design-doc!
+  "Writes the design document when it is missing or its views differ from
+   `ddoc`, so a changed map function replaces the stored one and an unchanged
+   one costs one read. Failure is logged, never raised."
+  [db {id :_id :as ddoc}]
+  (try
+    (let [stored (await (db/get db id))]
+      (when (not= (:views stored) (:views ddoc))
+        (await (db/insert db (cond-> ddoc stored (assoc :_rev (:_rev stored)))))))
+    (catch :default err
+      (log/error :db/design-doc-error {:ddoc id :error (str err)}))))
+
+
+(defn prepare-user-db!
+  "Indexes and views user-db carries; idempotent, run on every start."
   [db]
-  (js/Promise.all (into-array (map #(ensure-index! db %) user-db-indexes))))
+  (js/Promise.all (into-array (concat (map #(ensure-index! db %) user-db-indexes)
+                                      (map #(ensure-design-doc! db %) user-db-design-docs)))))
+
+
+(defn query
+  "Queries a mapreduce view on the database that owns `doc-type`."
+  [dbs doc-type view opts]
+  (db/query (db-for dbs doc-type) view opts))
 
 
 (defn ^:async init!
   [_deps]
   (await (db-migrations/ensure-migrated!))
   (let [user-db (user-db)]
-    (await (ensure-user-db-indexes! user-db))
+    (await (prepare-user-db! user-db))
     {:device/db (device-db)
      :user/db   user-db}))
