@@ -161,7 +161,7 @@
                                        ;; dialog's nonce.
                                        (when (get-in capabilities [:capabilities/sync :sync/account-id])
                                          (sync/connect-push!
-                                          #(dispatch [[:effect/sync-pull]])))))}
+                                          #(dispatch [[:effect/sync-pull :poke]])))))}
 
     :app/router         {:requires {:render :app/render}
                          :after    [:worker/service-worker

@@ -5,7 +5,9 @@
    [db.pouch :as pouch]
    [domain.vocabulary :as domain]
    [goog.functions :as gfn]
-   [lambdaisland.glogi :as log]))
+   [instrumentation :as instrumentation]
+   [lambdaisland.glogi :as log]
+   [utils :as utils]))
 
 
 (defn- lww-winner
@@ -102,6 +104,25 @@
   3000)
 
 
+(def pass-interval-ms
+  "A navigation within this of the last completed pass, with nothing written
+   locally since, runs no pass: on the phone every screen entry cost a
+   1-2 s pull that brought nothing. A poke always passes — it means the
+   server has something."
+  30000)
+
+
+(defn pull-due?
+  "Whether a pull runs now. `reason` :poke bypasses the throttle; otherwise
+   a pass runs when something was written locally since the last one or the
+   last one is older than `pass-interval-ms`."
+  [{:keys [reason dirty? last-pass-ms now-ms]}]
+  (or (= :poke reason)
+      (boolean dirty?)
+      (nil? last-pass-ms)
+      (>= (- now-ms last-pass-ms) pass-interval-ms)))
+
+
 (defn- ^:async pairing-confirmed!
   "True when the receipt a newly paired device wrote for `nonce` has arrived
    with a pull. Confirmation clears every receipt — including strays from
@@ -132,8 +153,34 @@
     (if-let [{:keys [id] :as identity} (await (identity/load-identity!))]
       (do
         (identity/use-identity! identity)
-        (let [pull!   #(when (.-onLine js/navigator) (sync-once! dbs id))
-              unwatch (pouch/on-change dbs :user/db (gfn/throttle pull! push-interval-ms))]
+        (let [last-pass (atom nil)
+              dirty     (atom false)
+              pass!     (fn []
+                          (.then (sync-once! dbs id)
+                                 (fn [result]
+                                   (reset! last-pass (utils/now-ms))
+                                   (reset! dirty false)
+                                   result)))
+              pull!     (fn [& [reason]]
+                          (when (.-onLine js/navigator)
+                            (if (pull-due? {:reason       reason
+                                            :dirty?       @dirty
+                                            :last-pass-ms @last-pass
+                                            :now-ms       (utils/now-ms)})
+                              (pass!)
+                              (do (when ^boolean goog/DEBUG
+                                    (instrumentation/trace! "pull-skipped"
+                                                            #js {:sinceMs (- (utils/now-ms) (or @last-pass 0))}))
+                                  (js/Promise.resolve nil)))))
+              ;; The same change feed that drives the throttled push marks
+              ;; the database dirty, so a navigation after a local write
+              ;; still passes within the interval.
+              push!     (gfn/throttle pull! push-interval-ms)
+              unwatch   (pouch/on-change dbs
+                                         :user/db
+                                         (fn [_]
+                                           (reset! dirty true)
+                                           (push!)))]
           (log/info :sync/ready {:user-id id})
           {:sync/account-id id
            :sync/pairing-confirmed! #(pairing-confirmed! dbs %)
