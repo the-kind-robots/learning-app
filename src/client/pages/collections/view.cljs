@@ -43,9 +43,10 @@
   [{:keys [preview-words]} active-id]
   [:div.tab-card
    {:replicant/key "main"
+    :data-collection-id "main"
     :class (when (nil? active-id) "tab-card--active")
-    :on    {:click [[:effect/stop-propagation]
-                    [:action/handle-main-tab-click]]}}
+    :on {:click [[:effect/stop-propagation]
+                 [:action/handle-main-tab-click]]}}
    (card-preview {:name "Всё подряд" :preview-words preview-words})])
 
 
@@ -65,10 +66,11 @@
   (let [editing? (= coll-id editing-id)]
     [:div.tab-card
      {:replicant/key coll-id
+      :data-collection-id coll-id
       :class [(when (= coll-id active-id) "tab-card--active")
               (when editing? "tab-card--editing")]
-      :on    {:click       [[:action/handle-tab-click coll-id]]
-              :pointerdown [[:effect/begin-long-press coll-id]]}}
+      :on {:click       [[:action/handle-tab-click coll-id]]
+           :pointerdown [[:effect/begin-long-press coll-id]]}}
      [:button.tab-card__close
       {:type       "button"
        :aria-label (str "Удалить набор «" (or (not-empty coll-name) "Без названия") "»")

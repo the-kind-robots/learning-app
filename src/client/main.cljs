@@ -135,8 +135,7 @@
                                         store
                                         (if ^boolean goog/DEBUG
                                           (fn [state]
-                                            (instrumentation/count-render!)
-                                            (application/render! state))
+                                            (instrumentation/render! application/render! state))
                                           application/render!))
                                        (when ^boolean goog/DEBUG
                                          (instrumentation/install!))

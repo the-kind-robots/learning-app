@@ -84,7 +84,9 @@ Each entry is `{t, kind, data}` with `t` in ms since page start
 | `effect-start` / `effect-done` | `{effect}` / `{effect, ms}` | an effect began / settled, with its duration (async effects are timed to the promise); saves and event plumbing are not traced |
 | `effect-failed` | `{effect, error}` | an async effect rejected |
 | `dispatch-error` | `{phase, source, message, stack}` | Nexus caught a throw in an action, an effect, or the render a save triggered — errors the dispatcher otherwise drops silently |
-| `tap` | `{target}` | a pointerdown inside `.switcher` (class name of the target). A tap with no `action` after it is a tap the app did not answer |
+| `pointerdown`, `pointerup`, `pointercancel`, `click`, `contextmenu` | `{target, card, pointerType}` | each step of a tap inside `.switcher`; `card` is the `data-collection-id` of the card under the finger (`main` for the main card). A lost tap reads as `pointerdown` → `pointercancel` (the browser took the gesture) or `pointerdown` → `pointerup` with no `click` and a `render` in between (the node was replaced) |
+| `touchcancel` | `{target}` | the browser cancelled a touch anywhere on the page |
+| `render` | `{ms}` | one Replicant render and its duration |
 | `longtask` | `{start, duration}` | the main thread was blocked for ≥ 50 ms |
 | `error` / `unhandledrejection` | `{message, stack, …}` | uncaught script error / rejected promise |
 | `console-error` | `{message, stack}` | anything logged with `console.error`, which includes Replicant's "Caught exception during rendering" |

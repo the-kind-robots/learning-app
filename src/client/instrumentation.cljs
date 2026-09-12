@@ -104,6 +104,22 @@
   (swap! metrics update :renders inc))
 
 
+(declare trace!)
+
+
+(defn render!
+  "Runs one render through the metrics and the trace: counted, and recorded
+   as a `render` entry with its duration, so a tap can be placed before,
+   inside or after the re-render that may have replaced its node."
+  [render-fn state]
+  (count-render!)
+  (let [started (.now js/performance)]
+    (try
+      (render-fn state)
+      (finally
+       (trace! "render" #js {:ms (- (.now js/performance) started)})))))
+
+
 (defn dictionary-start!
   "Opens the readiness interval. Called before the dictionary worker is
    constructed, on the document's timeline — the worker's own
@@ -408,14 +424,27 @@
                            :duration (.-duration ^js entry)}))
             {})
 
-  ;; A tap on the themes screen that dispatches nothing is visible as a
-  ;; "tap" entry with no "action" after it.
+  ;; Every step of a tap on the themes screen, so a lost one reads as either
+  ;; pointerdown -> pointercancel (the browser took the gesture) or
+  ;; pointerdown -> pointerup -> no click with a render in between (the
+  ;; touched node was replaced). The card's id comes from its
+  ;; data-collection-id, which survives a re-render where the node may not.
+  (doseq [event ["pointerdown" "pointerup" "pointercancel" "click" "contextmenu"]]
+    (.addEventListener js/document
+                       event
+                       (fn [^js e]
+                         (when-let [^js target (.-target e)]
+                           (when (.closest target ".switcher")
+                             (trace! event
+                                     #js {:target      (.-className target)
+                                          :card        (some-> (.closest target "[data-collection-id]")
+                                                               (.getAttribute "data-collection-id"))
+                                          :pointerType (.-pointerType e)}))))
+                       #js {:capture true :passive true}))
   (.addEventListener js/document
-                     "pointerdown"
+                     "touchcancel"
                      (fn [^js e]
-                       (when-let [^js target (.-target e)]
-                         (when (.closest target ".switcher")
-                           (trace! "tap" #js {:target (.-className target)}))))
+                       (trace! "touchcancel" #js {:target (some-> (.-target e) .-className)}))
                      #js {:capture true :passive true})
 
   (set! (.-__trace js/window) (fn [] (.slice trace))))

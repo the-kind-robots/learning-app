@@ -12,3 +12,14 @@ The system SHALL switch to the themes screen the moment it is opened and SHALL s
 - **WHEN** the themes screen is on display and a sync pull completes
 - **THEN** the current collections stay on screen until the reloaded ones replace them
 - **AND** no loading state is shown in between
+
+### Requirement: Collection cards own their touch gestures
+A collection card SHALL take a long press as its own gesture: pressing a card SHALL NOT select its preview text or open the browser's callout, and a double tap on a card SHALL NOT zoom the page. Panning and pinching the screen stay with the browser.
+
+#### Scenario: Long press on a card
+- **WHEN** the user presses and holds a collection card on a touch screen
+- **THEN** the card enters its editing state and no text on it is selected
+
+#### Scenario: Quick double tap on a card
+- **WHEN** the user taps a collection card twice in quick succession
+- **THEN** the page does not zoom
