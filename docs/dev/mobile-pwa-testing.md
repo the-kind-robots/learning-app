@@ -64,6 +64,37 @@ journalctl -u cloudflared -f
 3. Open `https://<name>.dev.sprecha.de` on phone.
 4. Install to home screen and test from PWA icon.
 
+## Reading the trace after a freeze
+
+A development build (`shadow-cljs watch`/`compile`, never `release`) keeps a
+ring of the last 500 events on the page, so when a screen goes dead you can
+read what happened last without DevTools having been attached at the time.
+
+- Live: `window.__trace()` in the console (remote inspect, or a CDP eval).
+- After a reload or a crash: `JSON.parse(localStorage.getItem('sprecha:trace'))`.
+  The ring is mirrored into localStorage on every error-class entry and on
+  every visibility change, so the copy is at most one quiet stretch old.
+
+Each entry is `{t, kind, data}` with `t` in ms since page start
+(`performance.now()`). Kinds:
+
+| kind | data | meaning |
+|---|---|---|
+| `action` | `{action}` | a Nexus action was dispatched (name only, no payload) |
+| `effect-start` / `effect-done` | `{effect}` / `{effect, ms}` | an effect began / settled, with its duration (async effects are timed to the promise); saves and event plumbing are not traced |
+| `effect-failed` | `{effect, error}` | an async effect rejected |
+| `dispatch-error` | `{phase, source, message, stack}` | Nexus caught a throw in an action, an effect, or the render a save triggered — errors the dispatcher otherwise drops silently |
+| `tap` | `{target}` | a pointerdown inside `.switcher` (class name of the target). A tap with no `action` after it is a tap the app did not answer |
+| `longtask` | `{start, duration}` | the main thread was blocked for ≥ 50 ms |
+| `error` / `unhandledrejection` | `{message, stack, …}` | uncaught script error / rejected promise |
+| `console-error` | `{message, stack}` | anything logged with `console.error`, which includes Replicant's "Caught exception during rendering" |
+| `visibilitychange`, `pageshow`, `pagehide`, `freeze`, `resume` | `{visibility}` | page lifecycle |
+
+Typical read: find the last `tap`; if no `action` follows it the tap never
+reached Nexus; if an `action` follows but no `effect-done` for
+`:effect/load-collections`, the read never came back; a `longtask` or a
+`console-error` in between says why.
+
 ## Quick troubleshooting
 
 - `Error 1033`: connector is not connected. Check `systemctl status cloudflared` and logs.
