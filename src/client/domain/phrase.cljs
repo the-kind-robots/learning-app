@@ -29,10 +29,9 @@
    text is one entry whichever kind it is, and the kind can be corrected later
    without rebuilding the document."
   [value translation]
-  {:_id         (vocabulary/vocab-id value)
+  {:id          (vocabulary/vocab-id value)
    :kind        "phrase"
    :translation [(translation-entry translation)]
-   :type        "vocab"
    :value       (collapsed value)})
 
 

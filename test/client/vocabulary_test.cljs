@@ -2,11 +2,13 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [adapters.examples :as examples]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
+   [domain.retention :as retention]
    [ports.progress-store :as progress-store]
    [use-cases.vocabulary :as sut]
    [utils :as utils]))
@@ -34,7 +36,10 @@
 
 (defn- test-capabilities
   [dbs]
-  {:progress-store
+  {:clock
+   {:clock/now-iso time/now-iso
+    :clock/now-ms  time/now-ms}
+   :progress-store
    (progress-store/start! {:db    dbs
                            :clock {:clock/now-iso time/now-iso
                                    :clock/now-ms  time/now-ms}})
@@ -48,6 +53,7 @@
     :collections/exclude-word! (fn [_ _] (js/Promise.resolve nil))}
    :examples
    {:examples/find     (fn [_ _] (js/Promise.resolve nil))
+    :examples/purge-by-word! (fn [word-id] (examples/purge-by-word! dbs word-id))
     :examples/request! (fn [_ _ _] nil)}})
 
 
@@ -95,27 +101,25 @@
         (is (= "der Hund" (:value (first words)))))))))
 
 
-(deftest count-uses-db-doc-count-as-limit
-  (async-testing "`count` uses db/info doc-count for single find"
-    (let [info-calls (atom 0)
-          find-calls (atom [])
-          doc-count  26]
-      (with-redefs [db/info
-                    (fn [_]
-                      (swap! info-calls inc)
-                      (js/Promise.resolve {:doc-count doc-count}))
+(deftest count-reads-the-vocab-view-not-the-documents
+  (async-testing "`count` counts vocab view rows and runs no find"
+    (let [find-calls  (atom 0)
+          query-calls (atom [])
+          row-count   26]
+      (with-redefs [db/find
+                    (fn [_ _]
+                      (swap! find-calls inc)
+                      (js/Promise.resolve {:docs []}))
 
-                    db/find
-                    (fn [_ query]
-                      (swap! find-calls conj query)
+                    db/query
+                    (fn [_ view opts]
+                      (swap! query-calls conj [view opts])
                       (js/Promise.resolve
-                       {:docs (vec (repeat doc-count {:type "vocab"}))}))]
-        (let [cnt (await (sut/count (test-capabilities {:user/db :fake})))
-              q   (first @find-calls)]
-          (is (= doc-count cnt))
-          (is (= 1 @info-calls))
-          (is (= doc-count (:limit q)))
-          (is (nil? (:skip q))))))))
+                       {:rows (vec (repeat row-count {:id "vocab:x" :key "vocab:x" :value [nil "x" []]}))}))]
+        (let [cnt (await (sut/count (test-capabilities {:user/db :fake})))]
+          (is (= row-count cnt))
+          (is (= 0 @find-calls))
+          (is (= [["vocab-preview/vocab_preview" {}]] @query-calls)))))))
 
 
 (deftest list-and-count-return-all-words-beyond-25
@@ -140,7 +144,7 @@
       [dbs]
       (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
             result (await (sut/get (test-capabilities dbs) word-id))]
-        (is (= word-id (:_id result)))
+        (is (= word-id (:id result)))
         (is (= "der Hund" (:value result)))
         (is (= "пёс" (-> result :translation first :value)))
         (is (number? (:retention-level result))))))))
@@ -153,7 +157,7 @@
       [dbs]
       (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
             result (await (sut/update! (test-capabilities dbs) word-id "лиса"))]
-        (is (= word-id (:_id result)))
+        (is (= word-id (:id result)))
         (is (= "der Hund" (:value result)))
         (is (= "лиса" (-> result :translation first :value))))))))
 
@@ -185,3 +189,52 @@
         (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
           (is (= 2 (count reviews)))
           (is (= 1 (count (filter (fn [r] (false? (:retained r))) reviews))))))))))
+
+
+(defn- ^:async seed-reviews!
+  "Seven reviews per word over the week before `test-now`, alternating
+   retained, so every word lands on a different retention level."
+  [dbs word-ids]
+  (await (js/Promise.all
+          (into-array
+           (for [[n word-id] (map-indexed vector word-ids)
+                 k (range 7)]
+             (db/insert (:user/db dbs)
+                        {:type       "review"
+                         :word-id    word-id
+                         :retained   (even? (+ n k))
+                         :created-at (utils/ms->iso (- (time/now-ms)
+                                                       (* (+ 1 n k) 6 3600 1000)))}))))))
+
+
+(deftest list-retention-matches-per-word-reviews-beyond-25-reviews
+  (async-testing "`list` retention equals retention over each word's own reviews when reviews exceed one page"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (let [word-ids (mapv #(str "vocab:wort-" %) (range 5))]
+        (await (js/Promise.all
+                (into-array
+                 (map (fn [word-id]
+                        (db/insert (:user/db dbs)
+                                   {:_id         word-id
+                                    :type        "vocab"
+                                    :value       (subs word-id 6)
+                                    :translation [{:lang "ru" :value "слово"}]
+                                    :created-at  time/test-now-iso
+                                    :modified-at time/test-now-iso}))
+                      word-ids))))
+        (await (seed-reviews! dbs word-ids))
+        (let [{reviews :docs} (await (db/find-all (:user/db dbs) {:selector {:type "review"}}))
+              expected (->> (group-by :word-id reviews)
+                            (map (fn [[word-id reviews]]
+                                   [word-id (retention/retention-level reviews (time/now-ms))]))
+                            (into {}))
+              {:keys [words]} (await (sut/list (test-capabilities dbs) {}))
+              actual (into {} (map (juxt :id :retention-level)) words)
+              {subset :words} (await (sut/list (test-capabilities dbs) {:word-ids (take 2 word-ids)}))]
+          (is (= 35 (count reviews)))
+          (is (= 5 (count (distinct (vals expected)))))
+          (is (= expected actual))
+          (is (= (select-keys expected (take 2 word-ids))
+                 (into {} (map (juxt :id :retention-level)) subset)))))))))

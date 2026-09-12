@@ -23,7 +23,7 @@
 
 
 (defn- lesson-vocab
-  [{id :_id kind :kind value :value translation :translation}]
+  [{:keys [id kind value translation]}]
   {:id          id
    :kind        kind
    :translation translation
@@ -49,9 +49,9 @@
               vocab           (mapv lesson-vocab selected)
               word-ids        (mapv :id vocab)
               lesson-examples (await ((:examples/list examples) word-ids collection-id))
-              lesson-state    (domain/initial-state vocab lesson-examples trial-selector)
-              {:keys [rev]}   (await ((:progress-store/save-lesson! progress-store) lesson-state))]
-          {:lesson-state (assoc lesson-state :_rev rev)})))
+              lesson-state    (domain/initial-state vocab lesson-examples trial-selector)]
+          (await ((:progress-store/save-lesson! progress-store) lesson-state))
+          {:lesson-state lesson-state})))
     (catch js/Error err
       (log/error :lesson/start-failed {:error (ex-message err)})
       {:error :lesson-start-failed})))
@@ -90,8 +90,8 @@
                     (:word-id current-trial)
                     (-> lesson-state domain/last-result :correct?)
                     (:prompt current-trial))))
-          (let [{:keys [rev]} (await ((:progress-store/save-lesson! progress-store) lesson-state))]
-            {:lesson-state (assoc lesson-state :_rev rev)})
+          (await ((:progress-store/save-lesson! progress-store) lesson-state))
+          {:lesson-state lesson-state}
           (catch js/Error err
             (log/error :lesson/check-answer-save-failed {:error (ex-message err)})
             {:error :lesson-save-failed :lesson-state lesson-state}))))))
@@ -107,8 +107,8 @@
         {:error :lesson-not-found})
       (when-let [next-state (domain/advance lesson-state)]
         (try
-          (let [{:keys [rev]} (await ((:progress-store/save-lesson! progress-store) next-state))]
-            {:lesson-state (assoc next-state :_rev rev)})
+          (await ((:progress-store/save-lesson! progress-store) next-state))
+          {:lesson-state next-state}
           (catch js/Error err
             (log/error :advance-lesson/save-failed {:error (ex-message err)})
             {:error :lesson-save-failed}))))))

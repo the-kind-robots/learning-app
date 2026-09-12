@@ -39,7 +39,9 @@
   ([dbs]
    (test-capabilities dbs (fn [_word-id _coll-id _coll-name] (js/Promise.resolve nil))))
   ([dbs request!]
-   {:progress-store (progress-store/start! {:db    dbs
+   {:clock          {:clock/now-iso time/now-iso
+                     :clock/now-ms  time/now-ms}
+    :progress-store (progress-store/start! {:db    dbs
                                             :clock {:clock/now-iso time/now-iso
                                                     :clock/now-ms  time/now-ms}})
     :collections    {:collections/active-id (fn [] nil)
@@ -60,12 +62,12 @@
       (let [result (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))]
         (is (some? (:lesson-state result)))
         (is (nil? (:error result)))
-        (let [lesson (:lesson-state result)]
-          (is (= "lesson" (:_id lesson)))
-          (is (= "lesson" (:type lesson)))
+        (let [lesson (:lesson-state result)
+              stored (await (db-queries/fetch-by-type (:device/db dbs) "lesson"))]
           (is (= 2 (count (:trials lesson))))
           (is (some? (:current-trial lesson)))
-          (is (some? (:_rev lesson)))))))))
+          (is (nil? (:_id lesson)) "the state carries no storage names")
+          (is (= ["lesson"] (map :_id stored)) "and is stored under the one lesson document")))))))
 
 
 (deftest start-returns-error-when-no-words

@@ -1,7 +1,6 @@
 (ns tasks
   "Simple task runner: scans DB for tasks, runs them in parallel, pauses when offline."
   (:require
-   [db :as db]
    [db.pouch :as dbs]
    [lambdaisland.glogi :as log]
    [utils :as utils]))
@@ -10,6 +9,12 @@
 (def ^:private config
   {:max-backoff-ms 60000
    :max-concurrent 3})
+
+
+(def schema
+  {:type    "task"
+   :db      :device/db
+   :indexes [{:name "by-type-run-at-created-at" :fields [:type :run-at :created-at]}]})
 
 
 (defn- now-iso
@@ -25,8 +30,7 @@
 (defn create-task
   "Create a task document."
   [task-type data now-iso]
-  {:type       "task"
-   :task-type  task-type
+  {:task-type  task-type
    :data       data
    :attempts   0
    :run-at     now-iso
@@ -59,23 +63,12 @@
 (def ^:private page-size 50)
 
 
-(defn- ensure-task-index!
-  [dbs]
-  (-> (db/create-index
-       (dbs/db-for dbs "task")
-       [:type :run-at :created-at]
-       {:name "by-type-run-at-created-at"
-        :ddoc "by-type-run-at-created-at"})
-      (.catch (fn [err]
-                (log/error :tasks/index-error {:error (str err)})))))
-
-
 (defn ^:async fetch-due-tasks
   [dbs now-iso]
   (let [{:keys [docs]}
         (await (dbs/find dbs
-                         {:selector  {:type       "task"
-                                      :run-at     {:$lte now-iso}
+                         schema
+                         {:selector  {:run-at     {:$lte now-iso}
                                       :created-at {:$exists true}
                                       :$or        [{:status {:$exists false}}
                                                    {:status {:$ne "failed"}}]}
@@ -95,13 +88,14 @@
          delay-ms    (or retry-after-ms (backoff-ms attempts))
          next-run-ms (+ (now-ms clock) delay-ms)
          next-run    (utils/ms->iso next-run-ms)]
-     (dbs/insert dbs (assoc task :attempts attempts :run-at next-run)))))
+     (dbs/insert dbs schema (assoc task :attempts attempts :run-at next-run)))))
 
 
 (defn- dead-letter!
   [dbs clock task reason]
   (let [now-iso (now-iso clock)]
     (dbs/insert dbs
+                schema
                 (assoc task
                        :status         "failed"
                        :failure-reason reason
@@ -111,14 +105,14 @@
 
 (defn- remove-with-latest-rev!
   [dbs task]
-  (-> (dbs/remove dbs task)
+  (-> (dbs/remove dbs schema task)
       (.catch (fn ^:async f [err]
                 (let [status (or (:status err) (get-in err [:body :status]))]
                   (cond
                     (= status 404) true
-                    (= status 409) (let [fresh (await (dbs/get dbs "task" (:_id task)))]
+                    (= status 409) (let [fresh (await (dbs/get dbs schema (:_id task)))]
                                      (if fresh
-                                       (await (dbs/remove dbs fresh))
+                                       (await (dbs/remove dbs schema fresh))
                                        true))
                     :else          true))))))
 
@@ -192,8 +186,8 @@
   [dbs clock]
   (let [{:keys [docs]}
         (await (dbs/find dbs
-                         {:selector  {:type       "task"
-                                      :run-at     {:$exists true}
+                         schema
+                         {:selector  {:run-at     {:$exists true}
                                       :created-at {:$exists true}
                                       :$or        [{:status {:$exists false}}
                                                    {:status {:$ne "failed"}}]}
@@ -238,12 +232,12 @@
   nil)
 
 
-(defn ^:async start!
-  "Start the task runner."
+(defn start!
+  "Start the task runner. The index it queries by is part of `schema`, which
+   the engine installs at start-up."
   [dbs clock]
   (reset! state {:enabled? true :dbs dbs :clock clock})
   (log/info :tasks/starting config)
-  (await (ensure-task-index! dbs))
   (flush!))
 
 
@@ -262,5 +256,5 @@
 (defn ^:async create-task!
   [dbs clock task-type data]
   (let [now-iso (now-iso clock)]
-    (await (dbs/insert dbs (create-task task-type data now-iso)))
+    (await (dbs/insert dbs schema (create-task task-type data now-iso)))
     (flush!)))

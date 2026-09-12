@@ -2,10 +2,25 @@
   "Client module for fetching example sentences from the backend."
   (:refer-clojure :exclude [list find])
   (:require
+   [adapters.words :as words]
    [db.pouch :as dbs]
    [lambdaisland.glogi :as log]
    [tasks :as tasks]
    [utils :as utils]))
+
+
+(def schema
+  {:type "example"
+   :db   :device/db})
+
+
+(defn- doc->example
+  "Outward an example is
+   `{:id :word-id :collection-id :word :value :translation :structure :created-at}`."
+  [doc]
+  (-> doc
+      (dissoc :_id :_rev :type)
+      (assoc :id (:_id doc))))
 
 
 (def invalid-response-message
@@ -88,12 +103,11 @@
   (let [example-doc (cond-> {:created-at  ((:clock/now-iso clock))
                              :structure   (:structure example)
                              :translation (:translation example)
-                             :type        "example"
                              :value       (:value example)
                              :word        word
                              :word-id     word-id}
                       collection-id (assoc :collection-id collection-id))]
-    (dbs/insert dbs example-doc)))
+    (dbs/insert dbs schema example-doc)))
 
 
 (defn- collection-selector
@@ -109,27 +123,27 @@
 (defn ^:async find
   "Retrieves the example document for a given word-id and collection-id, or nil."
   [dbs word-id collection-id]
-  (let [selector (merge {:type "example" :word-id word-id}
+  (let [selector (merge {:word-id word-id}
                         (collection-selector collection-id))
-        {examples :docs} (await (dbs/find dbs {:selector selector}))]
-    (first examples)))
+        {examples :docs} (await (dbs/find dbs schema {:selector selector}))]
+    (some-> (first examples) doc->example)))
 
 
 (defn ^:async list
   "Retrieves example documents for the given word-ids and collection-id."
   [dbs word-ids collection-id]
-  (let [selector (merge {:type "example" :word-id {:$in word-ids}}
+  (let [selector (merge {:word-id {:$in word-ids}}
                         (collection-selector collection-id))
-        {examples :docs} (await (dbs/find dbs {:selector selector}))]
-    examples))
+        {examples :docs} (await (dbs/find dbs schema {:selector selector}))]
+    (mapv doc->example examples)))
 
 
 (defn ^:async remove!
   "Deletes an example document by its _id. No-op if document doesn't exist."
   [dbs example-id]
-  (let [example (await (dbs/get dbs "example" example-id))]
+  (let [example (await (dbs/get dbs schema example-id))]
     (when example
-      (await (dbs/remove dbs example)))))
+      (await (dbs/remove dbs schema example)))))
 
 
 (defn ^:async purge-by-collection!
@@ -137,11 +151,18 @@
    device-db bulk write. Called when a collection is deleted to keep
    example storage from accumulating orphans."
   [dbs collection-id]
-  (let [{examples :docs} (await (dbs/find dbs
-                                          {:selector {:type "example"
-                                                      :collection-id collection-id}}))]
+  (let [{examples :docs} (await (dbs/find-all dbs schema {:selector {:collection-id collection-id}}))]
     (when (seq examples)
-      (await (dbs/bulk-docs dbs "example" (mapv #(assoc % :_deleted true) examples))))))
+      (await (dbs/bulk-docs dbs schema (mapv #(assoc % :_deleted true) examples))))))
+
+
+(defn ^:async purge-by-word!
+  "Tombstones every example of `word-id` in one device-db bulk write. Called
+   after the word itself is gone from user-db."
+  [dbs word-id]
+  (let [{examples :docs} (await (dbs/find-all dbs schema {:selector {:word-id word-id}}))]
+    (when (seq examples)
+      (await (dbs/bulk-docs dbs schema (mapv #(assoc % :_deleted true) examples))))))
 
 
 (defn request!
@@ -159,7 +180,7 @@
   (let [{:keys [collection-id collection-name word-id]} data]
     ((fn ^:async f
        []
-       (let [word-doc (await (dbs/get dbs "vocab" word-id))]
+       (let [word-doc (await (words/get-word dbs word-id))]
          (if-not word-doc
            (do
              (log/warn :example-fetch/word-not-found {:word-id word-id})

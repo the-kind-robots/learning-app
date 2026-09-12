@@ -15,7 +15,7 @@
   [{:keys [collections] :as capabilities}]
   (let [items       (await ((:collections/list collections)))
         all-words   (:words (await (vocabulary/list capabilities {:order :desc})))
-        vocab-index (utils/index-by :_id all-words)]
+        vocab-index (utils/index-by :id all-words)]
     {:active-id ((:collections/active-id collections))
      :items     (mapv #(assoc % :words (vec (keep vocab-index (:word-ids %)))) items)
      :main      {:words all-words}}))
@@ -72,5 +72,5 @@
             trimmed (subs trimmed 0 (min (count trimmed) max-name-length))
             final   (if (str/blank? trimmed) current trimmed)]
         (when (not= final current)
-          (await ((:collections/rename! collections) coll final)))
+          (await ((:collections/rename! collections) active-id final)))
         {:name final}))))

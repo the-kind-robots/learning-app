@@ -1,7 +1,9 @@
 (ns client.support.db-fixtures
   (:require
+   [client.support.schemas :as schemas]
    [clojure.string :as str]
-   [db :as db])
+   [db :as db]
+   [db.pouch :as pouch])
   (:require-macros
    [cljs.test :refer [async]]))
 
@@ -66,11 +68,21 @@
                (.finally (js/Promise.all (into-array (map destroy-test-db db-names))) done)))})
 
 
+(defn- ^:async prepared
+  "A test database carries what `db.pouch/init!` gives the app's databases
+   at start-up (every schema's indexes and views), so adapters can rely on
+   them here as they do there."
+  [db-name]
+  (let [db (db/use db-name)]
+    (await (pouch/prepare! db schemas/all))
+    db))
+
+
 (defn with-test-db
   [db-name f]
-  (f (db/use db-name)))
+  (.then (prepared db-name) f))
 
 
 (defn with-test-dbs
   [db-names f]
-  (f (mapv db/use db-names)))
+  (.then (js/Promise.all (into-array (map prepared db-names))) #(f (vec %))))

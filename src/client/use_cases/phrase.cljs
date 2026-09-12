@@ -31,8 +31,8 @@
             (await ((:progress-store/save-word! progress-store)
                     (assoc existing :translation merged)))
             (when collection-id
-              (await ((:collections/add-word! collections) (:_id existing) collection-id)))
-            {:word-id (:_id existing) :created? false})
+              (await ((:collections/add-word! collections) (:id existing) collection-id)))
+            {:word-id (:id existing) :created? false})
           (let [phrase       (domain/new-phrase value translation)
                 {:keys [id]} (await ((:progress-store/save-word! progress-store) phrase))]
             (await ((:progress-store/save-review! progress-store) id true translation))

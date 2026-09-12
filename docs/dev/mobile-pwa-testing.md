@@ -64,6 +64,52 @@ journalctl -u cloudflared -f
 3. Open `https://<name>.dev.sprecha.de` on phone.
 4. Install to home screen and test from PWA icon.
 
+## Reading the trace after a freeze
+
+A development build (`shadow-cljs watch`/`compile`, never `release`) keeps a
+ring of the last 500 events on the page, so when a screen goes dead you can
+read what happened last without DevTools having been attached at the time.
+
+- Live: `window.__trace()` in the console (remote inspect, or a CDP eval).
+- After a reload or a crash: `JSON.parse(localStorage.getItem('sprecha:trace'))`.
+  The ring is mirrored into localStorage on every error-class entry and on
+  every visibility change, so the copy is at most one quiet stretch old.
+
+Each entry is `{t, kind, data}` with `t` in ms since page start
+(`performance.now()`). Kinds:
+
+| kind | data | meaning |
+|---|---|---|
+| `action` | `{action}` | a Nexus action was dispatched (name only, no payload) |
+| `effect-start` / `effect-done` | `{effect}` / `{effect, ms}` | an effect began / settled, with its duration (async effects are timed to the promise); saves and event plumbing are not traced |
+| `effect-failed` | `{effect, error}` | an async effect rejected |
+| `dispatch-error` | `{phase, source, message, stack}` | Nexus caught a throw in an action, an effect, or the render a save triggered — errors the dispatcher otherwise drops silently |
+| `pointerdown`, `pointerup`, `pointercancel`, `click`, `contextmenu` | `{target, card, pointerType}` | each step of a tap inside `.switcher`; `card` is the `data-collection-id` of the card under the finger (`main` for the main card). A lost tap reads as `pointerdown` → `pointercancel` (the browser took the gesture) or `pointerdown` → `pointerup` with no `click` and a `render` in between (the node was replaced) |
+| `touchcancel` | `{target}` | the browser cancelled a touch anywhere on the page |
+| `pointercancel` (extra fields) | `{movedPx, scrollDelta}` | how far the finger went and how much the page scrolled since the pointerdown — the tap recovery's inputs |
+| `tap-recovered` | `{moved-px, scroll-delta}` | a cancelled tap that did not move was taken as a tap and its action dispatched |
+| `pull-skipped` | `{sinceMs}` | a navigation asked for a pull within 30 s of the last completed pass with nothing written locally; no pass ran |
+| `render` | `{ms}` | one Replicant render and its duration |
+| `longtask` | `{start, duration}` | the main thread was blocked for ≥ 50 ms |
+| `error` / `unhandledrejection` | `{message, stack, …}` | uncaught script error / rejected promise |
+| `console-error` | `{message, stack}` | anything logged with `console.error`, which includes Replicant's "Caught exception during rendering" |
+| `visibilitychange`, `pageshow`, `pagehide`, `freeze`, `resume` | `{visibility}` | page lifecycle |
+
+Getting it off the phone: a development build shows a red **D** after the
+logo. Tap it — it is the trace export — and the share sheet opens with
+`sprecha-trace-<timestamp>.json`; choose Telegram or mail and send it. Where
+the share sheet cannot take a file (desktop Chrome) the JSON goes to the
+clipboard and the page says «Трасса скопирована»; where there is no clipboard
+either, a prompt shows the JSON for selecting by hand. The file carries a
+`header` (build, time, URL, user agent, visibility, storage estimate), `live`
+(the ring as it was at the tap) and `stored` (the last localStorage mirror,
+which is what survives a reload).
+
+Typical read: find the last `tap`; if no `action` follows it the tap never
+reached Nexus; if an `action` follows but no `effect-done` for
+`:effect/load-collections`, the read never came back; a `longtask` or a
+`console-error` in between says why.
+
 ## Quick troubleshooting
 
 - `Error 1033`: connector is not connected. Check `systemctl status cloudflared` and logs.

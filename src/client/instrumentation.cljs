@@ -104,6 +104,22 @@
   (swap! metrics update :renders inc))
 
 
+(declare trace!)
+
+
+(defn render!
+  "Runs one render through the metrics and the trace: counted, and recorded
+   as a `render` entry with its duration, so a tap can be placed before,
+   inside or after the re-render that may have replaced its node."
+  [render-fn state]
+  (count-render!)
+  (let [started (.now js/performance)]
+    (try
+      (render-fn state)
+      (finally
+       (trace! "render" #js {:ms (- (.now js/performance) started)})))))
+
+
 (defn dictionary-start!
   "Opens the readiness interval. Called before the dictionary worker is
    constructed, on the document's timeline — the worker's own
@@ -206,6 +222,257 @@
     (js/Promise.resolve #js {})))
 
 
+;;
+;; Trace: what happened last, readable after the fact.
+;;
+;; A phone that freezes with no DevTools attached leaves nothing behind. This
+;; keeps the last `trace-limit` events in a ring — errors, render exceptions,
+;; page lifecycle, long tasks, every action and effect, taps on the themes
+;; screen — as plain JS objects (no conversion per entry), and mirrors the
+;; ring into localStorage on every error-class entry and every visibility
+;; change, so a reload can still read what preceded the freeze. Read it as
+;; `window.__trace()` or `JSON.parse(localStorage.getItem('sprecha:trace'))`.
+;;
+
+
+(def ^:private trace-limit 500)
+
+
+(def ^:private trace-key "sprecha:trace")
+
+
+(defonce ^:private trace (array))
+
+
+(defn trace!
+  "Appends one entry: `kind` a string, `data` a plain JS object or nil.
+   Public for the few product effects that report a decision here under
+   goog.DEBUG."
+  [kind data]
+  (.push trace #js {:t (.now js/performance) :kind kind :data data})
+  (when (> (.-length trace) trace-limit)
+    (.splice trace 0 (- (.-length trace) trace-limit)))
+  nil)
+
+
+(defn- mirror-trace!
+  "Serialises the ring into localStorage. Only here, never per entry."
+  []
+  (try
+    (.setItem js/localStorage trace-key (js/JSON.stringify trace))
+    (catch :default _ nil)))
+
+
+(defn- error-data
+  [^js err]
+  (if (instance? js/Error err)
+    #js {:message (.-message err) :stack (.-stack err)}
+    #js {:message (str err)}))
+
+
+(defn- traced-effect?
+  "Saves and event plumbing are noise; everything else is worth a line."
+  [effect-name]
+  (not (contains? #{:effect/save :effect/stop-propagation} effect-name)))
+
+
+(defn- effect-timer
+  "Nexus runs `:before-effect` before the handler and `:after-effect` after
+   it returns, so the pair times a synchronous effect. An async effect returns
+   a promise; its settlement is timed from the same start."
+  []
+  {:before-effect (fn [{:keys [effect] :as ctx}]
+                    (let [effect-name (first effect)]
+                      (when (traced-effect? effect-name)
+                        (trace! "effect-start" #js {:effect (str effect-name)}))
+                      (assoc ctx ::started (.now js/performance))))
+   :after-effect  (fn [{:keys [effect res] ::keys [started] :as ctx}]
+                    (let [effect-name (first effect)
+                          finish!     (fn [outcome]
+                                        (trace! (str "effect-" outcome)
+                                                #js {:effect (str effect-name)
+                                                     :ms     (- (.now js/performance) started)}))]
+                      (when (traced-effect? effect-name)
+                        (if (instance? js/Promise res)
+                          (.then res
+                                 (fn [_] (finish! "done"))
+                                 (fn [err]
+                                   (trace! "effect-failed" #js {:effect (str effect-name) :error (error-data err)})
+                                   (mirror-trace!)))
+                          (finish! "done"))))
+                    (dissoc ctx ::started))})
+
+
+(defn- ^:async trace-export
+  "The trace as one JSON document: a header about the page, the live ring,
+   and the last mirrored copy from localStorage under its own key — the two
+   overlap and are kept apart on purpose, so a reader can see what survived
+   a reload and what did not."
+  []
+  (let [^js storage (.-storage js/navigator)
+        estimate    (when (and storage (.-estimate storage))
+                      (try (await (.estimate storage)) (catch :default _ nil)))
+        stored      (try (.parse js/JSON (or (.getItem js/localStorage trace-key) "null"))
+                         (catch :default _ nil))]
+    (.stringify js/JSON
+                #js {:header #js {:build      (if goog/DEBUG "development" "release")
+                                  :time       (.toISOString (js/Date.))
+                                  :url        (.-href js/location)
+                                  :userAgent  (.-userAgent js/navigator)
+                                  :visibility (.-visibilityState js/document)
+                                  :storage    estimate}
+                     :live   trace
+                     :stored stored})))
+
+
+(defn- ^:async share-file!
+  "The share sheet with the trace as a file; false when the platform has no
+   file sharing or the user backed out, so the caller falls through."
+  [json file-name]
+  (let [^js nav js/navigator
+        file    (js/File. #js [json] file-name #js {:type "application/json"})
+        payload #js {:files #js [file] :title file-name}]
+    (if (and (.-share nav) (.-canShare nav) (.canShare nav payload))
+      (try
+        (await (.share nav payload))
+        true
+        (catch :default _ false))
+      false)))
+
+
+(defn ^:async export-trace!
+  "Hands the trace to whoever can carry it off the phone: the share sheet as a
+   file (Android Chrome), else the clipboard (desktop Chrome), else a prompt
+   whose value can be selected by hand."
+  []
+  (let [json      (await (trace-export))
+        file-name (str "sprecha-trace-" (.toISOString (js/Date.)) ".json")]
+    (when-not (await (share-file! json file-name))
+      (let [^js clipboard (.-clipboard js/navigator)
+            copied?       (if clipboard
+                            (try
+                              (await (.writeText clipboard json))
+                              true
+                              (catch :default _ false))
+                            false)]
+        (if copied?
+          (js/alert "Трасса скопирована")
+          (js/prompt "Трасса — скопируйте текст:" json))))))
+
+
+(defn- install-trace!
+  []
+  (nxr/register-effect! :effect/export-trace
+    (fn export-trace [_ _]
+      (export-trace!)))
+  (nxr/register-interceptor!
+    {:before-action  (fn [{:keys [action] :as ctx}]
+                       (trace! "action" #js {:action (str (first action))})
+                       ctx)
+     ;; A throw in an action, an effect, or the render that a save triggers
+     ;; ends up in Nexus's :errors and nowhere else — the dispatcher does not
+     ;; read them. Here they become the last thing the trace says.
+     :after-dispatch (fn [{:keys [errors] :as ctx}]
+                       (when (seq errors)
+                         (doseq [{:keys [action effect phase err]} errors]
+                           (trace! "dispatch-error"
+                                   #js {:phase   (str phase)
+                                        :source  (str (first (or action effect)))
+                                        :message (ex-message err)
+                                        :stack   (some-> err .-stack)}))
+                         (mirror-trace!))
+                       ctx)})
+  (nxr/register-interceptor! (effect-timer))
+
+  (.addEventListener js/window
+                     "error"
+                     (fn [^js e]
+                       (trace! "error"
+                               #js {:message (.-message e)
+                                    :source  (.-filename e)
+                                    :line    (.-lineno e)
+                                    :stack   (some-> (.-error e) .-stack)})
+                       (mirror-trace!)))
+  (.addEventListener js/window
+                     "unhandledrejection"
+                     (fn [^js e]
+                       (trace! "unhandledrejection" (error-data (.-reason e)))
+                       (mirror-trace!)))
+
+  ;; Replicant reports a render exception through console.error; wrapping it
+  ;; is the only way to get that into the ring. The original still runs.
+  (let [original (.-error js/console)]
+    (set! (.-error js/console)
+          (fn [& args]
+            (let [err (some #(when (instance? js/Error %) %) args)]
+              (trace!
+               "console-error"
+               #js {:message (apply str (interpose " " (map #(if (instance? js/Error %) (.-message %) (str %)) args)))
+                    :stack   (some-> err .-stack)}))
+            (mirror-trace!)
+            (.apply original js/console (to-array args)))))
+
+  (doseq [event ["visibilitychange" "pageshow" "pagehide" "freeze" "resume"]]
+    (.addEventListener js/document
+                       event
+                       (fn [_]
+                         (trace! event #js {:visibility (.-visibilityState js/document)})
+                         (mirror-trace!))))
+
+  (observe! "longtask"
+            (fn [entry]
+              (trace! "longtask"
+                      #js {:start    (.-startTime ^js entry)
+                           :duration (.-duration ^js entry)}))
+            {})
+
+  ;; Every step of a tap on the themes screen, so a lost one reads as either
+  ;; pointerdown -> pointercancel (the browser took the gesture) or
+  ;; pointerdown -> pointerup -> no click with a render in between (the
+  ;; touched node was replaced). The card's id comes from its
+  ;; data-collection-id, which survives a re-render where the node may not.
+  ;; A pointercancel also says how far the finger went and whether the page
+  ;; scrolled since the pointerdown, which is what the tap recovery decides
+  ;; on (pages.collections.tap).
+  (let [down (volatile! nil)]
+    (.addEventListener js/document
+                       "pointermove"
+                       (fn [^js e]
+                         (when-let [{:keys [x y]} @down]
+                           (vswap! down update :moved-px max (js/Math.hypot (- (.-clientX e) x) (- (.-clientY e) y)))))
+                       #js {:capture true :passive true})
+    (doseq [event ["pointerdown" "pointerup" "pointercancel" "click" "contextmenu"]]
+      (.addEventListener js/document
+                         event
+                         (fn [^js e]
+                           (when-let [^js target (.-target e)]
+                             (when (.closest target ".switcher")
+                               (let [scroll-top (or (some-> js/document .-scrollingElement .-scrollTop) 0)
+                                     data       #js {:target      (.-className target)
+                                                     :card        (some-> (.closest target "[data-collection-id]")
+                                                                          (.getAttribute "data-collection-id"))
+                                                     :pointerType (.-pointerType e)}]
+                                 (case event
+                                   "pointerdown"   (vreset! down
+                                                            {:x        (.-clientX e)
+                                                             :y        (.-clientY e)
+                                                             :moved-px 0
+                                                             :scroll-top scroll-top})
+                                   "pointercancel" (when-let [{:keys [moved-px] start :scroll-top} @down]
+                                                     (set! (.-movedPx data) moved-px)
+                                                     (set! (.-scrollDelta data) (- scroll-top start)))
+                                   nil)
+                                 (trace! event data)))))
+                         #js {:capture true :passive true})))
+  (.addEventListener js/document
+                     "touchcancel"
+                     (fn [^js e]
+                       (trace! "touchcancel" #js {:target (some-> (.-target e) .-className)}))
+                     #js {:capture true :passive true})
+
+  (set! (.-__trace js/window) (fn [] (.slice trace))))
+
+
 (defn install!
   "Wires every probe up."
   []
@@ -219,6 +486,8 @@
      :after-dispatch  (fn [ctx]
                         (vswap! dispatch-depth dec)
                         ctx)})
+
+  (install-trace!)
 
   (count-frames!)
 

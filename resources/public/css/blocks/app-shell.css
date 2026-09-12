@@ -47,6 +47,21 @@
   z-index: 1;
 }
 
+/* Development build only: the red D after the logo, also the trace export. */
+.app-shell__dev-mark {
+  background: none;
+  border: 0;
+  color: rgb(var(--color-cardinal));
+  cursor: pointer;
+  font-family: Nunito, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  height: 28px;
+  line-height: 1;
+  margin: 0;
+  padding: 0 2px;
+}
+
 .app-shell__logo {
   align-items: center;
   color: rgb(var(--color-black-text));

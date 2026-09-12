@@ -11,7 +11,7 @@
 
 
 (defn- preview-row
-  [{id :_id :keys [retention-level value translation]}]
+  [{:keys [id retention-level value translation]}]
   [:li.card-preview__row {:replicant/key id}
    (progress-dot retention-level)
    [:span.card-preview__de {:lang "de"} value]
@@ -43,9 +43,11 @@
   [{:keys [preview-words]} active-id]
   [:div.tab-card
    {:replicant/key "main"
+    :data-collection-id "main"
     :class (when (nil? active-id) "tab-card--active")
-    :on    {:click [[:effect/stop-propagation]
-                    [:action/handle-main-tab-click]]}}
+    :on {:click       [[:effect/stop-propagation]
+                       [:action/handle-main-tab-click]]
+         :pointerdown [[:effect/begin-tap [[:action/handle-main-tab-click]]]]}}
    (card-preview {:name "Всё подряд" :preview-words preview-words})])
 
 
@@ -61,14 +63,15 @@
 
 
 (defn- tab-card
-  [{coll-id :_id coll-name :name :as item} active-id editing-id]
+  [{coll-id :id coll-name :name :as item} active-id editing-id]
   (let [editing? (= coll-id editing-id)]
     [:div.tab-card
      {:replicant/key coll-id
+      :data-collection-id coll-id
       :class [(when (= coll-id active-id) "tab-card--active")
               (when editing? "tab-card--editing")]
-      :on    {:click       [[:action/handle-tab-click coll-id]]
-              :pointerdown [[:effect/begin-long-press coll-id]]}}
+      :on {:click       [[:action/handle-tab-click coll-id]]
+           :pointerdown [[:effect/begin-long-press coll-id]]}}
      [:button.tab-card__close
       {:type       "button"
        :aria-label (str "Удалить набор «" (or (not-empty coll-name) "Без названия") "»")
@@ -113,14 +116,22 @@
        :stroke-linecap "round"}]]]])
 
 
+(defn- loading-state
+  []
+  [:div.switcher__loading {:role "status" :aria-live "polite"}
+   [:p.switcher__loading-text "Загружаем…"]])
+
+
 (defn page
   [state]
-  (let [{:keys [active-id editing-id main items]} (presenter/page-props state)]
+  (let [{:keys [active-id editing-id loading? main items]} (presenter/page-props state)]
     [:div.switcher
      {:on {:click [[:effect/exit-editing-on-background]]}}
      [:h1.switcher__title "Наборы"]
-     [:div.switcher__grid
-      {:on {:click [[:effect/exit-editing-on-background]]}}
-      (main-card main active-id)
-      (for [item items] (tab-card item active-id editing-id))
-      (new-card)]]))
+     (if loading?
+       (loading-state)
+       [:div.switcher__grid
+        {:on {:click [[:effect/exit-editing-on-background]]}}
+        (main-card main active-id)
+        (for [item items] (tab-card item active-id editing-id))
+        (new-card)])]))

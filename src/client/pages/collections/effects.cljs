@@ -1,7 +1,9 @@
 (ns pages.collections.effects
   (:require
+   [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
+   [pages.collections.tap :as tap]
    [use-cases.collections :as collections]))
 
 
@@ -11,40 +13,98 @@
 (def ^:private long-press-cancel-px 10)
 
 
-(nxr/register-effect! :effect/begin-long-press
-  (fn begin-long-press [{:keys [dispatch dispatch-data]} _ coll-id]
-    (let [event   (:replicant/dom-event dispatch-data)
-          start-x (.-clientX event)
-          start-y (.-clientY event)
-          timer   (volatile! nil)
-          move-fn (volatile! nil)
-          up-fn   (volatile! nil)
-          cleanup (fn []
-                    (some-> @timer js/clearTimeout)
-                    (vreset! timer nil)
-                    (when-let [f @move-fn]
-                      (js/window.removeEventListener "pointermove" f))
-                    (when-let [f @up-fn]
-                      (js/window.removeEventListener "pointerup" f)
-                      (js/window.removeEventListener "pointercancel" f)))]
-      (vreset! move-fn
-               (fn [e]
-                 (let [dist (js/Math.hypot (- (.-clientX e) start-x)
-                                           (- (.-clientY e) start-y))]
-                   (when (and @timer (> dist long-press-cancel-px))
-                     (cleanup)))))
-      (vreset! up-fn (fn [_] (cleanup)))
+(defn- scroll-top
+  []
+  (or (some-> js/document .-scrollingElement .-scrollTop) 0))
+
+
+(defn- trace!
+  [kind data]
+  (when ^boolean goog/DEBUG
+    (instrumentation/trace! kind (clj->js data))))
+
+
+(defn- track-gesture!
+  "Follows one pointer from its pointerdown: how far it moved, whether the
+   page scrolled, and whether the gesture already fired its tap. On
+   pointercancel a tap the browser took without movement is recovered by
+   dispatching `tap-actions`; a click that follows a recovered cancel is
+   swallowed so the gesture fires once. `on-long-press`, when given, fires
+   after `long-press-delay-ms` unless the pointer moved or lifted first."
+  [{:keys [dispatch dispatch-data]} tap-actions on-long-press]
+  (let [event (:replicant/dom-event dispatch-data)
+        start-x (.-clientX event)
+        start-y (.-clientY event)
+        start-st (scroll-top)
+        gesture (volatile! {:moved-px 0})
+        timer (volatile! nil)
+        move-fn (volatile! nil)
+        up-fn (volatile! nil)
+        click-fn (volatile! nil)
+        stop-long-press
+        (fn []
+          (some-> @timer js/clearTimeout)
+          (vreset! timer nil))
+        cleanup (fn []
+                  (stop-long-press)
+                  (when-let [f @move-fn]
+                    (js/window.removeEventListener "pointermove" f))
+                  (when-let [f @up-fn]
+                    (js/window.removeEventListener "pointerup" f)
+                    (js/window.removeEventListener "pointercancel" f)))]
+    (vreset! move-fn
+             (fn [e]
+               (let [dist (js/Math.hypot (- (.-clientX e) start-x)
+                                         (- (.-clientY e) start-y))]
+                 (vswap! gesture update :moved-px max dist)
+                 (when (and @timer (> dist long-press-cancel-px))
+                   (stop-long-press)))))
+    (vreset! up-fn
+             (fn [e]
+               (cleanup)
+               (when (= "pointercancel" (.-type e))
+                 (let [decided (tap/on-cancel (assoc @gesture :scroll-delta (- (scroll-top) start-st)))]
+                   (vreset! gesture decided)
+                   (when (:dispatch? decided)
+                     (trace! "tap-recovered" (select-keys decided [:moved-px :scroll-delta]))
+                     ;; Chrome may still deliver the click of a cancelled
+                     ;; touch; the first click after a recovery is this
+                     ;; gesture's and must not fire twice.
+                     (vreset! click-fn
+                              (fn [click]
+                                (js/window.removeEventListener "click" @click-fn true)
+                                (when-not (:dispatch? (tap/on-click @gesture))
+                                  (.stopPropagation click)
+                                  (.preventDefault click))))
+                     (js/window.addEventListener "click" @click-fn true)
+                     (js/setTimeout #(js/window.removeEventListener "click" @click-fn true) 1000)
+                     (dispatch tap-actions))))))
+    (when on-long-press
       (vreset! timer
                (js/setTimeout
                 (fn []
                   (vreset! timer nil)
-                  (dispatch [[:effect/save
-                              {:collections/editing-id        coll-id
-                               :collections/long-press-fired? true}]]))
-                long-press-delay-ms))
-      (js/window.addEventListener "pointermove" @move-fn)
-      (js/window.addEventListener "pointerup" @up-fn)
-      (js/window.addEventListener "pointercancel" @up-fn))))
+                  (on-long-press))
+                long-press-delay-ms)))
+    (js/window.addEventListener "pointermove" @move-fn)
+    (js/window.addEventListener "pointerup" @up-fn)
+    (js/window.addEventListener "pointercancel" @up-fn)))
+
+
+(nxr/register-effect! :effect/begin-long-press
+  (fn begin-long-press [{:keys [dispatch] :as ctx} _ coll-id]
+    (track-gesture! ctx
+                    [[:action/handle-tab-click coll-id]]
+                    (fn []
+                      (dispatch [[:effect/save
+                                  {:collections/editing-id        coll-id
+                                   :collections/long-press-fired? true}]])))))
+
+
+(nxr/register-effect! :effect/begin-tap
+  ;; The main card has no long press; it gets the same tap recovery.
+  (fn begin-tap [ctx _ tap-actions]
+    (track-gesture! ctx tap-actions nil)))
 
 
 (nxr/register-effect! :effect/exit-editing-on-background

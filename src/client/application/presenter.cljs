@@ -8,7 +8,8 @@
    no entry point until an account exists, and an account exists only once an
    invite has been redeemed."
   [state]
-  {:menu-open?    (boolean (:app/sync-menu-open? state))
+  {:dev-build?    (boolean goog/DEBUG)
+   :menu-open?    (boolean (:app/sync-menu-open? state))
    :page          (:page/current state)
    :pairing       (:app/pairing state)
    :show-install? (boolean (:pwa/install-available? state))

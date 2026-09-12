@@ -2,7 +2,9 @@
   (:refer-clojure :exclude [list count get])
   (:require
    [domain.phrase :as phrase]
-   [domain.vocabulary :as domain]))
+   [domain.retention :as retention]
+   [domain.vocabulary :as domain]
+   [utils :as utils]))
 
 
 (defn ^:async find-duplicate
@@ -27,11 +29,11 @@
                 collection-id ((:collections/active-id collections))]
             (await ((:progress-store/save-word! progress-store) updated))
             (when collection-id
-              (await ((:collections/add-word! collections) (:_id existing) collection-id))
-              (when-not (await ((:examples/find examples) (:_id existing) collection-id))
+              (await ((:collections/add-word! collections) (:id existing) collection-id))
+              (when-not (await ((:examples/find examples) (:id existing) collection-id))
                 (let [collection-name (:name (await ((:collections/get collections) collection-id)))]
-                  ((:examples/request! examples) (:_id existing) collection-id collection-name))))
-            {:word-id (:_id existing) :created? false})
+                  ((:examples/request! examples) (:id existing) collection-id collection-name))))
+            {:word-id (:id existing) :created? false})
           (let [word (domain/new-word value parsed)
                 {:keys [id]} (await ((:progress-store/save-word! progress-store) word))
                 collection-id ((:collections/active-id collections))
@@ -44,16 +46,54 @@
             {:word-id id :created? true}))))))
 
 
+(defn- now-ms
+  [{:keys [clock]}]
+  ((:clock/now-ms clock)))
+
+
 (defn ^:async get
-  "Returns a word row by id, or nil if not found."
-  [{:keys [progress-store]} word-id]
-  (await ((:progress-store/get-word progress-store) word-id)))
+  "Returns a word with its retention level, or nil if not found."
+  [{:keys [progress-store] :as capabilities} word-id]
+  (when-let [word (await ((:progress-store/get-word progress-store) word-id))]
+    (let [reviews (await ((:progress-store/reviews-by-word progress-store) [word-id]))]
+      (assoc word :retention-level (retention/retention-level (reviews word-id []) (now-ms capabilities))))))
 
 
 (defn ^:async list
-  "Returns vocabulary rows with retention levels."
-  [{:keys [progress-store]} opts]
-  (await ((:progress-store/list-words progress-store) opts)))
+  "Vocabulary rows with retention levels, sorted by retention (`:order`
+   :asc or :desc, default :desc) and paged by `:offset`/`:limit`. `:word-ids`
+   restricts to those words, `:search` to values or translations containing
+   the text. `:total` counts the words before the search filter, so an empty
+   vocabulary and a search with no match tell apart."
+  [{:keys [progress-store] :as capabilities}
+   {:keys [order limit offset search word-ids]
+    :or   {order :desc}}]
+  (let [words        (await ((:progress-store/word-previews progress-store) word-ids))
+        total        (clojure.core/count words)
+        ;; The page is sorted by retention, so every candidate needs its
+        ;; level; only words the filters exclude are spared the lookup.
+        candidates   (cond->> words
+                       (utils/non-blank search)
+                       (filter (fn [{:keys [value translation]}]
+                                 (or (utils/includes? value search)
+                                     (some #(utils/includes? (:value %) search) translation)))))
+        ;; A narrowed list reads its reviews by key; the whole vocabulary
+        ;; reads every review, which the repository does cheaper.
+        narrowed-ids (when (or (some? word-ids) (utils/non-blank search))
+                       (mapv :id candidates))
+        reviews      (await ((:progress-store/reviews-by-word progress-store) narrowed-ids))
+        now          (now-ms capabilities)
+        rows         (->> candidates
+                          (map (fn [word]
+                                 (assoc word
+                                        :retention-level
+                                        (retention/retention-level (reviews (:id word) []) now))))
+                          (sort-by :retention-level (if (= order :asc) < >)))
+        rows         (cond->> rows
+                       offset (drop offset)
+                       limit  (take limit))]
+    {:total total
+     :words (vec rows)}))
 
 
 (defn ^:async list-active
@@ -88,9 +128,11 @@
 
 (defn ^:async delete!
   "Atomically deletes a word and its reviews and unlinks it from every
-   collection in a single bulk write. No-op if word doesn't exist."
-  [{:keys [progress-store]} word-id]
-  (await ((:progress-store/delete-word! progress-store) word-id)))
+   collection in a single bulk write, then purges the word's examples, which
+   live in another database. No-op if word doesn't exist."
+  [{:keys [examples progress-store]} word-id]
+  (when (await ((:progress-store/delete-word! progress-store) word-id))
+    (await ((:examples/purge-by-word! examples) word-id))))
 
 
 (defn ^:async remove-from-active!
