@@ -22,14 +22,17 @@ async function addWord(page, value, translation) {
   await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
 }
 
+// Seeds at the engine level (`db`, the PouchDB wrapper): a raw document into
+// the database that holds examples. The app's own layers (`db.pouch` and the
+// adapters) need the schema list `main` wires in, so a spec does not reach
+// for them — see test/browser/README.md.
 async function seedExample(page) {
   await page.evaluate(async () => {
     const kw = cljs.core.keyword;
     const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
-    const dbs = await db.pouch.init_BANG_(null);
-    const found = await db.pouch.find_all(dbs, toClj({ selector: { type: 'vocab' } }));
+    const found = await db.find(db.use('user-db'), toClj({ selector: { type: 'vocab' } }));
     const wordId = cljs.core.get(cljs.core.first(cljs.core.get(found, kw('docs'))), kw('_id'));
-    await db.pouch.insert(dbs, toClj({
+    await db.insert(db.use('device-db'), toClj({
       'type': 'example',
       'word-id': wordId,
       'word': 'der Hund',

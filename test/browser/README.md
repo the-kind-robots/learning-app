@@ -87,6 +87,31 @@ uploads `test-results/` (traces) and the backend log as an artifact.
   ClojureScript spelling: `metrics['layout-shift']`, not
   `metrics.layoutShift`.
 
+## Seeding from a spec
+
+Prefer the UI: `add-word.spec.js` and `lesson-answer-hints.spec.js` add words
+through the form. When a document has no UI to enter it by (an example
+sentence, say), seed it at the engine level through the development build's
+globals — `db`, the PouchDB wrapper — never through `db.pouch` or an adapter:
+those take the schema list `main` wires in at start-up, and a spec has no
+`main`.
+
+```js
+await page.evaluate(async () => {
+  const kw = cljs.core.keyword;
+  const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
+  const found = await db.find(db.use('user-db'), toClj({ selector: { type: 'vocab' } }));
+  const wordId = cljs.core.get(cljs.core.first(cljs.core.get(found, kw('docs'))), kw('_id'));
+  await db.insert(db.use('device-db'), toClj({ type: 'example', 'word-id': wordId, /* ... */ }));
+});
+```
+
+Two things to know. A raw document carries its own `type` and lives in the
+database that owns that type (`user-db`: vocab, review, collection;
+`device-db`: example, lesson, task — the adapters' `schema` values are the
+list). And keys go through `clj->couch`, which snake-cases them: write
+`'word-id'` and it is stored as `word_id`, exactly as the app stores it.
+
 ## Projects
 
 `desktop` runs every spec at the default 1280x720. `mobile` runs
