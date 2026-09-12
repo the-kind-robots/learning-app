@@ -14,6 +14,15 @@
    :db   :device/db})
 
 
+(defn- doc->example
+  "Outward an example is
+   `{:id :word-id :collection-id :word :value :translation :structure :created-at}`."
+  [doc]
+  (-> doc
+      (dissoc :_id :_rev :type)
+      (assoc :id (:_id doc))))
+
+
 (def invalid-response-message
   "Invalid example response from backend")
 
@@ -117,7 +126,7 @@
   (let [selector (merge {:word-id word-id}
                         (collection-selector collection-id))
         {examples :docs} (await (dbs/find dbs schema {:selector selector}))]
-    (first examples)))
+    (some-> (first examples) doc->example)))
 
 
 (defn ^:async list
@@ -126,7 +135,7 @@
   (let [selector (merge {:word-id {:$in word-ids}}
                         (collection-selector collection-id))
         {examples :docs} (await (dbs/find dbs schema {:selector selector}))]
-    examples))
+    (mapv doc->example examples)))
 
 
 (defn ^:async remove!

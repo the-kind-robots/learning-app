@@ -6,17 +6,17 @@
 
 (deftest new-phrase-shares-the-vocabulary-namespace
   (testing "id is the value, so a phrase and a word cannot both hold it"
-    (is (= "vocab:auf jeden fall" (:_id (sut/new-phrase "Auf jeden Fall" "перевод"))))
+    (is (= "vocab:auf jeden fall" (:id (sut/new-phrase "Auf jeden Fall" "перевод"))))
     ;; the frozen id normalization turns the apostrophe into a space —
     ;; typography forgiveness lives only in grading, not in ids (ADR-0008)
-    (is (= "vocab:wie geht s" (:_id (sut/new-phrase "Wie geht's?" "перевод"))))))
+    (is (= "vocab:wie geht s" (:id (sut/new-phrase "Wie geht's?" "перевод"))))))
 
 
 (deftest new-phrase-collapses-whitespace-and-keeps-translation-whole
   (testing "value whitespace collapses, translation stays one entry"
     (let [doc (sut/new-phrase "auf  jeden\n Fall" "во всяком случае, обязательно.")]
-      (is (= "vocab:auf jeden fall" (:_id doc)))
-      (is (= "vocab" (:type doc)))
+      (is (= "vocab:auf jeden fall" (:id doc)))
+      (is (nil? (:type doc)) "the repository stamps the document type")
       (is (= "phrase" (:kind doc)))
       (is (= "auf jeden Fall" (:value doc)))
       (is (= [{:lang "ru" :value "во всяком случае, обязательно."}] (:translation doc))))))

@@ -1,4 +1,6 @@
 (ns adapters.collections
+  "Repository of named collections. Outward a collection is
+   `{:id :name :word-ids :created-at}`."
   (:require
    [db.pouch :as dbs]))
 
@@ -8,15 +10,25 @@
    :db   :user/db})
 
 
+(defn- doc->collection
+  [doc]
+  {:id         (:_id doc)
+   :created-at (:created-at doc)
+   :name       (:name doc)
+   :word-ids   (or (:word-ids doc) [])})
+
+
 (defn ^:async list-collections
   [dbs]
   (let [{colls :docs} (await (dbs/find-all dbs schema {}))]
-    (vec (sort-by :created-at colls))))
+    (->> colls
+         (sort-by :created-at)
+         (mapv doc->collection))))
 
 
 (defn ^:async get-collection
   [dbs collection-id]
-  (await (dbs/get dbs schema collection-id)))
+  (some-> (await (dbs/get dbs schema collection-id)) doc->collection))
 
 
 (defn create-collection!
@@ -28,31 +40,32 @@
                :word-ids   []}))
 
 
-(defn rename-collection!
-  [dbs collection-doc new-name]
-  (dbs/insert dbs schema (assoc collection-doc :name new-name)))
+(defn ^:async rename-collection!
+  [dbs collection-id new-name]
+  (when-let [doc (await (dbs/get dbs schema collection-id))]
+    (await (dbs/insert dbs schema (assoc doc :name new-name)))))
 
 
 (defn ^:async delete-collection!
   [dbs collection-id]
-  (when-let [coll (await (dbs/get dbs schema collection-id))]
-    (await (dbs/remove dbs schema coll))))
+  (when-let [doc (await (dbs/get dbs schema collection-id))]
+    (await (dbs/remove dbs schema doc))))
 
 
 (defn ^:async add-word-to-collection!
   [dbs word-id collection-id]
-  (when-let [coll (await (dbs/get dbs schema collection-id))]
-    (let [current (or (:word-ids coll) [])]
+  (when-let [doc (await (dbs/get dbs schema collection-id))]
+    (let [current (or (:word-ids doc) [])]
       (when-not (some #(= word-id %) current)
-        (await (dbs/insert dbs schema (assoc coll :word-ids (conj current word-id))))))))
+        (await (dbs/insert dbs schema (assoc doc :word-ids (conj current word-id))))))))
 
 
 (defn ^:async exclude-word!
   [dbs word-id collection-id]
-  (when-let [coll (await (dbs/get dbs schema collection-id))]
-    (let [current (or (:word-ids coll) [])]
+  (when-let [doc (await (dbs/get dbs schema collection-id))]
+    (let [current (or (:word-ids doc) [])]
       (when (some #(= word-id %) current)
-        (await (dbs/insert dbs schema (assoc coll :word-ids (filterv #(not= word-id %) current))))))))
+        (await (dbs/insert dbs schema (assoc doc :word-ids (filterv #(not= word-id %) current))))))))
 
 
 (defn ^:async without-word

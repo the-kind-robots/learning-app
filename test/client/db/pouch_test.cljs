@@ -102,5 +102,5 @@
            (is (= #{{:word-id "vocab:a" :created-at "2024-01-01T00:00:00.000Z" :retained true}
                     {:word-id "vocab:a" :created-at "2024-01-02T00:00:00.000Z" :retained false}}
                   (set (by-word "vocab:a"))))
-           (is (= [{:_id "vocab:a" :kind nil :translation nil :value "a"}] previews))
+           (is (= [{:id "vocab:a" :kind nil :translation nil :value "a"}] previews))
            (is (= [] (await (words/previews dbs ["vocab:none"]))))))))))

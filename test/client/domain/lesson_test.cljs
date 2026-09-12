@@ -80,8 +80,7 @@
                  fixtures/lesson-words
                  fixtures/lesson-examples
                  :first)]
-      (is (= "lesson" (:_id state)))
-      (is (= "lesson" (:type state)))
+      (is (nil? (:_id state)) "storage names belong to the repository, not the state")
       (is (= 3 (count (:trials state))))
       (is (= 3 (count (:remaining-trials state))))
       (is (some? (:current-trial state)))

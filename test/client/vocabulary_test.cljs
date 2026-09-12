@@ -144,7 +144,7 @@
       [dbs]
       (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
             result (await (sut/get (test-capabilities dbs) word-id))]
-        (is (= word-id (:_id result)))
+        (is (= word-id (:id result)))
         (is (= "der Hund" (:value result)))
         (is (= "пёс" (-> result :translation first :value)))
         (is (number? (:retention-level result))))))))
@@ -157,7 +157,7 @@
       [dbs]
       (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
             result (await (sut/update! (test-capabilities dbs) word-id "лиса"))]
-        (is (= word-id (:_id result)))
+        (is (= word-id (:id result)))
         (is (= "der Hund" (:value result)))
         (is (= "лиса" (-> result :translation first :value))))))))
 
@@ -231,10 +231,10 @@
                                    [word-id (retention/retention-level reviews (time/now-ms))]))
                             (into {}))
               {:keys [words]} (await (sut/list (test-capabilities dbs) {}))
-              actual (into {} (map (juxt :_id :retention-level)) words)
+              actual (into {} (map (juxt :id :retention-level)) words)
               {subset :words} (await (sut/list (test-capabilities dbs) {:word-ids (take 2 word-ids)}))]
           (is (= 35 (count reviews)))
           (is (= 5 (count (distinct (vals expected)))))
           (is (= expected actual))
           (is (= (select-keys expected (take 2 word-ids))
-                 (into {} (map (juxt :_id :retention-level)) subset)))))))))
+                 (into {} (map (juxt :id :retention-level)) subset)))))))))

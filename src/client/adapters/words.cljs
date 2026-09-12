@@ -1,6 +1,7 @@
 (ns adapters.words
   "Repository of the vocabulary: words and phrases are one document type
-   that differ by `:kind`."
+   that differ by `:kind`. Outward a word is
+   `{:id :kind :value :translation :created-at :modified-at}`."
   (:require
    [adapters.collections :as collections]
    [adapters.reviews :as reviews]
@@ -25,20 +26,29 @@
   (dbs/view schema "vocab-preview"))
 
 
-(defn- now-iso
-  [clock]
-  ((:clock/now-iso clock)))
+(defn- doc->word
+  [doc]
+  (-> doc
+      (dissoc :_id :_rev :type)
+      (assoc :id (:_id doc))))
+
+
+(defn- word->doc
+  [word]
+  (-> word
+      (dissoc :id)
+      (assoc :_id (:id word))))
 
 
 (defn- stamp
   [clock word]
-  (let [now (now-iso clock)]
+  (let [now ((:clock/now-iso clock))]
     (cond-> (assoc word :modified-at now)
       (nil? (:created-at word)) (assoc :created-at now))))
 
 
 (defn ^:async previews
-  "Every word and phrase as `{:_id :kind :value :translation}` — what a list
+  "Every word and phrase as `{:id :kind :value :translation}` — what a list
    shows — or only `word-ids` when given. Read from the vocab view, so no
    document is fetched."
   [dbs word-ids]
@@ -48,7 +58,7 @@
          (filter (fn [{id :id}]
                    (or (nil? wanted-ids) (contains? wanted-ids id))))
          (mapv (fn [{id :id [kind value translation] :value}]
-                 {:_id         id
+                 {:id          id
                   :kind        kind
                   :translation translation
                   :value       value})))))
@@ -59,19 +69,23 @@
   (clojure/count (await (previews dbs nil))))
 
 
-(defn ^:async find-by-value
-  [dbs value]
-  (await (dbs/get dbs schema (vocabulary/vocab-id value))))
-
-
 (defn ^:async get-word
   [dbs word-id]
-  (await (dbs/get dbs schema word-id)))
+  (some-> (await (dbs/get dbs schema word-id)) doc->word))
 
 
-(defn save-word!
+(defn ^:async find-by-value
+  [dbs value]
+  (await (get-word dbs (vocabulary/vocab-id value))))
+
+
+(defn ^:async save-word!
+  "Writes the word under its id, over whichever revision is stored."
   [dbs clock word]
-  (dbs/insert dbs schema (stamp clock word)))
+  (let [stored (await (dbs/get dbs schema (:id word)))
+        doc    (cond-> (word->doc (stamp clock word))
+                 stored (assoc :_rev (:_rev stored)))]
+    (await (dbs/insert dbs schema doc))))
 
 
 (defn ^:async delete-word!

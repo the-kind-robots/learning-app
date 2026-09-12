@@ -37,16 +37,14 @@
 
 (defn new-word
   [value translations]
-  {:_id         (vocab-id value)
+  {:id          (vocab-id value)
    :translation translations
-   :type        "vocab"
    :value       value})
 
 
 (defn new-review
   [word-id retained translation]
-  {:type        "review"
-   :word-id     word-id
+  {:word-id     word-id
    :retained    retained
    :translation [{:lang "ru" :value translation}]})
 

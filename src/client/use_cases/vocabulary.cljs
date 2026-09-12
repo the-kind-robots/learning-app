@@ -29,11 +29,11 @@
                 collection-id ((:collections/active-id collections))]
             (await ((:progress-store/save-word! progress-store) updated))
             (when collection-id
-              (await ((:collections/add-word! collections) (:_id existing) collection-id))
-              (when-not (await ((:examples/find examples) (:_id existing) collection-id))
+              (await ((:collections/add-word! collections) (:id existing) collection-id))
+              (when-not (await ((:examples/find examples) (:id existing) collection-id))
                 (let [collection-name (:name (await ((:collections/get collections) collection-id)))]
-                  ((:examples/request! examples) (:_id existing) collection-id collection-name))))
-            {:word-id (:_id existing) :created? false})
+                  ((:examples/request! examples) (:id existing) collection-id collection-name))))
+            {:word-id (:id existing) :created? false})
           (let [word (domain/new-word value parsed)
                 {:keys [id]} (await ((:progress-store/save-word! progress-store) word))
                 collection-id ((:collections/active-id collections))
@@ -80,14 +80,14 @@
         ;; A narrowed list reads its reviews by key; the whole vocabulary
         ;; reads every review, which the repository does cheaper.
         narrowed-ids (when (or (some? word-ids) (utils/non-blank search))
-                       (mapv :_id candidates))
+                       (mapv :id candidates))
         reviews      (await ((:progress-store/reviews-by-word progress-store) narrowed-ids))
         now          (now-ms capabilities)
         rows         (->> candidates
                           (map (fn [word]
                                  (assoc word
                                         :retention-level
-                                        (retention/retention-level (reviews (:_id word) []) now))))
+                                        (retention/retention-level (reviews (:id word) []) now))))
                           (sort-by :retention-level (if (= order :asc) < >)))
         rows         (cond->> rows
                        offset (drop offset)

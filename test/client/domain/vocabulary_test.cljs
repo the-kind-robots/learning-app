@@ -7,7 +7,7 @@
 (deftest new-word-doc-creates-vocab-document
   (testing "user adds a new word"
     (let [word (sut/new-word "der Hund" [{:lang "ru" :value "пёс"}])]
-      (is (= "vocab" (:type word)))
+      (is (nil? (:type word)) "the repository stamps the document type")
       (is (= "der Hund" (:value word)))
       (is (= "пёс" (-> word :translation first :value)))
       (is (= "ru" (-> word :translation first :lang))))))
@@ -62,7 +62,7 @@
 (deftest new-review-doc-creates-review-document
   (testing "user reviews a word"
     (let [review (sut/new-review "word-1" true "пёс")]
-      (is (= "review" (:type review)))
+      (is (nil? (:type review)) "the repository stamps the document type")
       (is (= "word-1" (:word-id review)))
       (is (true? (:retained review)))
       (is (= "пёс" (-> review :translation first :value)))
@@ -79,10 +79,10 @@
 
 
 (deftest new-word-is-content-addressed
-  (testing "vocab _id is the content-addressed id of its value"
+  (testing "a word's id is the content-addressed id of its value"
     (let [value "der Hund"]
       (is (= (sut/vocab-id value)
-             (:_id (sut/new-word value [{:lang "ru" :value "пёс"}])))))))
+             (:id (sut/new-word value [{:lang "ru" :value "пёс"}])))))))
 
 
 (deftest vocab-id-is-case-insensitive

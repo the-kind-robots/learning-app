@@ -11,7 +11,7 @@
 
 
 (defn- preview-row
-  [{id :_id :keys [retention-level value translation]}]
+  [{:keys [id retention-level value translation]}]
   [:li.card-preview__row {:replicant/key id}
    (progress-dot retention-level)
    [:span.card-preview__de {:lang "de"} value]
@@ -61,7 +61,7 @@
 
 
 (defn- tab-card
-  [{coll-id :_id coll-name :name :as item} active-id editing-id]
+  [{coll-id :id coll-name :name :as item} active-id editing-id]
   (let [editing? (= coll-id editing-id)]
     [:div.tab-card
      {:replicant/key coll-id

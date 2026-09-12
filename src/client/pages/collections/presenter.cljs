@@ -14,8 +14,8 @@
 
 
 (defn- preview-word-props
-  [{id :_id :keys [retention-level value translation]}]
-  {:_id         id
+  [{:keys [id retention-level value translation]}]
+  {:id          id
    :retention-level retention-level
    :translation (translation-text translation)
    :value       value})
