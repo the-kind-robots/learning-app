@@ -534,4 +534,6 @@
      :controllers [{:start #(dispatch [[:effect/load-lesson] [:effect/sync-pull]])}]}]
    ["/collections"
     {:name        :page/collections
-     :controllers [{:start #(dispatch [[:effect/load-collections] [:effect/sync-pull]])}]}]])
+     :controllers [{:start #(dispatch [[:action/open-collections]
+                                       [:effect/load-collections]
+                                       [:effect/sync-pull]])}]}]])

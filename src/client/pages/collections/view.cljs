@@ -113,14 +113,22 @@
        :stroke-linecap "round"}]]]])
 
 
+(defn- loading-state
+  []
+  [:div.switcher__loading {:role "status" :aria-live "polite"}
+   [:p.switcher__loading-text "Загружаем…"]])
+
+
 (defn page
   [state]
-  (let [{:keys [active-id editing-id main items]} (presenter/page-props state)]
+  (let [{:keys [active-id editing-id loading? main items]} (presenter/page-props state)]
     [:div.switcher
      {:on {:click [[:effect/exit-editing-on-background]]}}
      [:h1.switcher__title "Наборы"]
-     [:div.switcher__grid
-      {:on {:click [[:effect/exit-editing-on-background]]}}
-      (main-card main active-id)
-      (for [item items] (tab-card item active-id editing-id))
-      (new-card)]]))
+     (if loading?
+       (loading-state)
+       [:div.switcher__grid
+        {:on {:click [[:effect/exit-editing-on-background]]}}
+        (main-card main active-id)
+        (for [item items] (tab-card item active-id editing-id))
+        (new-card)])]))

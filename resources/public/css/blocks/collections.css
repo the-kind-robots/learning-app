@@ -38,6 +38,21 @@ body:has(.switcher) {
   width: 1px;
 }
 
+/* Shown from the moment the screen opens until its collections are read. */
+.switcher__loading {
+  align-items: center;
+  color: rgb(var(--color-wolf));
+  display: flex;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+  justify-content: center;
+}
+
+.switcher__loading-text {
+  margin: 0;
+}
+
 .switcher__grid {
   display: flex;
   flex-wrap: wrap;
