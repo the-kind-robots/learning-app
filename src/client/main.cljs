@@ -1,5 +1,8 @@
 (ns main
   (:require
+   [adapters.collections :as collections-adapter]
+   [adapters.examples :as examples-adapter]
+   [adapters.progress-store :as progress-store-adapter]
    [application]
    [db.pouch :as pouch]
    [db.sqlite :as sqlite]
@@ -30,7 +33,19 @@
    [reitit.frontend.easy :as rfe]
    [replicant.dom :as r]
    [runtime.system :as system]
-   [sync]))
+   [sync]
+   [tasks]))
+
+
+(def ^:private schemas
+  "Every document type the app stores, declared by the adapter that owns it.
+   The engine learns its indexes, views and routing from this list alone."
+  [progress-store-adapter/word-schema
+   progress-store-adapter/review-schema
+   progress-store-adapter/lesson-schema
+   collections-adapter/schema
+   examples-adapter/schema
+   tasks/schema])
 
 
 (defn ^:async init
@@ -63,7 +78,7 @@
     :identity/incoming  {:start sync/check-incoming-auth!}
 
     :db/pouch           {:after [:identity/incoming]
-                         :start pouch/init!}
+                         :start (fn [_] (pouch/init! schemas))}
 
     :sync/identity      {:requires {:db :db/pouch}
                          :start    sync/start!

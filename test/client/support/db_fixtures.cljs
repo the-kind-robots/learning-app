@@ -1,5 +1,6 @@
 (ns client.support.db-fixtures
   (:require
+   [client.support.schemas :as schemas]
    [clojure.string :as str]
    [db :as db]
    [db.pouch :as pouch])
@@ -68,11 +69,12 @@
 
 
 (defn- ^:async prepared
-  "A test database carries what `db.pouch/init!` gives user-db at start-up
-   (indexes, views), so adapters can rely on them here as they do there."
+  "A test database carries what `db.pouch/init!` gives the app's databases
+   at start-up (every schema's indexes and views), so adapters can rely on
+   them here as they do there."
   [db-name]
   (let [db (db/use db-name)]
-    (await (pouch/prepare-user-db! db))
+    (await (pouch/prepare! db schemas/all))
     db))
 
 

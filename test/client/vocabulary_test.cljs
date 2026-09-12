@@ -2,12 +2,12 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [adapters.examples :as examples]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
-   [db.pouch :as pouch]
    [domain.retention :as retention]
    [ports.progress-store :as progress-store]
    [use-cases.vocabulary :as sut]
@@ -50,6 +50,7 @@
     :collections/exclude-word! (fn [_ _] (js/Promise.resolve nil))}
    :examples
    {:examples/find     (fn [_ _] (js/Promise.resolve nil))
+    :examples/purge-by-word! (fn [word-id] (examples/purge-by-word! dbs word-id))
     :examples/request! (fn [_ _ _] nil)}})
 
 
@@ -115,7 +116,7 @@
         (let [cnt (await (sut/count (test-capabilities {:user/db :fake})))]
           (is (= row-count cnt))
           (is (= 0 @find-calls))
-          (is (= [["vocab-preview/preview" {}]] @query-calls)))))))
+          (is (= [["vocab-preview/vocab_preview" {}]] @query-calls)))))))
 
 
 (deftest list-and-count-return-all-words-beyond-25
@@ -208,7 +209,6 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (await (pouch/prepare-user-db! (:user/db dbs)))
       (let [word-ids (mapv #(str "vocab:wort-" %) (range 5))]
         (await (js/Promise.all
                 (into-array

@@ -2,7 +2,9 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [adapters.progress-store :as progress-store]
    [client.support.db-fixtures :as db-fixtures]
+   [client.support.schemas :as schemas]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [db.pouch :as sut]))
@@ -56,26 +58,48 @@
            (is (empty? (filter #(re-find #"^_design/" %) (disj remote-ids "_design/remote-only"))))))))))
 
 
+(deftest a-schema-gives-its-database-indexes-and-views
+  (async-testing "prepare! installs every declared index and view once, and a changed map replaces the stored one"
+    (db-fixtures/with-test-db
+      local-name
+      (^:async fn
+       [local]
+       (let [names   (fn ^:async f []
+                       (let [{:keys [indexes]} (js->clj (await (.getIndexes ^js local)) :keywordize-keys true)]
+                         (set (map :name indexes))))
+             rev-of  (fn ^:async f [id] (:_rev (await (db/get local id))))
+             changed (assoc-in (first schemas/all) [:views "vocab-preview" :map] "function (doc) { emit(doc._id); }")]
+         (is (contains? (await (names)) "by-type"))
+         (is (contains? (await (names)) "by-type-run-at-created-at"))
+         (let [rev-1 (await (rev-of "_design/reviews-by-word"))]
+           (await (sut/prepare! local schemas/all))
+           (is (= rev-1 (await (rev-of "_design/reviews-by-word"))) "an unchanged view is not rewritten")
+           (await (sut/prepare! local [changed]))
+           (is (not= rev-1 (await (rev-of "_design/vocab-preview"))) "a changed map is")))))))
+
+
 (deftest the-reviews-view-answers-per-word
   (async-testing "reviews-by-word rows carry [created-at retained] keyed by word id"
     (db-fixtures/with-test-db
       local-name
       (^:async fn
        [local]
-       (await (sut/prepare-user-db! local))
-       (await (db/insert local
-                         {:type "review" :word-id "vocab:a" :retained true :created-at "2024-01-01T00:00:00.000Z"}))
-       (await (db/insert local
-                         {:type "review" :word-id "vocab:a" :retained false :created-at "2024-01-02T00:00:00.000Z"}))
-       (await (db/insert local
-                         {:type "review" :word-id "vocab:b" :retained true :created-at "2024-01-03T00:00:00.000Z"}))
-       (await (db/insert local {:type "vocab" :_id "vocab:a" :value "a"}))
-       (let [dbs      {:user/db local}
-             by-word  (await (sut/reviews-by-word dbs ["vocab:a"]))
-             previews (await (sut/vocab-previews dbs nil))]
-         (is (= ["vocab:a"] (keys by-word)))
-         (is (= #{{:word-id "vocab:a" :created-at "2024-01-01T00:00:00.000Z" :retained true}
-                  {:word-id "vocab:a" :created-at "2024-01-02T00:00:00.000Z" :retained false}}
-                (set (by-word "vocab:a"))))
-         (is (= [{:_id "vocab:a" :kind nil :translation nil :value "a"}] previews))
-         (is (= [] (await (sut/vocab-previews dbs ["vocab:none"])))))))))
+       (let [dbs {:user/db local}]
+         (await (sut/insert dbs
+                            progress-store/review-schema
+                            {:word-id "vocab:a" :retained true :created-at "2024-01-01T00:00:00.000Z"}))
+         (await (sut/insert dbs
+                            progress-store/review-schema
+                            {:word-id "vocab:a" :retained false :created-at "2024-01-02T00:00:00.000Z"}))
+         (await (sut/insert dbs
+                            progress-store/review-schema
+                            {:word-id "vocab:b" :retained true :created-at "2024-01-03T00:00:00.000Z"}))
+         (await (sut/insert dbs progress-store/word-schema {:_id "vocab:a" :value "a"}))
+         (let [by-word  (await (progress-store/reviews-by-word dbs ["vocab:a"]))
+               previews (await (progress-store/vocab-previews dbs nil))]
+           (is (= ["vocab:a"] (keys by-word)))
+           (is (= #{{:word-id "vocab:a" :created-at "2024-01-01T00:00:00.000Z" :retained true}
+                    {:word-id "vocab:a" :created-at "2024-01-02T00:00:00.000Z" :retained false}}
+                  (set (by-word "vocab:a"))))
+           (is (= [{:_id "vocab:a" :kind nil :translation nil :value "a"}] previews))
+           (is (= [] (await (progress-store/vocab-previews dbs ["vocab:none"]))))))))))

@@ -88,9 +88,11 @@
 
 (defn ^:async delete!
   "Atomically deletes a word and its reviews and unlinks it from every
-   collection in a single bulk write. No-op if word doesn't exist."
-  [{:keys [progress-store]} word-id]
-  (await ((:progress-store/delete-word! progress-store) word-id)))
+   collection in a single bulk write, then purges the word's examples, which
+   live in another database. No-op if word doesn't exist."
+  [{:keys [examples progress-store]} word-id]
+  (when (await ((:progress-store/delete-word! progress-store) word-id))
+    (await ((:examples/purge-by-word! examples) word-id))))
 
 
 (defn ^:async remove-from-active!

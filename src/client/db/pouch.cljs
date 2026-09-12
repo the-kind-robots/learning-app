@@ -1,4 +1,15 @@
 (ns db.pouch
+  "Storage engine over PouchDB: documents, databases, indexes, views and
+   replication. Knows no document type of its own — every call carries the
+   `schema` of the aggregate it serves, a value the owning adapter declares:
+
+     {:type    \"...\"            ; stored as the document's :type
+      :db      :user/db          ; the database the type lives in
+      :indexes [{:name \"...\" :fields [...]}]   ; optional
+      :views   {\"name\" {:map \"function (doc) {...}\"}}}  ; optional
+
+   `init!` takes every schema the app declares and gives each database its
+   indexes and design documents."
   (:refer-clojure :exclude [get find remove])
   (:require
    [clojure.string :as str]
@@ -16,22 +27,6 @@
 (defn- device-db
   []
   (db/use "device-db"))
-
-
-(def doc-type->db
-  "Maps PouchDB :type string to the dbs-map key for its owning database."
-  {"collection" :user/db
-   "example"    :device/db
-   "lesson"     :device/db
-   "review"     :user/db
-   "task"       :device/db
-   "vocab"      :user/db})
-
-
-(defn db-for
-  "Returns the database instance for a given doc type string."
-  [dbs doc-type]
-  (some-> doc-type doc-type->db dbs))
 
 
 (def ^:private db->remote-name
@@ -77,51 +72,73 @@
                 (resolve nil))))))))
 
 
+(defn- database
+  [dbs schema]
+  ((:db schema) dbs))
+
+
 (defn insert
-  "Inserts doc into the database determined by its :type field."
-  [dbs doc]
-  (db/insert (db-for dbs (:type doc)) doc))
+  "Writes doc as one of `schema`'s type into the database that holds it."
+  [dbs schema doc]
+  (db/insert (database dbs schema) (assoc doc :type (:type schema))))
 
 
 (defn bulk-docs
-  "Atomically writes multiple docs to the database that owns `doc-type`.
-   All docs must belong to that same database — caller groups by db."
-  [dbs doc-type docs]
-  (db/bulk-docs (db-for dbs doc-type) docs))
+  "Writes docs atomically into `schema`'s database. The docs carry their own
+   :type: a bulk write moves documents that were read, tombstoned or updated,
+   and those may belong to several types of the same database."
+  [dbs schema docs]
+  (db/bulk-docs (database dbs schema) docs))
 
 
 (defn get
-  "Fetches a document by id from the database that owns the given type string."
-  [dbs type-str doc-id]
-  (db/get (db-for dbs type-str) doc-id))
+  "The document with `id` from `schema`'s database, or nil."
+  [dbs schema id]
+  (db/get (database dbs schema) id))
 
 
 (defn remove
-  "Removes doc from the database determined by its :type field."
-  [dbs doc]
-  (db/remove (db-for dbs (:type doc)) doc))
+  [dbs schema doc]
+  (db/remove (database dbs schema) doc))
+
+
+(defn- typed
+  [schema query]
+  (assoc-in query [:selector :type] (:type schema)))
 
 
 (defn find
-  "Queries the database determined by [:selector :type] in the query."
-  [dbs query]
-  (db/find (db-for dbs (get-in query [:selector :type])) query))
+  "Documents of `schema`'s type matching the query's selector; the type is
+   added to the selector here."
+  [dbs schema query]
+  (db/find (database dbs schema) (typed schema query)))
 
 
 (defn find-all
-  "Queries (with auto-pagination) the database determined by [:selector :type] in the query."
-  [dbs query]
-  (db/find-all (db-for dbs (get-in query [:selector :type])) query))
+  "Like `find`, without a page limit."
+  [dbs schema query]
+  (db/find-all (database dbs schema) (typed schema query)))
 
 
-(def ^:private user-db-indexes
-  "Every user-db query selects on :type, and reviews are looked up by
-   :word-id. Without these pouchdb-find scans the whole database and filters
-   in JS on the main thread (#404). Design-document ids sort `by-type` before
-   `by-type-word-id`, which is the tie-break pouchdb-find uses for a plain
-   {:type ..} selector."
-  [{:fields [:type] :name "by-type"}
-   {:fields [:type :word-id] :name "by-type-word-id"}])
+(defn- stored-view-name
+  "Map keys are snake-cased on the way into PouchDB, so a view declared as
+   `by-owner` is stored as `by_owner`."
+  [view-name]
+  (str/replace view-name "-" "_"))
+
+
+(defn view
+  "A reference to one of `schema`'s views, for `query`."
+  [schema view-name]
+  {:db   (:db schema)
+   :view (str view-name "/" (stored-view-name view-name))})
+
+
+(defn query
+  "Rows of a view: `{:rows [{:id .. :key .. :value ..}]}`. `opts` are the
+   PouchDB query options (`:keys`, `:startkey`, `:endkey`, ...)."
+  [dbs {:keys [db view]} opts]
+  (db/query (db dbs) view opts))
 
 
 (defn- ^:async ensure-index!
@@ -135,90 +152,58 @@
       (log/error :db/index-error {:index index-name :error (str err)}))))
 
 
-(def ^:private reviews-by-word-view
-  "One row per review, keyed by word id, valued `[created_at retained]` —
-   what retention needs, without fetching the review documents. The view is
-   named without a dash because `clj->couch` snake-cases map keys on the way
-   in."
-  "reviews-by-word/reviews")
+(defn- design-doc
+  [view-name {map-source :map}]
+  {:_id   (str "_design/" view-name)
+   :views {(keyword (stored-view-name view-name)) {:map map-source}}})
 
 
-(def ^:private vocab-preview-view
-  "One row per vocabulary document, keyed by id, valued
-   `[kind value translation]` — what a list of words shows, without fetching
-   the documents."
-  "vocab-preview/preview")
-
-
-(defn ^:async reviews-by-word
-  "Reviews as `{:word-id :created-at :retained}`, grouped by word id. With
-   `word-ids` only those words are read, by key; nil reads the whole view,
-   which is the cheaper of the two when every word is wanted anyway
-   (#404: 800 keys 0.8 s, all rows 1.1 s, 1500 keys 1.5 s)."
-  [dbs word-ids]
-  (let [{rows :rows} (await (db/query (:user/db dbs)
-                                      reviews-by-word-view
-                                      (cond-> {} word-ids (assoc :keys (vec word-ids)))))]
-    (->> rows
-         (map (fn [{word-id :key [created-at retained] :value}]
-                {:created-at created-at
-                 :retained   retained
-                 :word-id    word-id}))
-         (group-by :word-id))))
-
-
-(defn ^:async vocab-previews
-  "Every word and phrase as `{:_id :kind :value :translation}` — what a list
-   shows — or only `word-ids` when given. Read from the vocab view, so no
-   document is fetched."
-  [dbs word-ids]
-  (let [{rows :rows} (await (db/query (:user/db dbs) vocab-preview-view {}))
-        wanted-ids   (some-> word-ids set)]
-    (->> rows
-         (filter (fn [{id :id}]
-                   (or (nil? wanted-ids) (contains? wanted-ids id))))
-         (mapv (fn [{id :id [kind value translation] :value}]
-                 {:_id         id
-                  :kind        kind
-                  :translation translation
-                  :value       value})))))
-
-
-(def ^:private user-db-design-docs
-  [{:_id   "_design/reviews-by-word"
-    :views {:reviews
-            {:map
-             "function (doc) { if (doc.type === 'review') emit(doc.word_id, [doc.created_at, doc.retained]); }"}}}
-   {:_id   "_design/vocab-preview"
-    :views {:preview
-            {:map
-             "function (doc) { if (doc.type === 'vocab') emit(doc._id, [doc.kind, doc.value, doc.translation]); }"}}}])
+(defn- view-sources
+  "The map functions of a design document by view name, whichever casing the
+   keys came back in."
+  [{:keys [views]}]
+  (into {}
+        (map (fn [[view-name {map-source :map}]]
+               [(str/replace (name view-name) "_" "-") map-source]))
+        views))
 
 
 (defn- ^:async ensure-design-doc!
-  "Writes the design document when it is missing or its views differ from
-   `ddoc`, so a changed map function replaces the stored one and an unchanged
-   one costs one read. Failure is logged, never raised."
+  "Writes the design document when it is missing or its map functions differ
+   from `ddoc`, so a changed map replaces the stored one and an unchanged one
+   costs one read. Failure is logged, never raised."
   [db {id :_id :as ddoc}]
   (try
     (let [stored (await (db/get db id))]
-      (when (not= (:views stored) (:views ddoc))
+      (when (not= (view-sources stored) (view-sources ddoc))
         (await (db/insert db (cond-> ddoc stored (assoc :_rev (:_rev stored)))))))
     (catch :default err
       (log/error :db/design-doc-error {:ddoc id :error (str err)}))))
 
 
-(defn prepare-user-db!
-  "Indexes and views user-db carries; idempotent, run on every start."
-  [db]
-  (js/Promise.all (into-array (concat (map #(ensure-index! db %) user-db-indexes)
-                                      (map #(ensure-design-doc! db %) user-db-design-docs)))))
+(defn prepare!
+  "Gives one database the indexes and views of `schemas`, idempotently."
+  [db schemas]
+  (js/Promise.all
+   (into-array
+    (concat (for [{:keys [indexes]} schemas
+                  index indexes]
+              (ensure-index! db index))
+            (for [{:keys [views]}  schemas
+                  [view-name view] views]
+              (ensure-design-doc! db (design-doc view-name view)))))))
 
 
 (defn ^:async init!
-  [_deps]
+  "Opens the databases and gives each the indexes and views of the schemas
+   that live in it. Run on every start: that is what gives an existing
+   installation a new index or view."
+  [schemas]
   (await (db-migrations/ensure-migrated!))
-  (let [user-db (user-db)]
-    (await (prepare-user-db! user-db))
-    {:device/db (device-db)
-     :user/db   user-db}))
+  (let [dbs {:device/db (device-db)
+             :user/db   (user-db)}]
+    (await (js/Promise.all
+            (into-array
+             (for [[db-key db] dbs]
+               (prepare! db (filter #(= db-key (:db %)) schemas))))))
+    dbs))
