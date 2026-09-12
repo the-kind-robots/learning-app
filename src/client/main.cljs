@@ -2,7 +2,9 @@
   (:require
    [adapters.collections :as collections-adapter]
    [adapters.examples :as examples-adapter]
-   [adapters.progress-store :as progress-store-adapter]
+   [adapters.lessons :as lessons-adapter]
+   [adapters.reviews :as reviews-adapter]
+   [adapters.words :as words-adapter]
    [application]
    [db.pouch :as pouch]
    [db.sqlite :as sqlite]
@@ -40,9 +42,9 @@
 (def ^:private schemas
   "Every document type the app stores, declared by the adapter that owns it.
    The engine learns its indexes, views and routing from this list alone."
-  [progress-store-adapter/word-schema
-   progress-store-adapter/review-schema
-   progress-store-adapter/lesson-schema
+  [words-adapter/schema
+   reviews-adapter/schema
+   lessons-adapter/schema
    collections-adapter/schema
    examples-adapter/schema
    tasks/schema])
@@ -114,6 +116,7 @@
                          :start    collections/start!}
 
     :app/capabilities   {:requires {:capabilities/sync :sync/identity
+                                    :clock             :port/clock
                                     :collections       :port/collections
                                     :dictionary        :port/dictionary
                                     :examples          :port/examples

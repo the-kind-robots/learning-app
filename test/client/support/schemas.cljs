@@ -3,14 +3,16 @@
   (:require
    [adapters.collections :as collections]
    [adapters.examples :as examples]
-   [adapters.progress-store :as progress-store]
+   [adapters.lessons :as lessons]
+   [adapters.reviews :as reviews]
+   [adapters.words :as words]
    [tasks :as tasks]))
 
 
 (def all
-  [progress-store/word-schema
-   progress-store/review-schema
-   progress-store/lesson-schema
+  [words/schema
+   reviews/schema
+   lessons/schema
    collections/schema
    examples/schema
    tasks/schema])

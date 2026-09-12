@@ -39,7 +39,9 @@
   ([dbs]
    (test-capabilities dbs (fn [_word-id _coll-id _coll-name] (js/Promise.resolve nil))))
   ([dbs request!]
-   {:progress-store (progress-store/start! {:db    dbs
+   {:clock          {:clock/now-iso time/now-iso
+                     :clock/now-ms  time/now-ms}
+    :progress-store (progress-store/start! {:db    dbs
                                             :clock {:clock/now-iso time/now-iso
                                                     :clock/now-ms  time/now-ms}})
     :collections    {:collections/active-id (fn [] nil)

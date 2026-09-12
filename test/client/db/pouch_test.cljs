@@ -2,7 +2,8 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.progress-store :as progress-store]
+   [adapters.reviews :as reviews]
+   [adapters.words :as words]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.schemas :as schemas]
    [cljs.test :refer-macros [deftest is use-fixtures]]
@@ -86,20 +87,20 @@
        [local]
        (let [dbs {:user/db local}]
          (await (sut/insert dbs
-                            progress-store/review-schema
+                            reviews/schema
                             {:word-id "vocab:a" :retained true :created-at "2024-01-01T00:00:00.000Z"}))
          (await (sut/insert dbs
-                            progress-store/review-schema
+                            reviews/schema
                             {:word-id "vocab:a" :retained false :created-at "2024-01-02T00:00:00.000Z"}))
          (await (sut/insert dbs
-                            progress-store/review-schema
+                            reviews/schema
                             {:word-id "vocab:b" :retained true :created-at "2024-01-03T00:00:00.000Z"}))
-         (await (sut/insert dbs progress-store/word-schema {:_id "vocab:a" :value "a"}))
-         (let [by-word  (await (progress-store/reviews-by-word dbs ["vocab:a"]))
-               previews (await (progress-store/vocab-previews dbs nil))]
+         (await (sut/insert dbs words/schema {:_id "vocab:a" :value "a"}))
+         (let [by-word  (await (reviews/reviews-by-word dbs ["vocab:a"]))
+               previews (await (words/previews dbs nil))]
            (is (= ["vocab:a"] (keys by-word)))
            (is (= #{{:word-id "vocab:a" :created-at "2024-01-01T00:00:00.000Z" :retained true}
                     {:word-id "vocab:a" :created-at "2024-01-02T00:00:00.000Z" :retained false}}
                   (set (by-word "vocab:a"))))
            (is (= [{:_id "vocab:a" :kind nil :translation nil :value "a"}] previews))
-           (is (= [] (await (progress-store/vocab-previews dbs ["vocab:none"]))))))))))
+           (is (= [] (await (words/previews dbs ["vocab:none"]))))))))))

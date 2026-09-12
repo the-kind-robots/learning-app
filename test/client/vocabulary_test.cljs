@@ -36,7 +36,10 @@
 
 (defn- test-capabilities
   [dbs]
-  {:progress-store
+  {:clock
+   {:clock/now-iso time/now-iso
+    :clock/now-ms  time/now-ms}
+   :progress-store
    (progress-store/start! {:db    dbs
                            :clock {:clock/now-iso time/now-iso
                                    :clock/now-ms  time/now-ms}})

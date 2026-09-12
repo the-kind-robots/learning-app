@@ -2,7 +2,7 @@
   "Client module for fetching example sentences from the backend."
   (:refer-clojure :exclude [list find])
   (:require
-   [adapters.progress-store :as progress-store]
+   [adapters.words :as words]
    [db.pouch :as dbs]
    [lambdaisland.glogi :as log]
    [tasks :as tasks]
@@ -171,7 +171,7 @@
   (let [{:keys [collection-id collection-name word-id]} data]
     ((fn ^:async f
        []
-       (let [word-doc (await (dbs/get dbs progress-store/word-schema word-id))]
+       (let [word-doc (await (words/get-word dbs word-id))]
          (if-not word-doc
            (do
              (log/warn :example-fetch/word-not-found {:word-id word-id})
