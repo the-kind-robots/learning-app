@@ -78,10 +78,15 @@
 
 (defn ^:async sync-once!
   "Runs one replication pass and resolves the conflicts it may have brought
-   home. Never rejects, so callers can fire it freely on triggers."
+   home. Resolves with what the pass did, `{:pulled n :pushed n}`, or nil
+   when it failed; never rejects, so callers can fire it freely on triggers.
+   A pass that pulled nothing brought no conflict home, so nothing is
+   resolved and — for the caller — nothing has changed."
   [dbs account-id]
-  (when (await (pouch/sync-once! dbs :user/db account-id))
-    (await (resolve-vocab-conflicts! (:user/db dbs)))))
+  (when-let [{:keys [pulled] :as result} (await (pouch/sync-once! dbs :user/db account-id))]
+    (when (pos? pulled)
+      (await (resolve-vocab-conflicts! (:user/db dbs))))
+    result))
 
 
 (defn stop!

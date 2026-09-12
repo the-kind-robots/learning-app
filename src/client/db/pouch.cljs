@@ -53,11 +53,16 @@
   (not (str/starts-with? (.-_id ^js doc) "_design/")))
 
 
+(defn- docs-written
+  [^js direction]
+  (or (some-> direction .-docs_written) 0))
+
+
 (defn sync-once!
   "Runs one bidirectional replication pass of db-key against the account's copy
-   on the server. Resolves when the pass finishes and never rejects — a failed
-   pass resolves nil — so a caller can fire it on a trigger without guarding
-   every one."
+   on the server. Resolves with what the pass did — `{:pulled n :pushed n}`,
+   documents written on each side — and never rejects: a failed pass resolves
+   nil, so a caller can fire it on a trigger without guarding every one."
   [dbs db-key account-id]
   (let [remote (str (.. js/globalThis -location -origin)
                     "/db/"
@@ -65,7 +70,10 @@
     (js/Promise.
      (fn [resolve _reject]
        (doto (db/sync (db-key dbs) {:filter user-doc? :live false :remote-url remote})
-         (.on "complete" (fn [_] (resolve true)))
+         (.on "complete"
+              (fn [^js info]
+                (resolve {:pulled (docs-written (some-> info .-pull))
+                          :pushed (docs-written (some-> info .-push))})))
          (.on "error"
               (fn [err]
                 (log/warn :db/sync-failed {:db db-key :error (str err)})
