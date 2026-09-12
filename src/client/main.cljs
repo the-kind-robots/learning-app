@@ -52,7 +52,7 @@
 
 (defn ^:async init
   []
-  (when goog/DEBUG
+  (when ^boolean goog/DEBUG
     (action-log/inspect))
 
   (system/start!
@@ -133,12 +133,12 @@
                                        (r/set-dispatch! dispatch)
                                        (application/install-render!
                                         store
-                                        (if goog/DEBUG
+                                        (if ^boolean goog/DEBUG
                                           (fn [state]
                                             (instrumentation/count-render!)
                                             (application/render! state))
                                           application/render!))
-                                       (when goog/DEBUG
+                                       (when ^boolean goog/DEBUG
                                          (instrumentation/install!))
                                        {:dispatch #(dispatch {} %)}))}
 

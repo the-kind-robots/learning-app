@@ -90,6 +90,16 @@ Each entry is `{t, kind, data}` with `t` in ms since page start
 | `console-error` | `{message, stack}` | anything logged with `console.error`, which includes Replicant's "Caught exception during rendering" |
 | `visibilitychange`, `pageshow`, `pagehide`, `freeze`, `resume` | `{visibility}` | page lifecycle |
 
+Getting it off the phone: a development build shows a red **D** after the
+logo. Tap it — it is the trace export — and the share sheet opens with
+`sprecha-trace-<timestamp>.json`; choose Telegram or mail and send it. Where
+the share sheet cannot take a file (desktop Chrome) the JSON goes to the
+clipboard and the page says «Трасса скопирована»; where there is no clipboard
+either, a prompt shows the JSON for selecting by hand. The file carries a
+`header` (build, time, URL, user agent, visibility, storage estimate), `live`
+(the ring as it was at the tap) and `stored` (the last localStorage mirror,
+which is what survives a reload).
+
 Typical read: find the last `tap`; if no `action` follows it the tap never
 reached Nexus; if an `action` follows but no `effect-done` for
 `:effect/load-collections`, the read never came back; a `longtask` or a

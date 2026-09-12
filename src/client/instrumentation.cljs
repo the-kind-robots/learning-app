@@ -285,8 +285,68 @@
                     (dissoc ctx ::started))})
 
 
+(defn- ^:async trace-export
+  "The trace as one JSON document: a header about the page, the live ring,
+   and the last mirrored copy from localStorage under its own key — the two
+   overlap and are kept apart on purpose, so a reader can see what survived
+   a reload and what did not."
+  []
+  (let [^js storage (.-storage js/navigator)
+        estimate    (when (and storage (.-estimate storage))
+                      (try (await (.estimate storage)) (catch :default _ nil)))
+        stored      (try (.parse js/JSON (or (.getItem js/localStorage trace-key) "null"))
+                         (catch :default _ nil))]
+    (.stringify js/JSON
+                #js {:header #js {:build      (if goog/DEBUG "development" "release")
+                                  :time       (.toISOString (js/Date.))
+                                  :url        (.-href js/location)
+                                  :userAgent  (.-userAgent js/navigator)
+                                  :visibility (.-visibilityState js/document)
+                                  :storage    estimate}
+                     :live   trace
+                     :stored stored})))
+
+
+(defn- ^:async share-file!
+  "The share sheet with the trace as a file; false when the platform has no
+   file sharing or the user backed out, so the caller falls through."
+  [json file-name]
+  (let [^js nav js/navigator
+        file    (js/File. #js [json] file-name #js {:type "application/json"})
+        payload #js {:files #js [file] :title file-name}]
+    (if (and (.-share nav) (.-canShare nav) (.canShare nav payload))
+      (try
+        (await (.share nav payload))
+        true
+        (catch :default _ false))
+      false)))
+
+
+(defn ^:async export-trace!
+  "Hands the trace to whoever can carry it off the phone: the share sheet as a
+   file (Android Chrome), else the clipboard (desktop Chrome), else a prompt
+   whose value can be selected by hand."
+  []
+  (let [json      (await (trace-export))
+        file-name (str "sprecha-trace-" (.toISOString (js/Date.)) ".json")]
+    (when-not (await (share-file! json file-name))
+      (let [^js clipboard (.-clipboard js/navigator)
+            copied?       (if clipboard
+                            (try
+                              (await (.writeText clipboard json))
+                              true
+                              (catch :default _ false))
+                            false)]
+        (if copied?
+          (js/alert "Трасса скопирована")
+          (js/prompt "Трасса — скопируйте текст:" json))))))
+
+
 (defn- install-trace!
   []
+  (nxr/register-effect! :effect/export-trace
+    (fn export-trace [_ _]
+      (export-trace!)))
   (nxr/register-interceptor!
     {:before-action  (fn [{:keys [action] :as ctx}]
                        (trace! "action" #js {:action (str (first action))})

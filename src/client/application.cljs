@@ -455,10 +455,25 @@
 
 (defn- render
   [state]
-  (let [{:keys [menu-open? page pairing show-install? show-sync?]}
+  (let [{:keys [dev-build? menu-open? page pairing show-install? show-sync?]}
         (presenter/shell-props state)]
     (list
      [:a.app-shell__logo {:href "/home"} "Sprecha"]
+     ;; The red D marks a development build on the phone and is also the
+     ;; trace export: the effect exists only where instrumentation installed
+     ;; it. The presenter says whether this is a development build; the
+     ;; compile-time flag around it is what lets a release build drop the
+     ;; branch. The ^boolean tag matters: without it the test is wrapped in
+     ;; cljs.core/truth_, a call Closure cannot see through, and the folded
+     ;; `false` ships along with everything behind it.
+     (when ^boolean goog/DEBUG
+       (when dev-build?
+         [:button.app-shell__dev-mark
+          {:type       "button"
+           :aria-label "Экспорт трассы"
+           :title      "Экспорт трассы"
+           :on         {:click [[:effect/export-trace]]}}
+          "D"]))
      [:div.app-shell__actions
       ;; Install stands on its own — it is not a sync action, and it is offered
       ;; before any account exists.
