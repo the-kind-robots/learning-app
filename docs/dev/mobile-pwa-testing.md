@@ -86,6 +86,9 @@ Each entry is `{t, kind, data}` with `t` in ms since page start
 | `dispatch-error` | `{phase, source, message, stack}` | Nexus caught a throw in an action, an effect, or the render a save triggered — errors the dispatcher otherwise drops silently |
 | `pointerdown`, `pointerup`, `pointercancel`, `click`, `contextmenu` | `{target, card, pointerType}` | each step of a tap inside `.switcher`; `card` is the `data-collection-id` of the card under the finger (`main` for the main card). A lost tap reads as `pointerdown` → `pointercancel` (the browser took the gesture) or `pointerdown` → `pointerup` with no `click` and a `render` in between (the node was replaced) |
 | `touchcancel` | `{target}` | the browser cancelled a touch anywhere on the page |
+| `pointercancel` (extra fields) | `{movedPx, scrollDelta}` | how far the finger went and how much the page scrolled since the pointerdown — the tap recovery's inputs |
+| `tap-recovered` | `{moved-px, scroll-delta}` | a cancelled tap that did not move was taken as a tap and its action dispatched |
+| `pull-skipped` | `{sinceMs}` | a navigation asked for a pull within 30 s of the last completed pass with nothing written locally; no pass ran |
 | `render` | `{ms}` | one Replicant render and its duration |
 | `longtask` | `{start, duration}` | the main thread was blocked for ≥ 50 ms |
 | `error` / `unhandledrejection` | `{message, stack, …}` | uncaught script error / rejected promise |

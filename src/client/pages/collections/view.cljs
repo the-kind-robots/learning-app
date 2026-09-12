@@ -45,8 +45,9 @@
    {:replicant/key "main"
     :data-collection-id "main"
     :class (when (nil? active-id) "tab-card--active")
-    :on {:click [[:effect/stop-propagation]
-                 [:action/handle-main-tab-click]]}}
+    :on {:click       [[:effect/stop-propagation]
+                       [:action/handle-main-tab-click]]
+         :pointerdown [[:effect/begin-tap [[:action/handle-main-tab-click]]]]}}
    (card-preview {:name "Всё подряд" :preview-words preview-words})])
 
 

@@ -244,8 +244,10 @@
 (defonce ^:private trace (array))
 
 
-(defn- trace!
-  "Appends one entry: `kind` a string, `data` a plain JS object or nil."
+(defn trace!
+  "Appends one entry: `kind` a string, `data` a plain JS object or nil.
+   Public for the few product effects that report a decision here under
+   goog.DEBUG."
   [kind data]
   (.push trace #js {:t (.now js/performance) :kind kind :data data})
   (when (> (.-length trace) trace-limit)
@@ -429,18 +431,39 @@
   ;; pointerdown -> pointerup -> no click with a render in between (the
   ;; touched node was replaced). The card's id comes from its
   ;; data-collection-id, which survives a re-render where the node may not.
-  (doseq [event ["pointerdown" "pointerup" "pointercancel" "click" "contextmenu"]]
+  ;; A pointercancel also says how far the finger went and whether the page
+  ;; scrolled since the pointerdown, which is what the tap recovery decides
+  ;; on (pages.collections.tap).
+  (let [down (volatile! nil)]
     (.addEventListener js/document
-                       event
+                       "pointermove"
                        (fn [^js e]
-                         (when-let [^js target (.-target e)]
-                           (when (.closest target ".switcher")
-                             (trace! event
-                                     #js {:target      (.-className target)
-                                          :card        (some-> (.closest target "[data-collection-id]")
-                                                               (.getAttribute "data-collection-id"))
-                                          :pointerType (.-pointerType e)}))))
-                       #js {:capture true :passive true}))
+                         (when-let [{:keys [x y]} @down]
+                           (vswap! down update :moved-px max (js/Math.hypot (- (.-clientX e) x) (- (.-clientY e) y)))))
+                       #js {:capture true :passive true})
+    (doseq [event ["pointerdown" "pointerup" "pointercancel" "click" "contextmenu"]]
+      (.addEventListener js/document
+                         event
+                         (fn [^js e]
+                           (when-let [^js target (.-target e)]
+                             (when (.closest target ".switcher")
+                               (let [scroll-top (or (some-> js/document .-scrollingElement .-scrollTop) 0)
+                                     data       #js {:target      (.-className target)
+                                                     :card        (some-> (.closest target "[data-collection-id]")
+                                                                          (.getAttribute "data-collection-id"))
+                                                     :pointerType (.-pointerType e)}]
+                                 (case event
+                                   "pointerdown"   (vreset! down
+                                                            {:x        (.-clientX e)
+                                                             :y        (.-clientY e)
+                                                             :moved-px 0
+                                                             :scroll-top scroll-top})
+                                   "pointercancel" (when-let [{:keys [moved-px] start :scroll-top} @down]
+                                                     (set! (.-movedPx data) moved-px)
+                                                     (set! (.-scrollDelta data) (- scroll-top start)))
+                                   nil)
+                                 (trace! event data)))))
+                         #js {:capture true :passive true})))
   (.addEventListener js/document
                      "touchcancel"
                      (fn [^js e]

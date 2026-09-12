@@ -103,3 +103,14 @@ A collection card SHALL take a long press as its own gesture: pressing a card SH
 #### Scenario: Quick double tap on a card
 - **WHEN** the user taps a collection card twice in quick succession
 - **THEN** the page does not zoom
+
+### Requirement: A tap the browser cancels without movement still opens the collection
+When the browser cancels a touch on a collection card (`pointercancel` with no `click` following), the card SHALL take it as a tap if the pointer travelled at most 10 px since it went down and the page scrolled at most 2 px in the meantime. A gesture SHALL fire at most once: a `click` the browser delivers after such a recovered cancel does nothing.
+
+#### Scenario: Cancelled tap without movement
+- **WHEN** the user taps a collection card and the browser cancels the touch after at most 10 px of movement and at most 2 px of page scroll
+- **THEN** the collection is activated as if the tap had completed
+
+#### Scenario: Cancelled touch that moved
+- **WHEN** the browser cancels a touch on a card after it travelled more than 10 px or the page scrolled more than 2 px
+- **THEN** nothing is activated
