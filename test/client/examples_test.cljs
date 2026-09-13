@@ -214,18 +214,6 @@
          (is (empty? examples)))))))
 
 
-(deftest task-handler-returns-true-when-word-deleted
-  (async-testing "task handler returns true when word is deleted"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [result (await (tasks/execute-task
-                           {:task-type "example-fetch"
-                            :data      {:word-id "deleted-word"}}
-                           (task-env dbs)))]
-        (is (true? result)))))))
-
-
 (deftest task-handler-fetches-and-saves-on-success
   (async-testing "task handler fetches and saves example"
     (let [example        {:value "Der Hund läuft" :translation "The dog runs"}
@@ -240,14 +228,9 @@
          (with-test-dbs
           (^:async fn
            [dbs]
-           (await (db/insert (:user/db dbs)
-                             {:_id         "word-123"
-                              :type        "vocab"
-                              :value       "Hund"
-                              :translation [{:lang "ru" :value "собака"}]}))
            (let [result (await (tasks/execute-task
                                 {:task-type "example-fetch"
-                                 :data      {:word-id "word-123"}}
+                                 :data      {:word-id "word-123" :word "Hund" :translations ["собака"]}}
                                 (task-env dbs)))]
              (is (true? result))
              (is (= "/api/examples?word=Hund&translation=%D1%81%D0%BE%D0%B1%D0%B0%D0%BA%D0%B0"
@@ -273,15 +256,9 @@
          (with-test-dbs
           (^:async fn
            [dbs]
-           (await (db/insert (:user/db dbs)
-                             {:_id         "word-bank"
-                              :type        "vocab"
-                              :value       "Bank"
-                              :translation [{:lang "ru" :value "банк"}
-                                            {:lang "ru" :value "скамейка"}]}))
            (await (tasks/execute-task
                    {:task-type "example-fetch"
-                    :data      {:word-id "word-bank"}}
+                    :data      {:word-id "word-bank" :word "Bank" :translations ["банк" "скамейка"]}}
                    (task-env dbs)))
            (is
             (=
@@ -300,10 +277,9 @@
          (with-test-dbs
           (^:async fn
            [dbs]
-           (await (db/insert (:user/db dbs) {:_id "word-123" :type "vocab" :value "Hund"}))
            (let [result (await (tasks/execute-task
                                 {:task-type "example-fetch"
-                                 :data      {:word-id "word-123"}}
+                                 :data      {:word-id "word-123" :word "Hund" :translations []}}
                                 (task-env dbs)))]
              (is (false? result))))))
         (finally
@@ -323,10 +299,9 @@
          (with-test-dbs
           (^:async fn
            [dbs]
-           (await (db/insert (:user/db dbs) {:_id "word-123" :type "vocab" :value "Hund"}))
            (let [result (await (tasks/execute-task
                                 {:task-type "example-fetch"
-                                 :data      {:word-id "word-123"}}
+                                 :data      {:word-id "word-123" :word "Hund" :translations []}}
                                 (task-env dbs)))]
              (is (= {:retry-after-ms 3000} result))))))
         (finally
@@ -342,10 +317,9 @@
          (with-test-dbs
           (^:async fn
            [dbs]
-           (await (db/insert (:user/db dbs) {:_id "word-123" :type "vocab" :value "Hund"}))
            (let [result   (await (tasks/execute-task
                                   {:task-type "example-fetch"
-                                   :data      {:word-id "word-123"}}
+                                   :data      {:word-id "word-123" :word "Hund" :translations []}}
                                   (task-env dbs)))
                  examples (await (db-queries/fetch-examples (:device/db dbs)))]
              (is (false? result))

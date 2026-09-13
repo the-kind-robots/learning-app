@@ -2,7 +2,7 @@
   "Client module for fetching example sentences from the backend."
   (:refer-clojure :exclude [list find])
   (:require
-   [adapters.progress-store :as progress-store]
+   [adapters.repository :as repository]
    [db.pouch :as dbs]
    [lambdaisland.glogi :as log]
    [tasks :as tasks]
@@ -12,6 +12,13 @@
 (def schema
   {:type "example"
    :db   :device/db})
+
+
+(defn- doc->example
+  "Outward an example is
+   `{:id :word-id :collection-id :word :value :translation :structure :created-at}`."
+  [doc]
+  (repository/entity doc))
 
 
 (def invalid-response-message
@@ -117,7 +124,7 @@
   (let [selector (merge {:word-id word-id}
                         (collection-selector collection-id))
         {examples :docs} (await (dbs/find dbs schema {:selector selector}))]
-    (first examples)))
+    (some-> (first examples) doc->example)))
 
 
 (defn ^:async list
@@ -126,7 +133,7 @@
   (let [selector (merge {:word-id {:$in word-ids}}
                         (collection-selector collection-id))
         {examples :docs} (await (dbs/find dbs schema {:selector selector}))]
-    examples))
+    (mapv doc->example examples)))
 
 
 (defn ^:async remove!
@@ -144,7 +151,7 @@
   [dbs collection-id]
   (let [{examples :docs} (await (dbs/find-all dbs schema {:selector {:collection-id collection-id}}))]
     (when (seq examples)
-      (await (dbs/bulk-docs dbs schema (mapv #(assoc % :_deleted true) examples))))))
+      (await (dbs/bulk-docs dbs schema (mapv repository/tombstone examples))))))
 
 
 (defn ^:async purge-by-word!
@@ -153,37 +160,35 @@
   [dbs word-id]
   (let [{examples :docs} (await (dbs/find-all dbs schema {:selector {:word-id word-id}}))]
     (when (seq examples)
-      (await (dbs/bulk-docs dbs schema (mapv #(assoc % :_deleted true) examples))))))
+      (await (dbs/bulk-docs dbs schema (mapv repository/tombstone examples))))))
 
 
 (defn request!
-  [dbs clock word-id collection-id collection-name]
+  "Queues an example fetch for `word` — `{:id :value :translation}` — in
+   `collection-id`. The task carries what the fetch needs, so it runs
+   without reading the word back."
+  [dbs clock word collection-id collection-name]
   (tasks/create-task! dbs
                       clock
                       "example-fetch"
-                      {:collection-id   collection-id
+                      {:collection-id collection-id
                        :collection-name collection-name
-                       :word-id         word-id}))
+                       :translations  (russian-translations word)
+                       :word          (:value word)
+                       :word-id       (:id word)}))
 
 
 (defmethod tasks/execute-task "example-fetch"
   [{:keys [data]} {:keys [clock dbs]}]
-  (let [{:keys [collection-id collection-name word-id]} data]
+  (let [{:keys [collection-id collection-name translations word word-id]} data]
     ((fn ^:async f
        []
-       (let [word-doc (await (dbs/get dbs progress-store/word-schema word-id))]
-         (if-not word-doc
-           (do
-             (log/warn :example-fetch/word-not-found {:word-id word-id})
-             true)
-           (try
-             (let [example (await (fetch-one (:value word-doc)
-                                             (russian-translations word-doc)
-                                             collection-name))]
-               (await (save-example! dbs clock word-id (:value word-doc) collection-id example))
-               true)
-             (catch js/Error err
-               (log/warn :example-fetch/failed {:word-id word-id :error (ex-message err)})
-               (if-let [retry-ms (:retry-after-ms (ex-data err))]
-                 {:retry-after-ms retry-ms}
-                 false)))))))))
+       (try
+         (let [example (await (fetch-one word translations collection-name))]
+           (await (save-example! dbs clock word-id word collection-id example))
+           true)
+         (catch js/Error err
+           (log/warn :example-fetch/failed {:word-id word-id :error (ex-message err)})
+           (if-let [retry-ms (:retry-after-ms (ex-data err))]
+             {:retry-after-ms retry-ms}
+             false)))))))

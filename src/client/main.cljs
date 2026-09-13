@@ -2,7 +2,9 @@
   (:require
    [adapters.collections :as collections-adapter]
    [adapters.examples :as examples-adapter]
-   [adapters.progress-store :as progress-store-adapter]
+   [adapters.lessons :as lessons-adapter]
+   [adapters.reviews :as reviews-adapter]
+   [adapters.words :as words-adapter]
    [application]
    [db.pouch :as pouch]
    [db.sqlite :as sqlite]
@@ -21,13 +23,16 @@
    [pages.lesson.effects]
    [pages.words.actions]
    [pages.words.effects]
+   [ports.backup :as backup]
    [ports.clock :as clock]
    [ports.collections :as collections]
    [ports.dictionary :as dictionary]
    [ports.examples :as examples]
+   [ports.lessons :as lessons]
    [ports.navigation :as navigation]
-   [ports.progress-store :as progress-store]
+   [ports.reviews :as reviews]
    [ports.task-queue :as task-queue]
+   [ports.words :as words]
    [reitit.frontend :as rf]
    [reitit.frontend.controllers :as rfc]
    [reitit.frontend.easy :as rfe]
@@ -40,9 +45,9 @@
 (def ^:private schemas
   "Every document type the app stores, declared by the adapter that owns it.
    The engine learns its indexes, views and routing from this list alone."
-  [progress-store-adapter/word-schema
-   progress-store-adapter/review-schema
-   progress-store-adapter/lesson-schema
+  [words-adapter/schema
+   reviews-adapter/schema
+   lessons-adapter/schema
    collections-adapter/schema
    examples-adapter/schema
    tasks/schema])
@@ -99,9 +104,20 @@
     :port/dictionary    {:requires {:db :db/sqlite}
                          :start    dictionary/start!}
 
-    :port/progress-store {:requires {:db    :db/pouch
-                                     :clock :port/clock}
-                          :start    progress-store/start!}
+    :port/words         {:requires {:db    :db/pouch
+                                    :clock :port/clock}
+                         :start    words/start!}
+
+    :port/reviews       {:requires {:db    :db/pouch
+                                    :clock :port/clock}
+                         :start    reviews/start!}
+
+    :port/lessons       {:requires {:db    :db/pouch
+                                    :clock :port/clock}
+                         :start    lessons/start!}
+
+    :port/backup        {:requires {:db :db/pouch}
+                         :start    backup/start!}
 
     :port/examples      {:requires {:clock :port/clock
                                     :db    :db/pouch}
@@ -114,11 +130,15 @@
                          :start    collections/start!}
 
     :app/capabilities   {:requires {:capabilities/sync :sync/identity
+                                    :backup            :port/backup
+                                    :clock             :port/clock
                                     :collections       :port/collections
                                     :dictionary        :port/dictionary
                                     :examples          :port/examples
+                                    :lessons           :port/lessons
                                     :navigation        :port/navigation
-                                    :progress-store    :port/progress-store}
+                                    :reviews           :port/reviews
+                                    :words             :port/words}
                          :start    identity}
 
     :app/render         {:requires {:capabilities :app/capabilities

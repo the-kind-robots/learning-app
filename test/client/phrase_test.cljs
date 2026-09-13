@@ -6,7 +6,8 @@
    [client.support.db-queries :as db-queries]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
-   [ports.progress-store :as progress-store]
+   [ports.reviews :as reviews]
+   [ports.words :as words]
    [use-cases.phrase :as sut]
    [use-cases.vocabulary :as vocabulary]
    [utils :as utils]))
@@ -34,17 +35,16 @@
 
 (defn- test-capabilities
   [dbs example-requests]
-  {:progress-store
-   (progress-store/start! {:db    dbs
-                           :clock {:clock/now-iso time/now-iso
-                                   :clock/now-ms  time/now-ms}})
-   :collections
-   {:collections/active-id (fn [] nil)
-    :collections/get       (fn [_] nil)
-    :collections/add-word! (fn [_ _] (js/Promise.resolve nil))}
-   :examples
-   {:examples/find     (fn [_ _] (js/Promise.resolve nil))
-    :examples/request! (fn [& args] (swap! example-requests conj args) nil)}})
+  (let [clock {:clock/now-iso time/now-iso
+               :clock/now-ms  time/now-ms}]
+    {:clock       clock
+     :reviews     (reviews/start! {:db dbs :clock clock})
+     :words       (words/start! {:db dbs :clock clock})
+     :collections {:collections/active-id (fn [] nil)
+                   :collections/get       (fn [_] nil)
+                   :collections/add-word! (fn [_ _] (js/Promise.resolve nil))}
+     :examples    {:examples/find     (fn [_ _] (js/Promise.resolve nil))
+                   :examples/request! (fn [& args] (swap! example-requests conj args) nil)}}))
 
 
 (deftest add-creates-phrase-and-initial-review-without-examples

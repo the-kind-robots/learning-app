@@ -4,9 +4,6 @@
    [utils :as utils]))
 
 
-(def lesson-id "lesson")
-
-
 (def default-vocab-per-lesson 3)
 
 
@@ -103,13 +100,11 @@
 (defn initial-state
   [vocab examples trial-selector]
   (let [trials (generate-trials vocab examples)]
-    {:_id           lesson-id
-     :type          "lesson"
-     :options       {:trial-selector trial-selector}
-     :trials        trials
+    {:options          {:trial-selector trial-selector}
+     :trials           trials
      :remaining-trials trials
-     :current-trial (select-trial (remove locked-trial? trials) trial-selector)
-     :last-result   nil}))
+     :current-trial    (select-trial (remove locked-trial? trials) trial-selector)
+     :last-result      nil}))
 
 
 (defn expected-answer

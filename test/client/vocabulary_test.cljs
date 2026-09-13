@@ -8,7 +8,8 @@
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
-   [ports.progress-store :as progress-store]
+   [ports.reviews :as reviews]
+   [ports.words :as words]
    [use-cases.vocabulary :as sut]
    [utils :as utils]))
 
@@ -35,22 +36,22 @@
 
 (defn- test-capabilities
   [dbs]
-  {:progress-store
-   (progress-store/start! {:db    dbs
-                           :clock {:clock/now-iso time/now-iso
-                                   :clock/now-ms  time/now-ms}})
-   ;; Vocabulary use-case calls into collections (active-id) and examples
-   ;; (request!/find) to scope per-collection examples. Stub these as
-   ;; main-card-active no-ops so tests stay isolated.
-   :collections
-   {:collections/active-id     (fn [] nil)
-    :collections/get           (fn [_] nil)
-    :collections/add-word!     (fn [_ _] (js/Promise.resolve nil))
-    :collections/exclude-word! (fn [_ _] (js/Promise.resolve nil))}
-   :examples
-   {:examples/find     (fn [_ _] (js/Promise.resolve nil))
-    :examples/purge-by-word! (fn [word-id] (examples/purge-by-word! dbs word-id))
-    :examples/request! (fn [_ _ _] nil)}})
+  (let [clock {:clock/now-iso time/now-iso
+               :clock/now-ms  time/now-ms}]
+    {:clock       clock
+     :reviews     (reviews/start! {:db dbs :clock clock})
+     :words       (words/start! {:db dbs :clock clock})
+     ;; Vocabulary use-case calls into collections (active-id) and examples
+     ;; (request!/find) to scope per-collection examples. Stub these as
+     ;; main-card-active no-ops so tests stay isolated.
+     :collections {:collections/active-id     (fn [] nil)
+                   :collections/get           (fn [_] nil)
+                   :collections/add-word!     (fn [_ _] (js/Promise.resolve nil))
+                   :collections/docs-without-word (fn [_] (js/Promise.resolve []))
+                   :collections/exclude-word! (fn [_ _] (js/Promise.resolve nil))}
+     :examples    {:examples/find     (fn [_ _] (js/Promise.resolve nil))
+                   :examples/purge-by-word! (fn [word-id] (examples/purge-by-word! dbs word-id))
+                   :examples/request! (fn [_ _ _] nil)}}))
 
 
 (deftest add-creates-vocab-and-initial-review
@@ -142,7 +143,7 @@
       [dbs]
       (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
             result (await (sut/get (test-capabilities dbs) word-id))]
-        (is (= word-id (:_id result)))
+        (is (= word-id (:id result)))
         (is (= "der Hund" (:value result)))
         (is (= "пёс" (-> result :translation first :value)))
         (is (number? (:retention-level result))))))))
@@ -155,7 +156,7 @@
       [dbs]
       (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
             result (await (sut/update! (test-capabilities dbs) word-id "лиса"))]
-        (is (= word-id (:_id result)))
+        (is (= word-id (:id result)))
         (is (= "der Hund" (:value result)))
         (is (= "лиса" (-> result :translation first :value))))))))
 

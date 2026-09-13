@@ -21,5 +21,5 @@
                               [example-id]
                               (examples/remove! db example-id))
    :examples/request!       (fn request!
-                              [word-id collection-id collection-name]
-                              (examples/request! db clock word-id collection-id collection-name))})
+                              [word collection-id collection-name]
+                              (examples/request! db clock word collection-id collection-name))})
