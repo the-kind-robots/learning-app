@@ -78,7 +78,9 @@
                                  (or (utils/includes? value search)
                                      (some #(utils/includes? (:value %) search) translation)))))
         ;; A narrowed list reads its reviews by key; the whole vocabulary
-        ;; reads every review, which the repository does cheaper.
+        ;; reads every review, which is the cheaper of the two when every
+        ;; word is wanted anyway (#404, 9000 reviews: 800 keys 0.8 s, all
+        ;; rows 1.1 s, 1500 keys 1.5 s).
         narrowed-ids (when (or (some? word-ids) (utils/non-blank search))
                        (mapv :id candidates))
         reviews      (await ((:reviews/by-word reviews) narrowed-ids))

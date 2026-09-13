@@ -12,6 +12,7 @@
    indexes and design documents."
   (:refer-clojure :exclude [get find remove])
   (:require
+   [clojure.string :as str]
    [db :as db]
    [db-migrations :as db-migrations]
    [lambdaisland.glogi :as log]
@@ -44,6 +45,14 @@
     #(.cancel ^js feed)))
 
 
+(defn user-doc?
+  "Replication filter: design documents stay on the device. CouchDB builds
+   an index for every design document it receives, and the server never
+   queries user-db through one."
+  [doc]
+  (not (str/starts-with? (.-_id ^js doc) "_design/")))
+
+
 (defn sync-once!
   "Runs one bidirectional replication pass of db-key against the account's copy
    on the server. Resolves when the pass finishes and never rejects — a failed
@@ -55,7 +64,7 @@
                     ((db->remote-name db-key) account-id))]
     (js/Promise.
      (fn [resolve _reject]
-       (doto (db/sync (db-key dbs) {:live false :remote-url remote})
+       (doto (db/sync (db-key dbs) {:filter user-doc? :live false :remote-url remote})
          (.on "complete" (fn [_] (resolve true)))
          (.on "error"
               (fn [err]
@@ -109,6 +118,21 @@
   "Like `find`, without a page limit."
   [dbs schema query]
   (db/find-all (database dbs schema) (typed schema query)))
+
+
+(defn view
+  "A reference to one of `schema`'s views, for `query`: the design document
+   carries the declared name and its one view is `rows`."
+  [schema view-name]
+  {:db   (:db schema)
+   :view (str view-name "/rows")})
+
+
+(defn query
+  "Rows of a view: `{:rows [{:id .. :key .. :value ..}]}`. `opts` are the
+   PouchDB query options (`:keys`, `:startkey`, `:endkey`, ...)."
+  [dbs {:keys [db view]} opts]
+  (db/query (db dbs) view opts))
 
 
 (defn- ^:async ensure-index!

@@ -9,8 +9,17 @@
 
 
 (def schema
-  {:type "vocab"
-   :db   :user/db})
+  {:type  "vocab"
+   :db    :user/db
+   :views {"vocab-preview"
+           {:map
+            "function (doc) { if (doc.type === 'vocab') emit(doc._id, [doc.kind, doc.value, doc.translation]); }"}}})
+
+
+(def ^:private preview-view
+  "One row per word, keyed by id, valued `[kind value translation]` — what a
+   list of words shows, without fetching the documents."
+  (dbs/view schema "vocab-preview"))
 
 
 (defn- stamp
@@ -22,18 +31,18 @@
 
 (defn ^:async previews
   "Every word and phrase as `{:id :kind :value :translation}` — what a list
-   shows — or only `word-ids` when given."
+   shows — or only `word-ids` when given. Read from the vocab view, so no
+   document is fetched."
   [dbs word-ids]
-  (let [{docs :docs} (await (dbs/find-all dbs
-                                          schema
-                                          (cond-> {}
-                                            word-ids (assoc :selector {:_id {:$in (vec word-ids)}}))))]
-    (mapv (fn [{id :_id :keys [kind value translation]}]
+  (let [{rows :rows} (await (dbs/query dbs
+                                       preview-view
+                                       (cond-> {} word-ids (assoc :keys (vec word-ids)))))]
+    (mapv (fn [{id :id [kind value translation] :value}]
             {:id          id
              :kind        kind
              :translation translation
              :value       value})
-          docs)))
+          rows)))
 
 
 (defn ^:async count-words

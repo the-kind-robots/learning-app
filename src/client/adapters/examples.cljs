@@ -10,8 +10,10 @@
 
 
 (def schema
-  {:type "example"
-   :db   :device/db})
+  {:type    "example"
+   :db      :device/db
+   :indexes [{:name "by-type-word-id" :fields [:type :word-id]}
+             {:name "by-type-collection-id" :fields [:type :collection-id]}]})
 
 
 (defn- doc->example
@@ -132,7 +134,7 @@
   [dbs word-ids collection-id]
   (let [selector (merge {:word-id {:$in word-ids}}
                         (collection-selector collection-id))
-        {examples :docs} (await (dbs/find dbs schema {:selector selector}))]
+        {examples :docs} (await (dbs/find-all dbs schema {:selector selector}))]
     (mapv doc->example examples)))
 
 

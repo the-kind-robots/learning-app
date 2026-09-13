@@ -7,20 +7,29 @@
 
 
 (def schema
-  {:type "review"
-   :db   :user/db})
+  {:type    "review"
+   :db      :user/db
+   :indexes [{:name "by-type-word-id" :fields [:type :word-id]}]
+   :views   {"reviews-by-word"
+             {:map
+              "function (doc) { if (doc.type === 'review') emit(doc.word_id, [doc.created_at, doc.retained]); }"}}})
+
+
+(def ^:private by-word-view
+  "One row per review, keyed by word id, valued `[created_at retained]` —
+   what retention needs, without fetching the review documents."
+  (dbs/view schema "reviews-by-word"))
 
 
 (defn ^:async reviews-by-word
   "Reviews as `{:word-id :created-at :retained}`, grouped by word id. With
-   `word-ids` only those words' reviews are read; nil reads every review."
+   `word-ids` only those words are read, by key; nil reads the whole view."
   [dbs word-ids]
-  (let [{reviews :docs} (await (dbs/find-all dbs
-                                             schema
-                                             (cond-> {}
-                                               word-ids (assoc :selector {:word-id {:$in (vec word-ids)}}))))]
-    (->> reviews
-         (map (fn [{:keys [word-id created-at retained]}]
+  (let [{rows :rows} (await (dbs/query dbs
+                                       by-word-view
+                                       (cond-> {} word-ids (assoc :keys (vec word-ids)))))]
+    (->> rows
+         (map (fn [{word-id :key [created-at retained] :value}]
                 {:created-at created-at
                  :retained   retained
                  :word-id    word-id}))
