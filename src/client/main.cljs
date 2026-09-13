@@ -169,9 +169,11 @@
                          :start    (fn [{:keys [capabilities render]}]
                                      (let [dispatch (:dispatch render)]
                                        (dispatch [[:effect/load-account]])
+                                       ;; A reconnect after offline is not a
+                                       ;; navigation: it passes the throttle.
                                        (js/window.addEventListener
                                         "online"
-                                        #(dispatch [[:effect/sync-pull]]))
+                                        #(dispatch [[:effect/sync-pull :poke]]))
                                        ;; Push channel (ADR-0009): a poke pulls
                                        ;; through the normal path. A waiting
                                        ;; pairing dialog closes only when the
@@ -179,7 +181,7 @@
                                        ;; dialog's nonce.
                                        (when (get-in capabilities [:capabilities/sync :sync/account-id])
                                          (sync/connect-push!
-                                          #(dispatch [[:effect/sync-pull]])))))}
+                                          #(dispatch [[:effect/sync-pull :poke]])))))}
 
     :app/router         {:requires {:render :app/render}
                          :after    [:worker/service-worker

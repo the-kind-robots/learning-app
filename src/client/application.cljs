@@ -46,9 +46,9 @@
   ;; and reloading the page for it re-rendered the themes screen every ~2 min
   ;; on the phone. The pairing receipt is itself a pulled document, so the
   ;; same condition covers the dialog.
-  (fn sync-pull [{:keys [capabilities dispatch]} _]
+  (fn sync-pull [{:keys [capabilities dispatch]} _ & [reason]]
     (when-let [pull! (get-in capabilities [:capabilities/sync :sync/pull!])]
-      (some-> (pull!)
+      (some-> (pull! reason)
               (.then (fn [{:keys [pulled]}]
                        (when (and pulled (pos? pulled))
                          (dispatch [[:action/reload-page] [:action/confirm-pairing]]))))))))
