@@ -1,7 +1,8 @@
 /*
- * Cards stay at --card-width until the viewport gets too narrow, then flex
- * shrinks them. Padding scales from --card-min-margin up to one card width
- * on wide screens. Everything below derives from these constants.
+ * Tiles in a masonry: N flex columns, each tile placed by the presenter
+ * into the lightest column so the alphabetical order reads by rows. The
+ * column count (2 under 700 px, 4 from it) lives in state; CSS only lays
+ * out what it is given.
  */
 body:has(.switcher) {
   background: rgb(var(--color-polar));
@@ -9,20 +10,15 @@ body:has(.switcher) {
 
 
 .switcher {
-  --card-width: 200px;
-  --card-gap: 16px;
-  --card-min-margin: 16px;
+  --tile-gap: 10px;
 
   background: rgb(var(--color-polar));
   display: flex;
   flex-direction: column;
   min-height: 100svh;
-  padding-block: calc(env(safe-area-inset-top, 0px) + 64px) calc(32px + env(safe-area-inset-bottom));
-  padding-inline: clamp(
-    var(--card-min-margin),
-    calc((100vw - var(--card-width) * 2 - var(--card-gap)) / 2),
-    var(--card-width)
-  );
+  /* The bottom inset keeps the floating button off the last row. */
+  padding-block: calc(env(safe-area-inset-top, 0px) + 64px) calc(96px + env(safe-area-inset-bottom, 0px));
+  padding-inline: 16px;
 }
 
 .switcher__title {
@@ -53,95 +49,206 @@ body:has(.switcher) {
   margin: 0;
 }
 
-.switcher__grid {
+
+/* Masonry */
+
+.masonry {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--card-gap);
-  justify-content: center;
+  gap: var(--tile-gap);
+  margin-inline: auto;
+  max-width: 1080px;
+  width: 100%;
 }
 
-.tab-card {
-  flex: 0 1 var(--card-width);
+.masonry__col {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--tile-gap);
+  min-width: 0;
 }
 
 
-/* Tab card */
+/* Tile */
 
-.tab-card {
+.tile {
   /*
    * A long press is our gesture (editing mode), not the browser's: without
-   * this a press selects the preview text and pops the callout, and a quick
-   * double tap zooms the page instead of reaching the card twice.
-   * `manipulation` keeps pan and pinch, drops double-tap zoom and its
-   * click delay.
+   * this a press selects the name and pops the callout, and a quick double
+   * tap zooms the page instead of reaching the tile twice. `manipulation`
+   * keeps pan and pinch, drops double-tap zoom and its click delay.
    */
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 
-  --tab-card-border: rgb(var(--color-swan));
+  --accent: rgb(var(--color-owl));
 
-  aspect-ratio: 9 / 16;
   background: rgb(var(--color-snow));
-  border: 2px solid var(--tab-card-border);
-  border-radius: 20px;
-  box-shadow: 0 4px 14px -4px rgb(0 0 0 / 18%);
+  border: 2px solid rgb(var(--color-swan));
+  border-bottom: 4px solid var(--accent);
+  border-radius: 14px;
+  box-shadow: 0 4px 12px -6px rgb(0 0 0 / 14%);
   cursor: pointer;
-  font-family: inherit;
-  overflow: hidden;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: space-between;
+  min-height: 76px;
+  padding: 10px 12px;
   position: relative;
-  transition: background-color 0.12s, transform 0.18s, box-shadow 0.18s, border-color 0.18s, border-width 0.12s;
+  transition: background-color 0.12s, transform 0.18s, box-shadow 0.18s, border-color 0.18s;
 }
 
-.tab-card:hover {
-  background: color-mix(in oklab, var(--tab-card-border) 5%, rgb(var(--color-snow)));
-  box-shadow: 0 12px 22px -12px rgb(0 0 0 / 18%);
+.tile:hover {
+  box-shadow: 0 10px 18px -10px rgb(0 0 0 / 18%);
   transform: translateY(-2px);
 }
 
-.tab-card--active,
-.tab-card--active:hover {
-  border-width: 3px;
-  box-shadow:
-    0 0 0 4px color-mix(in oklab, var(--tab-card-border) 22%, transparent),
-    0 0 18px -2px color-mix(in oklab, var(--tab-card-border) 55%, transparent),
-    0 6px 16px -10px rgb(0 0 0 / 18%);
+.tile--active,
+.tile--active:hover {
+  background: color-mix(in oklab, var(--accent) 8%, rgb(var(--color-snow)));
+  border-color: var(--accent);
 }
 
-.tab-card--editing,
-.tab-card--editing:hover {
+.tile--editing,
+.tile--editing:hover {
   box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--tab-card-border) 30%, transparent),
-    0 14px 28px -10px rgb(0 0 0 / 22%);
-  transform: scale(1.04);
+    0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent),
+    0 12px 24px -10px rgb(0 0 0 / 22%);
+  transform: scale(1.03);
 }
 
-.tab-card--active.tab-card--editing,
-.tab-card--active.tab-card--editing:hover {
-  box-shadow:
-    0 0 0 4px color-mix(in oklab, var(--tab-card-border) 22%, transparent),
-    0 0 18px -2px color-mix(in oklab, var(--tab-card-border) 55%, transparent),
-    0 14px 28px -10px rgb(0 0 0 / 22%);
+/* Palette cycled by position in the reading order; the presenter counts. */
+.tile--accent-1 { --accent: rgb(var(--color-owl)); }
+.tile--accent-2 { --accent: rgb(var(--color-macaw)); }
+.tile--accent-3 { --accent: rgb(var(--color-fox)); }
+.tile--accent-4 { --accent: rgb(var(--color-starfish)); }
+.tile--accent-5 { --accent: rgb(var(--color-beetle)); }
+.tile--accent-6 { --accent: rgb(var(--color-bee)); }
+.tile--accent-7 { --accent: rgb(var(--color-cardinal)); }
+.tile--accent-8 { --accent: rgb(var(--color-peacock)); }
+
+.tile__name {
+  color: rgb(var(--color-black-text));
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-/* Palette cycled by DOM position. */
-.tab-card:nth-of-type(8n+1) { --tab-card-border: rgb(var(--color-owl)); }
-.tab-card:nth-of-type(8n+2) { --tab-card-border: rgb(var(--color-macaw)); }
-.tab-card:nth-of-type(8n+3) { --tab-card-border: rgb(var(--color-fox)); }
-.tab-card:nth-of-type(8n+4) { --tab-card-border: rgb(var(--color-starfish)); }
-.tab-card:nth-of-type(8n+5) { --tab-card-border: rgb(var(--color-beetle)); }
-.tab-card:nth-of-type(8n+6) { --tab-card-border: rgb(var(--color-bee)); }
-.tab-card:nth-of-type(8n+7) { --tab-card-border: rgb(var(--color-cardinal)); }
-.tab-card:nth-of-type(8n)   { --tab-card-border: rgb(var(--color-peacock)); }
+.tile__count {
+  color: rgb(var(--color-wolf));
+  flex-shrink: 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+
+/* Folder tile: a header, then a row per child */
+
+.tile--folder {
+  cursor: default;
+  gap: 0;
+  padding: 0;
+}
+
+.tile--folder:hover {
+  box-shadow: 0 4px 12px -6px rgb(0 0 0 / 14%);
+  transform: none;
+}
+
+.tile__head {
+  align-items: baseline;
+  border-radius: 12px 12px 0 0;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  position: relative;
+  transition: background-color 0.12s;
+}
+
+.tile__head--active {
+  background: color-mix(in oklab, var(--accent) 8%, rgb(var(--color-snow)));
+}
+
+.tile__head--editing {
+  background: color-mix(in oklab, var(--accent) 14%, rgb(var(--color-snow)));
+}
+
+.tile__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 6px;
+}
+
+.tile__row {
+  border-top: 1px solid rgb(var(--color-swan));
+  color: rgb(var(--color-black-text));
+  cursor: pointer;
+  display: flex;
+  font-size: 15px;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: space-between;
+  line-height: 1.15;
+  padding: 8px 0 8px 10px;
+  position: relative;
+  transition: color 0.12s;
+}
+
+.tile__row::before {
+  background: color-mix(in oklab, var(--accent) 45%, rgb(var(--color-swan)));
+  border-radius: 2px;
+  bottom: 12px;
+  content: "";
+  left: 0;
+  position: absolute;
+  top: 12px;
+  width: 3px;
+}
+
+.tile__row-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tile__row--active {
+  color: var(--accent);
+}
+
+.tile__row--active::before {
+  background: var(--accent);
+}
+
+.tile__row--active .tile__count {
+  color: var(--accent);
+}
+
+.tile__row--editing {
+  background: color-mix(in oklab, var(--accent) 10%, rgb(var(--color-snow)));
+  margin-inline: -12px;
+  padding-inline: 22px 12px;
+}
+
+.tile__row--editing::before {
+  left: 12px;
+}
 
 
 /*
- * Close (X) button — quiet red glyph, only revealed when the card is in
- * the editing state (entered via long-press). No background or border.
+ * Close (X) button — quiet red glyph, only revealed when its tile or row
+ * is in the editing state (entered via long press). No background or border.
  */
-.tab-card__close {
+.tile__close {
   align-items: center;
   background: transparent;
   border: none;
@@ -154,178 +261,60 @@ body:has(.switcher) {
   place-items: center;
   pointer-events: none;
   position: absolute;
-  right: 6px;
-  top: 6px;
+  right: 4px;
+  top: 4px;
   transition: opacity 0.14s ease, color 0.12s ease;
   width: 24px;
   z-index: 4;
 }
 
-.tab-card__close:hover {
+.tile__row .tile__close {
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tile__close:hover {
   color: color-mix(in oklab, rgb(var(--color-cardinal)) 78%, #000);
 }
 
-.tab-card--editing .tab-card__close {
+.tile--editing .tile__close,
+.tile__head--editing .tile__close,
+.tile__row--editing .tile__close {
   opacity: 1;
   pointer-events: auto;
 }
 
-.tab-card__close-icon {
+.tile__close-icon {
   height: 14px;
   width: 14px;
 }
 
 
-/* New-set tile — dashed outline, no fill, pale green plus */
+/* Floating «+»: always on screen, over the grid's bottom inset. */
 
-.tab-card--new {
-  --tab-card-border: rgb(var(--color-owl));
-
-  background: transparent;
+.switcher__add {
+  background: rgb(var(--color-owl));
   border: none;
-  box-shadow: none;
+  border-radius: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 6px 16px -4px color-mix(in oklab, rgb(var(--color-owl)) 55%, transparent);
+  color: white;
   cursor: pointer;
   display: grid;
-  place-items: center;
-}
-
-.tab-card--new:hover {
-  background: color-mix(in oklab, var(--tab-card-border) 5%, transparent);
-  box-shadow: none;
-  transform: translateY(-2px);
-}
-
-.tab-card__dash-frame {
-  height: 100%;
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
-  width: 100%;
-}
-
-.tab-card__plus {
-  align-items: center;
-  color: color-mix(in oklab, rgb(var(--color-owl)) 55%, rgb(var(--color-snow)));
-  display: flex;
-  height: 64px;
-  justify-content: center;
-  width: 64px;
-}
-
-
-/*
- * Card preview — name + first N words. Container queries let typography
- * scale with card width so the same DOM fits small mobile cards and
- * roomier desktop cards.
- */
-.card-preview {
-  container-type: inline-size;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  height: 100%;
-  padding: 14px 12px 12px;
-}
-
-.card-preview__name {
-  -webkit-box-orient: vertical;
-  color: rgb(var(--color-black-text));
-  display: -webkit-box;
-  flex-shrink: 0;
-  font-size: clamp(14px, 11cqw, 24px);
-  font-weight: 900;
-  letter-spacing: -0.3px;
-  -webkit-line-clamp: 2;
-  line-height: 1.1;
-  margin: 0;
-  overflow: hidden;
-  padding: 4px 6px 8px;
-  text-align: center;
-  word-break: break-word;
-}
-
-.card-preview__name--placeholder {
-  color: rgb(var(--color-hare));
-  font-weight: 800;
-}
-
-.card-preview__list {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  list-style: none;
-  margin: 0;
-  min-height: 0;
-  overflow: hidden;
+  height: 56px;
   padding: 0;
+  place-items: center;
+  position: fixed;
+  right: 16px;
+  transition: transform 0.18s, box-shadow 0.18s;
+  width: 56px;
+  z-index: 5;
 }
 
-.card-preview__row {
-  align-items: center;
-  border-bottom: 1px solid color-mix(in oklab, rgb(var(--color-swan)) 55%, transparent);
-  display: grid;
-  font-size: clamp(9px, 6cqw, 14px);
-  gap: 6px;
-  grid-template-columns: 8cqw 1fr auto;
-  line-height: 1.1;
-  min-width: 0;
-  padding: 5px 2px;
-}
-
-.card-preview__row:last-child {
-  border-bottom: none;
-}
-
-.card-preview__dot {
-  border-radius: 50%;
-  height: clamp(5px, 2.4cqw, 8px);
-  justify-self: center;
-  width: clamp(5px, 2.4cqw, 8px);
-}
-
-.card-preview__de {
-  color: rgb(var(--color-eel));
-  font-weight: 800;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.card-preview__ru {
-  color: rgb(var(--color-wolf));
-  font-weight: 500;
-  min-width: 0;
-  overflow: hidden;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
-/* Empty card state — same copy as the empty word list */
-
-.card-preview__empty {
-  align-items: center;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 8px;
-  justify-content: center;
-  text-align: center;
-}
-
-.card-preview__empty-text {
-  color: rgb(var(--color-eel));
-  font-size: 14px;
-  font-weight: 700;
-  margin: 0;
-}
-
-.card-preview__empty-hint {
-  color: rgb(var(--color-wolf));
-  font-size: 12px;
-  margin: 0;
+.switcher__add:hover {
+  box-shadow: 0 10px 20px -6px color-mix(in oklab, rgb(var(--color-owl)) 60%, transparent);
+  transform: translateY(-2px);
 }
 
 
