@@ -11,8 +11,7 @@
   {:page/current :page/collections
    :page/load [:effect/load-collections]
    :collections/editing-id nil
-   :collections/loading? false
-   :collections/long-press-fired? false})
+   :collections/loading? false})
 
 
 (nxr/register-action! :action/open-collections
@@ -53,25 +52,13 @@
 
 (nxr/register-action! :action/handle-tab-click
   (fn handle-tab-click [state coll-id]
-    (cond
-      (:collections/long-press-fired? state)
-      [[:effect/save {:collections/long-press-fired? false}]]
-
-      (:collections/editing-id state)
+    (if (:collections/editing-id state)
       [[:effect/save {:collections/editing-id nil}]]
-
-      :else
       [[:effect/switch-active-collection coll-id]])))
 
 
 (nxr/register-action! :action/handle-main-tab-click
   (fn handle-main-tab-click [state _]
-    (cond
-      (:collections/long-press-fired? state)
-      [[:effect/save {:collections/long-press-fired? false}]]
-
-      (:collections/editing-id state)
+    (if (:collections/editing-id state)
       [[:effect/save {:collections/editing-id nil}]]
-
-      :else
       [[:effect/switch-active-collection]])))

@@ -43,9 +43,11 @@
   [{:keys [preview-words]} active-id]
   [:div.tab-card
    {:replicant/key "main"
+    :data-collection-id "main"
     :class (when (nil? active-id) "tab-card--active")
-    :on    {:click [[:effect/stop-propagation]
-                    [:action/handle-main-tab-click]]}}
+    :on {:click       [[:effect/stop-propagation]
+                       [:action/handle-main-tab-click]]
+         :pointerdown [[:effect/begin-tap "main" [[:action/handle-main-tab-click]]]]}}
    (card-preview {:name "Всё подряд" :preview-words preview-words})])
 
 
@@ -65,10 +67,11 @@
   (let [editing? (= coll-id editing-id)]
     [:div.tab-card
      {:replicant/key coll-id
+      :data-collection-id coll-id
       :class [(when (= coll-id active-id) "tab-card--active")
               (when editing? "tab-card--editing")]
-      :on    {:click       [[:action/handle-tab-click coll-id]]
-              :pointerdown [[:effect/begin-long-press coll-id]]}}
+      :on {:click       [[:action/handle-tab-click coll-id]]
+           :pointerdown [[:effect/begin-long-press coll-id]]}}
      [:button.tab-card__close
       {:type       "button"
        :aria-label (str "Удалить набор «" (or (not-empty coll-name) "Без названия") "»")
@@ -86,9 +89,7 @@
    {:type       "button"
     :aria-label "Новый набор"
     :on         {:click [[:effect/stop-propagation]
-                         [:effect/save
-                          {:collections/editing-id        nil
-                           :collections/long-press-fired? false}]
+                         [:effect/save {:collections/editing-id nil}]
                          [:effect/prompt-create-collection]]}}
    [:svg.tab-card__dash-frame
     {:preserveAspectRatio "none" :viewBox "0 0 90 160" :aria-hidden "true"}

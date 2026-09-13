@@ -68,6 +68,18 @@ body:has(.switcher) {
 /* Tab card */
 
 .tab-card {
+  /*
+   * A long press is our gesture (editing mode), not the browser's: without
+   * this a press selects the preview text and pops the callout, and a quick
+   * double tap zooms the page instead of reaching the card twice.
+   * `manipulation` keeps pan and pinch, drops double-tap zoom and its
+   * click delay.
+   */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+
   --tab-card-border: rgb(var(--color-swan));
 
   aspect-ratio: 9 / 16;
