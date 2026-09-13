@@ -130,18 +130,47 @@
 
 
 (nxr/register-effect! :effect/begin-long-press
-  (fn begin-long-press [{:keys [dispatch] :as ctx} _ coll-id]
+  (fn begin-long-press [{:keys [dispatch] :as ctx} _ coll-id tap-actions]
     (track-gesture! ctx
                     coll-id
-                    [[:action/handle-tab-click coll-id]]
+                    tap-actions
                     (fn []
                       (dispatch [[:effect/save {:collections/editing-id coll-id}]])))))
 
 
 (nxr/register-effect! :effect/begin-tap
-  ;; The main card has no long press; it gets the same tap recovery.
+  ;; «Всё подряд» and a folder header with no document have no long press;
+  ;; they get the same tap recovery.
   (fn begin-tap [ctx _ card-id tap-actions]
     (track-gesture! ctx card-id tap-actions nil)))
+
+
+(def ^:private wide-viewport
+  "From here the masonry has four columns; below, two."
+  "(min-width: 700px)")
+
+
+(defn- columns-of
+  [^js media-query]
+  (if (.-matches media-query) 4 2))
+
+
+(defonce ^:private column-watch
+  ;; One listener for the page's life: the query fires on crossing 700 px
+  ;; only, so there is no resize storm and no per-tile measurement.
+  (volatile! nil))
+
+
+(nxr/register-effect! :effect/track-columns
+  (fn track-columns [{:keys [dispatch]} _]
+    (let [query (js/window.matchMedia wide-viewport)]
+      (when-not @column-watch
+        (vreset! column-watch true)
+        (.addEventListener query
+                           "change"
+                           (fn [^js e]
+                             (dispatch [[:effect/save {:collections/columns (columns-of e)}]]))))
+      (dispatch [[:effect/save {:collections/columns (columns-of query)}]]))))
 
 
 (nxr/register-effect! :effect/exit-editing-on-background
@@ -175,6 +204,20 @@
             (dispatch [[:effect/load-collections]]))))
       (catch js/Error err
         (log/error :effect/prompt-create-collection {:error (str err)})))))
+
+
+(nxr/register-effect! :effect/create-collection-and-activate
+  ;; A folder header with no document of its own: the tap creates the
+  ;; parent collection and opens it like any other tap.
+  (fn ^:async create-collection-and-activate
+    [{:keys [capabilities dispatch]} _ name]
+    (try
+      (let [{:keys [ok id]} (await (collections/create! capabilities name))]
+        (if ok
+          (dispatch [[:effect/switch-active-collection id]])
+          (dispatch [[:effect/load-collections]])))
+      (catch js/Error err
+        (log/error :effect/create-collection-and-activate {:error (str err)})))))
 
 
 (nxr/register-effect! :effect/delete-collection

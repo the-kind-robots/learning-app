@@ -6,9 +6,9 @@
 
 
 (def ^:private summary
-  {:active-id "collection:travel"
-   :items     [{:id "collection:travel" :name "Travel" :word-ids ["vocab:hund"] :words []}]
-   :main      {:words [{:id "vocab:hund" :value "Hund"}]}})
+  {:active-id   "collection:travel"
+   :items       [{:id "collection:travel" :name "Travel" :word-ids ["vocab:hund"]}]
+   :total-words 1})
 
 
 (defn- reread
@@ -25,7 +25,7 @@
 
 (deftest new-data-replaces-the-old
   (let [state (merge {} (sut/collections-shown {} summary))
-        next  (assoc-in summary [:main :words] [])
+        next  (assoc summary :items [])
         saved (merge state (sut/collections-shown state next))]
     (is (not (identical? state saved)))
-    (is (= [] (get-in saved [:collections/main :words])))))
+    (is (= [] (:collections/items saved)))))

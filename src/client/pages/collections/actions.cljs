@@ -24,7 +24,8 @@
     [[:effect/save
       {:page/current (:page/current shown)
        :page/load    (:page/load shown)
-       :collections/loading? true}]]))
+       :collections/loading? true}]
+     [:effect/track-columns]]))
 
 
 (defn- unchanged-or
@@ -38,11 +39,11 @@
   "The state to save once the collections are read. A reload that brought
    the same data leaves every value identical to `state`'s, so the merge
    returns the same map and nothing renders."
-  [state {:keys [active-id items main]}]
+  [state {:keys [active-id items total-words]}]
   (assoc shown
-         :collections/active-id active-id
-         :collections/items     (unchanged-or (:collections/items state) items)
-         :collections/main      (unchanged-or (:collections/main state) main)))
+         :collections/active-id   active-id
+         :collections/items       (unchanged-or (:collections/items state) items)
+         :collections/total-words total-words))
 
 
 (nxr/register-action! :action/show-collections
@@ -62,3 +63,11 @@
     (if (:collections/editing-id state)
       [[:effect/save {:collections/editing-id nil}]]
       [[:effect/switch-active-collection]])))
+
+
+(nxr/register-action! :action/handle-folder-header-click
+  ;; A folder whose parent has no document: the tap creates it.
+  (fn handle-folder-header-click [state name]
+    (if (:collections/editing-id state)
+      [[:effect/save {:collections/editing-id nil}]]
+      [[:effect/create-collection-and-activate name]])))
