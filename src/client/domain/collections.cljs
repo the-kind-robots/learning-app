@@ -7,7 +7,8 @@
    [clojure.string :as str]))
 
 
-(defn- comparable
+(defn canonical
+  "The name as it is compared: trimmed and lower-cased."
   [name]
   (str/lower-case (str/trim (or name ""))))
 
@@ -16,7 +17,7 @@
   "Trimmed, case-insensitive equality — one rule for the duplicate check on
    create and for finding the parent of a folder."
   [a b]
-  (= (comparable a) (comparable b)))
+  (= (canonical a) (canonical b)))
 
 
 (defn folder-key
