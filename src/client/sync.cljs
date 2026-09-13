@@ -5,6 +5,7 @@
    [db.pouch :as pouch]
    [domain.vocabulary :as domain]
    [goog.functions :as gfn]
+   [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [utils :as utils]))
 
@@ -169,7 +170,10 @@
                                             :last-pass-ms @last-pass
                                             :now-ms       (utils/now-ms)})
                               (pass!)
-                              (js/Promise.resolve nil))))
+                              (do (when goog/DEBUG
+                                    (instrumentation/trace! "pull-skipped"
+                                                            #js {:sinceMs (- (utils/now-ms) (or @last-pass 0))}))
+                                  (js/Promise.resolve nil)))))
               ;; The same change feed that drives the throttled push marks
               ;; the database dirty, so a navigation after a local write
               ;; still passes within the interval.

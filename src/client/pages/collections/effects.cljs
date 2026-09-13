@@ -1,5 +1,6 @@
 (ns pages.collections.effects
   (:require
+   [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
    [use-cases.collections :as collections]))
@@ -51,6 +52,12 @@
 (defn- scroll-top
   []
   (or (some-> js/document .-scrollingElement .-scrollTop) 0))
+
+
+(defn- trace!
+  [kind data]
+  (when goog/DEBUG
+    (instrumentation/trace! kind (clj->js data))))
 
 
 (defn- card-of
@@ -117,6 +124,7 @@
               (finish)
               (when-let [tap (on-cancel (assoc @gesture :scroll-delta (- (scroll-top) start-st)))]
                 (vreset! gesture tap)
+                (trace! "tap-recovered" {:movedPx (:moved-px tap) :scrollDelta (:scroll-delta tap)})
                 (swallow-next-click! card-id)
                 (dispatch tap-actions))))))
 

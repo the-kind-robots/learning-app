@@ -466,6 +466,15 @@
         (presenter/shell-props state)]
     (list
      [:a.app-shell__logo {:href "/home"} "Sprecha"]
+     ;; The red D is the trace export, in a development build only; the
+     ;; compile-time flag is what lets a release build drop it.
+     (when goog/DEBUG
+       [:button.app-shell__dev-mark
+        {:type       "button"
+         :aria-label "Экспорт трассы"
+         :title      "Экспорт трассы"
+         :on         {:click [[:effect/export-trace]]}}
+        "D"])
      [:div.app-shell__actions
       ;; Install stands on its own — it is not a sync action, and it is offered
       ;; before any account exists.
