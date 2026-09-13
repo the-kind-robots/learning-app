@@ -2,6 +2,7 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [adapters.examples :as examples]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.time :as time]
@@ -48,6 +49,7 @@
     :collections/exclude-word! (fn [_ _] (js/Promise.resolve nil))}
    :examples
    {:examples/find     (fn [_ _] (js/Promise.resolve nil))
+    :examples/purge-by-word! (fn [word-id] (examples/purge-by-word! dbs word-id))
     :examples/request! (fn [_ _ _] nil)}})
 
 

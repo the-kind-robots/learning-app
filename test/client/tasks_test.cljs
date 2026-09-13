@@ -39,13 +39,6 @@
                         utils/now-ms  (constantly now-ms)
                         utils/now-iso (constantly now-iso)
                         sut/online?   (constantly online?)]
-            (try
-              (await (db/create-index
-                      db
-                      [:type :run-at :created-at]
-                      {:name "by-type-run-at-created-at"
-                       :ddoc "by-type-run-at-created-at"}))
-              (catch :default _ nil))
             (await (f dbs))))))))
 
 
@@ -110,7 +103,8 @@
 (deftest create-task-builds-correct-document
   (let [now-iso "2024-01-01T00:00:00.000Z"
         task    (sut/create-task "my-type" {:word-id "word-123"} now-iso)]
-    (is (= "task" (:type task)))
+    (is (nil? (:type task)) "the engine stamps the type from tasks/schema on insert")
+    (is (= "task" (:type sut/schema)))
     (is (= "my-type" (:task-type task)))
     (is (= {:word-id "word-123"} (:data task)))
     (is (nil? (:word-id task)))

@@ -15,6 +15,9 @@
 
 
 (def ^:private doc-type->db
+  ;; The frozen map of the one-time local-db split: where each type went at
+  ;; the time of the migration. Not routing — the engine takes that from the
+  ;; schemas — and it does not change when a schema does.
   {"example" :device/db
    "lesson"  :device/db
    "review"  :user/db

@@ -1,5 +1,6 @@
 (ns adapters.progress-store
   (:require
+   [adapters.collections :as collections]
    [adapters.data-export :as data-export]
    [clojure.core :as clojure]
    [db.pouch :as dbs]
@@ -7,6 +8,22 @@
    [domain.retention :as retention]
    [domain.vocabulary :as vocabulary]
    [utils :as utils]))
+
+
+(def word-schema
+  "Words and phrases are one document type that differ by `:kind`."
+  {:type "vocab"
+   :db   :user/db})
+
+
+(def review-schema
+  {:type "review"
+   :db   :user/db})
+
+
+(def lesson-schema
+  {:type "lesson"
+   :db   :device/db})
 
 
 (defn- now-iso
@@ -19,21 +36,12 @@
   ((:clock/now-ms clock)))
 
 
-(defn- find-all
-  ([dbs kind]
-   (find-all dbs nil kind))
-  ([dbs word-id kind]
-   (dbs/find-all dbs
-                 (cond-> {:selector {:type kind}}
-                   (some? word-id) (assoc-in [:selector :word-id] word-id)))))
-
-
 (defn- ^:async word-retention-levels
   [dbs word-ids now-ms-val]
   (if (seq word-ids)
     (let [{reviews :docs}  (await (dbs/find-all dbs
-                                                {:selector {:type    "review"
-                                                            :word-id {:$in (vec word-ids)}}}))
+                                                review-schema
+                                                {:selector {:word-id {:$in (vec word-ids)}}}))
           word-id->reviews (group-by :word-id reviews)]
       (mapv (fn [word-id]
               {:word-id word-id
@@ -46,9 +54,7 @@
 
 (defn- ^:async word-retention-level
   [dbs word-id now-ms-val]
-  (let [{reviews :docs} (await (dbs/find-all dbs
-                                             {:selector {:type    "review"
-                                                         :word-id word-id}}))]
+  (let [{reviews :docs} (await (dbs/find-all dbs review-schema {:selector {:word-id word-id}}))]
     (retention/retention-level reviews now-ms-val)))
 
 
@@ -83,17 +89,17 @@
   "Everything a lesson can draw from. Words and phrases are one document type
    that differ by `:kind`, so one query answers for both."
   [dbs]
-  (:docs (await (find-all dbs "vocab"))))
+  (:docs (await (dbs/find-all dbs word-schema {}))))
 
 
 (defn ^:async find-word-by-value
   [dbs value]
-  (await (dbs/get dbs "vocab" (vocabulary/vocab-id value))))
+  (await (dbs/get dbs word-schema (vocabulary/vocab-id value))))
 
 
 (defn ^:async get-word
   [dbs clock word-id]
-  (when-let [word (await (dbs/get dbs "vocab" word-id))]
+  (when-let [word (await (dbs/get dbs word-schema word-id))]
     (await (with-retention dbs clock word))))
 
 
@@ -133,51 +139,45 @@
 
 (defn save-word!
   [dbs clock word]
-  (dbs/insert dbs (stamp-word clock word)))
+  (dbs/insert dbs word-schema (stamp-word clock word)))
 
 
 (defn save-review!
   [dbs clock word-id retained translation]
-  (dbs/insert dbs (stamp-review clock (vocabulary/new-review word-id retained translation))))
+  (dbs/insert dbs review-schema (stamp-review clock (vocabulary/new-review word-id retained translation))))
 
 
 (defn ^:async delete-word!
   "Atomically removes the word and its reviews from user-db, scrubbing the
-   word-id from every collection's :word-ids in the same bulk write. Examples
-   live in device-db and are deleted as a follow-up best-effort bulk write."
+   word-id from every collection's :word-ids in the same bulk write. The
+   collections adapter hands over its updated documents so one write covers
+   the three types. Examples live in device-db; the use-case purges them
+   afterwards, best effort. Returns true when a word was deleted."
   [dbs word-id]
-  (when-let [word (await (dbs/get dbs "vocab" word-id))]
-    (let [{reviews :docs}  (await (find-all dbs word-id "review"))
-          {examples :docs} (await (find-all dbs word-id "example"))
-          {collections :docs} (await (dbs/find dbs {:selector {:type "collection"}}))
-          tombstone        #(assoc % :_deleted true)
-          updated-collections (->> collections
-                                   (filter #(some #{word-id} (:word-ids %)))
-                                   (mapv #(update %
-                                                  :word-ids
-                                                  (partial filterv (complement #{word-id})))))
-          user-bulk        (-> [(tombstone word)]
-                               (into (map tombstone) reviews)
-                               (into updated-collections))]
-      (await (dbs/bulk-docs dbs "vocab" user-bulk))
-      (when (seq examples)
-        (await (dbs/bulk-docs dbs "example" (mapv tombstone examples)))))))
+  (when-let [word (await (dbs/get dbs word-schema word-id))]
+    (let [{reviews :docs} (await (dbs/find-all dbs review-schema {:selector {:word-id word-id}}))
+          tombstone       #(assoc % :_deleted true)
+          user-bulk       (-> [(tombstone word)]
+                              (into (map tombstone) reviews)
+                              (into (await (collections/docs-without-word dbs word-id))))]
+      (await (dbs/bulk-docs dbs word-schema user-bulk))
+      true)))
 
 
 (defn get-lesson
   [dbs]
-  (dbs/get dbs "lesson" lesson/lesson-id))
+  (dbs/get dbs lesson-schema lesson/lesson-id))
 
 
 (defn save-lesson!
   [dbs clock lesson-state]
-  (dbs/insert dbs (stamp-lesson clock lesson-state)))
+  (dbs/insert dbs lesson-schema (stamp-lesson clock lesson-state)))
 
 
 (defn ^:async remove-lesson!
   [dbs]
   (when-let [lesson-state (await (get-lesson dbs))]
-    (await (dbs/remove dbs lesson-state))))
+    (await (dbs/remove dbs lesson-schema lesson-state))))
 
 
 (defn export-data!

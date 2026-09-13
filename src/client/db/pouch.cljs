@@ -1,4 +1,15 @@
 (ns db.pouch
+  "Storage engine over PouchDB: documents, databases, indexes, views and
+   replication. Knows no document type of its own — every call carries the
+   `schema` of the aggregate it serves, a value the owning adapter declares:
+
+     {:type    \"...\"            ; stored as the document's :type
+      :db      :user/db          ; the database the type lives in
+      :indexes [{:name \"...\" :fields [...]}]   ; optional
+      :views   {\"name\" {:map \"function (doc) {...}\"}}}  ; optional
+
+   `init!` takes every schema the app declares and gives each database its
+   indexes and design documents."
   (:refer-clojure :exclude [get find remove])
   (:require
    [db :as db]
@@ -15,22 +26,6 @@
 (defn- device-db
   []
   (db/use "device-db"))
-
-
-(def doc-type->db
-  "Maps PouchDB :type string to the dbs-map key for its owning database."
-  {"collection" :user/db
-   "example"    :device/db
-   "lesson"     :device/db
-   "review"     :user/db
-   "task"       :device/db
-   "vocab"      :user/db})
-
-
-(defn db-for
-  "Returns the database instance for a given doc type string."
-  [dbs doc-type]
-  (some-> doc-type doc-type->db dbs))
 
 
 (def ^:private db->remote-name
@@ -68,45 +63,134 @@
                 (resolve nil))))))))
 
 
+(defn- database
+  [dbs schema]
+  ((:db schema) dbs))
+
+
 (defn insert
-  "Inserts doc into the database determined by its :type field."
-  [dbs doc]
-  (db/insert (db-for dbs (:type doc)) doc))
+  "Writes doc as one of `schema`'s type into the database that holds it."
+  [dbs schema doc]
+  (db/insert (database dbs schema) (assoc doc :type (:type schema))))
 
 
 (defn bulk-docs
-  "Atomically writes multiple docs to the database that owns `doc-type`.
-   All docs must belong to that same database — caller groups by db."
-  [dbs doc-type docs]
-  (db/bulk-docs (db-for dbs doc-type) docs))
+  "Writes docs atomically into `schema`'s database. The docs carry their own
+   :type: a bulk write moves documents that were read, tombstoned or updated,
+   and those may belong to several types of the same database."
+  [dbs schema docs]
+  (db/bulk-docs (database dbs schema) docs))
 
 
 (defn get
-  "Fetches a document by id from the database that owns the given type string."
-  [dbs type-str doc-id]
-  (db/get (db-for dbs type-str) doc-id))
+  "The document with `id` from `schema`'s database, or nil."
+  [dbs schema id]
+  (db/get (database dbs schema) id))
 
 
 (defn remove
-  "Removes doc from the database determined by its :type field."
-  [dbs doc]
-  (db/remove (db-for dbs (:type doc)) doc))
+  [dbs schema doc]
+  (db/remove (database dbs schema) doc))
+
+
+(defn- typed
+  [schema query]
+  (assoc-in query [:selector :type] (:type schema)))
 
 
 (defn find
-  "Queries the database determined by [:selector :type] in the query."
-  [dbs query]
-  (db/find (db-for dbs (get-in query [:selector :type])) query))
+  "Documents of `schema`'s type matching the query's selector; the type is
+   added to the selector here."
+  [dbs schema query]
+  (db/find (database dbs schema) (typed schema query)))
 
 
 (defn find-all
-  "Queries (with auto-pagination) the database determined by [:selector :type] in the query."
-  [dbs query]
-  (db/find-all (db-for dbs (get-in query [:selector :type])) query))
+  "Like `find`, without a page limit."
+  [dbs schema query]
+  (db/find-all (database dbs schema) (typed schema query)))
+
+
+(defn- ^:async ensure-index!
+  "Idempotent, so running it on every start is what gives an installation
+   that predates the index its copy. A failure is logged, never raised: a
+   missing index slows queries down, it does not break them."
+  [db {:keys [fields] index-name :name}]
+  (try
+    (await (db/create-index db fields {:name index-name :ddoc index-name}))
+    (catch :default err
+      (log/error :db/index-error {:index index-name :error (str err)}))))
+
+
+(defn- design-doc
+  "One design document per declared view, named as declared, with its one
+   view under the fixed key `rows` — so nothing is renamed on the way in
+   or out."
+  [view-name {map-source :map}]
+  {:_id   (str "_design/" view-name)
+   :views {:rows {:map map-source}}})
+
+
+(defn- ^:async ensure-design-doc!
+  "Writes the design document when it is missing or its map function differs
+   from `ddoc`, so a changed map replaces the stored one and an unchanged one
+   costs one read. Failure is logged, never raised."
+  [db {id :_id :as ddoc}]
+  (try
+    (let [stored (await (db/get db id))]
+      (when (not= (get-in stored [:views :rows :map]) (get-in ddoc [:views :rows :map]))
+        (await (db/insert db (cond-> ddoc stored (assoc :_rev (:_rev stored)))))))
+    (catch :default err
+      (log/error :db/design-doc-error {:ddoc id :error (str err)}))))
+
+
+(def ^:private type-index
+  "The engine's own index: `typed` puts :type into every selector, so every
+   find on a database that holds a schema goes through it. Nobody declares
+   it."
+  {:name "by-type" :fields [:type]})
+
+
+(defn indexes-of
+  "The indexes a database with `schemas` needs: the engine's type index and
+   every one the schemas declare. Nothing for a database no schema lives in."
+  [schemas]
+  (when (seq schemas)
+    (cons type-index (mapcat :indexes schemas))))
+
+
+(defn ensure-indexes!
+  "Every index in `indexes` (see `indexes-of`) exists on `db`."
+  [db indexes]
+  (js/Promise.all
+   (into-array
+    (map #(ensure-index! db %) indexes))))
+
+
+(defn ensure-views!
+  "Every design document in `views` (the `:views` declarations of one
+   database's schemas, as `[name view]` pairs) is stored on `db` with the
+   map source it declares."
+  [db views]
+  (js/Promise.all
+   (into-array
+    (for [[view-name view] views]
+      (ensure-design-doc! db (design-doc view-name view))))))
 
 
 (defn ^:async init!
-  [_deps]
+  "Opens the databases and gives each the indexes and views of the schemas
+   that live in it. Run on every start: that is what gives an existing
+   installation a new index or view."
+  [schemas]
   (await (db-migrations/ensure-migrated!))
-  {:device/db (device-db)
-   :user/db   (user-db)})
+  (let [dbs {:device/db (device-db)
+             :user/db   (user-db)}]
+    (await (js/Promise.all
+            (into-array
+             (mapcat (fn [[db-key db]]
+                       (let [own (filter #(= db-key (:db %)) schemas)]
+                         [(ensure-indexes! db (indexes-of own))
+                          (ensure-views! db (mapcat :views own))]))
+              dbs))))
+    dbs))
