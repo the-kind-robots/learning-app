@@ -32,6 +32,7 @@
   [state]
   {:active-id  (:collections/active-id state)
    :editing-id (:collections/editing-id state)
+   :loading?   (boolean (:collections/loading? state))
    :main       {:preview-words (preview-words (:words (:collections/main state)))}
    :items      (mapv #(assoc % :preview-words (preview-words (:words %)))
                      (:collections/items state))})

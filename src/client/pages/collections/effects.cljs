@@ -67,7 +67,10 @@
       (let [data (await (collections/summary capabilities))]
         (dispatch [[:action/show-collections data]]))
       (catch js/Error err
-        (log/error :effect/load-collections {:error (str err)})))))
+        (log/error :effect/load-collections {:error (str err)})
+        ;; The screen shows what it has (its empty state at worst), not
+        ;; «Загружаем…» forever.
+        (dispatch [[:effect/save {:collections/loading? false}]])))))
 
 
 (nxr/register-effect! :effect/prompt-create-collection
