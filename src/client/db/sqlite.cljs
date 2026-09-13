@@ -80,13 +80,13 @@
    stripped from a release build."
   [^js data]
   (case (.-type data)
-    "ready" (when goog/DEBUG
+    "ready" (when ^boolean goog/DEBUG
               (instrumentation/dictionary-ready!))
     "error" (log/error :dbs/sqlite3-worker-error {:message (.-message data)})
     "phase" (let [ph  (.-phase data)
                   ms  (.-durationMs data)
                   ok? (= "ok" (.-status data))]
-              (when goog/DEBUG
+              (when ^boolean goog/DEBUG
                 (instrumentation/dictionary-phase! ph ms (.-status data)))
               (if ok?
                 (log/info (keyword "dict-worker" ph) {:duration-ms ms})
@@ -141,10 +141,10 @@
 
 (defn init!
   [_deps]
-  (when goog/DEBUG
+  (when ^boolean goog/DEBUG
     (instrumentation/dictionary-start!))
   (let [worker (js/Worker. (str "/js/sqlite3-worker.js?sqlite3.dir=/js"
-                                (when goog/DEBUG "&telemetry=1")))
+                                (when ^boolean goog/DEBUG "&telemetry=1")))
         report #(publish-foreground! worker)]
     ;; Posted before the worker's script has run — the message waits for it —
     ;; so the first thing it hears is whether it may take the database at all.

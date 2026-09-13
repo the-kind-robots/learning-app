@@ -56,7 +56,7 @@
 
 (defn- trace!
   [kind data]
-  (when goog/DEBUG
+  (when ^boolean goog/DEBUG
     (instrumentation/trace! kind (clj->js data))))
 
 

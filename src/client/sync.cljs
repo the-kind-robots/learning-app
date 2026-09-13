@@ -170,7 +170,7 @@
                                             :last-pass-ms @last-pass
                                             :now-ms       (utils/now-ms)})
                               (pass!)
-                              (do (when goog/DEBUG
+                              (do (when ^boolean goog/DEBUG
                                     (instrumentation/trace! "pull-skipped"
                                                             #js {:sinceMs (- (utils/now-ms) (or @last-pass 0))}))
                                   (js/Promise.resolve nil)))))

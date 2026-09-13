@@ -467,8 +467,8 @@
     (list
      [:a.app-shell__logo {:href "/home"} "Sprecha"]
      ;; The red D is the trace export, in a development build only; the
-     ;; compile-time flag is what lets a release build drop it.
-     (when goog/DEBUG
+     ;; ^boolean on the flag is what lets Closure drop it from a release.
+     (when ^boolean goog/DEBUG
        [:button.app-shell__dev-mark
         {:type       "button"
          :aria-label "Экспорт трассы"
