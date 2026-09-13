@@ -1,7 +1,9 @@
 (ns client.support.db-fixtures
   (:require
+   [client.support.schemas :as schemas]
    [clojure.string :as str]
-   [db :as db])
+   [db :as db]
+   [db.pouch :as pouch])
   (:require-macros
    [cljs.test :refer [async]]))
 
@@ -66,11 +68,36 @@
                (.finally (js/Promise.all (into-array (map destroy-test-db db-names))) done)))})
 
 
+(defn- role
+  "Which of the app's databases a test database stands for, by the suffix
+   its test named it with: `.user` or `.device`. Any other name stands for
+   both, for a test that keeps every type in one database."
+  [db-name]
+  (cond
+    (str/ends-with? db-name ".user")   :user/db
+    (str/ends-with? db-name ".device") :device/db))
+
+
+(defn- ^:async prepared
+  "A test database carries what `db.pouch/init!` gives the database it
+   stands for at start-up (the indexes and views of the schemas that live
+   there), so adapters can rely on them here as they do there."
+  [db-name]
+  (let [db  (db/use db-name)
+        own (filter #(if-let [db-key (role db-name)]
+                       (= db-key (:db %))
+                       true)
+                    schemas/all)]
+    (await (pouch/ensure-indexes! db (pouch/indexes-of own)))
+    (await (pouch/ensure-views! db (mapcat :views own)))
+    db))
+
+
 (defn with-test-db
   [db-name f]
-  (f (db/use db-name)))
+  (.then (prepared db-name) f))
 
 
 (defn with-test-dbs
   [db-names f]
-  (f (mapv db/use db-names)))
+  (.then (js/Promise.all (into-array (map prepared db-names))) #(f (vec %))))

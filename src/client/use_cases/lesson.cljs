@@ -6,8 +6,8 @@
 
 
 (defn- state
-  [progress-store]
-  ((:progress-store/get-lesson progress-store)))
+  [lessons]
+  ((:lessons/get lessons)))
 
 
 (def max-answer-length
@@ -23,7 +23,7 @@
 
 
 (defn- lesson-vocab
-  [{id :_id kind :kind value :value translation :translation}]
+  [{:keys [id kind value translation]}]
   {:id          id
    :kind        kind
    :translation translation
@@ -36,7 +36,7 @@
    opts:
      :vocab-per-lesson  — how many words and phrases to include (default 3)
      :trial-selector    — strategy for picking the next trial (:first or :random, default nil → random)"
-  [{:keys [collections examples progress-store] :as capabilities}
+  [{:keys [collections examples lessons] :as capabilities}
    {:keys [vocab-per-lesson trial-selector]
     :or   {vocab-per-lesson domain/default-vocab-per-lesson}}]
   (try
@@ -49,17 +49,17 @@
               vocab           (mapv lesson-vocab selected)
               word-ids        (mapv :id vocab)
               lesson-examples (await ((:examples/list examples) word-ids collection-id))
-              lesson-state    (domain/initial-state vocab lesson-examples trial-selector)
-              {:keys [rev]}   (await ((:progress-store/save-lesson! progress-store) lesson-state))]
-          {:lesson-state (assoc lesson-state :_rev rev)})))
+              lesson-state    (domain/initial-state vocab lesson-examples trial-selector)]
+          (await ((:lessons/save! lessons) lesson-state))
+          {:lesson-state lesson-state})))
     (catch js/Error err
       (log/error :lesson/start-failed {:error (ex-message err)})
       {:error :lesson-start-failed})))
 
 
 (defn ^:async finish!
-  [{:keys [progress-store]}]
-  (await ((:progress-store/remove-lesson! progress-store))))
+  [{:keys [lessons]}]
+  (await ((:lessons/remove! lessons))))
 
 
 (defn ^:async restart!
@@ -71,8 +71,8 @@
 
 (defn ^:async check-answer!
   "Check the user's answer. Returns {:lesson-state ...}."
-  [{:keys [progress-store] :as capabilities} answer]
-  (let [current-state (await (state progress-store))
+  [{:keys [lessons] :as capabilities} answer]
+  (let [current-state (await (state lessons))
         answer        (clamp-answer answer)]
     (if-not current-state
       (do
@@ -90,8 +90,8 @@
                     (:word-id current-trial)
                     (-> lesson-state domain/last-result :correct?)
                     (:prompt current-trial))))
-          (let [{:keys [rev]} (await ((:progress-store/save-lesson! progress-store) lesson-state))]
-            {:lesson-state (assoc lesson-state :_rev rev)})
+          (await ((:lessons/save! lessons) lesson-state))
+          {:lesson-state lesson-state}
           (catch js/Error err
             (log/error :lesson/check-answer-save-failed {:error (ex-message err)})
             {:error :lesson-save-failed :lesson-state lesson-state}))))))
@@ -99,16 +99,16 @@
 
 (defn ^:async advance!
   "Select the next trial. Returns {:lesson-state ...} or {:error ...}."
-  [{:keys [progress-store]}]
-  (let [lesson-state (await (state progress-store))]
+  [{:keys [lessons]}]
+  (let [lesson-state (await (state lessons))]
     (if-not lesson-state
       (do
         (log/warn :advance-lesson/missing-state {})
         {:error :lesson-not-found})
       (when-let [next-state (domain/advance lesson-state)]
         (try
-          (let [{:keys [rev]} (await ((:progress-store/save-lesson! progress-store) next-state))]
-            {:lesson-state (assoc next-state :_rev rev)})
+          (await ((:lessons/save! lessons) next-state))
+          {:lesson-state next-state}
           (catch js/Error err
             (log/error :advance-lesson/save-failed {:error (ex-message err)})
             {:error :lesson-save-failed}))))))

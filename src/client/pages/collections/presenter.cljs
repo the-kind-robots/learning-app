@@ -14,8 +14,8 @@
 
 
 (defn- preview-word-props
-  [{id :_id :keys [retention-level value translation]}]
-  {:_id         id
+  [{:keys [id retention-level value translation]}]
+  {:id          id
    :retention-level retention-level
    :translation (translation-text translation)
    :value       value})
@@ -32,6 +32,7 @@
   [state]
   {:active-id  (:collections/active-id state)
    :editing-id (:collections/editing-id state)
+   :loading?   (boolean (:collections/loading? state))
    :main       {:preview-words (preview-words (:words (:collections/main state)))}
    :items      (mapv #(assoc % :preview-words (preview-words (:words %)))
                      (:collections/items state))})

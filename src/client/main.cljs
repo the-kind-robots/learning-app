@@ -1,5 +1,10 @@
 (ns main
   (:require
+   [adapters.collections :as collections-adapter]
+   [adapters.examples :as examples-adapter]
+   [adapters.lessons :as lessons-adapter]
+   [adapters.reviews :as reviews-adapter]
+   [adapters.words :as words-adapter]
    [application]
    [db.pouch :as pouch]
    [db.sqlite :as sqlite]
@@ -18,24 +23,39 @@
    [pages.lesson.effects]
    [pages.words.actions]
    [pages.words.effects]
+   [ports.backup :as backup]
    [ports.clock :as clock]
    [ports.collections :as collections]
    [ports.dictionary :as dictionary]
    [ports.examples :as examples]
+   [ports.lessons :as lessons]
    [ports.navigation :as navigation]
-   [ports.progress-store :as progress-store]
+   [ports.reviews :as reviews]
    [ports.task-queue :as task-queue]
+   [ports.words :as words]
    [reitit.frontend :as rf]
    [reitit.frontend.controllers :as rfc]
    [reitit.frontend.easy :as rfe]
    [replicant.dom :as r]
    [runtime.system :as system]
-   [sync]))
+   [sync]
+   [tasks]))
+
+
+(def ^:private schemas
+  "Every document type the app stores, declared by the adapter that owns it.
+   The engine learns its indexes, views and routing from this list alone."
+  [words-adapter/schema
+   reviews-adapter/schema
+   lessons-adapter/schema
+   collections-adapter/schema
+   examples-adapter/schema
+   tasks/schema])
 
 
 (defn ^:async init
   []
-  (when goog/DEBUG
+  (when ^boolean goog/DEBUG
     (action-log/inspect))
 
   (system/start!
@@ -63,7 +83,7 @@
     :identity/incoming  {:start sync/check-incoming-auth!}
 
     :db/pouch           {:after [:identity/incoming]
-                         :start pouch/init!}
+                         :start (fn [_] (pouch/init! schemas))}
 
     :sync/identity      {:requires {:db :db/pouch}
                          :start    sync/start!
@@ -84,9 +104,20 @@
     :port/dictionary    {:requires {:db :db/sqlite}
                          :start    dictionary/start!}
 
-    :port/progress-store {:requires {:db    :db/pouch
-                                     :clock :port/clock}
-                          :start    progress-store/start!}
+    :port/words         {:requires {:db    :db/pouch
+                                    :clock :port/clock}
+                         :start    words/start!}
+
+    :port/reviews       {:requires {:db    :db/pouch
+                                    :clock :port/clock}
+                         :start    reviews/start!}
+
+    :port/lessons       {:requires {:db    :db/pouch
+                                    :clock :port/clock}
+                         :start    lessons/start!}
+
+    :port/backup        {:requires {:db :db/pouch}
+                         :start    backup/start!}
 
     :port/examples      {:requires {:clock :port/clock
                                     :db    :db/pouch}
@@ -99,11 +130,15 @@
                          :start    collections/start!}
 
     :app/capabilities   {:requires {:capabilities/sync :sync/identity
+                                    :backup            :port/backup
+                                    :clock             :port/clock
                                     :collections       :port/collections
                                     :dictionary        :port/dictionary
                                     :examples          :port/examples
+                                    :lessons           :port/lessons
                                     :navigation        :port/navigation
-                                    :progress-store    :port/progress-store}
+                                    :reviews           :port/reviews
+                                    :words             :port/words}
                          :start    identity}
 
     :app/render         {:requires {:capabilities :app/capabilities
@@ -115,12 +150,11 @@
                                        (r/set-dispatch! dispatch)
                                        (application/install-render!
                                         store
-                                        (if goog/DEBUG
+                                        (if ^boolean goog/DEBUG
                                           (fn [state]
-                                            (instrumentation/count-render!)
-                                            (application/render! state))
+                                            (instrumentation/render! application/render! state))
                                           application/render!))
-                                       (when goog/DEBUG
+                                       (when ^boolean goog/DEBUG
                                          (instrumentation/install!))
                                        {:dispatch #(dispatch {} %)}))}
 
@@ -134,9 +168,11 @@
                          :start    (fn [{:keys [capabilities render]}]
                                      (let [dispatch (:dispatch render)]
                                        (dispatch [[:effect/load-account]])
+                                       ;; A reconnect after offline is not a
+                                       ;; navigation: it passes the throttle.
                                        (js/window.addEventListener
                                         "online"
-                                        #(dispatch [[:effect/sync-pull]]))
+                                        #(dispatch [[:effect/sync-pull :poke]]))
                                        ;; Push channel (ADR-0009): a poke pulls
                                        ;; through the normal path. A waiting
                                        ;; pairing dialog closes only when the
@@ -144,7 +180,7 @@
                                        ;; dialog's nonce.
                                        (when (get-in capabilities [:capabilities/sync :sync/account-id])
                                          (sync/connect-push!
-                                          #(dispatch [[:effect/sync-pull]])))))}
+                                          #(dispatch [[:effect/sync-pull :poke]])))))}
 
     :app/router         {:requires {:render :app/render}
                          :after    [:worker/service-worker

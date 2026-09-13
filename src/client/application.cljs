@@ -41,10 +41,17 @@
 
 
 (nxr/register-effect! :effect/sync-pull
-  (fn sync-pull [{:keys [capabilities dispatch]} _]
+  ;; Only a pull that wrote something changes the screen: a poke from a socket
+  ;; reconnect, or the pull on route entry, brings nothing most of the time,
+  ;; and reloading the page for it re-rendered the themes screen every ~2 min
+  ;; on the phone. The pairing receipt is itself a pulled document, so the
+  ;; same condition covers the dialog.
+  (fn sync-pull [{:keys [capabilities dispatch]} _ & [reason]]
     (when-let [pull! (get-in capabilities [:capabilities/sync :sync/pull!])]
-      (some-> (pull!)
-              (.then #(dispatch [[:action/reload-page] [:action/confirm-pairing]]))))))
+      (some-> (pull! reason)
+              (.then (fn [{:keys [pulled]}]
+                       (when (and pulled (pos? pulled))
+                         (dispatch [[:action/reload-page] [:action/confirm-pairing]]))))))))
 
 
 (nxr/register-action! :action/reload-page
@@ -459,6 +466,15 @@
         (presenter/shell-props state)]
     (list
      [:a.app-shell__logo {:href "/home"} "Sprecha"]
+     ;; The red D is the trace export, in a development build only; the
+     ;; ^boolean on the flag is what lets Closure drop it from a release.
+     (when ^boolean goog/DEBUG
+       [:button.app-shell__dev-mark
+        {:type       "button"
+         :aria-label "Экспорт трассы"
+         :title      "Экспорт трассы"
+         :on         {:click [[:effect/export-trace]]}}
+        "D"])
      [:div.app-shell__actions
       ;; Install stands on its own — it is not a sync action, and it is offered
       ;; before any account exists.
@@ -534,4 +550,6 @@
      :controllers [{:start #(dispatch [[:effect/load-lesson] [:effect/sync-pull]])}]}]
    ["/collections"
     {:name        :page/collections
-     :controllers [{:start #(dispatch [[:effect/load-collections] [:effect/sync-pull]])}]}]])
+     :controllers [{:start #(dispatch [[:action/open-collections]
+                                       [:effect/load-collections]
+                                       [:effect/sync-pull]])}]}]])

@@ -16,11 +16,14 @@
                                 [name]
                                 (collections/create-collection! db clock name))
    :collections/rename!       (fn rename!
-                                [collection-doc new-name]
-                                (collections/rename-collection! db collection-doc new-name))
+                                [collection-id new-name]
+                                (collections/rename-collection! db collection-id new-name))
    :collections/delete!       (fn delete!
                                 [collection-id]
                                 (collections/delete-collection! db collection-id))
+   :collections/docs-without-word (fn docs-without-word
+                                    [word-id]
+                                    (collections/docs-without-word db word-id))
    :collections/add-word!     (fn add-word!
                                 [word-id collection-id]
                                 (collections/add-word-to-collection! db word-id collection-id))
