@@ -41,10 +41,17 @@
 
 
 (nxr/register-effect! :effect/sync-pull
+  ;; Only a pull that wrote something changes the screen: a poke from a socket
+  ;; reconnect, or the pull on route entry, brings nothing most of the time,
+  ;; and reloading the page for it re-rendered the themes screen every ~2 min
+  ;; on the phone. The pairing receipt is itself a pulled document, so the
+  ;; same condition covers the dialog.
   (fn sync-pull [{:keys [capabilities dispatch]} _]
     (when-let [pull! (get-in capabilities [:capabilities/sync :sync/pull!])]
       (some-> (pull!)
-              (.then #(dispatch [[:action/reload-page] [:action/confirm-pairing]]))))))
+              (.then (fn [{:keys [pulled]}]
+                       (when (and pulled (pos? pulled))
+                         (dispatch [[:action/reload-page] [:action/confirm-pairing]]))))))))
 
 
 (nxr/register-action! :action/reload-page
