@@ -7,7 +7,8 @@ Deployment and local dev environment configs. The app runs on a single Debian se
 ```
 infra/
 ├── development/              # Local dev environment
-│   └── etc/nginx/            # nginx config for sprecha.local (with mkcert TLS)
+│   ├── etc/nginx/            # nginx config for sprecha.local (with mkcert TLS)
+│   └── etc/systemd/user/     # systemd user units for the dev stand (see below)
 │
 └── production/               # Production Debian package contents
     ├── DEBIAN/               # Package metadata + postinst / postrm scripts
@@ -37,6 +38,13 @@ infra/
 | `learning-app-certbot.timer`             | Cert renewal schedule                             |
 | `learning-app-restart.path`              | Watch for deploy signal file → restart service    |
 | `learning-app-restart.service`           | Performs the restart                              |
+| `learning-app-dev-watch.service`         | Dev stand: `shadow-cljs watch app` (user unit)    |
+| `learning-app-dev-backend.service`       | Dev stand: the backend on 8083 (user unit)        |
+
+The last two are **user** units under `development/`, not part of the package.
+They replace the two terminals the dev stand used to be, so it survives the
+session that started it and `systemctl --user status` answers what is running.
+Installing and running them: [docs/dev/mobile-pwa-testing.md](../docs/dev/mobile-pwa-testing.md).
 
 ## Deployment
 

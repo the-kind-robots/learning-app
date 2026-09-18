@@ -57,12 +57,83 @@ systemctl status cloudflared
 journalctl -u cloudflared -f
 ```
 
+## Over the tailnet
+
+The stand is also reachable on the machine's Tailscale name,
+`https://<machine>.<tailnet>.ts.net`. Tailscale terminates TLS and proxies to
+the same local nginx, so the origin is https and therefore a secure context —
+the service worker registers and the app installs to the home screen exactly as
+on the tunnel hostname. The phone needs Tailscale switched on; nothing off the
+tailnet can reach the name at all.
+
+Two commands, once per machine:
+
+```bash
+sudo tailscale set --operator=$USER
+sudo tailscale serve --bg --https=443 http://127.0.0.1:80
+```
+
+Worth knowing before switching: browser storage is per origin. Opening the app
+on the tailnet name is a fresh install — an empty local database that
+repopulates by sync, and a home-screen icon that has to be added again.
+
+## Running the stand
+
+The stand is two systemd **user** units, `infra/development/etc/systemd/user/`:
+`learning-app-dev-watch.service` runs `shadow-cljs watch app`,
+`learning-app-dev-backend.service` runs the backend on 8083. Both restart on
+failure and both work from `~/Projects/learning-app`; a checkout elsewhere gets
+a drop-in (`systemctl --user edit <unit>`) rather than an edited unit.
+
+Install, and again after pulling a changed unit:
+
+```bash
+sudo install -m 644 infra/development/etc/systemd/user/learning-app-dev-*.service /etc/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now learning-app-dev-watch learning-app-dev-backend
+loginctl enable-linger "$USER"
+```
+
+`enable-linger` is what makes the stand outlive the terminal that started it:
+without it the user manager stops at logout and takes both units with it.
+
+```bash
+systemctl --user status learning-app-dev-watch learning-app-dev-backend
+systemctl --user restart learning-app-dev-backend
+systemctl --user stop learning-app-dev-watch learning-app-dev-backend
+journalctl --user -u learning-app-dev-watch -f
+```
+
+The logs are the journal — the compile output the watch used to print into a
+terminal is `journalctl --user -u learning-app-dev-watch`.
+
 ## Daily workflow
 
-1. Start local app stack.
+1. Start local app stack (the units above, if they are not already running).
 2. Ensure `cloudflared` service is running.
 3. Open `https://<name>.dev.sprecha.de` on phone.
 4. Install to home screen and test from PWA icon.
+
+The devtools socket connects to the page's own origin and to nothing else
+(`dev/cljs/dev/devtools_socket.cljs`, a `:devtools :preloads` entry). There is
+no setting, so where hot reload works follows from which origins nginx proxies
+`/shadow-cljs/` for: the machine's tailnet address and `sprecha.localhost`,
+yes; the public dev host, no — nginx refuses a request the tunnel forwarded,
+and that refusal is what keeps the watch off the public internet.
+
+So on the public name the app works and only hot reload is missing. What it
+looks like: the shadow-cljs client keeps retrying and shows its reconnect
+banner over the page, forever. That is the arrangement, not a fault. Open the
+app on the tailnet name — Tailscale switched on — when you want hot reload.
+
+nginx proxies `/shadow-cljs/` to port 9630, so the watch holding that port is
+the only one the phone can reach, and only one watch per machine can hold it.
+`shadow-cljs.edn` pins `:http {:port 9630 :strict true}`: a second watch now
+dies with `BindException: Address already in use` instead of drifting to the
+next free port. Without the pin it drifted silently, and the symptom was the
+socket URL looking right while nginx answered 502 on `/shadow-cljs/` and the
+page reconnected forever. Seen that? Check nothing else is running a watch
+(`ss -ltnp | grep 9630`), then restart the stand's.
 
 ## Getting the new build
 

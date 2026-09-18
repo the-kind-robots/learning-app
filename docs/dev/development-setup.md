@@ -7,9 +7,8 @@ This guide describes how to set up and run the Learning App in development mode.
 Everything below this section is one-time setup. A configured machine needs only:
 
 1. CouchDB, Nginx and cloudflared run as services — nothing to start by hand.
-2. `npx shadow-cljs watch app` — terminal 1.
-3. `clj -A:dev -M -m core` — terminal 2, after CouchDB answers (boot runs reconciliation against it; `fan-in-started` in the log means push sync is up).
-4. Open **http://sprecha.localhost/**. Phone: `https://<name>.dev.sprecha.de` (the Cloudflare tunnel feeds the same Nginx).
+2. The watch and the backend are systemd user units too — `systemctl --user start learning-app-dev-watch learning-app-dev-backend`, see [mobile-pwa-testing.md](mobile-pwa-testing.md). By hand instead: `npx shadow-cljs watch app` in one terminal and `clj -A:dev -M -m core` in another, the second after CouchDB answers (boot runs reconciliation against it; `fan-in-started` in the log means push sync is up).
+3. Open **http://sprecha.localhost/**. Phone: `https://<name>.dev.sprecha.de` (the Cloudflare tunnel feeds the same Nginx).
 
 ## Prerequisites
 
