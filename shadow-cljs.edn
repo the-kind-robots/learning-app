@@ -17,8 +17,12 @@
   [com.taoensso/telemere "1.4.0"]
   [http-kit/http-kit "2.8.1"]]
 
+ ;; `dev/clj` carries build hooks, which are Clojure and run in the compiler's
+ ;; own JVM. It is a source path of its own rather than `dev`, which holds a
+ ;; `user.clj` Clojure loads on startup and whose dependencies are the
+ ;; backend's, not the compiler's.
  :source-paths
- ["lib/db/src" "src/shared" "src/client" "dev/cljs" "test"]
+ ["lib/db/src" "src/shared" "src/client" "dev/cljs" "dev/clj" "test"]
 
  ;; nginx proxies /shadow-cljs/ to 9630 on every host it serves, so the
  ;; devtools socket only reaches a watch that holds that exact port. The
@@ -48,6 +52,9 @@
    :asset-path "/js/app"
    :modules    {:main {:init-fn main/start}}
    :js-options {:js-provider :shadow}
+   ;; Stamps the development bundle with the checkout it came from. The hook
+   ;; itself is what skips a release build, so this stays one line either way.
+   :build-hooks [(dev.build-identity/stamp-the-build)]
    :devtools
    {:preloads     [dev.devtools-socket debux.preloads]
     :watch-dir    "resources/public/css"

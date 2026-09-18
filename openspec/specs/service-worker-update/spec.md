@@ -49,3 +49,19 @@ Every time the document becomes visible the app SHALL ask the registration to up
 #### Scenario: Coming back to the app
 - **WHEN** the document's visibility changes to visible
 - **THEN** the service worker registration fetches `sw.js` again
+
+### Requirement: A tap on the build mark forces a reload in a development build
+In a development build the shell's build mark — the line that says which bundle the page loaded — SHALL be the forced reload: a tap SHALL check the registration for an update; if a worker is then waiting or finishes installing, it SHALL post the activation message and let the controller change reload the page; otherwise it SHALL reload the page. The trace export SHALL be a separate control in the shell's actions row, and a tap on it SHALL NOT reload the page.
+
+#### Scenario: Tap with a new build
+- **WHEN** the user taps the build mark and a changed `sw.js` is served
+- **THEN** the new worker installs, is activated and the page reloads under it
+
+#### Scenario: Tap with nothing new
+- **WHEN** the user taps the build mark and `sw.js` is unchanged
+- **THEN** the page reloads
+
+#### Scenario: Tap on the trace export
+- **WHEN** the user taps the trace export in the actions row
+- **THEN** the trace export runs and the page does not reload
+

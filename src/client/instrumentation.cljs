@@ -22,6 +22,7 @@
    web-vitals figures accumulate over the page's whole life, so a reset
    clears our copy without rewinding CLS or INP."
   (:require
+   [build-identity]
    [nexus.registry :as nxr]))
 
 
@@ -312,7 +313,7 @@
         stored      (try (.parse js/JSON (or (.getItem js/localStorage trace-key) "null"))
                          (catch :default _ nil))]
     (.stringify js/JSON
-                #js {:header #js {:build      "development"
+                #js {:header #js {:build      build-identity/stamp
                                   :time       (.toISOString (js/Date.))
                                   :url        (.-href js/location)
                                   :userAgent  (.-userAgent js/navigator)

@@ -54,6 +54,62 @@
   color: rgb(var(--color-cardinal));
 }
 
+/* Which bundle the page loaded, in the middle slot of the bar, and the tap
+   that reloads onto the newest one. Quiet — the small grey line it reads as,
+   with no button chrome — and it shrinks and ellipsises rather than pushing
+   either neighbour. `touch-action: manipulation` because a hold on text this
+   small otherwise starts a selection instead of a tap. */
+.app-shell__build-mark {
+  align-self: center;
+  background: none;
+  border: 0;
+  color: rgb(var(--color-hare));
+  cursor: pointer;
+  flex: 0 1 auto;
+  font-family: Nunito, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  text-overflow: ellipsis;
+  touch-action: manipulation;
+  white-space: nowrap;
+}
+
+/* The top bar: the word mark, the build mark and the actions in one row, each
+   where it was — fixed, transparent and out of the page's flow, so no page
+   reserves anything for it beyond the top padding it already had. Both side
+   slots grow from a zero basis, so they take the same width and the build
+   mark sits in the middle of the bar, not midway between its neighbours. The
+   bar and the slots span the page, so they pass pointer events through; only
+   the controls themselves take one. */
+.app-shell__bar {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  left: 16px;
+  pointer-events: none;
+  position: fixed;
+  right: 16px;
+  top: 16px;
+  z-index: 20;
+}
+
+.app-shell__bar-slot {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.app-shell__logo,
+.app-shell__build-mark,
+.app-shell__actions > * {
+  pointer-events: auto;
+}
+
 .app-shell__logo {
   align-items: center;
   color: rgb(var(--color-black-text));
@@ -62,13 +118,9 @@
   font-family: Nunito, sans-serif;
   font-size: 18px;
   font-weight: 800;
-  left: 16px;
   line-height: 1;
-  position: fixed;
   text-decoration: none;
-  top: 16px;
   white-space: nowrap;
-  z-index: 20;
 }
 
 
@@ -79,11 +131,10 @@
 .app-shell__actions {
   align-items: center;
   display: flex;
+  flex: 1 1 0;
   gap: 4px;
-  position: fixed;
-  right: 16px;
-  top: 16px;
-  z-index: 20;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .app-shell__corner-icon {

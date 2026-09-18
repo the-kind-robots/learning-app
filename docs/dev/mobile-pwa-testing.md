@@ -147,6 +147,8 @@ asking it would wait for the system to kill the process. The app asks for it:
   taking each one would reload every open page and lose the hot reload.
 - The check for a new build runs every time the app comes back to the
   foreground, so bring the phone back and look at the row.
+- In a development build a tap on the build mark does the same without the
+  row: it checks, activates and reloads.
 
 ## Reading the trace after a freeze
 
@@ -189,6 +191,12 @@ either, a prompt shows the JSON for selecting by hand. The file carries a
 (the ring as it was at the tap) and `stored` (the last localStorage mirror,
 which is what survives a reload).
 
+The grey line in the middle of the top bar is which build the page loaded:
+the short commit of the checkout it compiled from, a `+` when that tree had
+uncommitted changes, and `DD.MM HH:MM` of the compile. The trace's `build`
+header carries the same string. It changes when a rebuild lands, so it is how
+you tell whether the phone is on the new build or still on the old one — and
+tapping it is what brings the newest build (`openspec/specs/service-worker-update`).
 The red D at the end of the word mark is a letter of the name, not a control.
 
 Typical read: find the last `click` or `tap-recovered`; if no `action` follows it the tap never

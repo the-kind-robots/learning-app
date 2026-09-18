@@ -71,10 +71,10 @@
                                               #(log/info :storage/persisted {:granted %})))
                                      nil)}
 
-    ;; After render: a waiting worker becomes a state flag in a release
-    ;; build, and the flag needs dispatch.
-    :worker/service-worker {:requires {:render :app/render}
-                            :start    service-worker/start!}
+    ;; Before render, and it depends on nothing: registering the worker needs
+    ;; no dispatch. What it hands back — the registration — is what render
+    ;; carries into every effect.
+    :worker/service-worker {:start service-worker/start!}
 
     :document/listeners    {:start
                             (fn [_]
@@ -143,8 +143,9 @@
                                        :words             :port/words}
                             :start    identity}
 
-    :app/render            {:requires {:capabilities :app/capabilities
-                                       :store        :app/store}
+    :app/render            {:requires {:capabilities   :app/capabilities
+                                       :service-worker :worker/service-worker
+                                       :store          :app/store}
                             :start    (fn [{:keys [store] :as system}]
                                         (let [dispatch (fn [dispatch-data actions]
                                                          (nxr/dispatch system dispatch-data actions))]
@@ -164,6 +165,13 @@
                             :start    (fn [{:keys [render]}]
                                         (let [dispatch (:dispatch render)]
                                           (dispatch [[:effect/pwa-init]])))}
+
+    ;; The worker's other half: a waiting build becomes the state flag
+    ;; «Обновить» reads. Here rather than in the worker component because it
+    ;; is the part that needs dispatch, and the worker must not.
+    :pwa/new-build         {:requires {:render :app/render
+                                       :worker :worker/service-worker}
+                            :start    service-worker/announce-new-builds!}
 
     :app/sync              {:requires {:capabilities :app/capabilities
                                        :render       :app/render}
