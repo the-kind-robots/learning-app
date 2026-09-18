@@ -1,0 +1,22 @@
+[Unit]
+Description=Learning App dev stand: shadow-cljs watch
+After=network.target
+
+[Service]
+Type=simple
+# The stand is the main checkout. A checkout elsewhere overrides this with a
+# drop-in rather than editing the unit:
+# systemctl --user edit learning-app-dev-watch.service
+WorkingDirectory=%h/Projects/learning-app
+# Through a login shell because node comes from a version manager that only
+# exists inside one — npx is not on the user manager's PATH. `exec` keeps the
+# shell from standing between systemd and the process it has to signal.
+ExecStart=/bin/bash -lc 'exec npx shadow-cljs watch app'
+Restart=on-failure
+RestartSec=5
+# shadow-cljs.edn pins the devtools port with :strict, so a watch started by
+# hand while this one runs exits on BindException instead of drifting to
+# another port and leaving nginx answering 502 on /shadow-cljs/.
+
+[Install]
+WantedBy=default.target

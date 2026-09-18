@@ -20,6 +20,18 @@
  :source-paths
  ["lib/db/src" "src/shared" "src/client" "dev/cljs" "test"]
 
+ ;; nginx proxies /shadow-cljs/ to 9630 on every host it serves, so the
+ ;; devtools socket only reaches a watch that holds that exact port. The
+ ;; port alone does not pin it: on a BindException `start-http` retries the
+ ;; next free port and says so in a warning nobody reads, which is how a
+ ;; second watch on this machine ends up on 9631 while nginx answers 502.
+ ;; `:strict` makes that bind failure fatal instead. No `:ssl` and no
+ ;; `:host`: TLS ends at the tunnel and at nginx, which proxies to plain
+ ;; http, and the host already defaults to 0.0.0.0.
+ :http
+ {:port   9630
+  :strict true}
+
  :nrepl
  {:port 4444
   :middleware
@@ -37,8 +49,7 @@
    :modules    {:main {:init-fn main/start}}
    :js-options {:js-provider :shadow}
    :devtools
-   {:devtools-url "http://sprecha.localhost/shadow-cljs"
-    :preloads     [debux.preloads]
+   {:preloads     [dev.devtools-socket debux.preloads]
     :watch-dir    "resources/public/css"
     :watch-path   "/css"}
    :release-stubs #{debux.core}}
