@@ -7,8 +7,12 @@ Deployment and local dev environment configs. The app runs on a single Debian se
 ```
 infra/
 ├── development/              # Local dev environment
-│   ├── etc/nginx/            # nginx config for sprecha.local (with mkcert TLS)
-│   └── etc/systemd/user/     # systemd user units for the dev stand (see below)
+│   ├── etc/nginx/            # Dev vhost for sprecha.localhost + the snippet it includes
+│   ├── etc/systemd/user/     # systemd user units for the dev stand (see below)
+│   └── opt/couchdb/          # CouchDB proxy-auth configuration
+│
+├── scripts/                  # Repository-side helpers
+│   └── install-dev-stand.sh  # Brings the dev stand up on a machine (see below)
 │
 └── production/               # Production Debian package contents
     ├── DEBIAN/               # Package metadata + postinst / postrm scripts
@@ -44,7 +48,8 @@ infra/
 The last two are **user** units under `development/`, not part of the package.
 They replace the two terminals the dev stand used to be, so it survives the
 session that started it and `systemctl --user status` answers what is running.
-Installing and running them: [docs/dev/mobile-pwa-testing.md](../docs/dev/mobile-pwa-testing.md).
+`install-dev-stand.sh` installs and enables them; running them day to day is
+[docs/dev/mobile-pwa-testing.md](../docs/dev/mobile-pwa-testing.md).
 
 ## Deployment
 
@@ -52,4 +57,19 @@ The production directory is packaged as a Debian `.deb` (`learning-app-infra`). 
 
 ## Local dev
 
-Follow [docs/dev/development-setup.md](../docs/dev/development-setup.md) to configure nginx and mkcert for `sprecha.local`.
+One command installs everything under `development/` onto a machine and reports
+what it found:
+
+```bash
+infra/scripts/install-dev-stand.sh
+```
+
+It is the single copy of the bring-up list — the vhost and the snippet it
+includes (nginx refuses to start when an included file is missing), the CouchDB
+configuration and databases, the user units and their lingering. It is safe to
+re-run, shows any file that differs before replacing it, and asks before every
+step that needs root. Credentials and logins are named, never invented.
+
+The stand is plain http on `sprecha.localhost`; the `sprecha.local` mkcert
+certificates it used to need are gone. Full guide:
+[docs/dev/development-setup.md](../docs/dev/development-setup.md).
