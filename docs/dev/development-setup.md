@@ -1,241 +1,138 @@
 # Development Setup
 
-This guide describes how to set up and run the Learning App in development mode.
+## Bring the stand up
 
-## Bring-up on a configured machine
+One command, from the checkout:
 
-Everything below this section is one-time setup. A configured machine needs only:
+```bash
+infra/scripts/install-dev-stand.sh
+```
 
-1. CouchDB, Nginx and cloudflared run as services — nothing to start by hand.
-2. The watch and the backend are systemd user units too — `systemctl --user start learning-app-dev-watch learning-app-dev-backend`, see [mobile-pwa-testing.md](mobile-pwa-testing.md). By hand instead: `npx shadow-cljs watch app` in one terminal and `clj -A:dev -M -m core` in another, the second after CouchDB answers (boot runs reconciliation against it; `fan-in-started` in the log means push sync is up).
-3. Open **http://sprecha.localhost/**. Phone: `https://<name>.dev.sprecha.de` (the Cloudflare tunnel feeds the same Nginx).
+It checks every piece the stand needs, installs what this repository carries —
+the nginx vhost and the snippet it includes, the CouchDB proxy-auth config and
+the two databases, the systemd user units — and names what it cannot do. It is
+safe to re-run: a machine that is already correct is told so and left alone, a
+file that differs is shown before it is replaced, and a step needing root shows
+the exact command and asks. Answering no to everything is the dry run: the
+report is complete and nothing is touched.
+
+The script is the only copy of the list. When a piece of the stand changes, it
+changes there; this document does not repeat it.
+
+Then open **http://sprecha.localhost/**.
+
+## What the script cannot do
+
+It installs no toolchain and holds no credentials. These stay yours:
+
+- **Java, Clojure CLI, Node, CouchDB, nginx** — below.
+- **A CouchDB admin account** — below. Without it the script cannot create the
+  databases.
+- **An account in the app** — «Your account», below.
+- **A Cloudflare tunnel token** and **a Tailscale login**, for reaching the
+  stand from a phone — [mobile-pwa-testing.md](mobile-pwa-testing.md).
+
+The script names each of these when it finds it missing, with the section that
+covers it.
 
 ## Prerequisites
 
-### Required Software
-
-1. **Java 21+** - Required for Clojure
-2. **Clojure CLI** - [Installation guide](https://clojure.org/guides/install_clojure)
-3. **Node.js 18+** - Required for shadow-cljs and npm dependencies
-4. **SQLite3** - Usually pre-installed on macOS/Linux
-5. **CouchDB** - Document database for data synchronization
+1. **Java 21+** — required for Clojure
+2. **Clojure CLI** — [installation guide](https://clojure.org/guides/install_clojure)
+3. **Node.js 18+** — required for shadow-cljs and npm dependencies
+4. **nginx** — `sudo apt-get install -y nginx`
+5. **CouchDB** — below
 
 ### Installing CouchDB
-
-**macOS (Homebrew):**
-```bash
-brew install couchdb
-```
 
 **Ubuntu/Debian:**
 ```bash
 sudo apt-get install couchdb
 ```
 
-**Other platforms:** See the [official CouchDB installation guide](https://docs.couchdb.org/en/stable/install/index.html)
-
-#### CouchDB Admin Setup (Required)
-
-CouchDB requires an admin account before starting. Uncomment the default admin line in the config file:
-
 **macOS (Homebrew):**
+```bash
+brew install couchdb
+```
 
-Edit `/opt/homebrew/opt/couchdb/etc/local.ini` and uncomment the admin line in the `[admins]` section:
+**Other platforms:** see the [official installation guide](https://docs.couchdb.org/en/stable/install/index.html).
+
+### CouchDB admin account
+
+CouchDB needs an admin before it will start. Uncomment the default admin line
+in the `[admins]` section of the config — `/opt/couchdb/etc/local.d/10-admins.ini`
+on Debian, `/opt/homebrew/opt/couchdb/etc/local.ini` under Homebrew:
 
 ```ini
 [admins]
 admin = 3434
 ```
 
-CouchDB will hash the password on first start.
+CouchDB hashes the password on first start.
 
-> **Note:** The password `3434` matches the dev fallback in `lib/db/src/db.cljc` (`LEARNING_APP__COUCHDB_PASSWORD` overrides it). For production, use a strong password.
+> The password `3434` matches the dev fallback in `lib/db/src/db.cljc`
+> (`LEARNING_APP__COUCHDB_PASSWORD` overrides it). A deployed instance uses a
+> real one. The script reads `COUCHDB_USER` and `COUCHDB_PASS` if yours differ.
 
-#### Dictionary Database Setup
+## Your account
 
-After CouchDB is running, create the `dictionary-db` database and configure it for public read access:
-
-```bash
-curl -X PUT http://admin:3434@localhost:5984/dictionary-db
-curl -X PUT http://admin:3434@localhost:5984/dictionary-db/_security \
-  -H "Content-Type: application/json" \
-  -d '{"admins":{"names":["admin"],"roles":[]},"members":{"names":[],"roles":[]}}'
-```
-
-This matches the production configuration: anyone can read, only the admin can write.
-
-Push sync watches the server-wide updates feed, which needs one more database to exist:
+Identity is one bearer token per account (ADR-0006); there is no name and no
+password. Mint yourself an invite and open the URL it prints:
 
 ```bash
-curl -X PUT http://admin:3434@localhost:5984/_global_changes
+clj -M:dev -m core mint-invite
 ```
 
-## Setup Steps
+It touches SQLite only — no CouchDB credentials, no server. The server database
+itself needs no preparation: the backend migrates it on boot, creating it when
+it is not there.
 
-### 1. Install npm dependencies
+## Reference
 
-```bash
-npm install
-```
+| Service              | URL                            | Port |
+|----------------------|--------------------------------|------|
+| App (through nginx)  | http://sprecha.localhost/      | 80   |
+| Backend              | http://127.0.0.1:8083/         | 8083 |
+| shadow-cljs          | http://localhost:9630/         | 9630 |
+| nREPL                | —                              | 4444 |
+| CouchDB              | http://localhost:5984/         | 5984 |
+| CouchDB UI (Fauxton) | http://localhost:5984/_utils/  | 5984 |
 
-### 2. Initialize the SQLite database
+The stand is plain http on purpose: browsers resolve `*.localhost` to loopback
+themselves and treat it as a secure context, so Secure cookies and the service
+worker work with no certificates and no hosts entry. Both ways in from a phone
+terminate TLS elsewhere and proxy here —
+[mobile-pwa-testing.md](mobile-pwa-testing.md).
 
-```bash
-sqlite3 app.db < initial-setup.sql
-```
+Running the stand day to day — status, logs, restarts — is the same document's
+«Running the stand».
 
-### 3. Start CouchDB
+### Hosts entry for CLI tools (optional)
 
-Run directly in a terminal:
-```bash
-couchdb
-```
-
-> **Note:** `brew services start couchdb` may fail with I/O errors. Running `couchdb` directly is more reliable.
-
-Verify CouchDB is running:
-```bash
-curl http://localhost:5984/
-```
-
-CouchDB web interface (Fauxton) is available at: http://localhost:5984/_utils/
-
-### 3.5 Generate + import dictionary (before running the server)
-
-Do this after CouchDB is up and before starting the backend:
-
-```bash
-clj -M:dictionary
-clj -T:build dictionary-import
-COUCHDB_URL=http://localhost:5984 COUCHDB_PASS=3434 java -jar target/dictionary-import.jar --input-dir resources/dictionary
-```
-
-Add `--reset` only if you need to replace an existing `dictionary-db`.
-
-### 4. Start shadow-cljs (ClojureScript compiler)
-
-```bash
-npx shadow-cljs watch app
-```
-
-Wait for the message: `Build completed`
-
-This starts:
-- Dev server at http://localhost:9630
-- nREPL server on port 4444
-
-### 5. Start the backend server
-
-In a separate terminal:
-
-```bash
-clj -M:dev -m core
-```
-
-The backend server runs at: **http://127.0.0.1:8083/**
-
-> **Note:** Use `127.0.0.1` instead of `localhost` in Safari to avoid cookie issues.
-
-## Creating a Test User
-
-Run this command to create a test user (login: `test`, password: `test123`):
-
-```bash
-clj -M:dev -e '
-(require (quote [buddy.hashers :as hashers]))
-(require (quote [next.jdbc :as jdbc]))
-(let [db {:dbtype "sqlite" :dbname "app.db"}
-      password-hash (hashers/derive "test123" {:alg :argon2id})]
-  (jdbc/execute! db ["INSERT INTO users (name, password) VALUES (?, ?)" "test" password-hash]))
-'
-```
-
-## Local Domain Setup (sprecha.localhost)
-
-For full functionality including CouchDB sync, set up the local domain with Nginx proxy.
-
-The host is `sprecha.localhost` on plain http: browsers resolve `*.localhost` to loopback themselves and treat it as a secure context, so Secure cookies and the service worker work with no certificates and no hosts-file entry. To test from a phone, a Cloudflare tunnel feeds this same Nginx under `<name>.dev.sprecha.de` — see [mobile-pwa-testing.md](mobile-pwa-testing.md).
-
-### 1. Install Nginx
-
-```bash
-# macOS
-brew install nginx
-# Ubuntu/WSL
-sudo apt-get install -y nginx
-```
-
-### 2. Hosts entry for CLI tools (optional)
-
-Browsers need nothing. `curl` and other CLI tools resolve through the OS, which may not know `*.localhost`:
+Browsers need nothing. `curl` and other CLI tools resolve through the OS, which
+may not know `*.localhost`:
 
 ```bash
 sudo sh -c 'echo "127.0.0.1 sprecha.localhost" >> /etc/hosts'
 ```
 
-### 3. Configure CouchDB proxy authentication
-
-```bash
-cp infra/development/opt/couchdb/etc/local.d/00-proxy-auth.ini /opt/homebrew/opt/couchdb/etc/local.d/
-```
-
-Restart CouchDB after copying the config.
-
-### 4. Install the Nginx config
-
-The site config `include`s a snippet, so copy both — nginx refuses to start when
-an included file is missing. The include is relative, and nginx resolves it
-against the directory holding `nginx.conf`.
-
-```bash
-# macOS
-mkdir -p /opt/homebrew/etc/nginx/snippets
-cp infra/development/etc/nginx/snippets/couchdb-proxy-auth-strip.conf /opt/homebrew/etc/nginx/snippets/
-cp infra/development/etc/nginx/sites-available/sprecha.localhost.conf /opt/homebrew/etc/nginx/servers/
-# Ubuntu/WSL
-sudo cp infra/development/etc/nginx/snippets/couchdb-proxy-auth-strip.conf /etc/nginx/snippets/
-sudo cp infra/development/etc/nginx/sites-available/sprecha.localhost.conf /etc/nginx/sites-available/
-sudo ln -sf /etc/nginx/sites-available/sprecha.localhost.conf /etc/nginx/sites-enabled/
-```
-
-### 5. Start Nginx
-
-```bash
-# macOS
-brew services restart nginx
-# Ubuntu/WSL
-sudo systemctl reload nginx
-```
-
-### 6. Access the app
-
-Open **http://sprecha.localhost/** in your browser.
-
-## Summary
-
-| Service | URL | Port |
-|---------|-----|------|
-| App (with Nginx) | http://sprecha.localhost/ | 80 |
-| Backend | http://127.0.0.1:8083/ | 8083 |
-| shadow-cljs | http://localhost:9630/ | 9630 |
-| nREPL | - | 4444 |
-| CouchDB | http://localhost:5984/ | 5984 |
-| CouchDB UI (Fauxton) | http://localhost:5984/_utils/ | 5984 |
-
 ## Troubleshooting
 
+### The script says a step is left
+Re-run it. Each step reports what it found; the ones it cannot do are marked
+`manual` and carry the section that covers them.
+
 ### "Can't connect to server" in Safari
-Use `http://127.0.0.1:8083/` instead of `http://localhost:8083/`
+Use `http://127.0.0.1:8083/` rather than `http://localhost:8083/`.
 
-### Service Worker registration fails
-Clear browser cache and reload. The `Service-Worker-Allowed` header is required for the sw.js file.
+### Service worker registration fails
+Clear the site's data and reload. `sw.js` needs the `Service-Worker-Allowed`
+header, which the backend sets when it serves the file.
 
-### CouchDB connection errors in logs
-These errors appear when CouchDB is not running. Start CouchDB with `brew services start couchdb` or `couchdb`.
+### CouchDB connection errors in the log
+CouchDB is not running. `systemctl status couchdb`, or `couchdb` in a terminal.
 
-### "no such table: sessions" error
-Run the database initialization: `sqlite3 app.db < initial-setup.sql`
+## Related guides
 
-## Related Guides
-
-- Mobile PWA testing on a real phone via cloudflared: `docs/dev/mobile-pwa-testing.md`
+- Phone testing over a Cloudflare tunnel or the tailnet: [mobile-pwa-testing.md](mobile-pwa-testing.md)
+- The units and vhost themselves: [../../infra/README.md](../../infra/README.md)

@@ -14,7 +14,8 @@ This avoids routing conflicts and makes ownership clear.
 
 ## Prerequisites
 
-1. Local app stack works on your machine (`docs/dev/development-setup.md`).
+1. The stand is up on your machine — `infra/scripts/install-dev-stand.sh`,
+   see [development-setup.md](development-setup.md).
 2. `sprecha.de` DNS is managed by Cloudflare.
 3. `cloudflared` installed.
 
@@ -85,17 +86,16 @@ The stand is two systemd **user** units, `infra/development/etc/systemd/user/`:
 failure and both work from `~/Projects/learning-app`; a checkout elsewhere gets
 a drop-in (`systemctl --user edit <unit>`) rather than an edited unit.
 
-Install, and again after pulling a changed unit:
+Installing them, enabling them and turning on lingering — without which the
+user manager stops at logout and takes both units with it — is the setup
+script's job, and it is the only copy of those commands:
 
 ```bash
-sudo install -m 644 infra/development/etc/systemd/user/learning-app-dev-*.service /etc/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now learning-app-dev-watch learning-app-dev-backend
-loginctl enable-linger "$USER"
+infra/scripts/install-dev-stand.sh
 ```
 
-`enable-linger` is what makes the stand outlive the terminal that started it:
-without it the user manager stops at logout and takes both units with it.
+Run it again after pulling a changed unit: it notices the difference, shows it,
+and reinstalls only after you say so.
 
 ```bash
 systemctl --user status learning-app-dev-watch learning-app-dev-backend
