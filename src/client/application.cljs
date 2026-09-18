@@ -478,53 +478,70 @@
 
 (defn- render
   [state]
-  (let [{:keys [menu-open? page pairing show-install? show-sync? show-update?]}
+  (let [{:keys [build-mark menu-open? page pairing show-install? show-sync? show-update?]}
         (presenter/shell-props state)]
     (list
-     [:a.app-shell__logo {:href "/home"}
-      "Sprecha"
-      ;; A development build's word mark ends in a red D. A letter of the
-      ;; name, nothing to tap; the ^boolean on the flag is what lets Closure
-      ;; drop it from a release.
+     ;; One bar across the top holds the three slots: the word mark, the build
+     ;; mark and the actions. It is fixed, as the word mark and the actions
+     ;; were on their own, so no page's content moves for it; the side slots
+     ;; share the free space equally, which is what centres the build mark in
+     ;; the bar rather than between its neighbours.
+     [:div.app-shell__bar
+      [:div.app-shell__bar-slot
+       [:a.app-shell__logo {:href "/home"}
+        "Sprecha"
+        ;; A development build's word mark ends in a red D. A letter of the
+        ;; name, nothing to tap; the ^boolean on the flag is what lets Closure
+        ;; drop it, and the build mark below, from a release.
+        (when ^boolean goog/DEBUG
+          [:span.app-shell__dev-mark "D"])]]
+      ;; Which bundle the page loaded, and the tap that reloads onto the
+      ;; newest one: an update check, the activation if a worker waits or is
+      ;; installing, otherwise a plain reload.
       (when ^boolean goog/DEBUG
-        [:span.app-shell__dev-mark "D"])]
-     [:div.app-shell__actions
-      ;; The trace export leads the row: a development build's control among
-      ;; the shell's own, not a character beside the word mark.
-      (when ^boolean goog/DEBUG
-        [:button.app-shell__icon-button
+        [:button.app-shell__build-mark
          {:type       "button"
-          :title      "Экспортировать трассу"
-          :aria-label "Экспортировать трассу"
-          :on         {:click [[:effect/export-trace]]}}
-         (trace-export-icon)])
-      ;; A new build waits until asked (ADR-0014); this is the asking.
-      (when show-update?
-        [:button.app-shell__text-button
-         {:type  "button"
-          :title "Обновить приложение"
-          :on    {:click [[:effect/activate-waiting-worker]]}}
-         "Обновить"])
-      ;; Install stands on its own — it is not a sync action, and it is offered
-      ;; before any account exists.
-      (when show-install?
-        [:button.app-shell__icon-button
-         {:type       "button"
-          :title      "Установить приложение"
-          :aria-label "Установить приложение"
-          :on         {:click [[:action/pwa-install-requested]]}}
-         (install-icon)])
-      (when show-sync?
-        [:button.app-shell__icon-button
-         {:type       "button"
-          :title      "Синхронизация"
-          :aria-label "Синхронизация"
-          :on         {:click [[:action/open-sync-menu]]}}
-         (sync-icon)])
-      (case page
-        :page/home        (collections-icon)
-        :page/collections (close-icon)
-        nil)]
+          :aria-label "Перезагрузить сборку"
+          :title      "Перезагрузить сборку"
+          :on         {:click [[:effect/force-reload]]}}
+         build-mark])
+      [:div.app-shell__actions
+       ;; The trace export leads the row: a development build's control among
+       ;; the shell's own, not a character beside the word mark.
+       (when ^boolean goog/DEBUG
+         [:button.app-shell__icon-button
+          {:type       "button"
+           :title      "Экспортировать трассу"
+           :aria-label "Экспортировать трассу"
+           :on         {:click [[:effect/export-trace]]}}
+          (trace-export-icon)])
+       ;; A new build waits until asked (ADR-0014); this is the asking.
+       (when show-update?
+         [:button.app-shell__text-button
+          {:type  "button"
+           :title "Обновить приложение"
+           :on    {:click [[:effect/activate-waiting-worker]]}}
+          "Обновить"])
+       ;; Install stands on its own — it is not a sync action, and it is offered
+       ;; before any account exists.
+       (when show-install?
+         [:button.app-shell__icon-button
+          {:type       "button"
+           :title      "Установить приложение"
+           :aria-label "Установить приложение"
+           :on         {:click [[:action/pwa-install-requested]]}}
+          (install-icon)])
+       (when show-sync?
+         [:button.app-shell__icon-button
+          {:type       "button"
+           :title      "Синхронизация"
+           :aria-label "Синхронизация"
+           :on         {:click [[:action/open-sync-menu]]}}
+          (sync-icon)])
+       (case page
+         :page/home        (collections-icon)
+         :page/collections (close-icon)
+         nil)]]
      (install-guide/render state)
      (when menu-open?
        (sync-menu-dialog (presenter/sync-menu-props state)))

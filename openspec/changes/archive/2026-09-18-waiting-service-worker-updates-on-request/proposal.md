@@ -8,7 +8,7 @@ The service worker keeps waiting until every tab of the origin is gone (#278: ac
 - The app detects a waiting worker — one already waiting at registration, or one that finishes installing while a controller exists — and offers the update: an «Обновить» control in the app shell, in every build. No build activates a worker unasked; a development watch writes a new worker on every recompile.
 - Every page reloads itself once on `controllerchange`, so no tab keeps running on a deleted bucket after the activation.
 - The registration checks for an update every time the document becomes visible, so a phone coming back sees the new build.
-- Development build only: the trace export joins the shell's actions row, and the red D after the word mark goes back to being a letter of the name.
+- Development build only: the build mark forces a bundle reload, and the trace export joins the shell's actions row.
 
 ## Capabilities
 

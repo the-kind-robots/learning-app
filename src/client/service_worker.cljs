@@ -6,7 +6,8 @@
    the worker is told to activate on request, and every page that started
    under a controller reloads itself once when the controller changes, which
    is what makes the deletion safe. The request is always the user's:
-   «Обновить» in the shell."
+   «Обновить» in the shell, or a tap on the build mark in a development
+   build."
   (:require
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]))
@@ -115,6 +116,28 @@
   (fn activate-waiting-worker [_ _]
     (when-let [waiting (some-> ^js @registration .-waiting)]
       (activate! waiting))))
+
+
+;; The forced reload behind the build mark (development build): an update check,
+;; then the activation if a worker waits or is still installing — the
+;; controller change reloads the page — else a plain reload. A redundant
+;; install, or no registration at all, falls through to the plain reload.
+(nxr/register-effect! :effect/force-reload
+  (fn force-reload [_ _]
+    (if-let [^js reg @registration]
+      (-> (.update reg)
+          (.then (fn [^js reg]
+                   (cond
+                     (.-waiting reg)    (activate! (.-waiting reg))
+                     (.-installing reg) (once-install-settled!
+                                         (.-installing reg)
+                                         (fn [state]
+                                           (if (= "installed" state)
+                                             (activate! (.-waiting reg))
+                                             (js/location.reload))))
+                     :else              (js/location.reload))))
+          (.catch (fn [_] (js/location.reload))))
+      (js/location.reload))))
 
 
 (defn start!
