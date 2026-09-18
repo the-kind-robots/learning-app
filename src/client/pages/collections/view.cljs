@@ -1,59 +1,11 @@
 (ns pages.collections.view
   (:require
-   [pages.collections.presenter :as presenter]
-   [utils :as utils]))
-
-
-(defn- progress-dot
-  [retention-level]
-  [:span.card-preview__dot
-   {:style {:background-color (utils/prozent->color retention-level)}}])
-
-
-(defn- preview-row
-  [{:keys [id retention-level value translation]}]
-  [:li.card-preview__row {:replicant/key id}
-   (progress-dot retention-level)
-   [:span.card-preview__de {:lang "de"} value]
-   [:span.card-preview__ru {:lang "ru"} translation]])
-
-
-(defn- empty-state
-  []
-  [:div.card-preview__empty
-   [:p.card-preview__empty-text "Слов пока нет"]
-   [:p.card-preview__empty-hint "Добавьте первое слово"]])
-
-
-(defn- card-preview
-  [{:keys [name preview-words]}]
-  (let [display (not-empty name)]
-    [:div.card-preview
-     [:h2.card-preview__name
-      {:class (when-not display "card-preview__name--placeholder")}
-      (or display "Без названия")]
-     (if (seq preview-words)
-       [:ul.card-preview__list
-        (for [word preview-words]
-          (preview-row word))]
-       (empty-state))]))
-
-
-(defn- main-card
-  [{:keys [preview-words]} active-id]
-  [:div.tab-card
-   {:replicant/key "main"
-    :data-collection-id "main"
-    :class (when (nil? active-id) "tab-card--active")
-    :on {:click       [[:effect/stop-propagation]
-                       [:action/handle-main-tab-click]]
-         :pointerdown [[:effect/begin-tap "main" [[:action/handle-main-tab-click]]]]}}
-   (card-preview {:name "Всё подряд" :preview-words preview-words})])
+   [pages.collections.presenter :as presenter]))
 
 
 (defn- close-icon
   []
-  [:svg.tab-card__close-icon
+  [:svg.tile__close-icon
    {:viewBox "0 0 12 12" :aria-hidden "true" :fill "none"}
    [:path
     {:d "M2 2 L10 10 M10 2 L2 10"
@@ -62,69 +14,124 @@
      :stroke-linecap "round"}]])
 
 
-(defn- tab-card
-  [{coll-id :id coll-name :name :as item} active-id editing-id]
-  (let [editing? (= coll-id editing-id)]
-    [:div.tab-card
-     {:replicant/key coll-id
-      :data-collection-id coll-id
-      :class [(when (= coll-id active-id) "tab-card--active")
-              (when editing? "tab-card--editing")]
-      :on {:click       [[:action/handle-tab-click coll-id]]
-           :pointerdown [[:effect/begin-long-press coll-id]]}}
-     [:button.tab-card__close
-      {:type       "button"
-       :aria-label (str "Удалить набор «" (or (not-empty coll-name) "Без названия") "»")
-       :tabindex   (when-not editing? "-1")
-       :on         {:pointerdown [[:effect/stop-propagation]]
-                    :click       [[:effect/stop-propagation]
-                                  [:effect/delete-collection {:id coll-id}]]}}
-      (close-icon)]
-     (card-preview item)]))
+(defn- close-button
+  "The delete control, revealed by the editing state."
+  [{:keys [id editing? delete-label]}]
+  [:button.tile__close
+   {:type        "button"
+    :aria-label  delete-label
+    :aria-hidden (when-not editing? "true")
+    :tabindex    (when-not editing? "-1")
+    :on          {:pointerdown [[:effect/stop-propagation]]
+                  :click       [[:effect/stop-propagation]
+                                [:effect/delete-collection {:id id}]]}}
+   (close-icon)])
 
 
-(defn- new-card
+(defn- target-attrs
+  "What every tappable thing carries: its id for the gesture tracking, its
+   tap, and a long press where there is something to delete. It goes on a
+   `<button>` every time, so nothing claims a role it cannot carry and a
+   keyboard reaches every target."
+  [{:keys [id tap deletable?]}]
+  {:data-collection-id id
+   :type "button"
+   :on   {:click       tap
+          :pointerdown (if deletable?
+                         [[:effect/begin-long-press id tap]]
+                         [[:effect/begin-tap id tap]])}})
+
+
+(defn- name-and-count
+  [{:keys [name count]}]
+  (list
+   [:span.tile__name name]
+   [:span.tile__count count]))
+
+
+(defn- plain-tile
+  "The box carries the colour and the states; the button inside it fills the
+   box and takes the tap. The close button is that button's sibling, because
+   a button holds no button."
+  [{:keys [key active? editing? deletable?] :as tile}]
+  [:div.tile
+   {:replicant/key key
+    :class [(when active? "tile--active")
+            (when editing? "tile--editing")]}
+   (when deletable? (close-button tile))
+   [:button.tile__target (target-attrs tile)
+    (name-and-count tile)]])
+
+
+(defn- folder-row
+  "A list item holding the row's own button. The `<ul>` keeps its items and
+   the tap target is an element that already is one."
+  [{:keys [id active? editing?] :as row}]
+  [:li.tile__row
+   {:replicant/key id
+    :class [(when active? "tile__row--active")
+            (when editing? "tile__row--editing")]}
+   (close-button row)
+   [:button.tile__row-target (target-attrs row)
+    [:span.tile__row-name (:name row)]
+    [:span.tile__count (:count row)]]])
+
+
+(defn- folder-head
+  "The parent collection when it has a document; a plain label with the
+   count otherwise. Tappable means a button, so a label stays a heading and
+   a target never is one."
+  [{:keys [tappable? name count] :as head}]
+  (if tappable?
+    [:div.tile__head
+     {:class [(when (:active? head) "tile__head--active")
+              (when (:editing? head) "tile__head--editing")]}
+     (when (:deletable? head) (close-button head))
+     [:button.tile__head-target (target-attrs head)
+      (name-and-count head)]]
+    [:h2.tile__label
+     [:span.tile__label-text name]
+     [:span.tile__count count]]))
+
+
+(defn- folder-tile
+  [{:keys [key head rows]}]
+  [:div.tile.tile--folder
+   {:replicant/key key}
+   (folder-head head)
+   [:ul.tile__rows
+    (for [row rows] (folder-row row))]])
+
+
+(defn- add-button
   []
-  [:button.tab-card.tab-card--new
+  [:button.switcher__add
    {:type       "button"
     :aria-label "Новый набор"
     :on         {:click [[:effect/stop-propagation]
                          [:effect/save {:collections/editing-id nil}]
                          [:effect/prompt-create-collection]]}}
-   [:svg.tab-card__dash-frame
-    {:preserveAspectRatio "none" :viewBox "0 0 90 160" :aria-hidden "true"}
-    [:rect
-     {:x            1
-      :y            1
-      :width        88
-      :height       158
-      :rx           10
-      :ry           10
-      :fill         "none"
-      :stroke       "rgba(60,60,60,0.3)"
-      :stroke-width 1.2
-      :stroke-dasharray "7 4"
-      :vector-effect "non-scaling-stroke"}]]
-   [:span.tab-card__plus {:aria-hidden "true"}
-    [:svg {:viewBox "0 0 40 40" :width 40 :height 40}
-     [:path
-      {:d "M20 8 V32 M8 20 H32"
-       :stroke "currentColor"
-       :stroke-width 3.5
-       :stroke-linecap "round"}]]]])
+   [:svg {:viewBox "0 0 40 40" :width 28 :height 28 :aria-hidden "true"}
+    [:path
+     {:d "M20 8 V32 M8 20 H32"
+      :stroke "currentColor"
+      :stroke-width 4
+      :stroke-linecap "round"}]]])
 
 
 (defn page
   [state]
-  (let [{:keys [active-id editing-id loading? main items]} (presenter/page-props state)]
+  (let [{:keys [loading? tiles]} (presenter/page-props state)]
     [:div.switcher
      {:on {:click [[:effect/exit-editing-on-background]]}}
      [:h1.switcher__title "Наборы"]
      (if loading?
        [:div.switcher__loading {:role "status" :aria-live "polite"}
         [:p.switcher__loading-text "Загружаем…"]]
-       [:div.switcher__grid
+       [:div.masonry
         {:on {:click [[:effect/exit-editing-on-background]]}}
-        (main-card main active-id)
-        (for [item items] (tab-card item active-id editing-id))
-        (new-card)])]))
+        (for [tile tiles]
+          (if (:folder? tile)
+            (folder-tile tile)
+            (plain-tile tile)))])
+     (add-button)]))

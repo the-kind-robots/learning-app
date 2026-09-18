@@ -39,26 +39,26 @@
 (defn- ^:async resolve-active
   "Returns {:active-id … :active-name … :word-count …}. If the stored id no
   longer matches a collection, clears localStorage and falls back to the
-  implicit main view. :word-count is the size of the active collection (nil
-  for main — caller falls back to the global vocab count)."
-  [colls]
-  (let [stored-id (when-let [id ((:collections/active-id colls))]
-                    (not-empty id))]
-    (if stored-id
-      (if-let [coll (await ((:collections/get colls) stored-id))]
-        {:active-id   stored-id
-         :active-name (:name coll)
-         :word-count  (count (:word-ids coll))}
-        (do ((:collections/set-active! colls) nil)
-            {:active-id nil :active-name nil :word-count nil}))
-      {:active-id nil :active-name nil :word-count nil})))
+  implicit main view. :word-count is the size of the active collection's
+  scope — its own words and its children's (ADR-0013); nil for main, and
+  the caller falls back to the global vocab count."
+  [{:keys [collections]}]
+  (let [stored-id ((:collections/active-id collections))
+        all-collections (when stored-id (await ((:collections/list collections))))
+        coll      (some #(when (= stored-id (:id %)) %) all-collections)]
+    (cond
+      (nil? stored-id) {:active-id nil :active-name nil :word-count nil}
+      coll {:active-id   stored-id
+            :active-name (:name coll)
+            :word-count  (count (collections/scope-word-ids all-collections stored-id))}
+      :else (do ((:collections/set-active! collections) nil)
+                {:active-id nil :active-name nil :word-count nil}))))
 
 
 (defn- ^:async home-data
   [capabilities]
-  (let [colls (:collections capabilities)
-        total (await (vocabulary/count capabilities))
-        {:keys [active-id active-name word-count]} (await (resolve-active colls))]
+  (let [total (await (vocabulary/count capabilities))
+        {:keys [active-id active-name word-count]} (await (resolve-active capabilities))]
     {:active-id   active-id
      :active-name active-name
      :total       (or word-count total)}))
@@ -95,11 +95,13 @@
   (fn ^:async rename-active-collection
     [{:keys [capabilities dispatch]} _ new-name]
     (try
-      ;; Always dispatch the final name (even when unchanged) so Replicant
-      ;; rewrites the h2 textContent to match state — that's how a blank
-      ;; edit reverts visually to the existing name.
+      ;; A blank or a taken name keeps the current one, and a store that did
+      ;; not change renders nothing (#213) — the heading would keep what was
+      ;; typed. So it is written by hand, through the same effect Escape
+      ;; already uses.
       (when-let [{:keys [name]} (await (collections/rename-active! capabilities new-name))]
-        (dispatch [[:effect/save {:home/active-coll-name name}]]))
+        (dispatch [[:effect/save {:home/active-coll-name name}]
+                   [:effect/set-target-text name]]))
       (catch js/Error err
         (log/error :effect/rename-active-collection {:error (str err)})))))
 
@@ -112,9 +114,8 @@
             result (await (add! capabilities value translation))]
         (if (:error result)
           (dispatch [[:action/show-word-error (:error result)]])
-          (let [colls (:collections capabilities)
-                total (await (vocabulary/count capabilities))
-                {:keys [active-id active-name word-count]} (await (resolve-active colls))]
+          (let [total (await (vocabulary/count capabilities))
+                {:keys [active-id active-name word-count]} (await (resolve-active capabilities))]
             (dispatch (cond-> [[:action/show-home
                                 {:active-id   active-id
                                  :active-name active-name

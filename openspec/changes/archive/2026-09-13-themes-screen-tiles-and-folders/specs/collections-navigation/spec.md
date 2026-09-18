@@ -1,93 +1,4 @@
-# collections-navigation Specification
-
-## Purpose
-Define how the user reaches the themes screen, what a tap on a tile does, and how a collection is created, renamed and deleted.
-## Requirements
-### Requirement: Home screen shows collections grid icon
-The system SHALL display a 2×2 grid icon in the top-right area of the home screen header.
-
-#### Scenario: Grid icon visible
-- **WHEN** the home screen is rendered
-- **THEN** a collections grid icon button is visible in the top-right corner
-
-### Requirement: Tapping collections icon opens collections page
-The system SHALL navigate to the collections page when the collections icon is tapped.
-
-#### Scenario: Navigate to the themes screen
-- **WHEN** the user taps the collections grid icon
-- **THEN** the themes screen is shown
-- **AND** it renders all existing collections as tiles and the floating «+» button
-
-### Requirement: Tapping a collection card switches the active collection
-The system SHALL switch the active collection and navigate back to the home screen when a collection card is tapped.
-
-#### Scenario: Tap collection card activates it
-- **WHEN** the user taps a collection card
-- **THEN** that collection becomes the active collection
-- **AND** the app returns to the home screen
-
-### Requirement: A long press reveals the delete control, which deletes at once
-The system SHALL put a named collection's tile, folder header or folder row into an editing state when the user long-presses it, revealing a delete control on it; tapping that control SHALL delete the collection with no confirmation step. A long press SHALL have no effect on the «Всё подряд» tile, which carries no delete control.
-
-#### Scenario: Long press on a named collection reveals the control
-- **WHEN** the user long-presses a named collection's tile
-- **THEN** that tile enters an editing state showing a delete control labelled «Удалить набор «X»» for the collection named X
-
-#### Scenario: The delete control deletes
-- **WHEN** the user taps the delete control on a tile in the editing state
-- **THEN** the collection is deleted and the screen re-renders without it
-
-#### Scenario: Long press has no effect on «Всё подряд»
-- **WHEN** the user long-presses the «Всё подряд» tile
-- **THEN** no editing state is entered and no delete control appears
-
-### Requirement: A collection is renamed on the home screen heading
-The system SHALL let the user rename the active collection by editing the home screen's heading. A name another collection already carries — trimmed, case-insensitive — SHALL be refused the way a blank one is: the heading shows the current name again and no document is written.
-
-#### Scenario: Rename updates the stored name
-- **WHEN** the user edits the home screen heading and submits a non-blank value no other collection carries
-- **THEN** the collection document is updated with the new name
-- **AND** the heading and the collection's tile show it
-
-#### Scenario: Rename to a taken name is refused
-- **WHEN** the user submits a name another collection carries
-- **THEN** the heading shows the current name again
-- **AND** the collection document is unchanged
-
-### Requirement: Opening the themes screen switches to it at once
-The system SHALL switch to the themes screen the moment it is opened and SHALL show a loading state there until its collections are available. A reload of the screen that is already open (after a sync pull) SHALL keep the current collections on screen until the new ones arrive, with no loading state in between.
-
-#### Scenario: First open shows loading before the collections
-- **WHEN** the user opens the themes screen
-- **THEN** the screen is on display with a loading state before its collections have been read
-- **AND** the collections replace the loading state once they are available
-
-#### Scenario: A post-pull reload keeps the current content
-- **WHEN** the themes screen is on display and a sync pull completes
-- **THEN** the current collections stay on screen until the reloaded ones replace them
-- **AND** no loading state is shown in between
-
-### Requirement: Collection cards own their touch gestures
-A collection card SHALL take a long press as its own gesture: pressing a card SHALL NOT select its preview text or open the browser's callout, and a double tap on a card SHALL NOT zoom the page. Panning and pinching the screen stay with the browser.
-
-#### Scenario: Long press on a card
-- **WHEN** the user presses and holds a collection card on a touch screen
-- **THEN** the card enters its editing state and no text on it is selected
-
-#### Scenario: Quick double tap on a card
-- **WHEN** the user taps a collection card twice in quick succession
-- **THEN** the page does not zoom
-
-### Requirement: A tap the browser cancels without movement still opens the collection
-When the browser cancels a touch on a collection card (`pointercancel` with no `click` following), the card SHALL take it as a tap if the pointer travelled at most 10 px since it went down and the page scrolled at most 2 px in the meantime. A gesture SHALL fire at most once: a `click` the browser delivers after such a recovered cancel does nothing.
-
-#### Scenario: Cancelled tap without movement
-- **WHEN** the user taps a collection card and the browser cancels the touch after at most 10 px of movement and at most 2 px of page scroll
-- **THEN** the collection is activated as if the tap had completed
-
-#### Scenario: Cancelled touch that moved
-- **WHEN** the browser cancels a touch on a card after it travelled more than 10 px or the page scrolled more than 2 px
-- **THEN** nothing is activated
+## ADDED Requirements
 
 ### Requirement: The themes screen reads collection documents only
 Opening the themes screen SHALL read the collection documents and the count of words, and SHALL NOT read vocabulary or review documents.
@@ -164,3 +75,29 @@ The system SHALL show a floating «+» button fixed at the bottom right of the t
 - **WHEN** the user taps the floating «+» and confirms a non-blank name
 - **THEN** the collection is created and appears as a tile
 
+## MODIFIED Requirements
+
+### Requirement: Tapping collections icon opens collections page
+The system SHALL navigate to the collections page when the collections icon is tapped.
+
+#### Scenario: Navigate to collections page
+- **WHEN** the user taps the collections grid icon
+- **THEN** the app navigates to `:page/collections`
+- **AND** the page renders all existing collections as tiles and the floating «+» button
+
+### Requirement: Collections page shows collection cards
+The system SHALL render one tile per collection, or one folder tile per group of collections sharing a folder key. Each tile SHALL display the collection name and word count. The All Words tile SHALL always be present and listed first.
+
+#### Scenario: Collection card displays name and word count
+- **WHEN** the collections page is rendered
+- **THEN** each tile shows the collection name and the count of words belonging to that collection
+
+#### Scenario: All Words card always listed first
+- **WHEN** the collections page is rendered
+- **THEN** the All Words tile appears first
+
+## REMOVED Requirements
+
+### Requirement: Collections page has a create-collection card
+**Reason**: The dashed «+» card scrolled away with the grid; a floating button is always on screen.
+**Migration**: The floating «+» button opens the same name prompt.
