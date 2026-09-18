@@ -406,6 +406,22 @@
    [:line {:x1 "12" :y1 "15" :x2 "12" :y2 "3"}]])
 
 
+(defn- trace-export-icon
+  []
+  [:svg.app-shell__icon
+   {:aria-hidden    "true"
+    :fill           "none"
+    :stroke         "currentColor"
+    :stroke-linecap "round"
+    :stroke-linejoin "round"
+    :stroke-width   "1.8"
+    :viewBox        "0 0 24 24"}
+   [:path {:d "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"}]
+   [:polyline {:points "14 3 14 8 19 8"}]
+   [:line {:x1 "12" :y1 "11" :x2 "12" :y2 "17"}]
+   [:polyline {:points "9 14 12 17 15 14"}]])
+
+
 (defn- sync-icon
   []
   [:svg.app-shell__icon
@@ -462,20 +478,33 @@
 
 (defn- render
   [state]
-  (let [{:keys [menu-open? page pairing show-install? show-sync?]}
+  (let [{:keys [menu-open? page pairing show-install? show-sync? show-update?]}
         (presenter/shell-props state)]
     (list
-     [:a.app-shell__logo {:href "/home"} "Sprecha"]
-     ;; The red D is the trace export, in a development build only; the
-     ;; ^boolean on the flag is what lets Closure drop it from a release.
-     (when ^boolean goog/DEBUG
-       [:button.app-shell__dev-mark
-        {:type       "button"
-         :aria-label "Экспорт трассы"
-         :title      "Экспорт трассы"
-         :on         {:click [[:effect/export-trace]]}}
-        "D"])
+     [:a.app-shell__logo {:href "/home"}
+      "Sprecha"
+      ;; A development build's word mark ends in a red D. A letter of the
+      ;; name, nothing to tap; the ^boolean on the flag is what lets Closure
+      ;; drop it from a release.
+      (when ^boolean goog/DEBUG
+        [:span.app-shell__dev-mark "D"])]
      [:div.app-shell__actions
+      ;; The trace export leads the row: a development build's control among
+      ;; the shell's own, not a character beside the word mark.
+      (when ^boolean goog/DEBUG
+        [:button.app-shell__icon-button
+         {:type       "button"
+          :title      "Экспортировать трассу"
+          :aria-label "Экспортировать трассу"
+          :on         {:click [[:effect/export-trace]]}}
+         (trace-export-icon)])
+      ;; A new build waits until asked (ADR-0014); this is the asking.
+      (when show-update?
+        [:button.app-shell__text-button
+         {:type  "button"
+          :title "Обновить приложение"
+          :on    {:click [[:effect/activate-waiting-worker]]}}
+         "Обновить"])
       ;; Install stands on its own — it is not a sync action, and it is offered
       ;; before any account exists.
       (when show-install?

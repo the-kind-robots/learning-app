@@ -47,19 +47,11 @@
   z-index: 1;
 }
 
-/* Development build only: the red D after the logo, also the trace export. */
+/* Development build only: the last letter of the word mark, in red. A letter,
+   not a control — it carries no handler and nothing here makes it a tap
+   target; it inherits the word mark's face and size. */
 .app-shell__dev-mark {
-  background: none;
-  border: 0;
   color: rgb(var(--color-cardinal));
-  cursor: pointer;
-  font-family: Nunito, sans-serif;
-  font-size: 18px;
-  font-weight: 800;
-  height: 28px;
-  line-height: 1;
-  margin: 0;
-  padding: 0 2px;
 }
 
 .app-shell__logo {
@@ -70,18 +62,20 @@
   font-family: Nunito, sans-serif;
   font-size: 18px;
   font-weight: 800;
-  line-height: 1;
   left: 16px;
+  line-height: 1;
   position: fixed;
   text-decoration: none;
   top: 16px;
+  white-space: nowrap;
   z-index: 20;
 }
 
 
-/* Shell actions sit in one row so any of them can be absent without
-   leaving a hole: install shows only when installable, sync only with
-   an account, the corner icon only on home/collections. */
+/* Shell actions sit in one row so any of them can be absent without leaving a
+   hole: the trace export in a development build, install only when
+   installable, sync only with an account, the corner icon only on
+   home/collections. */
 .app-shell__actions {
   align-items: center;
   display: flex;
@@ -139,6 +133,37 @@
 .app-shell__icon {
   height: 20px;
   width: 20px;
+}
+
+/* The update offer: an icon button's box with a word in it. */
+.app-shell__text-button {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: rgb(var(--color-wolf));
+  cursor: pointer;
+  display: inline-flex;
+  font-family: Nunito, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  height: 32px;
+  line-height: 1;
+  min-height: auto;
+  padding: 0 8px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+@media (hover: hover) {
+  .app-shell__text-button:hover {
+    background: rgb(var(--color-polar));
+    color: rgb(var(--color-owl));
+  }
+}
+
+.app-shell__text-button:active {
+  background: rgb(var(--color-polar));
+  color: rgb(var(--color-owl));
 }
 
 @media (hover: hover) {

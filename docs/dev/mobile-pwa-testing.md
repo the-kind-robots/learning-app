@@ -64,6 +64,19 @@ journalctl -u cloudflared -f
 3. Open `https://<name>.dev.sprecha.de` on phone.
 4. Install to home screen and test from PWA icon.
 
+## Getting the new build
+
+The service worker never activates on its own (#278): a new build waits
+until asked, and on Android a swiped-away PWA is not a closed tab, so without
+asking it would wait for the system to kill the process. The app asks for it:
+
+- «Обновить» appears in the top-right row when a new worker is waiting; tap
+  it. Every open tab of the origin reloads onto the new build. Same in a
+  development build: a watch writes a new worker on every recompile, and
+  taking each one would reload every open page and lose the hot reload.
+- The check for a new build runs every time the app comes back to the
+  foreground, so bring the phone back and look at the row.
+
 ## Reading the trace after a freeze
 
 A development build (`shadow-cljs watch`/`compile`, never `release`) keeps a
@@ -95,8 +108,8 @@ Each entry is `{t, kind, data}` with `t` in ms since page start
 | `console-error` | `{message, stack}` | anything logged with `console.error`, which includes Replicant's "Caught exception during rendering" |
 | `visibilitychange`, `pageshow`, `pagehide`, `freeze`, `resume` | `{visibility}` | page lifecycle |
 
-Getting it off the phone: a development build shows a red **D** after the
-logo. Tap it — it is the trace export — and the share sheet opens with
+Getting it off the phone: a development build puts the export first in the
+top-right row of shell actions. Tap it and the share sheet opens with
 `sprecha-trace-<timestamp>.json`; choose Telegram or mail and send it. Where
 the share sheet cannot take a file (desktop Chrome) the JSON goes to the
 clipboard and the page says «Трасса скопирована»; where there is no clipboard
@@ -104,6 +117,8 @@ either, a prompt shows the JSON for selecting by hand. The file carries a
 `header` (build, time, URL, user agent, visibility, storage estimate), `live`
 (the ring as it was at the tap) and `stored` (the last localStorage mirror,
 which is what survives a reload).
+
+The red D at the end of the word mark is a letter of the name, not a control.
 
 Typical read: find the last `click` or `tap-recovered`; if no `action` follows it the tap never
 reached Nexus; if an `action` follows but no `effect-done` for
