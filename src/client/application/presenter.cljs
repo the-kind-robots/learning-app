@@ -12,7 +12,8 @@
    :page          (:page/current state)
    :pairing       (:app/pairing state)
    :show-install? (boolean (:pwa/install-available? state))
-   :show-sync?    (some? (:app/account-id state))})
+   :show-sync?    (some? (:app/account-id state))
+   :show-update?  (boolean (:pwa/update-waiting? state))})
 
 
 (defn sync-menu-props

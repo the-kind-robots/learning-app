@@ -173,7 +173,11 @@ which the suite does (`channel: "chrome"`).
 
 ## Out of scope
 
-- **Service worker / offline** — not asserted here.
+- **Service worker offline behaviour** — not asserted here. The worker's
+  update path is (`service-worker-update.spec.js`): a build "changes" by
+  rewriting the `SW_VERSION` line of `sw.js` on the way to the browser. That
+  script fetch is not a page request — `page.route` never sees it, measured —
+  so the spec routes it on the `context`.
 - **Sync / CouchDB** — the backend runs alone, no replication target exists.
   "Push to server" therefore reduces to "the word persists across a reload".
 - **Sync-menu dialog** — it renders only for a provisioned account (invite
