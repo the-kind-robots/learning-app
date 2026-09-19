@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 
 // Watches the document from before the app boots and notes the first moment
-// the themes screen's loading state and its first card are in the DOM. The
+// the themes screen's loading state and its first tile are in the DOM. The
 // loading state may live for milliseconds on a small vocabulary, so a polling
 // assertion could miss it; a MutationObserver cannot. Attributes are watched
 // too: the renderer morphs nodes in place, so a block can appear as a class
@@ -14,8 +14,8 @@ const watchSwitcher = `
     if (!window.__seen.loading && document.querySelector('.switcher__loading')) {
       window.__seen.loading = performance.now();
     }
-    if (!window.__seen.card && document.querySelector('.tab-card')) {
-      window.__seen.card = performance.now();
+    if (!window.__seen.tile && document.querySelector('.tile')) {
+      window.__seen.tile = performance.now();
     }
   }).observe(document, {
     attributes: true, characterData: true, childList: true, subtree: true,
@@ -48,7 +48,7 @@ async function seedVocabulary(page, words) {
   }, words);
 }
 
-test('opening the themes screen shows a loading state before its cards', async ({ page }) => {
+test('opening the themes screen shows a loading state before its tiles', async ({ page }) => {
   await page.addInitScript(watchSwitcher);
   await page.goto('/');
   await addWord(page, 'der Hund', 'пёс');
@@ -56,13 +56,14 @@ test('opening the themes screen shows a loading state before its cards', async (
 
   await page.getByRole('link', { name: 'Открыть наборы' }).click();
 
-  // The first read after a seed also builds the views over every document,
-  // which is seconds; the loading state is on screen for all of it.
-  await expect(page.locator('.tab-card')).toHaveCount(2, { timeout: 30000 });
+  // The first read after a seed also builds the words view over every
+  // document for the count; the loading state is on screen for all of it.
+  // One tile: «Всё подряд» with the 201 words.
+  await expect(page.getByRole('button', { name: 'Всё подряд 201', exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.locator('.switcher__loading')).toHaveCount(0);
 
   const seen = await page.evaluate(() => window.__seen);
   expect(seen.loading, 'the loading state entered the DOM').toBeDefined();
-  expect(seen.card, 'a card entered the DOM').toBeDefined();
-  expect(seen.loading).toBeLessThan(seen.card);
+  expect(seen.tile, 'a tile entered the DOM').toBeDefined();
+  expect(seen.loading).toBeLessThan(seen.tile);
 });

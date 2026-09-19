@@ -61,6 +61,27 @@
   "sw-version")
 
 
+(def sw-precache-file
+  "Read back by `service-worker-handler` in core.clj under the same name."
+  "sw-precache")
+
+
+(defn- asset-paths
+  "Every file under `dir` as a request path, sorted, with the compiled bundle
+   left out — the server names `/js/app/main.js` itself, as it names `/`, and
+   it is also the server that drops what must not be precached.
+
+   This belongs to the build for the same reason `assets-digest` does: it
+   walks a directory, and a jar has none."
+  [dir]
+  (let [root (.toPath (io/file dir))]
+    (->> (file-seq (io/file dir))
+         (filter #(.isFile ^java.io.File %))
+         (map #(str "/" (.relativize root (.toPath ^java.io.File %))))
+         (remove #(str/starts-with? % "/js/app/"))
+         sort)))
+
+
 (defn uber
   [_]
   (clean nil)
@@ -73,6 +94,11 @@
   (let [version (assets-digest (io/file class-dir "public"))]
     (spit (io/file class-dir sw-version-file) version)
     (println (format "Service worker version: %s" version)))
+
+  (println "Listing the service worker's assets...")
+  (let [paths (asset-paths (io/file class-dir "public"))]
+    (spit (io/file class-dir sw-precache-file) (str/join "\n" paths))
+    (println (format "Service worker assets: %d" (count paths))))
 
   (println "Compiling files...")
   (b/compile-clj {:basis      @basis

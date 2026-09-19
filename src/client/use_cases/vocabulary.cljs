@@ -4,6 +4,7 @@
    [domain.phrase :as phrase]
    [domain.retention :as retention]
    [domain.vocabulary :as domain]
+   [use-cases.collections :as collections]
    [utils :as utils]))
 
 
@@ -99,13 +100,11 @@
 
 
 (defn ^:async list-active
-  "Returns vocabulary rows scoped to the active collection. When no collection
-   is active (implicit main card), returns all words like `list`."
-  [{:keys [collections] :as capabilities} opts]
-  (let [id       (not-empty ((:collections/active-id collections)))
-        word-ids (when id
-                   (some-> (await ((:collections/get collections) id))
-                           :word-ids))]
+  "Returns vocabulary rows scoped to the active collection — its own words
+   and its children's by name (ADR-0013). When no collection is active
+   (implicit main card), returns all words like `list`."
+  [capabilities opts]
+  (let [word-ids (await (collections/active-word-ids capabilities))]
     (await (list capabilities
                  (cond-> opts
                    word-ids (assoc :word-ids word-ids))))))

@@ -17,8 +17,24 @@
   [com.taoensso/telemere "1.4.0"]
   [http-kit/http-kit "2.8.1"]]
 
+ ;; `dev/clj` carries build hooks, which are Clojure and run in the compiler's
+ ;; own JVM. It is a source path of its own rather than `dev`, which holds a
+ ;; `user.clj` Clojure loads on startup and whose dependencies are the
+ ;; backend's, not the compiler's.
  :source-paths
- ["lib/db/src" "src/shared" "src/client" "dev/cljs" "test"]
+ ["lib/db/src" "src/shared" "src/client" "dev/cljs" "dev/clj" "test"]
+
+ ;; nginx proxies /shadow-cljs/ to 9630 on every host it serves, so the
+ ;; devtools socket only reaches a watch that holds that exact port. The
+ ;; port alone does not pin it: on a BindException `start-http` retries the
+ ;; next free port and says so in a warning nobody reads, which is how a
+ ;; second watch on this machine ends up on 9631 while nginx answers 502.
+ ;; `:strict` makes that bind failure fatal instead. No `:ssl` and no
+ ;; `:host`: TLS ends at the tunnel and at nginx, which proxies to plain
+ ;; http, and the host already defaults to 0.0.0.0.
+ :http
+ {:port   9630
+  :strict true}
 
  :nrepl
  {:port 4444
@@ -36,9 +52,11 @@
    :asset-path "/js/app"
    :modules    {:main {:init-fn main/start}}
    :js-options {:js-provider :shadow}
+   ;; Stamps the development bundle with the checkout it came from. The hook
+   ;; itself is what skips a release build, so this stays one line either way.
+   :build-hooks [(dev.build-identity/stamp-the-build)]
    :devtools
-   {:devtools-url "http://sprecha.localhost/shadow-cljs"
-    :preloads     [debux.preloads]
+   {:preloads     [dev.devtools-socket debux.preloads]
     :watch-dir    "resources/public/css"
     :watch-path   "/css"}
    :release-stubs #{debux.core}}

@@ -17,18 +17,22 @@ pre-built offline dictionary stored in SQLite/OPFS on the client.
 
 ## Development
 
-Quick start (local, http://sprecha.localhost):
-1) Follow the "Local Domain Setup (sprecha.localhost)" section in `docs/dev/development-setup.md` (nginx, no certs). Phone testing goes through a Cloudflare tunnel — `docs/dev/mobile-pwa-testing.md`.
-2) Run:
+One command brings the stand up on a new machine, and says what it did:
+
 ```bash
-npm install
-COUCHDB_URL=http://localhost:5984 COUCHDB_PASS=<pass> clojure -X:dictionary-import
-npx shadow-cljs watch app  # terminal 1
-clj -M:dev -m core         # terminal 2
+infra/scripts/install-dev-stand.sh
 ```
-Open http://sprecha.localhost/ in browser.
+
+It installs what this repository carries — the nginx vhost, the CouchDB
+configuration and databases, the systemd user units — checks the rest, and
+names what only you can do (a CouchDB admin, a tunnel token, a Tailscale
+login). Re-running it on a correct machine changes nothing, and answering no
+to every question reports without touching anything.
+
+Then open http://sprecha.localhost/.
 
 Full guide: [docs/dev/development-setup.md](docs/dev/development-setup.md).
+Phone testing: [docs/dev/mobile-pwa-testing.md](docs/dev/mobile-pwa-testing.md).
 
 ## Dictionary
 

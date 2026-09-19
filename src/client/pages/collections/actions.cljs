@@ -38,11 +38,11 @@
   "The state to save once the collections are read. A reload that brought
    the same data leaves every value identical to `state`'s, so the merge
    returns the same map and nothing renders."
-  [state {:keys [active-id items main]}]
+  [state {:keys [active-id items total-words]}]
   (assoc shown
-         :collections/active-id active-id
-         :collections/items     (unchanged-or (:collections/items state) items)
-         :collections/main      (unchanged-or (:collections/main state) main)))
+         :collections/active-id   active-id
+         :collections/items       (unchanged-or (:collections/items state) items)
+         :collections/total-words total-words))
 
 
 (nxr/register-action! :action/show-collections

@@ -1,0 +1,27 @@
+[Unit]
+Description=Learning App dev stand: backend
+After=network.target
+
+[Service]
+Type=simple
+# The stand is the main checkout. A checkout elsewhere overrides this with a
+# drop-in rather than editing the unit:
+# systemctl --user edit learning-app-dev-backend.service
+WorkingDirectory=%h/Projects/learning-app
+# Named, and named as the working directory's own app.db on purpose. The
+# backend adopts a cwd-relative `app.db` into LEARNING_APP__DB_PATH whenever
+# the two paths differ and the target does not exist — it moves the file and
+# deletes the original. That is what makes a packaged deploy atomic (#201) and
+# what silently stole a live dev database (#282). Equal paths, no adoption.
+Environment=LEARNING_APP__DB_PATH=%h/Projects/learning-app/app.db
+# The port nginx proxies sprecha.localhost to; the default, written down so a
+# change to it is a change to this file.
+Environment=LEARNING_APP__PORT=8083
+# Where the Clojure CLI installer puts it, and on the user manager's own PATH
+# — unlike npx, so this one needs no login shell.
+ExecStart=/usr/local/bin/clojure -M:dev -m core
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

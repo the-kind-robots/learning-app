@@ -466,12 +466,61 @@
     (public-dir-hash)))
 
 
+(def ^:private sw-precache-resource
+  "Where the build leaves the asset paths, one per line. The name is repeated
+   in build.clj, which writes it."
+  "sw-precache")
+
+
+(def ^:private precache-extras
+  "The two paths no walk of `resources/public` can see: the shell is a route,
+   and the bundle is compiler output the walk skips."
+  ["/" "/js/app/main.js"])
+
+
+(def ^:private precache-excluded
+  "Files that are served but must not be precached: the worker's own source,
+   which it would cache under its old bucket, and the metrics library only a
+   development build loads."
+  #{"/js/sw.js" "/js/web-vitals.js"})
+
+
+(defn- public-dir-paths
+  "Every asset under `resources/public` as a request path, `/js/app` left out.
+   Only a source checkout can answer this, for the reason `public-dir-hash`
+   gives."
+  []
+  (let [dir  (io/file "resources/public")
+        root (.toPath dir)]
+    (for [^java.io.File f (file-seq dir)
+          :when (.isFile f)
+          :let  [path (str "/" (.relativize root (.toPath f)))]
+          :when (not (str/starts-with? path "/js/app/"))]
+      path)))
+
+
+(defn- precache-paths
+  "What the worker precaches: the assets as they are, not as someone
+   remembered them. The build writes the walk into the artifact; a source
+   checkout walks the directory on every request, so a file added under
+   `resources/public` joins the list with no edit anywhere."
+  []
+  (->> (if-let [built (io/resource sw-precache-resource)]
+         (str/split-lines (str/trim (slurp built)))
+         (public-dir-paths))
+       (remove precache-excluded)
+       (concat precache-extras)
+       sort))
+
+
 (defn service-worker-handler
   [request]
   (when (= (:uri request) "/js/app/sw.js")
     (when-let [res (io/resource "public/js/sw.js")]
       (-> (response/response
-           (str "const SW_VERSION=\"" (service-worker-version) "\";\n" (slurp res)))
+           (str "const SW_VERSION=\"" (service-worker-version) "\";\n"
+                "const PRECACHE_URLS=" (cheshire/generate-string (precache-paths)) ";\n"
+                (slurp res)))
           (response/content-type "text/javascript")
           (response/header "Service-Worker-Allowed" "/")))))
 
