@@ -1,6 +1,7 @@
 (ns client.domain.retention-test
   (:require
    [cljs.test :refer-macros [deftest is testing]]
+   [clojure.math :as math]
    [domain.retention :as sut]
    [utils :as utils]))
 
@@ -58,3 +59,17 @@
           stale (last-reviewed-days-ago 0.01)]
       (is (> (sut/retention-level fresh now-ms) (sut/retention-level stale now-ms)))
       (is (< (sut/urgency fresh now-ms) (sut/urgency stale now-ms))))))
+
+
+(deftest retention-level-is-the-image-of-urgency
+  (testing "a reviewed word: the level is exactly 100 * exp(- urgency)"
+    (let [reviewed (last-reviewed-days-ago 0.01)]
+      (is (= (sut/retention-level reviewed now-ms)
+             (* 100 (math/exp (- (sut/urgency reviewed now-ms))))))))
+  (testing "a word never reviewed: urgency is infinite and the level is zero"
+    (is (= ##Inf (sut/urgency [] now-ms)))
+    (is (zero? (sut/retention-level [] now-ms))))
+  (testing "a clock that moved backwards: negative urgency still caps at 100"
+    (let [future-review (last-reviewed-days-ago -1)]
+      (is (neg? (sut/urgency future-review now-ms)))
+      (is (= 100 (sut/retention-level future-review now-ms))))))

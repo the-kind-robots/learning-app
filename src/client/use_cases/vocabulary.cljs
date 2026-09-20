@@ -91,14 +91,15 @@
         ;; carries: retention underflows to a flat 0.0 after 3.8 unreviewed
         ;; days, and the ties then fall back to the repository's read order,
         ;; which is the alphabet (#431). Urgency orders the same words the
-        ;; same way without collapsing.
+        ;; same way without collapsing, and the level is its image, so a
+        ;; word's reviews are still walked once (#404).
         rows         (->> candidates
                           (map (fn [word]
-                                 (let [word-reviews (reviews (:id word) [])]
-                                   {:urgency (retention/urgency word-reviews now)
+                                 (let [urgency (retention/urgency (reviews (:id word) []) now)]
+                                   {:urgency urgency
                                     :row     (assoc word
                                                     :retention-level
-                                                    (retention/retention-level word-reviews now))})))
+                                                    (retention/urgency->retention-level urgency))})))
                           (sort-by :urgency (if (= order :asc) > <))
                           (map :row))
         rows         (cond->> rows
