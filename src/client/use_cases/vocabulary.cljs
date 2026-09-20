@@ -62,7 +62,8 @@
 
 (defn ^:async list
   "Vocabulary rows with retention levels, sorted by retention (`:order`
-   :asc or :desc, default :desc) and paged by `:offset`/`:limit`. `:word-ids`
+   :asc for the most due first, :desc for the best remembered first,
+   default :desc) and paged by `:offset`/`:limit`. `:word-ids`
    restricts to those words, `:search` to values or translations containing
    the text. `:total` counts the words before the search filter, so an empty
    vocabulary and a search with no match tell apart."
@@ -86,12 +87,20 @@
                        (mapv :id candidates))
         reviews      (await ((:reviews/by-word reviews) narrowed-ids))
         now          (now-ms capabilities)
+        ;; Sorted by urgency rather than by the retention level the row
+        ;; carries: retention underflows to a flat 0.0 after 3.8 unreviewed
+        ;; days, and the ties then fall back to the repository's read order,
+        ;; which is the alphabet (#431). Urgency orders the same words the
+        ;; same way without collapsing.
         rows         (->> candidates
                           (map (fn [word]
-                                 (assoc word
-                                        :retention-level
-                                        (retention/retention-level (reviews (:id word) []) now))))
-                          (sort-by :retention-level (if (= order :asc) < >)))
+                                 (let [word-reviews (reviews (:id word) [])]
+                                   {:urgency (retention/urgency word-reviews now)
+                                    :row     (assoc word
+                                                    :retention-level
+                                                    (retention/retention-level word-reviews now))})))
+                          (sort-by :urgency (if (= order :asc) > <))
+                          (map :row))
         rows         (cond->> rows
                        offset (drop offset)
                        limit  (take limit))]

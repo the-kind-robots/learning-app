@@ -35,14 +35,17 @@
 
    opts:
      :vocab-per-lesson  — how many words and phrases to include (default 3)
+     :vocab-pool-size   — how many of the most due to draw them from (default 20)
      :trial-selector    — strategy for picking the next trial (:first or :random, default nil → random)"
   [{:keys [collections examples lessons] :as capabilities}
-   {:keys [vocab-per-lesson trial-selector]
-    :or   {vocab-per-lesson domain/default-vocab-per-lesson}}]
+   {:keys [vocab-per-lesson vocab-pool-size trial-selector]
+    :or   {vocab-per-lesson domain/default-vocab-per-lesson
+           vocab-pool-size  domain/default-vocab-pool-size}}]
   (try
-    (let [{selected :words} (await (vocabulary/list-active
-                                    capabilities
-                                    {:order :asc :limit vocab-per-lesson}))]
+    (let [{pool :words} (await (vocabulary/list-active
+                                capabilities
+                                {:order :asc :limit vocab-pool-size}))
+          selected      (domain/pick-vocab pool vocab-per-lesson)]
       (if-not (seq selected)
         {:error :no-words-available}
         (let [collection-id   ((:collections/active-id collections))

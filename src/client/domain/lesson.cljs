@@ -7,7 +7,21 @@
 (def default-vocab-per-lesson 3)
 
 
+(def default-vocab-pool-size
+  "How many of the most due words a lesson draws from. Taking the top of that
+   pool would serve the same words until they are answered; drawing from it
+   keeps the due end of the vocabulary in rotation."
+  20)
+
+
 (def default-trial-selector rand-nth)
+
+
+(defn pick-vocab
+  "Picks `n` of the pool uniformly at random, no word twice. A pool shorter
+   than `n` is taken whole."
+  [pool n]
+  (vec (take n (shuffle pool))))
 
 
 (def trial-type-word "word")

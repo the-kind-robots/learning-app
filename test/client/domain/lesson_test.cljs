@@ -436,3 +436,34 @@
       (is (= 1 (count (:remaining-trials wrong))))
       (is (true? (-> right sut/last-result :correct?)))
       (is (zero? (count (:remaining-trials right)))))))
+
+
+;; =============================================================================
+;; pick-vocab
+;; =============================================================================
+
+
+(def ^:private pool (vec (range 20)))
+
+
+(deftest pick-vocab-draws-from-the-pool
+  (testing "the asked-for count, all of it from the pool, nothing twice"
+    (let [picked (sut/pick-vocab pool 3)]
+      (is (= 3 (count picked)))
+      (is (every? (set pool) picked))
+      (is (= 3 (count (distinct picked)))))))
+
+
+(deftest pick-vocab-takes-a-short-pool-whole
+  (testing "a pool smaller than the lesson gives what it has"
+    (let [picked (sut/pick-vocab [:a :b] 3)]
+      (is (= 2 (count picked)))
+      (is (= #{:a :b} (set picked)))))
+  (testing "an empty pool gives nothing"
+    (is (= [] (sut/pick-vocab [] 3)))))
+
+
+(deftest pick-vocab-does-not-answer-the-same-pool-the-same-way
+  (testing "repeated draws are not one fixed answer — 50 draws of 3 from 20"
+    (let [draws (into #{} (map (fn [_] (sut/pick-vocab pool 3))) (range 50))]
+      (is (< 1 (count draws))))))
