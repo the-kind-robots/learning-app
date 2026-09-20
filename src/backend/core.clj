@@ -466,12 +466,87 @@
     (public-dir-hash)))
 
 
+(def ^:private sw-precache-resource
+  "Where the build leaves the asset paths, one per line. The name is repeated
+   in build.clj, which writes it."
+  "sw-precache")
+
+
+(def ^:private shell-asset-dirs
+  "Directories under `resources/public` that hold app shell assets and nothing
+   else. Everything in them is precached, so a new stylesheet, font or icon
+   joins the list with no edit here."
+  ["/css/" "/fonts/" "/icons/"])
+
+
+(def ^:private shell-asset-files
+  "Shell assets named one by one, because the directory they sit in is not
+   theirs alone. `/js` also holds the worker's own source and a metrics library
+   only a development build loads; the root holds the manifests and the icon.
+   `/` is a route and `/js/app/main.js` is compiler output — no walk can see
+   either."
+  ["/"
+   "/dev-manifest.json"
+   "/favicon.ico"
+   "/icons.svg"
+   "/js/app/main.js"
+   "/js/sqlite3-dictionary.js"
+   "/js/sqlite3-worker.js"
+   "/js/sqlite3.js"
+   "/js/sqlite3.wasm"
+   "/manifest.json"])
+
+
+(defn- public-dir-paths
+  "Every file under `resources/public` as a request path. Only a source
+   checkout can answer this, for the reason `public-dir-hash` gives."
+  []
+  (let [dir  (io/file "resources/public")
+        root (.toPath dir)]
+    (for [^java.io.File f (file-seq dir)
+          :when (.isFile f)]
+      (str "/" (.relativize root (.toPath f))))))
+
+
+(defn- shell-assets
+  "The rule, over whatever files a run found under `resources/public`:
+   everything in a shell directory, plus the named files, and nothing else. A
+   stylesheet, font or icon added to one of those directories joins with no
+   edit anywhere; an old build's output under `/js`, a file downloaded into the
+   checkout root, the worker's own source do not, however long they sit there.
+   `cache.addAll` is atomic, so a list that simply followed the disk would be a
+   worker that stops installing the day someone clears a stray directory out."
+  [paths]
+  (->> paths
+       (filter (fn [path] (some #(str/starts-with? path %) shell-asset-dirs)))
+       (concat shell-asset-files)
+       distinct
+       sort))
+
+
+(defn- precache-paths
+  "What the worker precaches. Where the files come from differs by run — the
+   build writes its walk into the artifact, a source checkout walks the
+   directory on every request — but the rule over them does not, so a packaged
+   build of a developer's dirty checkout serves the same list as a clean one."
+  []
+  (shell-assets
+   (if-let [built (io/resource sw-precache-resource)]
+     (str/split-lines (str/trim (slurp built)))
+     (public-dir-paths))))
+
+
 (defn service-worker-handler
   [request]
   (when (= (:uri request) "/js/app/sw.js")
     (when-let [res (io/resource "public/js/sw.js")]
       (-> (response/response
-           (str "const SW_VERSION=\"" (service-worker-version) "\";\n" (slurp res)))
+           (str "const SW_VERSION=\""
+                (service-worker-version)
+                "\";\n"
+                "const PRECACHE_URLS=" (cheshire/generate-string (precache-paths))
+                ";\n"
+                (slurp res)))
           (response/content-type "text/javascript")
           (response/header "Service-Worker-Allowed" "/")))))
 
