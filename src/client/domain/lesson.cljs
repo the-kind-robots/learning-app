@@ -7,7 +7,46 @@
 (def default-vocab-per-lesson 3)
 
 
+(def default-vocab-pool-size
+  "How many of the most due words a lesson draws from. Taking the top of that
+   pool would serve the same words until they are answered; drawing from it
+   keeps the due end of the vocabulary in rotation."
+  20)
+
+
 (def default-trial-selector rand-nth)
+
+
+(defn pick-vocab
+  "Picks `n` items for a lesson out of `rows`, each carrying the `:urgency`
+   the vocabulary was sorted on. Strict urgency still wins: the sort runs
+   over every row, so a more due item outranks a less due one every time,
+   not merely usually.
+
+   Shuffled twice, for two unrelated reasons — deleting either brings a bug
+   back.
+
+   The first shuffle breaks ties. `sort-by` is stable (`cljs.core/sort`
+   hands off to `goog.array.stableSort`; the docstring does not promise it,
+   so the tie test below is what holds this), which means equal urgencies
+   keep the order they arrived in, and that order is the repository's —
+   `_id`, the alphabet. Urgency ties in bulk: every item never reviewed sits
+   at `##Inf`, and elapsed time is truncated to seconds, so a batch added
+   together ties too. Without the shuffle the pool is cut alphabetically and
+   the lesson walks `ab-` again (#431).
+
+   The second shuffle is the draw: it takes `n` of the pool uniformly, so
+   consecutive lessons over an unchanged vocabulary differ.
+
+   A pool shorter than `n` is taken whole."
+  [rows pool-size n]
+  (->> rows
+       shuffle
+       (sort-by :urgency >)
+       (take pool-size)
+       shuffle
+       (take n)
+       vec))
 
 
 (def trial-type-word "word")

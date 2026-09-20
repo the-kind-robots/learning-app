@@ -57,6 +57,17 @@ Run this when the user wants to create a new item and begin implementation.
   --base master
 ```
 
+When the branch is for a delegated executor rather than for the calling session, add `--no-checkout`:
+
+```bash
+.skills/gh-project-workflow/scripts/start_issue_flow.sh \
+  --title "Add offline start screen" \
+  --priority "High" \
+  --status "In progress" \
+  --base master \
+  --no-checkout
+```
+
 Important behavior:
 - Before creating anything, the script searches the configured project for an exact-title item and reuses it when found.
 - Existing issue project items are reused as-is; existing draft items are converted to issues.
@@ -64,7 +75,9 @@ Important behavior:
 - If no project item exists, the script searches repo issues by exact title before creating a new issue.
 - Default mode (`--mode issue`) creates an issue only when no reusable project item or issue exists, adds it to project, sets fields, and creates/checks out a dev branch.
 - Draft mode (`--mode draft-convert`) creates a draft item only when no reusable item exists, sets fields, converts it to an issue, then creates/checks out branch.
-- Branch creation uses `gh issue develop <number> --checkout`.
+- Branch creation uses `gh issue develop <number> --checkout`, so the calling worktree ends up on the issue branch and holds it.
+- `--no-checkout` creates and links the branch and leaves the calling worktree where it was, printing `Branch: <name>` instead of `Checked Out Branch: <name>`. Use it when the branch is for somebody else — a delegated executor in its own worktree cannot take a branch the caller is sitting on, because git allows one branch in one worktree. `--skip-branch` creates no branch at all; passing both is an error.
+- Branch creation is idempotent: the script passes the issue's existing linked branch back to `gh issue develop --name`, which reuses it. Without a name, `gh` appends `-1` to a name already taken and forks a second branch off the same issue.
 - `Area`, `Size` and `Status` are ordinary project fields, set by name through `gh project item-edit`; `Area` and `Size` are skipped with a warning when the target project does not expose them.
 - `Priority` is not a project field. It is the organization's native issue field, written with the `setIssueFieldValue` mutation — `updateProjectV2ItemFieldValue` refuses a column backed by an issue field. Valid options are `Urgent`, `High`, `Medium`, `Low`; the retired `Blocker`/`Critical`/`Major`/`Minor`/`Trivial` are rejected with the replacement named.
 - Reading Priority back needs the `ProjectV2ItemIssueFieldValue` fragment. A plain `ProjectV2ItemFieldSingleSelectValue` query returns nothing for it, which looks exactly like "unset" and is not.

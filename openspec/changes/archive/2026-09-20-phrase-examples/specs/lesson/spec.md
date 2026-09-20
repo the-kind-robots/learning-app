@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Lesson trial generation rules
-The system SHALL generate trials for each word, each phrase, and each example, using denormalized prompts and answers. Words and phrases SHALL be selected into the lesson from one shared pool ordered by retention. A phrase SHALL produce example trials on the same terms as a word: every example stored for it becomes an example trial.
+The system SHALL generate trials for each word, each phrase, and each example, using denormalized prompts and answers. A phrase SHALL produce example trials on the same terms as a word: every example stored for it becomes an example trial.
 
 #### Scenario: Trial generation
 - **WHEN** a lesson starts

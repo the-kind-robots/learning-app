@@ -472,3 +472,72 @@
       (is (= 1 (count (:remaining-trials wrong))))
       (is (true? (-> right sut/last-result :correct?)))
       (is (zero? (count (:remaining-trials right)))))))
+
+
+;; =============================================================================
+;; pick-vocab
+;; =============================================================================
+
+
+(defn- rows
+  "Rows as `list` hands them over — ordered most due first, alphabetical by
+   id wherever the urgencies tie, which is the read order `list` leaves."
+  [urgencies]
+  (vec (map-indexed (fn [n urgency]
+                      {:id (str "vocab:wort-" (char (+ 97 n))) :urgency urgency})
+                    urgencies)))
+
+
+(def ^:private pool (rows (range 20 0 -1)))
+
+
+(defn- draws
+  "`n` draws of `count` from `rows`, as a set of id sets. Sets, not vectors:
+   the draw shuffles what it picked, so comparing order would call a fixed
+   selection varied and pass on the very bug these tests are for."
+  [rows pool-size count n]
+  (into #{}
+        (map (fn [_] (set (map :id (sut/pick-vocab rows pool-size count)))))
+        (range n)))
+
+
+(deftest pick-vocab-draws-from-the-pool
+  (testing "the asked-for count, all of it from the pool, nothing twice"
+    (let [picked (sut/pick-vocab pool 20 3)]
+      (is (= 3 (count picked)))
+      (is (every? (set pool) picked))
+      (is (= 3 (count (distinct picked)))))))
+
+
+(deftest pick-vocab-takes-a-short-pool-whole
+  (testing "a pool smaller than the lesson gives what it has"
+    (let [picked (sut/pick-vocab (rows [2 1]) 20 3)]
+      (is (= 2 (count picked)))
+      (is (= #{"vocab:wort-a" "vocab:wort-b"} (set (map :id picked))))))
+  (testing "an empty pool gives nothing"
+    (is (= [] (sut/pick-vocab [] 20 3)))))
+
+
+(deftest pick-vocab-does-not-answer-the-same-pool-the-same-way
+  (testing "repeated draws are not one fixed answer — 50 draws of 3 from 20"
+    (is (< 1 (count (draws pool 20 3 50))))))
+
+
+(deftest pick-vocab-cuts-a-tied-pool-at-random
+  (testing "every item never reviewed ties at ##Inf, and the cut is not the alphabet"
+    (let [tied (rows (repeat 10 ##Inf))]
+      (is (< 1 (count (draws tied 3 3 50))))))
+  (testing "a batch added within one second ties on urgency too, and cuts the same way"
+    (let [tied (rows (repeat 10 0.0231))]
+      (is (< 1 (count (draws tied 3 3 50)))))))
+
+
+(deftest pick-vocab-lets-strict-urgency-win-over-the-shuffle
+  (testing "a more due item outranks a less due one every time, not merely usually"
+    (let [ranked (rows [9 8 7 6 5 4 3 2 1])
+          top    (set (map :id (take 3 ranked)))]
+      (is (= #{top} (draws ranked 3 3 50))
+          "the three most due are the only pool, in all fifty draws")))
+  (testing "one strictly more due item is always in the pool of a tied field"
+    (let [ranked (rows (cons ##Inf (repeat 9 1.0)))]
+      (is (every? #(contains? % "vocab:wort-a") (draws ranked 3 3 50))))))

@@ -32,7 +32,9 @@ Options:
   --base <branch>               Base branch for dev branch (default: GHWF_DEFAULT_BASE or master)
   --branch-name <name>          Override branch name
   --no-reuse-existing           Do not reuse exact-title project item or issue
-  --skip-branch                 Do not create/checkout development branch
+  --skip-branch                 Do not create the development branch at all
+  --no-checkout                 Create and link the branch, leave the calling worktree alone
+                                (mutually exclusive with --skip-branch)
   --help                        Show this help
 USAGE
 }
@@ -325,6 +327,7 @@ mode="issue"
 branch_name=""
 reuse_existing=1
 skip_branch=0
+no_checkout=0
 labels_json=""
 
 while [[ $# -gt 0 ]]; do
@@ -425,6 +428,10 @@ while [[ $# -gt 0 ]]; do
       skip_branch=1
       shift
       ;;
+    --no-checkout)
+      no_checkout=1
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -440,6 +447,7 @@ done
 [[ -n "$repo" ]] || die "--repo or GHWF_REPO is required"
 [[ -n "$project_number" ]] || die "--project-number or GHWF_PROJECT_NUMBER is required"
 [[ "$mode" == "issue" || "$mode" == "draft-convert" ]] || die "--mode must be 'issue' or 'draft-convert'"
+[[ "$skip_branch" -eq 0 || "$no_checkout" -eq 0 ]] || die "--skip-branch and --no-checkout are mutually exclusive: one creates no branch, the other creates one without touching the working tree"
 
 # Checked before anything is created: a run that files the issue and then dies on the
 # priority leaves half-tracked work behind.
@@ -538,21 +546,39 @@ apply_issue_priority "$priority_field" "$priority_option"
 apply_project_field "$size_field" "$size_option" false
 apply_project_field "$status_field" "$status_option" true
 
-checked_out_branch=""
+development_branch=""
 if [[ "$skip_branch" -eq 0 ]]; then
-  develop_args=(issue develop "$issue_number" -R "$repo" --checkout)
+  # `gh issue develop` with no --name appends -1 to a name already taken, so a rerun forks a
+  # duplicate branch off the same issue. Handing it the branch already linked to the issue
+  # makes the run idempotent: gh reuses that branch and creates nothing.
+  if [[ -z "$branch_name" ]]; then
+    branch_name="$(gh issue develop --list "$issue_number" -R "$repo" 2>/dev/null | head -n1 | cut -f1 || true)"
+  fi
+
+  develop_args=(issue develop "$issue_number" -R "$repo")
+  [[ "$no_checkout" -eq 1 ]] || develop_args+=(--checkout)
   [[ -n "$base_branch" ]] && develop_args+=(--base "$base_branch")
   [[ -n "$branch_name" ]] && develop_args+=(--name "$branch_name")
 
-  gh "${develop_args[@]}" >/dev/null
-  checked_out_branch="$(git branch --show-current || true)"
+  # --no-checkout leaves the working tree alone, so the branch name cannot be read back from
+  # it. gh prints the branch URL; everything after /tree/ is the name, slashes included.
+  develop_url="$(gh "${develop_args[@]}" | tail -n1 | tr -d '\r')"
+  if [[ "$no_checkout" -eq 1 ]]; then
+    development_branch="${develop_url##*/tree/}"
+  else
+    development_branch="$(git branch --show-current || true)"
+  fi
 fi
 
 echo "Issue URL: $issue_url"
 echo "Issue Number: $issue_number"
 echo "Project Item ID: $item_id"
-if [[ -n "$checked_out_branch" ]]; then
-  echo "Checked Out Branch: $checked_out_branch"
+if [[ -n "$development_branch" ]]; then
+  if [[ "$no_checkout" -eq 1 ]]; then
+    echo "Branch: $development_branch"
+  else
+    echo "Checked Out Branch: $development_branch"
+  fi
 fi
 
 # Name the Claude Code session after the issue. No-op outside a session; never fails the flow.

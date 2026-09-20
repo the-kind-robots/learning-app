@@ -236,3 +236,37 @@
           (is (= expected actual))
           (is (= (select-keys expected (take 2 word-ids))
                  (into {} (map (juxt :id :retention-level)) subset)))))))))
+
+
+(defn- ^:async seed-single-review!
+  [dbs id value days-ago]
+  (await (db/insert (:user/db dbs)
+                    {:_id         id
+                     :type        "vocab"
+                     :value       value
+                     :translation [{:lang "ru" :value "слово"}]
+                     :created-at  time/test-now-iso
+                     :modified-at time/test-now-iso}))
+  (await (db/insert (:user/db dbs)
+                    {:_id        (str "review-" id)
+                     :type       "review"
+                     :word-id    id
+                     :retained   true
+                     :created-at (utils/ms->iso (- (time/now-ms)
+                                                   (* days-ago 24 3600 1000)))})))
+
+
+(deftest list-orders-by-dueness-past-the-retention-underflow
+  (async-testing "`list` orders long-unreviewed words by how due they are, not by the alphabet"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      ;; `vocab:a-…` reads first from the id-keyed view and is the least due;
+      ;; ordering by retention alone leaves it first, because every level here
+      ;; has underflowed to the same zero (#431).
+      (await (seed-single-review! dbs "vocab:a-wort" "A-Wort" 5))
+      (await (seed-single-review! dbs "vocab:m-wort" "M-Wort" 60))
+      (await (seed-single-review! dbs "vocab:z-wort" "Z-Wort" 300))
+      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:order :asc}))]
+        (is (every? zero? (map :retention-level words)))
+        (is (= ["vocab:z-wort" "vocab:m-wort" "vocab:a-wort"] (mapv :id words))))))))
