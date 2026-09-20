@@ -34,6 +34,14 @@
   (= (:type trial) trial-type-phrase))
 
 
+(defn vocab-trial?
+  "The trial an entry itself is asked by — a word trial for a word, a phrase
+   trial for a phrase. It is the one whose `:word-id` an example hangs off,
+   so it is the one that unlocks examples."
+  [trial]
+  (not (example-trial? trial)))
+
+
 (defn- vocab->trial
   "A word or a phrase becomes the trial its kind calls for. `:word-id` keeps
    its name because reviews and examples are stored under it."
@@ -139,10 +147,11 @@
                           (trial-normalized current-trial correct-answer))
         remaining      (cond-> (:remaining-trials state)
                          correct? (remove-trial current-trial))
-        remaining      (if (and correct? (word-trial? current-trial))
+        unlock?        (and correct? (vocab-trial? current-trial))
+        remaining      (if unlock?
                          (unlock-example-trials remaining (:word-id current-trial))
                          remaining)
-        trials         (if (and correct? (word-trial? current-trial))
+        trials         (if unlock?
                          (unlock-example-trials (:trials state) (:word-id current-trial))
                          (:trials state))
         last-result    {:correct? correct?

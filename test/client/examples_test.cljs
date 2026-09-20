@@ -326,3 +326,25 @@
              (is (empty? examples))))))
         (finally
          (set! js/fetch original-fetch))))))
+
+
+(deftest request-queues-the-same-task-for-a-phrase
+  (async-testing "GH-371: the fetch path reads a vocabulary entry, not a word"
+    (await
+     (with-test-dbs
+      (^:async fn
+       [dbs]
+       (let [phrase {:id          "vocab:auf jeden fall"
+                     :kind        "phrase"
+                     :translation [{:lang "ru" :value "во всяком случае"}]
+                     :value       "auf jeden Fall"}]
+         (await (sut/request! dbs (test-clock) phrase "collection-1" "Поездка"))
+         (let [tasks (await (db-queries/fetch-by-type (:device/db dbs) "task"))
+               {:keys [data task-type]} (first tasks)]
+           (is (= 1 (count tasks)))
+           (is (= "example-fetch" task-type))
+           (is (= "auf jeden Fall" (:word data)))
+           (is (= "vocab:auf jeden fall" (:word-id data)))
+           (is (= ["во всяком случае"] (:translations data)))
+           (is (= "collection-1" (:collection-id data)))
+           (is (= "Поездка" (:collection-name data))))))))))

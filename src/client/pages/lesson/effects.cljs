@@ -79,7 +79,7 @@
   (fn ^:async add-token
     [{:keys [capabilities dispatch]} _ {:keys [dictionary-form hints translation word-index]}]
     (try
-      (await (vocabulary/add! capabilities dictionary-form translation))
+      (await (vocabulary/add! capabilities dictionary-form translation :word))
       ;; The saved hint map re-renders the open card to its added state;
       ;; the popover's on-update then repositions the shell.
       (dispatch [[:action/annotate-answer

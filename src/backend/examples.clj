@@ -85,13 +85,14 @@
 (def ^:private generated-example-schema
   [:map {:closed true}
    [:value
-    {:description "A natural German sentence using the requested word."}
+    {:description "A natural German sentence containing the requested target — a lemma, possibly inflected, or a whole phrase."}
     [:string {:min 1}]]
    [:translation
     {:description "Russian translation of the sentence."}
     [:string {:min 1}]]
    [:structure
-    {:description "A list of JSON objects containing the used word form, its dictionary form, and its translation, ordered left to right as they appear in the German sentence."}
+    {:description
+     "A list of JSON objects containing the used word form, its dictionary form, and its translation, ordered left to right as they appear in the German sentence."}
     [:vector {:min 1}
      [:map {:closed true}
       [:usedForm
@@ -106,10 +107,11 @@
 
 
 (def ^:private valid-generated-example-schema
-  (-> generated-example-schema
-      (mu/update :value       with-constraint german-sentence-text?  "German sentence required")
-      (mu/update :translation with-constraint russian-sentence-text? "Russian translation required")
-      (mu/update-in [:structure 0 :translation] with-constraint russian-text? "Structure translation must be Cyrillic")))
+  (->
+   generated-example-schema
+   (mu/update :value with-constraint german-sentence-text? "German sentence required")
+   (mu/update :translation with-constraint russian-sentence-text? "Russian translation required")
+   (mu/update-in [:structure 0 :translation] with-constraint russian-text? "Structure translation must be Cyrillic")))
 
 
 (defn- normalize-text
@@ -122,9 +124,29 @@
   (count (re-seq #"\p{L}+" (or sentence ""))))
 
 
+(def ^:private min-sentence-words 3)
+
+
+(def ^:private min-max-sentence-words 12)
+
+
+(def ^:private words-around-target
+  "How much room a sentence gets beyond the target itself. A six-word phrase
+   cannot fit a flat twelve-word ceiling with anything around it."
+  6)
+
+
+(defn- sentence-length-bounds
+  [target]
+  {:min min-sentence-words
+   :max (max min-max-sentence-words
+             (+ (sentence-word-count target) words-around-target))})
+
+
 (defn- sentence-length-ok?
-  [sentence]
-  (<= 3 (sentence-word-count sentence) 12))
+  [target sentence]
+  (let [{:keys [min max]} (sentence-length-bounds target)]
+    (<= min (sentence-word-count sentence) max)))
 
 
 (defn- split-sentence-words
@@ -143,7 +165,8 @@
 
 (defn- strip-word-indexes
   [example]
-  (update example :structure
+  (update example
+          :structure
           (fn [structure]
             (mapv #(dissoc % :wordIndex) (or structure [])))))
 
@@ -161,9 +184,9 @@
 (defn- add-word-indexes-to-structure
   [sentence structure]
   (let [words (split-sentence-words sentence)]
-    (loop [items           (seq structure)
+    (loop [items   (seq structure)
            next-word-index 0
-           indexed         []]
+           indexed []]
       (if-let [item (first items)]
         (if-let [word-index (find-word-index words next-word-index (:usedForm item))]
           (recur (next items)
@@ -173,18 +196,41 @@
         indexed))))
 
 
+(defn- target-word?
+  "A word of the target itself, compared the way the sentence's words are."
+  [target used-form]
+  (contains? (into #{} (map normalize-text) (split-sentence-words target))
+             (normalize-text (strip-word-edges used-form))))
+
+
+(defn- illegal-duplicate?
+  "A repeated `{usedForm, dictionaryForm}` pair is legitimate only when the
+   target is a phrase and the repeated word is one of its own — `Zeit` in
+   `von Zeit zu Zeit`, which the construction says twice. Anything else
+   repeating is the mistake the guard was put here for: a separable verb
+   annotating the preposition that shares its prefix's spelling, as in
+   `Pass auf deine Sachen auf!`."
+  [target phrase-target? [[used-form dictionary-form] items]]
+  (and (> (count items) 1)
+       (not (and phrase-target?
+                 (dictionary/same-lemma? target dictionary-form)
+                 (target-word? target used-form)))))
+
+
 (defn- structure-has-duplicate-items?
-  [structure]
-  (not= (count structure)
-        (count (distinct (map (juxt :usedForm :dictionaryForm) structure)))))
+  [target phrase-target? structure]
+  (boolean
+   (some #(illegal-duplicate? target phrase-target? %)
+         (group-by (juxt :usedForm :dictionaryForm) structure))))
 
 
 (defn- add-word-indexes
-  [example]
-  (let [example (strip-word-indexes example)]
-    (when-not (structure-has-duplicate-items? (:structure example))
-      (when-let [structure (add-word-indexes-to-structure (:value example) (:structure example))]
-        (assoc example :structure structure)))))
+  ([example] (add-word-indexes nil false example))
+  ([target phrase-target? example]
+   (let [example (strip-word-indexes example)]
+     (when-not (structure-has-duplicate-items? target phrase-target? (:structure example))
+       (when-let [structure (add-word-indexes-to-structure (:value example) (:structure example))]
+         (assoc example :structure structure))))))
 
 
 (defn- log-generation-failure!
@@ -209,24 +255,29 @@
 
 
 (def ^:private issue-messages
+  "Each message states the rule in the words the system prompt states it in,
+   so a retry reads as a correction and not as a new instruction."
   {:malformed-example
    "The generated example did not match the required JSON shape or text constraints. See `details` for the specific field errors."
    :structure-mismatch
-   "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, each `usedForm` must match the word at its position, and a `{usedForm, dictionaryForm}` pair must not repeat (each separable-verb prefix appears once, not twice)."
-   :sentence-length-out-of-range "The German sentence must contain between 3 and 12 words."
-   :target-lemma-missing "The target lemma must appear as a `dictionaryForm` entry in `structure`."})
+   "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, and each `usedForm` must match the word at its position. A `{usedForm, dictionaryForm}` pair may repeat only for a word the target phrase itself says twice; a separable-verb prefix appears once, not twice."
+   :sentence-length-out-of-range
+   "The German sentence is outside the accepted length. See `details` for the number of words it must contain."
+   :target-lemma-missing
+   "The whole target must appear in the sentence and as a `dictionaryForm` entry in `structure` — the lemma for a word, every word of the construction for a phrase."})
 
 
 (defn- example-issue
-  [word example]
-  (let [raw     (strip-word-indexes example)
+  [target word-meta example]
+  (let [phrase? (dictionary/phrase-target? target (:partOfSpeech word-meta))
+        raw     (strip-word-indexes example)
         valid?  (m/validate valid-generated-example-schema raw)
-        indexed (when valid? (add-word-indexes raw))]
+        indexed (when valid? (add-word-indexes target phrase? raw))]
     (cond
       (not valid?)
       (let [explain (me/humanize (m/explain valid-generated-example-schema raw))]
         (log-generation-failure!
-         {:word    word
+         {:word    target
           :error   "Invalid generated example shape"
           :explain explain})
         {:issue :malformed-example :details explain})
@@ -234,10 +285,11 @@
       (nil? indexed)
       {:issue :structure-mismatch}
 
-      (not (sentence-length-ok? (:value indexed)))
-      {:issue :sentence-length-out-of-range}
+      (not (sentence-length-ok? target (:value indexed)))
+      {:issue   :sentence-length-out-of-range
+       :details (sentence-length-bounds target)}
 
-      (not (dictionary/lemma-in-structure? word (:structure indexed)))
+      (not (dictionary/lemma-in-structure? target (:structure indexed)))
       {:issue :target-lemma-missing})))
 
 
@@ -253,53 +305,80 @@
 
 
 (def system-prompt
+  "One target concept: the target is a lemma or a phrase, and every rule below
+   is written for both. The few-shot block carries one case per distinct shape
+   — noun with article, separable verb, reflexive, homograph, phrase — and the
+   retry messages in `issue-messages` repeat these rules word for word."
   (str/join
    "\n"
-   ["You generate learner-facing German example sentences for a vocabulary app."
+   [;; What this is
+    "You generate learner-facing German example sentences for a vocabulary app."
     "Return only JSON that matches the supplied schema."
     "Input fields: word, translation, part of speech, cefrLevel, context, previousAttempt, previousIssue."
+    "The target is `word`: either a single lemma (`die Leiter`, `aufpassen`, `sich vorstellen`) or a whole phrase (`auf jeden Fall`, `von Zeit zu Zeit`, `das heißt`). Every rule below applies to both."
     "Missing cefrLevel => B2."
+    ""
+    ;; Sense
+    "SENSE"
     "- `translation` is one or more Russian glosses the learner has confirmed; any of them is an acceptable sense for the sentence."
-    "- Pick one sense that fits naturally; the structure `translation` of the target lemma must match the gloss you chose."
-    "- Produce one natural standard German sentence, 6-12 words, using the target lemma or a correct inflected form."
+    "- Pick one sense that fits naturally; the structure `translation` of the target must match the gloss you chose."
+    "- Ambiguous noun articles and ambiguous prefixes (`um-`, `über-`, `unter-`, `durch-`, `wieder-`) must follow the supplied Russian gloss."
+    ""
+    ;; Sentence
+    "SENTENCE"
+    "- Produce one natural standard German sentence containing the whole target."
+    "- A lemma may appear as a correct inflected form. A phrase may be inflected and rearranged by German word order, and its words need not be adjacent — `Ich komme auf jeden Fall mit.` is the phrase `auf jeden Fall`."
+    "- A phrase that is already a complete sentence is extended or embedded into a turn, never returned unchanged."
+    "- Leave room around the target: roughly the target's own length plus a handful of words, and at least three words in all."
     "- German sentence only: no labels, notes, markdown, or meta commentary."
     "- `translation` must be one natural Russian sentence, not a calque."
+    ""
+    ;; Structure: what goes in
+    "STRUCTURE — WHAT GOES IN"
     "- `structure` must include every noun, verb (including auxiliaries and modals), adjective, and adverb in the sentence."
-    "- Each item in `structure` must be a JSON object with keys `usedForm`, `dictionaryForm`, and `translation`."
-    "- Never use arrays like `[\"Fenster\", \"das Fenster\", \"окно\"]` inside `structure`."
     "- Exclude articles, pronouns, prepositions, conjunctions, and pure particles like `zu` or `nicht`."
     "- Detached prefixes of separable verbs are not particles: include them."
-    "- Order `structure` items strictly left to right as they appear in the German sentence."
-    "- The backend assigns `wordIndex`; do not return `wordIndex`."
+    "- A phrase target overrides the exclusions: every word of the phrase gets its own item, articles and prepositions included."
+    ""
+    ;; Structure: the shape of an item
+    "STRUCTURE — THE SHAPE OF AN ITEM"
+    "- Each item in `structure` must be a JSON object with keys `usedForm`, `dictionaryForm`, and `translation`."
+    "- Never use arrays like `[\"Fenster\", \"das Fenster\", \"окно\"]` inside `structure`."
+    "- Example structure item: `{\"usedForm\":\"Fenster\",\"dictionaryForm\":\"das Fenster\",\"translation\":\"окно\"}`."
     "- Keep `dictionaryForm` lemma-only unless the lemma inherently includes an article or `sich`."
     "- For nouns, `dictionaryForm` includes the article."
-    "- For separable verbs with detached prefixes, include one item for the verb part and one for the prefix; both use the full infinitive as `dictionaryForm` and the same Russian gloss."
-    "- Separable verbs emit the prefix exactly once. If a preposition shares spelling with the prefix (for example `auf` in `Pass auf deine Sachen auf!`), exclude the preposition — only the detached prefix in the verb frame belongs in `structure`."
-    "- Never emit two `structure` items with the same `usedForm` and `dictionaryForm` pair."
     "- Reflexive verb `dictionaryForm` keeps `sich`."
-    "- Ambiguous noun articles and ambiguous prefixes (`um-`, `über-`, `unter-`, `durch-`, `wieder-`) must follow the supplied Russian gloss."
-    "- Example structure item: `{\"usedForm\":\"Fenster\",\"dictionaryForm\":\"das Fenster\",\"translation\":\"окно\"}`."
-    "Example word=aufstehen gloss=вставать:"
-    "{\"value\":\"Ich stehe jeden Morgen um sieben Uhr auf.\",\"translation\":\"Я встаю каждое утро в семь часов.\",\"structure\":[{\"usedForm\":\"stehe\",\"dictionaryForm\":\"aufstehen\",\"translation\":\"вставать\"},{\"usedForm\":\"Morgen\",\"dictionaryForm\":\"der Morgen\",\"translation\":\"утро\"},{\"usedForm\":\"auf\",\"dictionaryForm\":\"aufstehen\",\"translation\":\"вставать\"}]}"
-    "Example word=aufpassen gloss=следить:"
-    "{\"value\":\"Er passt auf die Kinder auf.\",\"translation\":\"Он следит за детьми.\",\"structure\":[{\"usedForm\":\"passt\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"},{\"usedForm\":\"Kinder\",\"dictionaryForm\":\"das Kind\",\"translation\":\"дети\"},{\"usedForm\":\"auf\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"}]}"
-    "Note: the first `auf` is a preposition and is excluded; only the sentence-final `auf` is the detached separable prefix."
-    "Example word=das Verstehen gloss=понимание:"
+    "- For separable verbs with detached prefixes, include one item for the verb part and one for the prefix; both use the full infinitive as `dictionaryForm` and the same Russian gloss."
+    "- For a phrase target, every one of its words uses the whole phrase as `dictionaryForm` and the same Russian gloss."
+    ""
+    ;; Structure: order and repetition
+    "STRUCTURE — ORDER AND REPETITION"
+    "- Order `structure` items strictly left to right as they appear in the German sentence, and each `usedForm` must match the word at its position."
+    "- The backend assigns `wordIndex`; do not return `wordIndex`."
+    "- A `{usedForm, dictionaryForm}` pair may repeat only for a word the target phrase itself says twice — `Zeit` in `von Zeit zu Zeit`."
+    "- Separable verbs emit the prefix exactly once. If a preposition shares spelling with the prefix (for example `auf` in `Pass auf deine Sachen auf!`), exclude the preposition — only the detached prefix in the verb frame belongs in `structure`."
+    ""
+    ;; One case per shape
+    "EXAMPLES — one per shape"
+    "Noun with article. word=das Verstehen gloss=понимание:"
     "{\"value\":\"Das Verstehen dieser Regel dauert lange.\",\"translation\":\"Понимание этого правила требует времени.\",\"structure\":[{\"usedForm\":\"Verstehen\",\"dictionaryForm\":\"das Verstehen\",\"translation\":\"понимание\"},{\"usedForm\":\"Regel\",\"dictionaryForm\":\"die Regel\",\"translation\":\"правило\"},{\"usedForm\":\"dauert\",\"dictionaryForm\":\"dauern\",\"translation\":\"длиться\"},{\"usedForm\":\"lange\",\"dictionaryForm\":\"lang\",\"translation\":\"долго\"}]}"
-    "Example word=die Bank gloss=скамейка:"
-    "{\"value\":\"Wir sitzen auf einer Bank im Park.\",\"translation\":\"Мы сидим на скамейке в парке.\",\"structure\":[{\"usedForm\":\"sitzen\",\"dictionaryForm\":\"sitzen\",\"translation\":\"сидеть\"},{\"usedForm\":\"Bank\",\"dictionaryForm\":\"die Bank\",\"translation\":\"скамейка\"},{\"usedForm\":\"Park\",\"dictionaryForm\":\"der Park\",\"translation\":\"парк\"}]}"
-    "Example word=Leiter gloss=лестница:"
+    "Separable verb. word=aufpassen gloss=следить:"
+    "{\"value\":\"Er passt auf die Kinder auf.\",\"translation\":\"Он следит за детьми.\",\"structure\":[{\"usedForm\":\"passt\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"},{\"usedForm\":\"Kinder\",\"dictionaryForm\":\"das Kind\",\"translation\":\"дети\"},{\"usedForm\":\"auf\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"}]}"
+    "The first `auf` is a preposition and is excluded; only the sentence-final `auf` is the detached separable prefix."
+    "Reflexive. word=sich vorstellen gloss=представляться:"
+    "{\"value\":\"Er stellt sich bei den neuen Kollegen vor.\",\"translation\":\"Он представляется новым коллегам.\",\"structure\":[{\"usedForm\":\"stellt\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"neu\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"
+    "Homograph. word=Leiter gloss=лестница:"
     "{\"value\":\"Die Leiter steht neben der Wand.\",\"translation\":\"Лестница стоит у стены.\",\"structure\":[{\"usedForm\":\"Leiter\",\"dictionaryForm\":\"die Leiter\",\"translation\":\"лестница\"},{\"usedForm\":\"steht\",\"dictionaryForm\":\"stehen\",\"translation\":\"стоять\"},{\"usedForm\":\"Wand\",\"dictionaryForm\":\"die Wand\",\"translation\":\"стена\"}]}"
     "Do not use `der Leiter` for this meaning."
-    "Example word=sich vorstellen gloss=представляться:"
-    "{\"value\":\"Er stellt sich bei den neuen Kollegen vor.\",\"translation\":\"Он представляется новым коллегам.\",\"structure\":[{\"usedForm\":\"stellt\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"neu\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"]))
-
+    "Phrase. word=von Zeit zu Zeit gloss=время от времени:"
+    "{\"value\":\"Von Zeit zu Zeit besuche ich meine Eltern.\",\"translation\":\"Время от времени я навещаю своих родителей.\",\"structure\":[{\"usedForm\":\"Von\",\"dictionaryForm\":\"von Zeit zu Zeit\",\"translation\":\"время от времени\"},{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"von Zeit zu Zeit\",\"translation\":\"время от времени\"},{\"usedForm\":\"zu\",\"dictionaryForm\":\"von Zeit zu Zeit\",\"translation\":\"время от времени\"},{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"von Zeit zu Zeit\",\"translation\":\"время от времени\"},{\"usedForm\":\"besuche\",\"dictionaryForm\":\"besuchen\",\"translation\":\"навещать\"},{\"usedForm\":\"Eltern\",\"dictionaryForm\":\"die Eltern\",\"translation\":\"родители\"}]}"]))
 
 
 (defn- previous-issue-payload
   [{:keys [issue details]}]
   (cond-> {:issue   (name issue)
-           :message (get issue-messages issue
+           :message (get issue-messages
+                         issue
                          "Unknown issue; regenerate the example from scratch.")}
     (seq details) (assoc :details details)))
 
@@ -400,14 +479,16 @@
             retry-context nil]
        (let [example  (generate-attempt! word translations context word-meta retry-context)
              failure? (generation-failure? example)
-             result   (when-not failure? (example-issue word example))
+             result   (when-not failure? (example-issue word word-meta example))
              issue    (:issue result)]
          (cond
            (and failure? (not (:retryable? example)))
            example
 
            (and (not failure?) (nil? issue))
-           (add-word-indexes example)
+           (add-word-indexes word
+                             (dictionary/phrase-target? word (:partOfSpeech word-meta))
+                             example)
 
            (< attempt max-attempts)
            (let [retry-ctx (when (and (not failure?) issue)

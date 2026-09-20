@@ -60,7 +60,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id created?]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
+      (let [{:keys [word-id created?]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
             vocabs  (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
             reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (is (string? word-id))
@@ -77,8 +77,8 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
-      (await (sut/add! (test-capabilities dbs) "die Katze" "кот"))
+      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
+      (await (sut/add! (test-capabilities dbs) "die Katze" "кот" :word))
       (let [{:keys [words total]} (await (sut/list (test-capabilities dbs) {}))]
         (is (= 2 (count words)))
         (is (= 2 total))
@@ -90,9 +90,9 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
-      (await (sut/add! (test-capabilities dbs) "die Katze" "кот"))
-      (await (sut/add! (test-capabilities dbs) "der Vogel" "птица"))
+      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
+      (await (sut/add! (test-capabilities dbs) "die Katze" "кот" :word))
+      (await (sut/add! (test-capabilities dbs) "der Vogel" "птица" :word))
       (let [{:keys [words total]} (await (sut/list (test-capabilities dbs) {:search "Hund" :limit 1}))]
         (is (= 3 total))
         (is (= 1 (count words)))
@@ -126,7 +126,7 @@
      (^:async fn
       [dbs]
       (await (js/Promise.all
-              (into-array (map (fn [i] (sut/add! (test-capabilities dbs) (str "word-" i) (str "перевод-" i)))
+              (into-array (map (fn [i] (sut/add! (test-capabilities dbs) (str "word-" i) (str "перевод-" i) :word))
                                (range 30)))))
       (let [cnt (await (sut/count (test-capabilities dbs)))
             {:keys [words total]} (await (sut/list (test-capabilities dbs) {}))]
@@ -140,7 +140,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
+      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
             result (await (sut/get (test-capabilities dbs) word-id))]
         (is (= word-id (:id result)))
         (is (= "der Hund" (:value result)))
@@ -153,7 +153,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
+      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
             result (await (sut/update! (test-capabilities dbs) word-id "лиса"))]
         (is (= word-id (:id result)))
         (is (= "der Hund" (:value result)))
@@ -165,7 +165,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))]
+      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))]
         (await (sut/add-review (test-capabilities dbs) word-id true "пёс"))
         (await (db/insert (:device/db dbs) {:type "example" :word-id word-id :value "Der Hund läuft"}))
         (await (sut/delete! (test-capabilities dbs) word-id))
@@ -182,7 +182,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))]
+      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))]
         (await (sut/add-review (test-capabilities dbs) word-id false "собака"))
         (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
           (is (= 2 (count reviews)))

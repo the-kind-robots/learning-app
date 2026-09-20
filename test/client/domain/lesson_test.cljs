@@ -411,13 +411,49 @@
    :value       "Wie geht's?"})
 
 
+(def ^:private phrase-example
+  {:word-id     "vocab:wie geht s"
+   :structure   []
+   :translation "Как дела сегодня, спросил он тихо."
+   :value       "Wie geht's dir heute, fragte er leise?"})
+
+
 (deftest generate-trials-creates-phrase-trials
-  (testing "a phrase item produces a phrase trial without examples"
+  (testing "a phrase item produces a phrase trial"
     (let [trials (sut/generate-trials [phrase-word] [])]
       (is (= 1 (count trials)))
       (is (true? (sut/phrase-trial? (first trials))))
       (is (= "Wie geht's?" (:answer (first trials))))
       (is (= "Как дела?" (:prompt (first trials)))))))
+
+
+(deftest a-phrase-gets-an-example-trial-locked-behind-its-own
+  (testing "GH-371: a phrase's example trial waits for the phrase trial, as a word's does"
+    (let [state (sut/initial-state [phrase-word] [phrase-example] :first)
+          example-trial (first (filter sut/example-trial? (:trials state)))]
+      (is (= 2 (count (:trials state))))
+      (is (some? example-trial))
+      (is (true? (:locked? example-trial)))
+      (is (true? (sut/phrase-trial? (:current-trial state)))
+          "only the phrase trial is selectable at the start"))))
+
+
+(deftest a-correct-phrase-answer-unlocks-its-examples
+  (testing "GH-371: the unlock is driven by the vocabulary trial, whichever kind it is"
+    (let [state   (sut/initial-state [phrase-word] [phrase-example] :first)
+          updated (sut/check-answer state "wie gehts")
+          example (first (filter sut/example-trial? (:remaining-trials updated)))]
+      (is (some? example))
+      (is (false? (:locked? example))))))
+
+
+(deftest a-wrong-phrase-answer-leaves-its-examples-locked
+  (testing "GH-371: only a correct answer unlocks"
+    (let [state   (sut/initial-state [phrase-word] [phrase-example] :first)
+          updated (sut/check-answer state "wie stehts")
+          example (first (filter sut/example-trial? (:remaining-trials updated)))]
+      (is (some? example))
+      (is (true? (:locked? example))))))
 
 
 (deftest phrase-answers-forgive-typography-only
