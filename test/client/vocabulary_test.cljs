@@ -93,10 +93,29 @@
       (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
       (await (sut/add! (test-capabilities dbs) "die Katze" "кот"))
       (await (sut/add! (test-capabilities dbs) "der Vogel" "птица"))
-      (let [{:keys [words total]} (await (sut/list (test-capabilities dbs) {:search "Hund" :limit 1}))]
+      (let [{:keys [matches words total]} (await (sut/list (test-capabilities dbs) {:search "Hund" :limit 1}))]
         (is (= 3 total))
+        (is (= 1 matches)
+            "`matches` counts what the search left, `total` what the scope holds")
         (is (= 1 (count words)))
         (is (= "der Hund" (:value (first words)))))))))
+
+
+(deftest list-reports-how-many-rows-the-page-left-behind
+  (async-testing "`matches` says whether another page follows"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (await (js/Promise.all
+              (into-array (map (fn [i] (sut/add! (test-capabilities dbs) (str "wort-" i) (str "перевод-" i)))
+                               (range 12)))))
+      (let [{:keys [matches words total]} (await (sut/list (test-capabilities dbs) {:limit 5}))]
+        (is (= 5 (count words)) "the page is the limit")
+        (is (= 12 matches) "every word matched the empty filter")
+        (is (= 12 total)))
+      (let [{:keys [matches words]} (await (sut/list (test-capabilities dbs) {:limit 50}))]
+        (is (= 12 (count words)))
+        (is (= 12 matches) "a page larger than the list leaves nothing behind"))))))
 
 
 (deftest count-reads-the-vocab-view-not-the-documents

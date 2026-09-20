@@ -65,7 +65,9 @@
    :asc or :desc, default :desc) and paged by `:offset`/`:limit`. `:word-ids`
    restricts to those words, `:search` to values or translations containing
    the text. `:total` counts the words before the search filter, so an empty
-   vocabulary and a search with no match tell apart."
+   vocabulary and a search with no match tell apart; `:matches` counts them
+   after the filter and before the paging, so a caller holding a page can
+   tell whether another one follows."
   [{:keys [reviews words] :as capabilities}
    {:keys [order limit offset search word-ids]
     :or   {order :desc}}]
@@ -92,11 +94,13 @@
                                         :retention-level
                                         (retention/retention-level (reviews (:id word) []) now))))
                           (sort-by :retention-level (if (= order :asc) < >)))
+        matches      (clojure.core/count rows)
         rows         (cond->> rows
                        offset (drop offset)
                        limit  (take limit))]
-    {:total total
-     :words (vec rows)}))
+    {:matches matches
+     :total   total
+     :words   (vec rows)}))
 
 
 (defn ^:async list-active
