@@ -43,6 +43,16 @@
   (fn [_ _ _]))
 
 
+;; Registered by `application` in the browser; a keydown test dispatches them
+;; and nexus needs a handler for each.
+(nxr/register-effect! :effect/prevent-default
+  (fn [_ _]))
+
+
+(nxr/register-effect! :effect/scroll-nearest
+  (fn [_ _ _]))
+
+
 (def hund
   {:lemma "Hund" :translations ["пёс" "собака"] :exact? true})
 
@@ -262,3 +272,43 @@
     (let [{:keys [store] :as system} (test-system {})]
       (nxr/dispatch system {} [[:action/update-suggestions {:completions [] :value nil}]])
       (is (str/blank? (:home/translation @store))))))
+
+
+(defn- active-lemmas
+  "The lemmas the props mark active. The view renders `data-active` from
+   `:active?` and compares nothing, so this is the whole highlight."
+  [store]
+  (->> (get-in (presenter/page-props @store) [:form :suggestions :items])
+       (filter :active?)
+       (mapv :lemma)))
+
+
+(deftest a-fresh-list-marks-its-first-entry
+  (testing "GH-412: the entry Enter would pick is the one the list shows marked"
+    (let [{:keys [store] :as system} (test-system {})]
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund hut haus] :value nil}]])
+      (is (= ["Hund"] (active-lemmas store))))))
+
+
+(deftest the-arrows-move-the-marked-entry
+  (testing "GH-412: exactly one entry is marked, and it is the one the index names"
+    (let [{:keys [store] :as system} (test-system {})
+          arrow (fn [key]
+                  (nxr/dispatch system
+                                {}
+                                [[:action/handler-word-keydown {:key key}]]))]
+      (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund hut haus] :value nil}]])
+      (arrow "ArrowDown")
+      (is (= ["Hut"] (active-lemmas store)))
+      (arrow "ArrowDown")
+      (is (= ["das Haus"] (active-lemmas store)))
+      ;; The bottom holds: there is no fourth entry to move onto.
+      (arrow "ArrowDown")
+      (is (= ["das Haus"] (active-lemmas store)))
+      (arrow "ArrowUp")
+      (is (= ["Hut"] (active-lemmas store)))
+      (arrow "ArrowUp")
+      (is (= ["Hund"] (active-lemmas store)))
+      ;; And so does the top.
+      (arrow "ArrowUp")
+      (is (= ["Hund"] (active-lemmas store))))))

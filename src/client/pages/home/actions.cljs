@@ -85,13 +85,15 @@
 
 
 (defn- suggestions
+  "The index is the only record of which entry is active. It used to be kept
+   twice — the index and the completion it names — and the two readers took
+   different copies: the handler moved the index, the view compared the value
+   and never matched (#412)."
   ([completions]
    (suggestions completions 0))
   ([completions active-idx]
-   (let [completions (vec completions)]
-     {:suggestions/items      completions
-      :suggestions/active-idx active-idx
-      :suggestions/active     (get completions active-idx)})))
+   {:suggestions/items      (vec completions)
+    :suggestions/active-idx active-idx}))
 
 
 (nxr/register-action! :action/update-suggestions
