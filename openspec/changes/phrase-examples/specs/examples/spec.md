@@ -1,0 +1,40 @@
+## REMOVED Requirements
+
+### Requirement: Example fetch tasks are created on word creation
+**Reason**: The requirement's name and text scope task creation to words, which is the exclusion #371 reverses. A phrase is a vocabulary document like any other and now gets an example the same way, so the trigger is the creation of a vocabulary entry, not of a word. The collection context it carried is unchanged and is carried into the requirement that replaces it.
+
+**Migration**: None. Tasks already queued keep their shape; only the set of entries that produce one grows.
+
+## ADDED Requirements
+
+### Requirement: Example fetch tasks are created on vocabulary entry creation
+The system SHALL create an example-fetch task whenever a vocabulary entry is created, whether it is a word or a phrase, carrying the active collection context (see `specs/examples-schema/spec.md`).
+
+#### Scenario: Word creation triggers example-fetch task
+- **WHEN** a word is added
+- **THEN** an example-fetch task document is persisted for that word via the examples module
+
+#### Scenario: Phrase creation triggers example-fetch task
+- **WHEN** a phrase is added
+- **THEN** an example-fetch task document is persisted for that phrase via the examples module, with the same payload shape a word's task has
+
+### Requirement: A generated example for a phrase carries the whole construction
+When the target of generation is a phrase, the generated German sentence SHALL contain the whole construction, and `structure` SHALL carry one item per word of the phrase, each item's `dictionaryForm` being the whole phrase and each item's `translation` the same Russian gloss the sentence was generated for. The construction MAY appear inflected and rearranged by German word order, and its words need not be adjacent in the sentence. A phrase that is already a complete sentence SHALL be placed in a sentence that extends or embeds it rather than returned verbatim. A generated example that does not satisfy this SHALL be rejected as invalid and regenerated, as one missing its target lemma already is.
+
+#### Scenario: Inflected phrase inside a sentence
+- **WHEN** an example is generated for the phrase "den Kopf verlieren"
+- **THEN** the sentence contains the construction inflected, such as "Er verliert den Kopf."
+- **AND** `structure` carries one item for each of "den", "Kopf" and "verlieren", every one of them with `dictionaryForm` "den Kopf verlieren" and the same Russian gloss
+
+#### Scenario: Phrase split by German word order
+- **WHEN** an example is generated for the phrase "auf jeden Fall"
+- **THEN** a sentence such as "Ich komme auf jeden Fall mit." is accepted although the construction sits inside the clause
+- **AND** each word of the phrase has its own `structure` item, so each carries its own `wordIndex`
+
+#### Scenario: Phrase that is already a sentence
+- **WHEN** an example is generated for a phrase that is itself a complete sentence
+- **THEN** the generated sentence extends or embeds it into a turn rather than repeating it unchanged
+
+#### Scenario: Construction missing from the output
+- **WHEN** the generated sentence omits part of the construction, or no `structure` item names the whole phrase as its `dictionaryForm`
+- **THEN** the example is rejected as invalid and generation is retried, and the retry is told the same rule in the same words the prompt states it in
