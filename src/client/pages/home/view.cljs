@@ -115,7 +115,10 @@
   [state]
   (let [{:keys [active-collection empty-vocab? form]} (presenter/page-props state)]
     [:div.home
-     {:data-vk-overlay true}
+     {:data-vk-overlay true
+      :on {:keydown [[:action/start-lesson-if-alt-enter
+                      {:alt? [:event.keyboard/alt?]
+                       :key  [:event.keyboard/key]}]]}}
      [:header.home__intro
       [:h1.home__title "Главная"]
       [:p.home__subtitle
