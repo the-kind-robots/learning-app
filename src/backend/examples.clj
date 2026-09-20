@@ -85,7 +85,8 @@
 (def ^:private generated-example-schema
   [:map {:closed true}
    [:value
-    {:description "A natural German sentence containing the requested target — a lemma, possibly inflected, or a whole phrase."}
+    {:description
+     "A natural German sentence containing the requested target — a lemma, possibly inflected, or a whole phrase."}
     [:string {:min 1}]]
    [:translation
     {:description "Russian translation of the sentence."}
@@ -171,14 +172,60 @@
             (mapv #(dissoc % :wordIndex) (or structure [])))))
 
 
+(defn- same-word?
+  [sentence-word used-form]
+  (= (normalize-text used-form)
+     (normalize-text (strip-word-edges sentence-word))))
+
+
 (defn- find-word-index
   [words next-word-index used-form]
   (loop [word-index next-word-index]
     (when (< word-index (count words))
-      (if (= (normalize-text used-form)
-             (normalize-text (strip-word-edges (nth words word-index))))
+      (if (same-word? (nth words word-index) used-form)
         word-index
         (recur (inc word-index))))))
+
+
+(defn- find-span-index
+  "Index of the first sentence word at or after `next-word-index` where every
+   word of `span` matches a consecutive sentence word."
+  [words next-word-index span]
+  (let [span-length (count span)]
+    (loop [word-index next-word-index]
+      (when (<= (+ word-index span-length) (count words))
+        (if (every? true?
+                    (map-indexed
+                     (fn [offset span-word]
+                       (same-word? (nth words (+ word-index offset)) span-word))
+                     span))
+          word-index
+          (recur (inc word-index)))))))
+
+
+(defn- indexed-span
+  "A `usedForm` holding several words becomes one item per word, each with its
+   own `wordIndex` and the span's own `dictionaryForm` and gloss. A provider
+   answering `{usedForm: \"auf jeden Fall\"}` is describing the construction
+   honestly; `wordIndex` is one index per word, so the span is unfolded here
+   rather than rejected. A span whose words are not consecutive in the
+   sentence still has no honest reading, and stays a rejection."
+  [words next-word-index item span]
+  (when-let [word-index (find-span-index words next-word-index span)]
+    (into []
+          (map-indexed
+           (fn [offset span-word]
+             (assoc item :usedForm span-word :wordIndex (+ word-index offset))))
+          span)))
+
+
+(defn- indexed-item
+  [words next-word-index item]
+  (let [span (split-sentence-words (:usedForm item))]
+    (if (< 1 (count span))
+      (indexed-span words next-word-index item span)
+      (when-let [word-index (find-word-index words next-word-index (:usedForm item))]
+        [(assoc item :wordIndex word-index)]))))
 
 
 (defn- add-word-indexes-to-structure
@@ -188,11 +235,10 @@
            next-word-index 0
            indexed []]
       (if-let [item (first items)]
-        (if-let [word-index (find-word-index words next-word-index (:usedForm item))]
+        (when-let [items-indexed (indexed-item words next-word-index item)]
           (recur (next items)
-                 (inc word-index)
-                 (conj indexed (assoc item :wordIndex word-index)))
-          nil)
+                 (inc (:wordIndex (peek items-indexed)))
+                 (into indexed items-indexed)))
         indexed))))
 
 
@@ -225,11 +271,14 @@
 
 
 (defn- add-word-indexes
+  "The repeat guard runs on the indexed structure, not on what the provider
+   sent: unfolding a span can create a repeated pair the guard never saw, and
+   what must hold is that nothing stored repeats illegally."
   ([example] (add-word-indexes nil false example))
   ([target phrase-target? example]
    (let [example (strip-word-indexes example)]
-     (when-not (structure-has-duplicate-items? target phrase-target? (:structure example))
-       (when-let [structure (add-word-indexes-to-structure (:value example) (:structure example))]
+     (when-let [structure (add-word-indexes-to-structure (:value example) (:structure example))]
+       (when-not (structure-has-duplicate-items? target phrase-target? structure)
          (assoc example :structure structure))))))
 
 
@@ -260,7 +309,7 @@
   {:malformed-example
    "The generated example did not match the required JSON shape or text constraints. See `details` for the specific field errors."
    :structure-mismatch
-   "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, and each `usedForm` must match the word at its position. A `{usedForm, dictionaryForm}` pair may repeat only for a word the target phrase itself says twice; a separable-verb prefix appears once, not twice."
+   "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, and each `usedForm` must match the word at its position. A `usedForm` holding several words is accepted only where the sentence says those words consecutively. A `{usedForm, dictionaryForm}` pair may repeat only for a word the target phrase itself says twice; a separable-verb prefix appears once, not twice."
    :sentence-length-out-of-range
    "The German sentence is outside the accepted length. See `details` for the number of words it must contain."
    :target-lemma-missing
@@ -354,6 +403,7 @@
     ;; Structure: order and repetition
     "STRUCTURE — ORDER AND REPETITION"
     "- Order `structure` items strictly left to right as they appear in the German sentence, and each `usedForm` must match the word at its position."
+    "- Prefer one item per word. A `usedForm` holding several words is accepted only where the sentence says those words consecutively, and the backend then unfolds it into one item per word."
     "- The backend assigns `wordIndex`; do not return `wordIndex`."
     "- A `{usedForm, dictionaryForm}` pair may repeat only for a word the target phrase itself says twice — `Zeit` in `von Zeit zu Zeit`."
     "- Separable verbs emit the prefix exactly once. If a preposition shares spelling with the prefix (for example `auf` in `Pass auf deine Sachen auf!`), exclude the preposition — only the detached prefix in the verb frame belongs in `structure`."

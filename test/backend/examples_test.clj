@@ -467,8 +467,8 @@
             "the two Zeit items index their own occurrence")))))
 
 
-(deftest phrase-target-rejects-one-item-spanning-the-construction
-  (testing "a structure item must be one word of the sentence, so it can carry one wordIndex"
+(deftest a-spanning-used-form-is-unfolded-into-one-item-per-word
+  (testing "the provider's honest answer for a construction survives a one-index-per-word store"
     (let [example {:value       "Wir werden das auf jeden Fall schaffen."
                    :translation "Мы обязательно справимся с этим."
                    :structure   [{:usedForm       "werden"
@@ -481,9 +481,69 @@
                                   :dictionaryForm "schaffen"
                                   :translation    "справляться"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (nil? (:issue (#'sut/example-issue "auf jeden Fall" nil example)))
+            "this is what the provider actually returns for this phrase")
+        (is (= [["werden" "werden" 1]
+                ["auf" "auf jeden Fall" 3]
+                ["jeden" "auf jeden Fall" 4]
+                ["Fall" "auf jeden Fall" 5]
+                ["schaffen" "schaffen" 6]]
+               (mapv (juxt :usedForm :dictionaryForm :wordIndex)
+                     (:structure (#'sut/add-word-indexes "auf jeden Fall" true example))))
+            "each word of the span keeps the span's dictionaryForm and gets its own index")))))
+
+
+(deftest a-span-whose-words-are-not-consecutive-stays-a-rejection
+  (testing "a span has an honest reading only where the sentence says it whole"
+    (let [example {:value       "Ich komme mit auf jeden Berg heute."
+                   :translation "Я иду с тобой на любую гору сегодня."
+                   :structure   [{:usedForm       "auf jeden Fall"
+                                  :dictionaryForm "auf jeden Fall"
+                                  :translation    "в любом случае"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= :structure-mismatch
-               (:issue (#'sut/example-issue "auf jeden Fall" nil example)))
-            "this is what the provider actually returned for this phrase")))))
+               (:issue (#'sut/example-issue "auf jeden Fall" nil example))))))))
+
+
+(deftest unfolding-a-span-does-not-open-the-repeat-guard
+  (testing "the guard runs on the indexed structure, so a repeat unfolding creates is judged too"
+    (let [legitimate {:value       "Schritt für Schritt lernt man die Sprache."
+                      :translation "Шаг за шагом человек учит язык."
+                      :structure   [{:usedForm       "Schritt für Schritt"
+                                     :dictionaryForm "Schritt für Schritt"
+                                     :translation    "шаг за шагом"}
+                                    {:usedForm       "lernt"
+                                     :dictionaryForm "lernen"
+                                     :translation    "учить"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (nil? (:issue (#'sut/example-issue
+                           "Schritt für Schritt"
+                           {:partOfSpeech "phrase"}
+                           legitimate)))
+            "the repeated Schritt is the construction's own")
+        (is (= [["Schritt" "Schritt für Schritt" 0]
+                ["für" "Schritt für Schritt" 1]
+                ["Schritt" "Schritt für Schritt" 2]
+                ["lernt" "lernen" 3]]
+               (mapv (juxt :usedForm :dictionaryForm :wordIndex)
+                     (:structure (#'sut/add-word-indexes "Schritt für Schritt" true legitimate)))))))))
+
+
+(deftest a-word-target-span-is-unfolded-too
+  (testing "nothing restricts unfolding to phrases, and a noun with its article reads the same way"
+    (let [example {:value       "Der Hund bellt laut."
+                   :translation "Собака громко лает."
+                   :structure   [{:usedForm       "Der Hund"
+                                  :dictionaryForm "der Hund"
+                                  :translation    "собака"}
+                                 {:usedForm       "bellt"
+                                  :dictionaryForm "bellen"
+                                  :translation    "лаять"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (nil? (:issue (#'sut/example-issue "der Hund" nil example))))
+        (is (= [["Der" "der Hund" 0] ["Hund" "der Hund" 1] ["bellt" "bellen" 2]]
+               (mapv (juxt :usedForm :dictionaryForm :wordIndex)
+                     (:structure (#'sut/add-word-indexes "der Hund" false example)))))))))
 
 
 (deftest phrase-target-still-rejects-a-repeat-of-its-own-that-is-missing
