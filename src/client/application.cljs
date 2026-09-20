@@ -253,6 +253,11 @@
     (some-> (:replicant/dom-event dispatch-data) .-shiftKey)))
 
 
+(nxr/register-placeholder! :event.keyboard/alt?
+  (fn [dispatch-data]
+    (some-> (:replicant/dom-event dispatch-data) .-altKey)))
+
+
 (nxr/register-placeholder! :event/self-click?
   (fn [dispatch-data]
     (let [e (:replicant/dom-event dispatch-data)]

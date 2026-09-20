@@ -28,6 +28,19 @@
     [[:effect/navigate :page/home]]))
 
 
+;; The screen's other job is the lesson, and its button sits in the footer
+;; below the add form — a pointer away from the field the user is typing in.
+;; `Alt`+`Enter` starts it without leaving the keyboard. The handler is on the
+;; page's root element, so the keystroke bubbles to it from either field and
+;; means nothing anywhere else. An empty vocabulary hides the footer, and the
+;; keystroke offers no more than the screen does.
+(nxr/register-action! :action/start-lesson-if-alt-enter
+  (fn start-lesson-if-alt-enter [state {:keys [alt? key]}]
+    (when (and alt? (= "Enter" key) (not (:home/empty-vocab? state)))
+      [[:effect/prevent-default]
+       [:action/go-to-lesson]])))
+
+
 (nxr/register-action! :action/show-home
   (fn show-home [_ {:keys [active-id active-name total]}]
     [[:effect/save
