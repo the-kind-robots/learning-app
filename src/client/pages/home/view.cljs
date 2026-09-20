@@ -4,7 +4,7 @@
 
 
 (defn- suggestion-item
-  [{:keys [lemma phrase? translations exact?]} active?]
+  [{:keys [active? lemma phrase? translations exact?]}]
   [:li.suggestions__item
    {:role        "option"
     :data-active (when active? "")
@@ -24,7 +24,7 @@
 
 (defn- add-form
   [{:keys [add-error copy suggestions translation word]}]
-  (let [{:keys [items active]} suggestions]
+  (let [{:keys [items]} suggestions]
     [:form.home__add-form
      {:id "home-add-form"
       :autocapitalize "none"
@@ -65,7 +65,7 @@
                                      :scroll-selector ".suggestions [data-active]"}]]}}]
         [:ul.suggestions
          (for [item items]
-           (suggestion-item item (= item active)))]]
+           (suggestion-item item))]]
        [:div.home__add-translation
         [:label.home__add-form-label {:for "new-word-translation"} "Перевод (русский)"]
         [:textarea.home__add-form-input.home__add-form-textarea
