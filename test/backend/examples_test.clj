@@ -467,6 +467,25 @@
             "the two Zeit items index their own occurrence")))))
 
 
+(deftest phrase-target-rejects-one-item-spanning-the-construction
+  (testing "a structure item must be one word of the sentence, so it can carry one wordIndex"
+    (let [example {:value       "Wir werden das auf jeden Fall schaffen."
+                   :translation "Мы обязательно справимся с этим."
+                   :structure   [{:usedForm       "werden"
+                                  :dictionaryForm "werden"
+                                  :translation    "будем"}
+                                 {:usedForm       "auf jeden Fall"
+                                  :dictionaryForm "auf jeden Fall"
+                                  :translation    "в любом случае"}
+                                 {:usedForm       "schaffen"
+                                  :dictionaryForm "schaffen"
+                                  :translation    "справляться"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (= :structure-mismatch
+               (:issue (#'sut/example-issue "auf jeden Fall" nil example)))
+            "this is what the provider actually returned for this phrase")))))
+
+
 (deftest phrase-target-still-rejects-a-repeat-of-its-own-that-is-missing
   (testing "the construction must be in the sentence, not only in structure"
     (let [example {:value       "Ich besuche meine Eltern."
