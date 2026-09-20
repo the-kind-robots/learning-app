@@ -18,21 +18,33 @@
 - [ ] 1.6 Rewrite `issue-messages` in the same pass so each retry message states the rule in the
       same words the prompt states it in, and add the phrase case to `:target-lemma-missing`.
 - [ ] 1.7 Confirm `add-word-indexes` handles a phrase whose words are separated in the sentence
-      (`auf jeden Fall` in `Ich komme auf jeden Fall mit.`) and that the duplicate-pair guard does
-      not reject a legitimate repeated word of the phrase.
+      (`auf jeden Fall` in `Ich komme auf jeden Fall mit.`).
+- [ ] 1.8 Narrow `structure-has-duplicate-items?` instead of deleting it. A repeat is legitimate
+      when the repeated word is a word of the phrase target (`von Zeit zu Zeit`, `nach und nach`,
+      `Schritt für Schritt`, `Zug um Zug`); it stays a rejection otherwise, which is what stops a
+      separable verb annotating the preposition that shares its prefix's spelling
+      (`Pass auf deine Sachen auf!`). Decide which shape survives both cases by running them, not
+      by reading the code.
 
-## 2. Client: the add flow queues the fetch
+## 2. Client: one add flow for both kinds
 
-- [ ] 2.1 In `src/client/use_cases/phrase.cljs`, queue the example fetch the way
-      `use_cases/vocabulary.cljs` does — collection id and name resolved the same way, the
-      `:examples/request!` call in both the created and the existing-entry branch, including the
-      "no example for this (entry, collection) pair yet" check.
-- [ ] 2.2 Delete the docstring claim that a phrase needs no example; the comment must not outlive
+- [ ] 2.1 Fold `use-cases.phrase/add!` and `use-cases.vocabulary/add!` into one `add!` in
+      `use-cases.vocabulary`, parameterised by the kind. Once the example fetch is common, the only
+      differences left are the translation (`domain.vocabulary/parse-translations` splits, a
+      phrase's stays one whole entry) and the document the kind builds (`new-word` vs
+      `new-phrase`). Duplicate lookup, merge, initial review, collection membership and the
+      re-fetch rule for an existing entry are already the same code twice.
+- [ ] 2.2 `use-cases.phrase/add!` ends up either gone, with `pages/home/effects.cljs` passing the
+      mode, or a two-line wrapper — whichever reads better against the repo's style.
+      `domain.phrase` stays as it is.
+- [ ] 2.3 Delete the docstring claim that a phrase needs no example; the comment must not outlive
       the decision it recorded.
-- [ ] 2.3 Keep the "translation is never split on punctuation" rule untouched: it is the one
-      phrase-specific thing in this use case and nothing here should reach it.
-- [ ] 2.4 Check the capabilities map the phrase use case is constructed with actually carries
+- [ ] 2.4 Keep the "translation is never split on punctuation" rule intact through the merge: it is
+      the one phrase-specific thing in the flow.
+- [ ] 2.5 Check the capabilities map the phrase path is constructed with actually carries
       `:examples`; add it at the construction site if it does not.
+- [ ] 2.6 This unification changes no behaviour, so it carries no delta. The behaviour that does
+      change — the queued fetch — is stated once, in `specs/user-phrases/spec.md`.
 
 ## 3. Client: the lesson treats a phrase like a word
 
@@ -72,12 +84,15 @@
 ## 6. Verification
 
 - [ ] 6.1 Run the ClojureScript and Clojure test suites.
-- [ ] 6.2 Live provider run, before/after on a fixed list of ~12 words and ~8 phrases, counting how
-      many generations pass validation on the first try. Load the key with
-      `set -a; . ~/.config/environment.d/99-llm.conf; set +a`; the dictionary lookup needs the
-      shared CouchDB `dictionary-db`, so this runs from the main checkout. Record both numbers on
-      #371 — the point is showing the rewritten prompt did not degrade word examples.
-- [ ] 6.3 Keep the list fixed and small: every call costs money.
+- [ ] 6.2 Live provider run from this worktree, before/after on a fixed list of ~12 words and ~8
+      phrases, counting how many generations pass validation on the first try. Load the key with
+      `set -a; . ~/.config/environment.d/99-llm.conf; set +a`. CouchDB is reached over HTTP and a
+      worktree shares the runtime, so `dictionary-db` needs nothing the main checkout has. Record
+      word and phrase counts separately on #371 — the word numbers are what show the rewritten
+      prompt cost nothing.
+- [ ] 6.3 Keep the list fixed and small: every call costs money. Include the repeated-word phrases
+      (`von Zeit zu Zeit`, `nach und nach`) and a split construction (`auf jeden Fall`), and record
+      what they actually generated, not what the code suggests they would.
 - [ ] 6.4 Browser check: add a phrase, confirm the example arrives and that a lesson offers its
       example trial only after the phrase trial is answered correctly.
 - [ ] 6.5 Archive the change on the branch before opening the PR.

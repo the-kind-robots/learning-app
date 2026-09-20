@@ -19,7 +19,7 @@ The system SHALL create an example-fetch task whenever a vocabulary entry is cre
 - **THEN** an example-fetch task document is persisted for that phrase via the examples module, with the same payload shape a word's task has
 
 ### Requirement: A generated example for a phrase carries the whole construction
-When the target of generation is a phrase, the generated German sentence SHALL contain the whole construction, and `structure` SHALL carry one item per word of the phrase, each item's `dictionaryForm` being the whole phrase and each item's `translation` the same Russian gloss the sentence was generated for. The construction MAY appear inflected and rearranged by German word order, and its words need not be adjacent in the sentence. A phrase that is already a complete sentence SHALL be placed in a sentence that extends or embeds it rather than returned verbatim. A generated example that does not satisfy this SHALL be rejected as invalid and regenerated, as one missing its target lemma already is.
+When the target of generation is a phrase, the generated German sentence SHALL contain the whole construction, and `structure` SHALL carry one item per word of the phrase, each item's `dictionaryForm` being the whole phrase and each item's `translation` the same Russian gloss the sentence was generated for. The construction MAY appear inflected and rearranged by German word order, and its words need not be adjacent in the sentence. A word repeated inside the construction SHALL keep an item per occurrence: a repeat is legitimate when the repeated word belongs to the phrase target, and a repeated `{usedForm, dictionaryForm}` pair SHALL still be rejected otherwise, which is what keeps a separable verb from annotating the preposition that shares its prefix's spelling. A phrase that is already a complete sentence SHALL be placed in a sentence that extends or embeds it rather than returned verbatim. A generated example that does not satisfy this SHALL be rejected as invalid and regenerated, as one missing its target lemma already is.
 
 #### Scenario: Inflected phrase inside a sentence
 - **WHEN** an example is generated for the phrase "den Kopf verlieren"
@@ -30,6 +30,15 @@ When the target of generation is a phrase, the generated German sentence SHALL c
 - **WHEN** an example is generated for the phrase "auf jeden Fall"
 - **THEN** a sentence such as "Ich komme auf jeden Fall mit." is accepted although the construction sits inside the clause
 - **AND** each word of the phrase has its own `structure` item, so each carries its own `wordIndex`
+
+#### Scenario: A word repeated inside the construction
+- **WHEN** an example is generated for the phrase "von Zeit zu Zeit"
+- **THEN** the example is accepted although "Zeit" occurs twice in the construction
+- **AND** each occurrence has its own `structure` item and its own `wordIndex`
+
+#### Scenario: A repeat that does not belong to the target is still rejected
+- **WHEN** the target is the separable verb "aufpassen" and `structure` carries the sentence's preposition "auf" beside the detached prefix "auf", both with `dictionaryForm` "aufpassen"
+- **THEN** the example is rejected as invalid and generation is retried
 
 #### Scenario: Phrase that is already a sentence
 - **WHEN** an example is generated for a phrase that is itself a complete sentence
