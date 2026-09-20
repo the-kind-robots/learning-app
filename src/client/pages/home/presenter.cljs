@@ -13,15 +13,20 @@
 
 
 (defn- suggestion-props
-  [item]
-  (assoc item :phrase? (phrase/phrase-suggestion? item)))
+  "Each entry carries its own highlight. The view used to hold the comparison,
+   against an item it had already decorated — the two shapes never matched and
+   nothing was ever marked (#412). Position against the active index is the one
+   thing that decides it, and it is decided here."
+  [active-idx idx item]
+  (assoc item
+         :active? (= idx active-idx)
+         :phrase? (phrase/phrase-suggestion? item)))
 
 
 (defn- suggestions-props
   [state]
-  (when-let [s (:home/suggestions state)]
-    {:items  (mapv suggestion-props (:suggestions/items s))
-     :active (:suggestions/active s)}))
+  (when-let [{:suggestions/keys [items active-idx]} (:home/suggestions state)]
+    {:items (vec (map-indexed (partial suggestion-props active-idx) items))}))
 
 
 (def ^:private mode-copy
