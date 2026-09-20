@@ -1,10 +1,8 @@
 # collections-navigation Specification
 
 ## Purpose
-Define the home-screen collections grid UI: grid icon, collections page, collection cards, create/rename/delete flows, and active-collection switching.
-
+Define how the user reaches the themes screen, what a tap on a tile does, and how a collection is created, renamed and deleted.
 ## Requirements
-
 ### Requirement: Home screen shows collections grid icon
 The system SHALL display a 2×2 grid icon in the top-right area of the home screen header.
 
@@ -15,29 +13,10 @@ The system SHALL display a 2×2 grid icon in the top-right area of the home scre
 ### Requirement: Tapping collections icon opens collections page
 The system SHALL navigate to the collections page when the collections icon is tapped.
 
-#### Scenario: Navigate to collections page
+#### Scenario: Navigate to the themes screen
 - **WHEN** the user taps the collections grid icon
-- **THEN** the app navigates to `:page/collections`
-- **AND** the page renders all existing collections plus the dashed create card
-
-### Requirement: Collections page shows collection cards
-The system SHALL render one card per collection. Each card SHALL display the collection name and word count. The All Words card SHALL always be present and listed first.
-
-#### Scenario: Collection card displays name and word count
-- **WHEN** the collections page is rendered
-- **THEN** each card shows the collection name and the count of words belonging to that collection
-
-#### Scenario: All Words card always listed first
-- **WHEN** the collections page is rendered
-- **THEN** the All Words card appears first
-
-### Requirement: Collections page has a create-collection card
-The system SHALL render a dashed "+" card on the collections page to create a new collection.
-
-#### Scenario: Tapping create card opens name input
-- **WHEN** the user taps the dashed "+" card
-- **THEN** a name input is shown
-- **AND** confirming with a non-blank name creates the collection
+- **THEN** the themes screen is shown
+- **AND** it renders all existing collections as tiles and the floating «+» button
 
 ### Requirement: Tapping a collection card switches the active collection
 The system SHALL switch the active collection and navigate back to the home screen when a collection card is tapped.
@@ -45,40 +24,35 @@ The system SHALL switch the active collection and navigate back to the home scre
 #### Scenario: Tap collection card activates it
 - **WHEN** the user taps a collection card
 - **THEN** that collection becomes the active collection
-- **AND** the active collection is persisted to localStorage
-- **AND** the app navigates back to `:page/home`
+- **AND** the app returns to the home screen
 
-### Requirement: Long-press on named collection card enters editing mode
-The system SHALL enter an inline editing state with Rename and Delete affordances when the user long-presses a named collection card. Long-press SHALL have no effect on the All Words card.
+### Requirement: A long press reveals the delete control, which deletes at once
+The system SHALL put a named collection's tile, folder header or folder row into an editing state when the user long-presses it, revealing a delete control on it; tapping that control SHALL delete the collection with no confirmation step. A long press SHALL have no effect on the «Всё подряд» tile, which carries no delete control.
 
-#### Scenario: Long-press on named collection enters editing
-- **WHEN** the user long-presses a named collection card
-- **THEN** that card enters an editing state exposing rename input and a delete control
+#### Scenario: Long press on a named collection reveals the control
+- **WHEN** the user long-presses a named collection's tile
+- **THEN** that tile enters an editing state showing a delete control labelled «Удалить набор «X»» for the collection named X
 
-#### Scenario: Long-press has no effect on All Words
-- **WHEN** the user long-presses the All Words card
-- **THEN** no editing state is entered
+#### Scenario: The delete control deletes
+- **WHEN** the user taps the delete control on a tile in the editing state
+- **THEN** the collection is deleted and the screen re-renders without it
 
-### Requirement: Delete collection confirms before removing
-The system SHALL show a confirmation dialog before deleting a collection. The dialog text SHALL be "Удалить набор «X»? Слова останутся в «Все слова»." where X is the collection name.
+#### Scenario: Long press has no effect on «Всё подряд»
+- **WHEN** the user long-presses the «Всё подряд» tile
+- **THEN** no editing state is entered and no delete control appears
 
-#### Scenario: Confirm delete removes collection
-- **WHEN** the user invokes Delete and confirms the dialog
-- **THEN** the collection is deleted
-- **AND** all word-collection memberships for that collection are removed
-- **AND** the grid refreshes without the deleted collection
+### Requirement: A collection is renamed on the home screen heading
+The system SHALL let the user rename the active collection by editing the home screen's heading. A name another collection already carries — trimmed, case-insensitive — SHALL be refused the way a blank one is: the heading shows the current name again and no document is written.
 
-#### Scenario: Cancel delete leaves collection intact
-- **WHEN** the user invokes Delete but cancels the dialog
-- **THEN** the collection is not deleted
-
-### Requirement: Rename collection updates collection name
-The system SHALL allow the user to rename a named collection via inline editing.
-
-#### Scenario: Rename updates stored collection name
-- **WHEN** the user edits the card name and submits a non-blank value
+#### Scenario: Rename updates the stored name
+- **WHEN** the user edits the home screen heading and submits a non-blank value no other collection carries
 - **THEN** the collection document is updated with the new name
-- **AND** the card reflects the new name
+- **AND** the heading and the collection's tile show it
+
+#### Scenario: Rename to a taken name is refused
+- **WHEN** the user submits a name another collection carries
+- **THEN** the heading shows the current name again
+- **AND** the collection document is unchanged
 
 ### Requirement: Opening the themes screen switches to it at once
 The system SHALL switch to the themes screen the moment it is opened and SHALL show a loading state there until its collections are available. A reload of the screen that is already open (after a sync pull) SHALL keep the current collections on screen until the new ones arrive, with no loading state in between.
@@ -114,3 +88,79 @@ When the browser cancels a touch on a collection card (`pointercancel` with no `
 #### Scenario: Cancelled touch that moved
 - **WHEN** the browser cancels a touch on a card after it travelled more than 10 px or the page scrolled more than 2 px
 - **THEN** nothing is activated
+
+### Requirement: The themes screen reads collection documents only
+Opening the themes screen SHALL read the collection documents and the count of words, and SHALL NOT read vocabulary or review documents.
+
+#### Scenario: No vocabulary or review read on open
+- **WHEN** the user opens the themes screen
+- **THEN** the collection documents and the words count are read
+- **AND** no vocabulary document and no review document is read
+
+### Requirement: Collections are tiles in a masonry, one alphabetical sequence down the columns
+The system SHALL render every collection as a tile showing its name and its word count, with a colour accent cycled by position over the eight-colour palette, the active one tinted in its accent. The tiles SHALL be one alphabetical sequence — locale-aware and case-insensitive — laid out in two columns under 700 px of viewport width and four from 700 px, read down each column in turn, and no tile SHALL be broken across a column boundary. «Всё подряд» SHALL be a tile pinned first with the total words count.
+
+#### Scenario: Alphabetical down the columns
+- **WHEN** the themes screen renders collections `b`, `A`, `c` in two columns
+- **THEN** the first column holds «Всё подряд» and `A`, the second `b` and `c`
+
+#### Scenario: A tile is never split by a column break
+- **WHEN** the themes screen renders its tiles in columns
+- **THEN** every tile is one unbroken box in one column
+
+#### Scenario: Twelve collections on a phone
+- **WHEN** the themes screen renders twelve collections without folders on a 384 × 800 viewport
+- **THEN** every one of them is visible without scrolling
+
+### Requirement: A slash in a name makes a folder
+The system SHALL render collections whose names share the text before the first `/` — trimmed of surrounding whitespace, compared case-insensitively — as one folder tile: a header with the folder key and a row per child, alphabetical, showing the rest of the name after the first `/`, trimmed, with any deeper `/` kept in the row text. A folder with one child is still a folder. Folder tiles sort by their key among plain tiles. Every row SHALL be tappable and SHALL activate its collection; the header is the requirement below.
+
+#### Scenario: Two chapters under one course
+- **WHEN** collections `Kurs / Kapitel 1` and `Kurs / Kapitel 2` exist
+- **THEN** one tile shows the header `Kurs` and the rows `Kapitel 1` and `Kapitel 2`
+
+#### Scenario: Deeper slashes stay in the row
+- **WHEN** a collection `Kurs / A / B` exists
+- **THEN** it is the row `A / B` under the folder `Kurs`
+
+#### Scenario: Tapping a row
+- **WHEN** the user taps the row `Kapitel 1`
+- **THEN** `Kurs / Kapitel 1` becomes the active collection and the app returns home
+
+### Requirement: The folder header is the parent collection
+The header of a folder SHALL stand for the collection whose name equals the folder key (trimmed, case-insensitive) and SHALL show the size of the union of that collection's words and every child's, without duplicates; it is tappable and tinted when active like any tile. When no such collection exists, the header SHALL be a plain group label — a small grey uppercase caption with the folder key and, in the tile's count style, the size of the union of the children's words without duplicates — that is not a tap target, is never tinted and creates nothing. Creating the parent is the user's job through the «+» prompt; once its document exists the header stands for it on the next load.
+
+#### Scenario: Header count is the union
+- **WHEN** `Kurs` holds words a and b, `Kurs / Kapitel 1` holds b and c, `Kurs / Kapitel 2` holds d
+- **THEN** the header `Kurs` shows 4
+
+#### Scenario: A header without a document is a label with the children's count
+- **WHEN** `Grammatik / Konnektoren` holds words e and f and no collection is named `Grammatik`
+- **THEN** the themes screen shows the caption `Grammatik` with the count 2
+- **AND** tapping it does nothing and no document named `Grammatik` is written
+
+#### Scenario: Creating the parent through «+»
+- **WHEN** `Grammatik / Konnektoren` exists and the user creates `Grammatik` through the «+» prompt
+- **THEN** the header `Grammatik` becomes the collection's tile showing the union of its children
+
+### Requirement: Every target on the themes screen is reachable by keyboard
+Every tap target on the themes screen — a collection tile, a folder header standing for a collection, and a folder row — SHALL be reachable by keyboard, in the same order the screen reads. The reached target SHALL open its collection when activated from the keyboard, exactly as a tap opens it. A folder label standing for no collection of its own is no target and SHALL be skipped.
+
+#### Scenario: Keyboard walks the reading order
+- **WHEN** «Всё подряд», the folder `Grammatik` with its one row `Konnektoren`, the folder `Kurs` with the rows `Kapitel 1` and `Kapitel 2`, and the collection `Solo` are on the themes screen
+- **AND** the user moves focus forward from the top of the screen
+- **THEN** focus reaches «Всё подряд», `Konnektoren`, the header `Kurs`, `Kapitel 1`, `Kapitel 2` and `Solo`, in that order
+- **AND** the label `Grammatik` is never focused
+
+#### Scenario: Opening the focused collection
+- **WHEN** focus is on the tile `Solo`
+- **AND** the user activates it from the keyboard
+- **THEN** `Solo` becomes the active collection and the app returns home
+
+### Requirement: A floating button creates a collection
+The system SHALL show a floating «+» button fixed at the bottom right of the themes screen, always on screen, which opens the name prompt; confirming with a non-blank name creates the collection. The grid SHALL keep a bottom inset so the button covers no tile.
+
+#### Scenario: Creating from the floating button
+- **WHEN** the user taps the floating «+» and confirms a non-blank name
+- **THEN** the collection is created and appears as a tile
+

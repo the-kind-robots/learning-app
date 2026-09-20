@@ -168,6 +168,33 @@
         "build.clj writes the service worker version under a different name than core.clj reads")))
 
 
+(deftest the-precache-list-is-the-shell-and-not-whatever-is-on-disk
+  (testing "an asset added to a shell directory joins with no edit here"
+    (is (contains? (set (#'sut/shell-assets ["/css/blocks/brand-new.css"]))
+                   "/css/blocks/brand-new.css")))
+  (testing "anything else a checkout collects is ignored"
+    ;; An old build's output, a downloaded file, the worker's own source and
+    ;; the metrics library a development build loads: each was served, none
+    ;; belongs in a cache.addAll that must not reject.
+    (is (= (#'sut/shell-assets [])
+           (#'sut/shell-assets
+            ["/js/cljs-runtime/cljs.core.js"
+             "/js/app/cljs-runtime/goog.base.js"
+             "/js/sw.js"
+             "/js/web-vitals.js"
+             "/dictionary.sqlite3"
+             "/styles.css.orig"]))))
+  (testing "the shell is there with nothing found at all"
+    (is (= (sort (#'sut/shell-assets []))
+           (sort @#'sut/shell-asset-files)))))
+
+
+(deftest every-precached-path-is-a-file-that-exists
+  (testing "a named asset that was deleted would reject the atomic install"
+    (doseq [path (remove #{"/" "/js/app/main.js"} (#'sut/precache-paths))]
+      (is (.exists (File. (str "resources/public" path))) path))))
+
+
 (deftest the-new-secret-name-is-read
   (is (= "new" (#'sut/configured-db-auth-secret {"LEARNING_APP__DB_AUTH_SECRET" "new"} false))))
 

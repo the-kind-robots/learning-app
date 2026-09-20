@@ -9,8 +9,8 @@
    Installed only under goog.DEBUG — a release build eliminates the whole
    namespace. Read from the page as `window.__metrics()`, reset with
    `window.__metricsReset()`, read storage as `window.__storage()`, and the
-   trace of the last events as `window.__trace()` — the red D after the
-   logo exports it off the phone.
+   trace of the last events as `window.__trace()` — the grey arrow beside
+   the red D exports it off the phone.
 
    The standard metrics come from the web-vitals library, fetched at runtime
    from `/js/web-vitals.js` rather than imported — see `load-web-vitals!`.
@@ -22,6 +22,7 @@
    web-vitals figures accumulate over the page's whole life, so a reset
    clears our copy without rewinding CLS or INP."
   (:require
+   [build-identity]
    [nexus.registry :as nxr]))
 
 
@@ -312,7 +313,7 @@
         stored      (try (.parse js/JSON (or (.getItem js/localStorage trace-key) "null"))
                          (catch :default _ nil))]
     (.stringify js/JSON
-                #js {:header #js {:build      "development"
+                #js {:header #js {:build      build-identity/stamp
                                   :time       (.toISOString (js/Date.))
                                   :url        (.-href js/location)
                                   :userAgent  (.-userAgent js/navigator)

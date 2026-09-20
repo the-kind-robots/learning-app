@@ -1,7 +1,7 @@
 # repo-delivery-workflow Specification
 
 ## Purpose
-TBD - created by archiving change improve-tracked-workflow-and-project-cdp-browser-handling. Update Purpose after archive.
+Define what tracked delivery means in this repository: which reported work goes through an issue, a branch and a pull request, and when it also carries an OpenSpec change.
 ## Requirements
 ### Requirement: Likely repository changes default to tracked delivery
 The repository workflow SHALL treat newly reported problems or proposed changes that are likely to become committed repository edits as tracked work by default.

@@ -10,7 +10,7 @@
 # Delivery
 
 - Any task likely to end in a committed edit runs the full flow. Invoke the `repo-task-delivery` skill and let it drive — do not assemble the steps by hand.
-- The flow: issue on the board -> branch from that issue -> implement -> verify -> PR -> merge -> Done -> cleanup. Work that changes product behaviour adds an OpenSpec change before implementing and archives it on the branch before the PR; the test for that is below.
+- The flow: issue on the board -> branch from that issue -> implement -> verify -> PR -> merge -> Done -> cleanup.
 - `repo-task-delivery` is the entrypoint. It delegates GitHub to `gh-project-workflow` and specs to the OpenSpec skills. Do not start at a sub-skill; they assume the flow is already underway.
 - Issues come from the workflow, never by hand:
   `bash .skills/gh-project-workflow/scripts/start_issue_flow.sh --title "..." --priority High --status "In progress" --base master`
@@ -19,15 +19,15 @@
 - The same call renames the running Claude Code session to `<number> <issue title>`, so the session list says which issue each session is on. Skipped silently outside Claude Code; a failed rename never fails the flow.
 - A raw `gh issue create` makes an issue that is on no board, with no Status and no Priority — work nobody can see. #288, #289, #290 and #292 were made that way and had to be added by hand afterwards. A `PreToolUse` hook now refuses the raw form and names the script instead.
 - The board is the owner's only window into the work. An issue that is not on it does not exist.
-- The delegation rule under **Branches and Worktrees** is enforced, not left to memory. A second `PreToolUse` hook, `.claude/hooks/coordinator-guard.sh`, refuses `Edit`/`Write`/`NotebookEdit` from a session with no subagent id when the target is inside the repository, and asks instead of refusing when the target's worktree is on an issue branch, since that is also what legitimate full-stand work looks like. Subagents pass untouched. The same hook also watches `Bash`, where it only ever asks: an editor target is given in the payload, a shell target is guessed from a string, and its list of shell write shapes is short and knowingly incomplete. Its header comment records what it cannot tell apart — read it before trusting it, and do not read it as a lock. Since 2.1.143 `worktree.bgIsolation` refuses a background coordinator's editor writes natively; the hook's own coverage is the interactive session and shell writes.
+- A second `PreToolUse` hook, `.claude/hooks/coordinator-guard.sh`, enforces the delegation rule rather than leaving it to memory. It refuses `Edit`/`Write`/`NotebookEdit` from a session with no subagent id when the target is inside the repository, and asks instead of refusing when the target's worktree is on an issue branch, since that is also what legitimate full-stand work looks like. Subagents pass untouched. The same hook also watches `Bash`, where it only ever asks: an editor target is given in the payload, a shell target is guessed from a string, and its list of shell write shapes is short and knowingly incomplete. Its header comment records what it cannot tell apart — read it before trusting it, and do not read it as a lock. Since 2.1.143 the harness refuses a background coordinator's editor writes natively under `worktree.bgIsolation`, which this repository sets nowhere; the hook's own coverage is the interactive session and shell writes.
 
-Do not start the flow when the user asks a question, wants only reading or measuring, is continuing an issue that is already active, or says to skip GitHub/OpenSpec. Everything else goes through it — bug, refactor, docs, skills, config. "It" is the issue, the branch and the pull request; whether an OpenSpec change joins them is the test below. "It is small" is not an exception; it is the usual excuse, and it is what produced four issues nobody could see.
+Do not start the flow when the user asks a question, wants only reading or measuring, is continuing an issue that is already active, or says to skip GitHub/OpenSpec. Everything else goes through it — bug, refactor, docs, skills, config. "It" is the issue, the branch and the pull request. "It is small" is not an exception; it is the usual excuse.
 
-Whether the work also needs an OpenSpec change is a verifiability test, not a topic match. Name the behaviour this change alters that someone could check afterwards without reading the diff — a word that now syncs, a document shape the migration must produce, a screen that now answers differently. Can you name one? Write the OpenSpec change, and archive it on the branch before the PR. Cannot name one? There is no requirement to state, so there is no OpenSpec change: the work alters how the repository is worked, not what the product does. Subsystems are examples, never the test.
+Whether the work also needs an OpenSpec change is a verifiability test, not a topic match. Name the behaviour this change alters that someone could check afterwards without reading the diff — a word that now syncs, a document shape the migration must produce, a screen that now answers differently. Can you name one? Write the OpenSpec change before implementing, and archive it on the branch before the PR. Cannot name one? There is no requirement to state, so there is no OpenSpec change: the work alters how the repository is worked, not what the product does. Subsystems are examples, never the test.
 
 Repository process fails that test by construction — agent rules, hooks, skills, scripts, CI configuration, documentation about how work is delivered. Until #400 every tracked edit needed a change anyway, and since `openspec validate` refuses a change with no delta, process work had to invent a normative requirement about itself to get delivered. It no longer does. Process rules are written down here instead: this file is loaded every session, and the one other copy was deleted for saying the same things twice (#388).
 
-Nothing else moves. The issue on the board, the branch from that issue, the guards, the pull request: unchanged, whichever side of the test the work falls on. Those are what make work visible — #288, #289, #290 and #292 were lost because they were never issues, not because they had no spec.
+Nothing else moves. The issue on the board, the branch from that issue, the guards, the pull request: unchanged, whichever side of the test the work falls on. Those are what make work visible; a spec was never what made them visible.
 
 If the user asks for a blocked command outright, prefix it with `DELIVERY_GUARD=off`. That turns the refusal into a normal approval prompt, so the owner still confirms. Never reach for it on your own judgement.
 
@@ -35,9 +35,14 @@ A refusal — from one of these hooks or from workspace isolation — stops the 
 
 - Do not assemble a commit in a side or detached worktree and push straight to the branch ref because ordinary writes were blocked. That was PR #347; the harness flagged it afterwards rather than preventing it, and absence of prevention is not permission.
 - Do not reword a command so it slips past a static check. Run it the permitted way or stop.
-- Do not set `DELIVERY_GUARD=off` on your own judgement. Owner's request only, as above.
 
 The guards read command text and the working directory, so they stop accidents, not intent. Going around one does not break the protection — it breaks the assurance that delivered work went down a verified path.
+
+**Behaviour is normative in exactly two files**: the change's delta spec and the synced main spec. The proposal, the design notes, the tasks, the ADR and the documentation describe it and link to it — they never restate it. Stated once, a behaviour is reversed by editing one requirement; stated in six places, reversing one word of it costs ten files.
+
+**Settle a decision before writing it down.** A decision about what a person does — which gesture is common, whether a control is a target or a label, what someone reads — cannot be settled by the codebase. Name those decisions before the first artifact. Take the measurement where one exists; otherwise ask the owner in one line with two named options. Until it is answered it is a line in the issue, not a spec: a test written from an unsettled decision passes and proves nothing.
+
+**Verify the symptom where it appeared.** A fix proven on a fixture is not proven on the stand it was for. When the report came from a phone, the tunnel or the live nginx, the verification goes there before the work is called done.
 
 # Clojure REPL Evaluation
 
@@ -81,7 +86,7 @@ Always use `:reload` when requiring namespaces to pick up changes.
 - A worktree still proves browser behaviour on fixture data. It serves on `localhost`, a secure context, so OPFS, Web Locks, service workers and workers all run there; the browser tests' fixture dictionary is enough for anything that needs only one origin. Only the real data and the shared services stay behind — cold-start timing on the full dictionary, replication against a live CouchDB, nginx routing.
 - On merge, delete the branch and remove the worktree.
 
-Measured 2026-09-10 on Claude Code 2.1.267; the boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` in `.claude/settings.json` is the owner's lever over it, not yours. Re-measure after a CLI update.
+Measured 2026-09-10 on Claude Code 2.1.267; the boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` is the owner's lever over it, not yours — and it appears in neither `.claude/settings.json` nor `.claude/settings.local.json`, so the harness default is what is in force. Re-measure after a CLI update.
 
 # Browser / PWA Verification
 

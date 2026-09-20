@@ -36,11 +36,17 @@ src/backend/
 ## Running
 
 ```bash
-clj -M:dev -m core          # dev REPL with nREPL on port 7888
+clj -M:dev -m core          # start the server with the dev alias
 clj -M:test                 # run backend tests
 ```
 
-See [readme.md](../../readme.md) for full dev setup (nginx, TLS, DB init).
+Neither starts an nREPL. The one on the stand is shadow-cljs's, on the port
+`shadow-cljs.edn` pins.
+
+Bringing the stand up, and the nginx vhost in front of it, are in
+[docs/dev/development-setup.md](../../docs/dev/development-setup.md) and
+[infra/README.md](../../infra/README.md). The database needs no step of its
+own: the server migrates it on boot and creates it when it is not there.
 
 ## Database
 

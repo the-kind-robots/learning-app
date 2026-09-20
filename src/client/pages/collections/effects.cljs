@@ -130,16 +130,16 @@
 
 
 (nxr/register-effect! :effect/begin-long-press
-  (fn begin-long-press [{:keys [dispatch] :as ctx} _ coll-id]
+  (fn begin-long-press [{:keys [dispatch] :as ctx} _ coll-id tap-actions]
     (track-gesture! ctx
                     coll-id
-                    [[:action/handle-tab-click coll-id]]
+                    tap-actions
                     (fn []
                       (dispatch [[:effect/save {:collections/editing-id coll-id}]])))))
 
 
 (nxr/register-effect! :effect/begin-tap
-  ;; The main card has no long press; it gets the same tap recovery.
+  ;; «Всё подряд» has no long press; it gets the same tap recovery.
   (fn begin-tap [ctx _ card-id tap-actions]
     (track-gesture! ctx card-id tap-actions nil)))
 

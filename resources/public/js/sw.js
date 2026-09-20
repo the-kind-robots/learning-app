@@ -1,67 +1,21 @@
-// SW_VERSION is prepended by the server: const SW_VERSION = "abcd1234";
+// SW_VERSION and PRECACHE_URLS are prepended by the server:
+//
+//   const SW_VERSION="abcd1234";
+//   const PRECACHE_URLS=["/","/css/styles.css", ...];
 //
 // SW_VERSION doubles as the cache bucket name. Each deploy gets a fresh bucket;
 // the activate handler deletes every bucket whose name isn't SW_VERSION, so
 // stale assets from old deployments are evicted automatically.
-
-// Static app-shell resources.
 //
-// These are safe to cache during SW install and serve cache-first because their
-// lifecycle is tied to SW_VERSION. Keep dynamic/runtime metadata out of this
-// list; it needs its own cache policy.
-const PRECACHE_URLS = [
-  "/",
-  "/css/base/colors.css",
-  "/css/base/foundation.css",
-  "/css/base/reset.css",
-  "/css/base/typography.css",
-  "/css/blocks/app-shell.css",
-  "/css/blocks/home.css",
-  "/css/blocks/lesson.css",
-  "/css/blocks/modal.css",
-  "/css/blocks/page-footer.css",
-  "/css/blocks/popover.css",
-  "/css/blocks/pwa-install.css",
-  "/css/blocks/token-card.css",
-  "/css/blocks/vocabulary.css",
-  "/css/blocks/word-edit-dialog.css",
-  "/css/blocks/word-item.css",
-  "/css/blocks/word-list.css",
-  "/css/components/autocomplete.css",
-  "/css/components/buttons.css",
-  "/css/components/input.css",
-  "/css/styles.css",
-  "/favicon.ico",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-200.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-200italic.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-300.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-300italic.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-500.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-500italic.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-600.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-600italic.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-700.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-700italic.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-800.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-800italic.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-900.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-900italic.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-italic.woff2",
-  "/fonts/Nunito/nunito-v26-cyrillic_latin-regular.woff2",
-  "/dev-manifest.json",
-  "/icons.svg",
-  "/icons/cancel.svg",
-  "/icons/ue-192.png",
-  "/icons/ue-512.png",
-  "/icons/ue-dev-192.png",
-  "/icons/ue-dev-512.png",
-  "/js/app/main.js",
-  "/js/sqlite3-dictionary.js",
-  "/js/sqlite3-worker.js",
-  "/js/sqlite3.js",
-  "/js/sqlite3.wasm",
-  "/manifest.json"
-];
+// PRECACHE_URLS is the static app shell, derived from the files under
+// resources/public rather than typed out here: whole directories that hold
+// shell assets and nothing else (css, fonts, icons), plus the few files named
+// one by one in core.clj. Whatever else is in a checkout — an old build's
+// output, a downloaded file — is not in it. These are safe to cache during SW
+// install and serve cache-first because their lifecycle is tied to
+// SW_VERSION. Keep dynamic/runtime metadata out of it; it needs its own cache
+// policy — and a path in the list that no longer exists is worse than one
+// missing, since cache.addAll is atomic and the install would never finish.
 
 // Set for O(1) path lookup in the fetch handler.
 const PRECACHE_SET = new Set(PRECACHE_URLS);
@@ -107,6 +61,20 @@ self.addEventListener("install", event => {
       cache.addAll(PRECACHE_URLS.map(url => new Request(url, { cache: "reload" })))
     )
   );
+});
+
+// No skipWaiting in install (#278): activating deletes every other bucket,
+// and a page still open on the old build loads its assets from one of them.
+// A new worker therefore waits until a page asks for it. Asking is safe
+// because every page that started under a controller reloads itself once
+// on controllerchange (service_worker.cljs, ADR-0014) — the old bucket goes,
+// and no page keeps running on it. No build asks by itself: the request is
+// always the user's — «Обновить» in every build, or a tap on the red D in a
+// development build.
+self.addEventListener("message", event => {
+  if (event.data && event.data.type === "activate-waiting") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("activate", event => {
