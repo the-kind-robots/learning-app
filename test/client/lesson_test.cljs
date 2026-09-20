@@ -14,6 +14,7 @@
    [ports.reviews :as reviews]
    [ports.words :as words]
    [use-cases.lesson :as sut]
+   [use-cases.vocabulary :as vocabulary]
    [utils :as utils]))
 
 
@@ -405,3 +406,114 @@
               (await (sut/finish! (test-capabilities dbs)))
               (let [lessons (await (db-queries/fetch-by-type (:device/db dbs) "lesson"))]
                 (is (empty? lessons)))))))))))
+
+
+(defn- ^:async seed-stale-vocabulary!
+  "Words whose single review is old enough that every retention level
+   underflows to a flat zero, so nothing but the sort key tells them apart."
+  [db words]
+  (await
+   (js/Promise.all
+    (into-array
+     (mapcat
+      (fn [{:keys [id value days-ago]}]
+        [(db/insert db
+                    {:_id         id
+                     :type        "vocab"
+                     :value       value
+                     :translation [{:lang "ru" :value "слово"}]
+                     :created-at  time/test-now-iso
+                     :modified-at time/test-now-iso})
+         (db/insert db
+                    {:_id        (str "review-" id)
+                     :type       "review"
+                     :word-id    id
+                     :retained   true
+                     :created-at (utils/ms->iso (- (time/now-ms)
+                                                   (* days-ago 24 3600 1000)))})])
+      words)))))
+
+
+(deftest start-draws-the-most-due-not-the-alphabet
+  (async-testing
+    "`start!` over words whose retention has all underflowed serves the most due, not the ones the alphabet puts first"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      ;; The vocab view is keyed by document id, so left to itself the read
+      ;; order here is abend, abfahrt, abholen, zeit, zug, zurueck — and the
+      ;; three `ab-` words are the three *least* due of the six (#431).
+      (await (seed-stale-vocabulary!
+              (:user/db dbs)
+              [{:id "vocab:abend" :value "der Abend" :days-ago 10}
+               {:id "vocab:abfahrt" :value "die Abfahrt" :days-ago 10}
+               {:id "vocab:abholen" :value "abholen" :days-ago 10}
+               {:id "vocab:zeit" :value "die Zeit" :days-ago 300}
+               {:id "vocab:zug" :value "der Zug" :days-ago 300}
+               {:id "vocab:zurueck" :value "zurück" :days-ago 300}]))
+      (let [capabilities    (test-capabilities dbs)
+            {:keys [words]} (await (vocabulary/list capabilities {}))
+            {:keys [lesson-state]}
+            (await (sut/start! capabilities
+                               {:vocab-pool-size  3
+                                :vocab-per-lesson 3
+                                :trial-selector   :first}))]
+        (is (every? zero? (map :retention-level words))
+            "the premise: retention has underflowed to zero for all six")
+        (is (= #{"vocab:zeit" "vocab:zug" "vocab:zurueck"}
+               (set (map :word-id (:trials lesson-state))))
+            "the lesson holds the three most due, not the three the alphabet leads with"))))))
+
+
+(defn- ^:async seed-unreviewed-vocabulary!
+  "Words with no review at all. Every one of them is maximally due, so every
+   one has the same urgency — the tie that is left once the underflow is
+   gone."
+  [db values]
+  (await (js/Promise.all
+          (into-array
+           (map (fn [value]
+                  (db/insert db
+                             {:_id         (str "vocab:" value)
+                              :type        "vocab"
+                              :value       value
+                              :translation [{:lang "ru" :value "слово"}]
+                              :created-at  time/test-now-iso
+                              :modified-at time/test-now-iso}))
+                values)))))
+
+
+(deftest start-cuts-a-tied-vocabulary-at-random
+  (async-testing "`start!` over words that all tie on urgency does not keep serving the alphabetically first"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      ;; A word document and its reviews are separate documents and can
+      ;; arrive apart, so a whole vocabulary can sit at ##Inf at once.
+      (await (seed-unreviewed-vocabulary!
+              (:user/db dbs)
+              ["abend" "abfahrt" "abholen" "ankommen" "aufstehen"
+               "bleiben" "bringen" "denken" "essen" "fahren"]))
+      (let [capabilities (test-capabilities dbs)
+            urgencies    (->> (await (vocabulary/list capabilities {}))
+                              :words
+                              (map :urgency)
+                              set)
+            ;; The pool has to be smaller than the vocabulary, or there is no
+            ;; cut to make and this passes even on a pool cut alphabetically.
+            draw         (^:async fn
+                          []
+                          (let [{:keys [lesson-state]}
+                                (await (sut/start! capabilities
+                                                   {:vocab-pool-size 3
+                                                    :trial-selector  :first}))]
+                            (set (map :word-id (:trials lesson-state)))))
+            first-draw   (await (draw))
+            second-draw  (await (draw))
+            third-draw   (await (draw))
+            fourth-draw  (await (draw))
+            fifth-draw   (await (draw))]
+        (is (= #{##Inf} urgencies)
+            "the premise: all ten tie at the same urgency")
+        (is (< 1 (count #{first-draw second-draw third-draw fourth-draw fifth-draw}))
+            "five lessons over the tied vocabulary did not all draw the same words"))))))

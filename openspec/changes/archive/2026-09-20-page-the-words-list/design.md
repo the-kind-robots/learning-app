@@ -8,10 +8,11 @@ Two constraints are settled and not reopened here:
 
 - `:total` is deliberately pre-filter (GH-359). The empty vocabulary and the search that
   matched nothing are different screens, and that is how they are told apart.
-- The list is sorted by retention level, so the query needs every word's level before it
-  can name a first page. GH-404 measured that read (9000 reviews: all rows 1.1 s, beating
-  keyed lookup at the sizes that matter) and chose reading all reviews. The win claimed
-  here is the render, not the query.
+- The list is sorted by how due each word is — by `:urgency` since GH-431, with the
+  retention level the row shows as its image — so the query needs every word's key before
+  it can name a first page. GH-404 measured that read (9000 reviews: all rows 1.1 s,
+  beating keyed lookup at the sizes that matter) and chose reading all reviews. The win
+  claimed here is the render, not the query.
 
 ## Goals / Non-Goals
 
@@ -21,7 +22,7 @@ Two constraints are settled and not reopened here:
 - A loaded row count that survives an edit or a delete and resets on a search.
 
 **Non-Goals:**
-- A lazy query. The retention sort reads everything either way.
+- A lazy query. The sort reads every word's reviews either way.
 - Row virtualisation — rows already rendered stay in the DOM.
 - Changing what `:total` counts.
 
