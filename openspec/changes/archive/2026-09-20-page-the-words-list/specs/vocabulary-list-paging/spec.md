@@ -69,10 +69,11 @@ the top of that page, whatever was loaded and however far down the reader had sc
 - **WHEN** the reader clears the query
 - **THEN** the list renders one page of the unfiltered rows
 
-### Requirement: Editing or deleting a word keeps the loaded rows
+### Requirement: A reload keeps the loaded rows
 
-Reloading the list after a word is edited or removed SHALL keep the number of rows the
-reader had loaded, so the reader is not returned to the first page.
+Reloading the list SHALL keep the number of rows the reader had loaded and the query they
+were read under, so the reader is not returned to the first page — whether the reload
+follows their own edit or arrives on its own after synchronisation brought documents.
 
 #### Scenario: Editing a word from a later page
 
@@ -83,6 +84,14 @@ reader had loaded, so the reader is not returned to the first page.
 
 - **WHEN** the reader has loaded more than one page and removes a word
 - **THEN** the list still holds the rows that were loaded, less the removed one
+
+#### Scenario: A sync pull reloads the screen
+
+- **WHEN** a synchronisation pass brings documents while the reader has several pages
+  loaded
+- **THEN** the reload asks for the rows that were loaded, under the query they were read
+  under
+- **AND** the list is not returned to its first page
 
 ### Requirement: The presenter decides whether another page exists
 

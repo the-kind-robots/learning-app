@@ -13,7 +13,8 @@ with a few thousand words every keystroke in the search box rebuilds every row (
   loaded on scroll before and keeps doing so.
 - Typing in the search box goes back to the first page.
 - Editing or deleting a word reloads the list at the row count already on screen, so the
-  reader is not thrown back to the top.
+  reader is not thrown back to the top. The reload a sync pull triggers does the same: the
+  page stores the query its rows came from, not a bare load effect.
 - The sentinel is rendered only while unrendered rows remain.
 - The vocabulary use case reports how many rows survived the search filter, so the
   presenter can say whether another page exists. `:total` stays pre-filter (GH-359) and

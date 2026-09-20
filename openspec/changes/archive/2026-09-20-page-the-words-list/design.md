@@ -54,5 +54,7 @@ stops a burst of intersections from stacking loads.
 - A short list on a tall screen may not push the sentinel out of view, so the reader must
   scroll for the page after next → `rootMargin` of 200 px, plus the sentinel unmounting
   once the rows run out.
-- A sync pull's `:page/load` reload carries no limit and lands back on the first page →
-  accepted: it is a whole-page reload of data the reader did not ask for, and it is rare.
+- A reload the reader did not ask for — the one a sync pull triggers through `:page/load`
+  — would throw them back to the first page → `:page/load` is rewritten on every render of
+  the list and carries that render's limit and query, so the reload asks for the page on
+  screen.

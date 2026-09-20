@@ -4,13 +4,22 @@
    [pages.words.presenter :as presenter]))
 
 
+(defn words-shown
+  "State for a page of words that has just been read. `:page/load` carries the
+   query these rows came from, so the reload a sync pull triggers
+   (`:action/reload-page`) asks for the page the reader has rather than the
+   first one — otherwise a reader 500 rows down loses 450 of them to a pull
+   that happened to bring a document."
+  [{:keys [limit search] :as words}]
+  (merge {:page/current  :page/words
+          :page/load     [:effect/load-words {:limit limit :search search}]
+          :words/editing nil}
+         (presenter/page-state words)))
+
+
 (nxr/register-action! :action/show-words
   (fn show-words [_ words]
-    [[:effect/save
-      (merge {:page/current  :page/words
-              :page/load     [:effect/load-words]
-              :words/editing nil}
-             (presenter/page-state words))]]))
+    [[:effect/save (words-shown words)]]))
 
 
 (nxr/register-action! :action/open-word-edit

@@ -14,6 +14,8 @@
 - [x] 3.2 `:action/show-more-words` asks for the next page; search and mutations carry the
   limit they should land on
 - [x] 3.3 `:effect/observe-words-sentinel` / `:effect/unobserve-words-sentinel`
+- [x] 3.4 `:page/load` carries the limit and query of the rows on screen, so the reload a
+  sync pull triggers reads the same page
 
 ## 4. View and CSS
 
@@ -22,6 +24,6 @@
 
 ## 5. Verify
 
-- [x] 5.1 Node tests: presenter paging props, use-case `:matches`
+- [x] 5.1 Node tests: presenter paging props, use-case `:matches`, the stored reload effect
 - [x] 5.2 Browser: 50 rows on first render, append on scroll, reset on search, preserved
   across an edit
