@@ -31,16 +31,35 @@
      :review-count    review-count}))
 
 
-(defn- retention-state->retention-level
+(defn- retention-state->urgency
   [{:keys [forgetting-rate last-review-ms]} now-ms]
   (if (nil? last-review-ms)
-    0
-    (let [elapsed-secs (utils/ms->secs (- now-ms last-review-ms))]
-      (min 100 (* 100 (math/exp (- (* forgetting-rate elapsed-secs))))))))
+    ##Inf
+    (* forgetting-rate (utils/ms->secs (- now-ms last-review-ms)))))
+
+
+(defn urgency
+  "Pure function. How overdue a word is: the time since its last review,
+   counted in its own forgetting time-constants. It ranks words exactly as
+   retention does, only reversed — but retention underflows to a flat `0.0`
+   after 3.8 unreviewed days at the initial rate, and urgency keeps
+   separating words past that. A word never reviewed is as due as a word
+   gets."
+  [reviews now-ms]
+  (-> reviews reviews->retention-state (retention-state->urgency now-ms)))
+
+
+(defn urgency->retention-level
+  "Retention percentage (0-100) for an urgency — the one place the two are
+   tied together, so a caller that needs both reads a word's reviews once.
+   An urgency of `##Inf`, a word never reviewed, gives 0; the cap holds the
+   percentage at 100 for a clock that moved backwards."
+  [urgency]
+  (min 100 (* 100 (math/exp (- urgency)))))
 
 
 (defn retention-level
   "Pure function. Returns retention percentage (0-100) for a sequence
    of reviews at a given point in time."
   [reviews now-ms]
-  (-> reviews reviews->retention-state (retention-state->retention-level now-ms)))
+  (-> reviews (urgency now-ms) urgency->retention-level))

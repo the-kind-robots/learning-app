@@ -62,7 +62,10 @@
 
 (defn ^:async list
   "Vocabulary rows with retention levels, sorted by retention (`:order`
-   :asc or :desc, default :desc) and paged by `:offset`/`:limit`. `:word-ids`
+   :asc for the most due first, :desc for the best remembered first,
+   default :desc) and paged by `:offset`/`:limit`. Each row carries the
+   `:urgency` the sort ran on, for a caller that has to break its ties.
+   `:word-ids`
    restricts to those words, `:search` to values or translations containing
    the text. `:total` counts the words before the search filter, so an empty
    vocabulary and a search with no match tell apart."
@@ -86,12 +89,27 @@
                        (mapv :id candidates))
         reviews      (await ((:reviews/by-word reviews) narrowed-ids))
         now          (now-ms capabilities)
+        ;; Sorted by urgency rather than by the retention level the row
+        ;; carries: retention underflows to a flat 0.0 after 3.8 unreviewed
+        ;; days, and the ties then fall back to the repository's read order,
+        ;; which is the alphabet (#431). Urgency orders the same words the
+        ;; same way without collapsing, and the level is its image, so a
+        ;; word's reviews are still walked once (#404).
+        ;;
+        ;; Urgency still ties — every word with no review at all, and every
+        ;; word added within one second of another, since elapsed time is
+        ;; truncated to seconds — and those ties are still broken by the read
+        ;; order. On this page that is the alphabet among words showing the
+        ;; same percentage, which is predictable and wanted. Only a caller
+        ;; taking a subset off the head needs more, and `domain.lesson` does
+        ;; that for itself out of the `:urgency` each row carries.
         rows         (->> candidates
                           (map (fn [word]
-                                 (assoc word
-                                        :retention-level
-                                        (retention/retention-level (reviews (:id word) []) now))))
-                          (sort-by :retention-level (if (= order :asc) < >)))
+                                 (let [urgency (retention/urgency (reviews (:id word) []) now)]
+                                   (assoc word
+                                          :retention-level (retention/urgency->retention-level urgency)
+                                          :urgency urgency))))
+                          (sort-by :urgency (if (= order :asc) > <)))
         rows         (cond->> rows
                        offset (drop offset)
                        limit  (take limit))]
