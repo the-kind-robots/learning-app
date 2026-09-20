@@ -42,10 +42,12 @@
     :or   {vocab-per-lesson domain/default-vocab-per-lesson
            vocab-pool-size  domain/default-vocab-pool-size}}]
   (try
-    (let [{pool :words} (await (vocabulary/list-active
-                                capabilities
-                                {:order :asc :limit vocab-pool-size}))
-          selected      (domain/pick-vocab pool vocab-per-lesson)]
+    ;; Asked for without `:limit`: `list-active` computes and sorts every row
+    ;; either way and `:limit` only trims afterwards, so nothing more is read
+    ;; — and cutting the head here would cut it alphabetically wherever
+    ;; urgencies tie. `pick-vocab` owns the whole selection policy.
+    (let [{rows :words} (await (vocabulary/list-active capabilities {:order :asc}))
+          selected      (domain/pick-vocab rows vocab-pool-size vocab-per-lesson)]
       (if-not (seq selected)
         {:error :no-words-available}
         (let [collection-id   ((:collections/active-id collections))

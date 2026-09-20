@@ -463,3 +463,57 @@
         (is (= #{"vocab:zeit" "vocab:zug" "vocab:zurueck"}
                (set (map :word-id (:trials lesson-state))))
             "the lesson holds the three most due, not the three the alphabet leads with"))))))
+
+
+(defn- ^:async seed-unreviewed-vocabulary!
+  "Words with no review at all. Every one of them is maximally due, so every
+   one has the same urgency — the tie that is left once the underflow is
+   gone."
+  [db values]
+  (await (js/Promise.all
+          (into-array
+           (map (fn [value]
+                  (db/insert db
+                             {:_id         (str "vocab:" value)
+                              :type        "vocab"
+                              :value       value
+                              :translation [{:lang "ru" :value "слово"}]
+                              :created-at  time/test-now-iso
+                              :modified-at time/test-now-iso}))
+                values)))))
+
+
+(deftest start-cuts-a-tied-vocabulary-at-random
+  (async-testing "`start!` over words that all tie on urgency does not keep serving the alphabetically first"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      ;; A word document and its reviews are separate documents and can
+      ;; arrive apart, so a whole vocabulary can sit at ##Inf at once.
+      (await (seed-unreviewed-vocabulary!
+              (:user/db dbs)
+              ["abend" "abfahrt" "abholen" "ankommen" "aufstehen"
+               "bleiben" "bringen" "denken" "essen" "fahren"]))
+      (let [capabilities (test-capabilities dbs)
+            urgencies    (->> (await (vocabulary/list capabilities {}))
+                              :words
+                              (map :urgency)
+                              set)
+            ;; The pool has to be smaller than the vocabulary, or there is no
+            ;; cut to make and this passes even on a pool cut alphabetically.
+            draw         (^:async fn
+                          []
+                          (let [{:keys [lesson-state]}
+                                (await (sut/start! capabilities
+                                                   {:vocab-pool-size 3
+                                                    :trial-selector  :first}))]
+                            (set (map :word-id (:trials lesson-state)))))
+            first-draw   (await (draw))
+            second-draw  (await (draw))
+            third-draw   (await (draw))
+            fourth-draw  (await (draw))
+            fifth-draw   (await (draw))]
+        (is (= #{##Inf} urgencies)
+            "the premise: all ten tie at the same urgency")
+        (is (< 1 (count #{first-draw second-draw third-draw fourth-draw fifth-draw}))
+            "five lessons over the tied vocabulary did not all draw the same words"))))))

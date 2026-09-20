@@ -61,6 +61,18 @@
       (is (< (sut/urgency fresh now-ms) (sut/urgency stale now-ms))))))
 
 
+(deftest urgency-ties-for-reviews-within-one-second
+  (testing "elapsed time is truncated to seconds, so a batch added together ties"
+    (let [at    (fn [iso] [{:created-at iso :retained true}])
+          early (at "2024-08-20T09:59:00.100Z")
+          late  (at "2024-08-20T09:59:00.900Z")]
+      (is (= (sut/urgency early now-ms) (sut/urgency late now-ms))
+          "800 ms apart is one urgency — the tie `pick-vocab` has to break")
+      (is (not= (sut/urgency early now-ms)
+                (sut/urgency (at "2024-08-20T09:59:01.100Z") now-ms))
+          "a full second apart does separate them"))))
+
+
 (deftest retention-level-is-the-image-of-urgency
   (testing "a reviewed word: the level is exactly 100 * exp(- urgency)"
     (let [reviewed (last-reviewed-days-ago 0.01)]
