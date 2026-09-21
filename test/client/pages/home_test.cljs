@@ -11,7 +11,6 @@
    [pages.home.actions]
    [pages.home.effects]
    [pages.home.presenter :as presenter]
-   [use-cases.phrase :as phrase]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -131,7 +130,7 @@
 
 (deftest submit-clears-suggestions
   (async-testing "a successful submit resets the form, suggestions included"
-    (with-redefs [vocabulary/add!  (fn [_ _ _]
+    (with-redefs [vocabulary/add!  (fn [_ _ _ _]
                                      (js/Promise.resolve {:word-id "w1" :created? true}))
                   vocabulary/count (fn [_]
                                      (js/Promise.resolve 1))]
@@ -223,12 +222,9 @@
 (deftest typing-on-from-a-picked-word-is-saved-as-a-phrase
   (async-testing "GH-358: the submitted document follows the re-evaluated mode"
     (let [saved-as (atom nil)]
-      (with-redefs [phrase/add!      (fn [_ _ _]
-                                       (reset! saved-as :phrase)
-                                       (js/Promise.resolve {:word-id "p1" :created? true}))
-                    vocabulary/add!  (fn [_ _ _]
-                                       (reset! saved-as :word)
-                                       (js/Promise.resolve {:word-id "w1" :created? true}))
+      (with-redefs [vocabulary/add!  (fn [_ _ _ kind]
+                                       (reset! saved-as kind)
+                                       (js/Promise.resolve {:word-id "e1" :created? true}))
                     vocabulary/count (fn [_]
                                        (js/Promise.resolve 1))]
         (let [system (test-system {})]

@@ -60,7 +60,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id created?]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
+      (let [{:keys [word-id created?]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
             vocabs  (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
             reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (is (string? word-id))
@@ -77,8 +77,8 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
-      (await (sut/add! (test-capabilities dbs) "die Katze" "кот"))
+      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
+      (await (sut/add! (test-capabilities dbs) "die Katze" "кот" :word))
       (let [{:keys [words total]} (await (sut/list (test-capabilities dbs) {}))]
         (is (= 2 (count words)))
         (is (= 2 total))
@@ -90,9 +90,9 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
-      (await (sut/add! (test-capabilities dbs) "die Katze" "кот"))
-      (await (sut/add! (test-capabilities dbs) "der Vogel" "птица"))
+      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
+      (await (sut/add! (test-capabilities dbs) "die Katze" "кот" :word))
+      (await (sut/add! (test-capabilities dbs) "der Vogel" "птица" :word))
       (let [{:keys [matches words total]} (await (sut/list (test-capabilities dbs) {:search "Hund" :limit 1}))]
         (is (= 3 total))
         (is (= 1 matches)
@@ -108,13 +108,35 @@
                          tells an empty vocabulary from a search with no match"))))))
 
 
+(deftest a-phrase-is-counted-and-listed-like-a-word
+  (async-testing "one vocabulary, two kinds (#371)"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
+      (await (sut/add! (test-capabilities dbs) "auf jeden Fall" "в любом случае" :phrase))
+      (is (= 2 (await (sut/count (test-capabilities dbs))))
+          "the count comes off the view's row count, and a phrase is a row of it")
+      (let [{:keys [matches total words]} (await (sut/list (test-capabilities dbs) {:limit 50}))]
+        (is (= ["vocab:auf jeden fall" "vocab:der hund"] (mapv :id words))
+            "both kinds in one alphabet")
+        (is (= ["phrase" nil] (mapv :kind words))
+            "the kind rides along, so the row can be rendered as a phrase")
+        (is (= 2 total))
+        (is (= 2 matches)))
+      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:search "jeden" :limit 50}))]
+        (is (= ["vocab:auf jeden fall"] (mapv :id words))
+            "a phrase is searchable by its value like a word"))))))
+
+
 (deftest list-reports-how-many-rows-the-page-left-behind
   (async-testing "`matches` says whether another page follows"
     (with-test-dbs
      (^:async fn
       [dbs]
       (await (js/Promise.all
-              (into-array (map (fn [i] (sut/add! (test-capabilities dbs) (str "wort-" i) (str "перевод-" i)))
+              (into-array (map (fn [i]
+                                 (sut/add! (test-capabilities dbs) (str "wort-" i) (str "перевод-" i) :word))
                                (range 12)))))
       (let [{:keys [matches words total]} (await (sut/list (test-capabilities dbs) {:limit 5}))]
         (is (= 5 (count words)) "the page is the limit")
@@ -155,7 +177,8 @@
               (into-array (map (fn [i]
                                  (sut/add! (test-capabilities dbs)
                                            (str "wort-" (+ 100 i))
-                                           (str "перевод-" i)))
+                                           (str "перевод-" i)
+                                           :word))
                                (range 120)))))
       (let [calls    (atom [])
             original db/query]
@@ -182,7 +205,7 @@
      (^:async fn
       [dbs]
       (await (js/Promise.all
-              (into-array (map (fn [i] (sut/add! (test-capabilities dbs) (str "word-" i) (str "перевод-" i)))
+              (into-array (map (fn [i] (sut/add! (test-capabilities dbs) (str "word-" i) (str "перевод-" i) :word))
                                (range 30)))))
       (let [cnt (await (sut/count (test-capabilities dbs)))
             {:keys [words total]} (await (sut/list (test-capabilities dbs) {}))]
@@ -196,7 +219,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
+      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
             result (await (sut/get (test-capabilities dbs) word-id))]
         (is (= word-id (:id result)))
         (is (= "der Hund" (:value result)))
@@ -209,7 +232,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))
+      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
             result (await (sut/update! (test-capabilities dbs) word-id "лиса"))]
         (is (= word-id (:id result)))
         (is (= "der Hund" (:value result)))
@@ -221,7 +244,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))]
+      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))]
         (await (sut/add-review (test-capabilities dbs) word-id true "пёс"))
         (await (db/insert (:device/db dbs) {:type "example" :word-id word-id :value "Der Hund läuft"}))
         (await (sut/delete! (test-capabilities dbs) word-id))
@@ -238,7 +261,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс"))]
+      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))]
         (await (sut/add-review (test-capabilities dbs) word-id false "собака"))
         (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
           (is (= 2 (count reviews)))

@@ -3,7 +3,6 @@
 ## Purpose
 User phrases are multi-word German expressions a user authors and learns as a unit. This spec covers how they are entered, how they sit in the vocabulary alongside words, and how a lesson asks for them.
 ## Requirements
-
 ### Requirement: Phrases are added from the home form with automatic mode detection
 The home add form SHALL detect whether the input is a word or a phrase without a manual toggle. When an already-fetched completion is the input itself, its pos SHALL decide: `phrase` selects phrase mode, anything else word mode. Otherwise input containing a space (after trim) SHALL be treated as a phrase, EXCEPT when it is an article (der/die/das/ein/eine) or `sich` followed by a single token. Selecting an autocomplete suggestion SHALL set the mode from the suggestion: multi-word pos=phrase suggestions select phrase mode, all others word mode. A selected suggestion's mode SHALL hold only while the entered value is still the selected lemma, compared by the normalization that gives a vocabulary document its id; once the value differs, detection SHALL decide again. The form SHALL offer no control over the mode: the panel legend and the field label are what state it, and a selection is the only thing that can override detection. A multi-word noun is entered as a word by typing it with its article, as the dictionary lists it.
 
@@ -38,18 +37,6 @@ Both the German input and the translation input SHALL be auto-growing multi-line
 #### Scenario: Long phrase grows the field
 - **WHEN** the user pastes a phrase longer than one visual line
 - **THEN** the field grows to show the content up to the maximum height without horizontal scrolling
-
-### Requirement: Adding a phrase creates a phrase document without example generation
-Submitting the form in phrase mode SHALL create a vocabulary document of the `"phrase"` kind with the translation stored as a single entry (never split on punctuation), seed an initial review, and add it to the active collection. No LLM example fetch SHALL be queued for phrases. Re-adding an existing value SHALL merge translations as whole entries and add it to the active collection.
-
-#### Scenario: Phrase with sentence translation survives punctuation
-- **WHEN** the user adds "Entschuldigung, dass ich zu spät komme" with translation "Извини, что я опоздал."
-- **THEN** one phrase document exists whose translation is the single entered string
-- **AND** no example-fetch task is queued
-
-#### Scenario: Duplicate phrase merges
-- **WHEN** the user adds a phrase whose normalized value already exists
-- **THEN** the translations are merged as whole entries and the document count does not grow
 
 ### Requirement: One value is one entry
 A value identifies one vocabulary document whatever its kind. Submitting a phrase whose value already exists SHALL merge the translation into that document, without a warning, a confirmation, or a second press, and SHALL leave its kind unchanged.
@@ -103,3 +90,20 @@ The client conflict resolver SHALL resolve phrase documents in the same pass and
 #### Scenario: Two devices add the same phrase
 - **WHEN** two devices add the same phrase with different translations and sync
 - **THEN** one phrase document remains with both translation entries intact
+
+### Requirement: Adding a phrase creates a phrase document and queues an example fetch
+Submitting the form in phrase mode SHALL create a vocabulary document of the `"phrase"` kind with the translation stored as a single entry (never split on punctuation), seed an initial review, add it to the active collection, and queue an example fetch carrying the active collection context. The fetch SHALL be queued on the same terms as for a word, including the re-fetch rule for an entry added to a named collection that has no example for it yet (see `specs/examples-schema/spec.md`). Re-adding an existing value SHALL merge translations as whole entries and add it to the active collection.
+
+#### Scenario: Phrase with sentence translation survives punctuation
+- **WHEN** the user adds "Entschuldigung, dass ich zu spät komme" with translation "Извини, что я опоздал."
+- **THEN** one phrase document exists whose translation is the single entered string
+- **AND** an example-fetch task is queued for that phrase, carrying the active collection context
+
+#### Scenario: Duplicate phrase merges
+- **WHEN** the user adds a phrase whose normalized value already exists
+- **THEN** the translations are merged as whole entries and the document count does not grow
+
+#### Scenario: Existing phrase added to a collection that has no example for it
+- **WHEN** the user adds an existing phrase while a named collection is active and that collection has no example for it
+- **THEN** an example-fetch task is queued for that phrase and collection, as it would be for a word
+
