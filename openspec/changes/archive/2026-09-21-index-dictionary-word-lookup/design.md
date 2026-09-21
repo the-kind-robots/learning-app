@@ -43,6 +43,24 @@ bringing it back. The backend is the index's only reader and starts after every 
 one place that cannot drift from the query. It is created beside the query it serves, in
 `examples/dictionary.clj`.
 
+**The import unit restarts the app, not the deploy workflow.** The import runs
+`import.sh --db dictionary-db --reset`, and the reset takes the index with the database. The
+application is what puts it back, so something has to start the application after the import. Putting
+that in the workflow would cover the workflow alone — the runbook tells an operator to start the
+import unit by hand, and that path would stay indexless. `ExecStartPost=` on the import unit covers
+every caller, and it runs only when the import itself succeeded. It goes through the existing
+`learning-app-restart.service` so there is one definition of how the app is restarted, shared with
+the jar's `learning-app-restart.path`. The `+` prefix is needed because the import runs as an
+unprivileged user with an empty capability bounding set and cannot otherwise reach PID 1.
+`OnSuccess=` would say the same thing more directly but needs a newer systemd than `ExecStartPost=`,
+which has carried the `+` prefix for far longer.
+
+**The deploy checks the query plan, not the index listing.** `_index` lists definitions, and a
+definition exists the moment it is posted. `_explain` of the lookup's own selector answers the
+question actually being asked — what will serve this query. The check retries against a bounded
+deadline because the application's unit is `Type=simple`: `systemctl restart` returns when the
+process is forked, not when it has finished starting.
+
 **Best-effort at boot, like the reconciliation report.** `serve!` already treats an unreachable
 CouchDB as a warning rather than a failed boot; index creation joins that step under the same rule.
 An app that cannot generate examples is still an app that serves.
@@ -54,7 +72,11 @@ An app that cannot generate examples is still an app that serves.
   degrade to the unknown-word path, exactly as before the fix; the build continues in the background
   and every later lookup is answered from the index. Measured locally: the build ran under a minute
   over ~850k documents. Not worth a boot-time warm-up, which would trade a rare single slow request
-  for a slow boot on every start.
+  for a slow boot on every start. The deploy's plan check does not wait for the build either — it
+  asks which index answers the selector, which the planner knows as soon as the definition exists.
+- **The restart is a restart: in-flight requests to the application are dropped** → it happens once
+  per dictionary deploy, at the same point the jar deploy already restarts the app through
+  `learning-app-restart.path`.
 - **The index covers every document in the database, not only dictionary entries** → additional
   on-disk index, proportional to the document count. Accepted: a partial index would have to be named
   at the call site (see Decisions).

@@ -124,3 +124,32 @@ jobs:
               https://sprecha.de/db/dictionary-db/dictionary-meta >/dev/null
 
             test -f /var/lib/learning-app/dictionary/import-metrics.json
+
+            # The import resets the database, which drops the index the example
+            # generator's word lookup is planned against; the app recreates it as
+            # it starts, and the import restarts the app for exactly that. Ask
+            # CouchDB how it would answer that lookup's own selector rather than
+            # trust that the chain ran: an index listing would pass on a
+            # definition nobody queries. learning-app-run.service is Type=simple,
+            # so the restart returns before the app has finished starting — hence
+            # the deadline rather than a single shot.
+            plan=''
+            deadline=$(( $(date +%s) + 120 ))
+            while [ "$(date +%s)" -lt "${deadline}" ]; do
+              plan="$(curl -sf -X POST http://127.0.0.1:5984/dictionary-db/_explain \
+                -H 'Content-Type: application/json' \
+                -d '{"selector":{"type":"dictionary-entry","meta.normalized_value":"das haus"},"limit":20}' \
+                || true)"
+              case "${plan}" in
+                *'"ddoc":"_design/dictionary-entry-normalized-value"'*) break ;;
+              esac
+              sleep 5
+            done
+            case "${plan}" in
+              *'"ddoc":"_design/dictionary-entry-normalized-value"'*)
+                echo "dictionary word lookup is planned against its index" ;;
+              *)
+                echo "ERROR: dictionary word lookup is not planned against its index." >&2
+                echo "CouchDB explained the selector as: ${plan}" >&2
+                exit 1 ;;
+            esac
