@@ -95,6 +95,10 @@
 - [x] 6.3 Keep the list fixed and small: every call costs money. Include the repeated-word phrases
       (`von Zeit zu Zeit`, `nach und nach`) and a split construction (`auf jeden Fall`), and record
       what they actually generated, not what the code suggests they would.
-- [ ] 6.4 Browser check: add a phrase, confirm the example arrives and that a lesson offers its
-      example trial only after the phrase trial is answered correctly.
+- [x] 6.4 Browser check: add a phrase, confirm the example arrives and that a lesson offers its
+      example trial only after the phrase trial is answered correctly. Committed as
+      `test/browser/phrase-example.spec.js` rather than poked by hand. `:strict` guards the
+      shadow server on 9630, which the browser suite never starts: it compiles the bundle once and
+      runs its own backend on 8301 against `test-app.db` and the fixture dictionary, so the
+      worktree runs it beside the stand without touching it.
 - [x] 6.5 Archive the change on the branch before opening the PR.
