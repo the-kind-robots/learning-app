@@ -4,13 +4,22 @@
    [pages.words.presenter :as presenter]))
 
 
+(defn words-shown
+  "State for a page of words that has just been read. `:page/load` carries the
+   query these rows came from, so the reload a sync pull triggers
+   (`:action/reload-page`) asks for the page the reader has rather than the
+   first one — otherwise a reader 500 rows down loses 450 of them to a pull
+   that happened to bring a document."
+  [{:keys [limit search] :as words}]
+  (merge {:page/current  :page/words
+          :page/load     [:effect/load-words {:limit limit :search search}]
+          :words/editing nil}
+         (presenter/page-state words)))
+
+
 (nxr/register-action! :action/show-words
   (fn show-words [_ words]
-    [[:effect/save
-      (merge {:page/current  :page/words
-              :page/load     [:effect/load-words]
-              :words/editing nil}
-             (presenter/page-state words))]]))
+    [[:effect/save (words-shown words)]]))
 
 
 (nxr/register-action! :action/open-word-edit
@@ -24,15 +33,39 @@
 
 
 (nxr/register-action! :action/search-words
+  ;; A new query starts at the first page: the rows loaded for the old one say
+  ;; nothing about how far down this one the reader has read. The list goes
+  ;; back to the top with them — results are read from the first one, and a
+  ;; reader left at the bottom would be sitting on the sentinel, which would
+  ;; ask for the second page before the first was read.
   (fn search-words [_ search]
-    [[:effect/set-words-search search]]))
+    [[:effect/scroll-words-to-top]
+     [:effect/set-words-search {:search search :limit presenter/page-size}]]))
 
 
+(nxr/register-action! :action/show-more-words
+  (fn show-more-words [state]
+    (when (:words/more? state)
+      [[:effect/load-more-words
+        {:search (:words/search state)
+         :limit  (presenter/next-limit (:words/limit state))}]])))
+
+
+;; A mutation reloads the list at the row count already on screen, so saving or
+;; removing a word does not throw the reader back to the first page.
 (nxr/register-action! :action/save-word
   (fn save-word [state {:keys [id translation]}]
-    [[:effect/update-word {:id id :translation translation :search (:words/search state)}]]))
+    [[:effect/update-word
+      {:id          id
+       :translation translation
+       :limit       (:words/limit state)
+       :search      (:words/search state)}]]))
 
 
 (nxr/register-action! :action/remove-word
   (fn remove-word [state {:keys [id value]}]
-    [[:effect/delete-word {:id id :value value :search (:words/search state)}]]))
+    [[:effect/delete-word
+      {:id     id
+       :value  value
+       :limit  (:words/limit state)
+       :search (:words/search state)}]]))

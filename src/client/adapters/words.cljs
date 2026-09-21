@@ -29,6 +29,14 @@
       (nil? (:created-at word)) (assoc :created-at now))))
 
 
+(defn- preview
+  [{id :id [kind value translation] :value}]
+  {:id          id
+   :kind        kind
+   :translation translation
+   :value       value})
+
+
 (defn ^:async previews
   "Every word and phrase as `{:id :kind :value :translation}` — what a list
    shows — or only `word-ids` when given. Read from the vocab view, so no
@@ -37,17 +45,28 @@
   (let [{rows :rows} (await (dbs/query dbs
                                        preview-view
                                        (cond-> {} word-ids (assoc :keys (vec word-ids)))))]
-    (mapv (fn [{id :id [kind value translation] :value}]
-            {:id          id
-             :kind        kind
-             :translation translation
-             :value       value})
-          rows)))
+    (mapv preview rows)))
+
+
+(defn ^:async previews-page
+  "One page of words in alphabetical order, `limit` rows from `skip`. The view
+   is keyed by the document id and the id is the normalised value (ADR-0008),
+   so the view is already in that order and a page costs its own rows — not
+   the vocabulary's."
+  [dbs {:keys [limit skip]}]
+  (let [{rows :rows} (await (dbs/query dbs
+                                       preview-view
+                                       (cond-> {}
+                                         limit (assoc :limit limit)
+                                         skip  (assoc :skip skip))))]
+    (mapv preview rows)))
 
 
 (defn ^:async count-words
+  "How many words the vocabulary holds. `:limit 0` asks the view for no rows
+   at all: the count rides on every view query, so this reads none of them."
   [dbs]
-  (count (await (previews dbs nil))))
+  (:total-rows (await (dbs/query dbs preview-view {:limit 0}))))
 
 
 (defn ^:async get-word

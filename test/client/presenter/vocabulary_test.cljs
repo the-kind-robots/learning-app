@@ -75,3 +75,41 @@
       (is (nil? (:words/empty-state props)))
       (is (= ["word-1"] (mapv :id (:words/items props))))
       (is (true? (:words/vocabulary? props))))))
+
+
+(defn- word-rows
+  [n]
+  (for [i (range n)]
+    {:id (str "word-" i) :value (str "Wort" i) :translation [] :retention-level i}))
+
+
+(deftest a-page-that-did-not-exhaust-the-matches-keeps-the-sentinel
+  (testing "fewer rows than the filter matched means another page follows"
+    (let [props (sut/page-state {:limit   sut/page-size
+                                 :matches 137
+                                 :total   137
+                                 :words   (word-rows sut/page-size)})]
+      (is (= 50 (count (:words/items props)))
+          "the first page is one page of rows, not the vocabulary")
+      (is (true? (:words/more? props)))
+      (is (= 50 (:words/limit props))
+          "the loaded row count rides in state, so a reload can ask for it again")))
+  (testing "the next page asks for one page more"
+    (is (= 100 (sut/next-limit 50)))
+    (is (= 100 (sut/next-limit sut/page-size)))
+    (is (= 50 (sut/next-limit nil))
+        "no limit yet means the first page")))
+
+
+(deftest the-last-page-drops-the-sentinel
+  (testing "every matching row on screen"
+    (let [props (sut/page-state {:limit   100
+                                 :matches 60
+                                 :total   60
+                                 :words   (word-rows 60)})]
+      (is (false? (:words/more? props)))
+      (is (= 100 (:words/limit props)))))
+  (testing "an empty list has nothing to append"
+    (let [props (sut/page-state {:limit sut/page-size :matches 0 :total 3 :words []})]
+      (is (false? (:words/more? props))
+          "a search with no match must not render a sentinel beside the placeholder"))))

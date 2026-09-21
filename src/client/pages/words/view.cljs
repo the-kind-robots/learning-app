@@ -30,6 +30,16 @@
     [:span.word-item__arrow.word-item__chevron "→"]]])
 
 
+(defn- sentinel
+  "The end of the loaded rows. It is keyed so appending rows in front of it
+   reuses the node, and the observer watching it survives the render."
+  []
+  [:li.word-list__sentinel
+   {:replicant/key        :word-list-sentinel
+    :replicant/on-mount   [[:effect/observe-words-sentinel]]
+    :replicant/on-unmount [[:effect/unobserve-words-sentinel]]}])
+
+
 (defn- edit-dialog
   [{:keys [id phrase? value translation]}]
   [:dialog.word-edit-dialog.modal
@@ -94,7 +104,7 @@
 
 (defn page
   [state]
-  (let [{:words/keys [items search editing vocabulary?] placeholder :words/empty-state} state]
+  (let [{:words/keys [items search editing more? vocabulary?] placeholder :words/empty-state} state]
     [:div.vocabulary
      {:data-vk-overlay true}
      (when editing (edit-dialog editing))
@@ -130,7 +140,8 @@
           {:id "word-list"}
           (if placeholder
             [:li.word-list__empty (empty-state placeholder)]
-            (for [word items] (word-list-item word)))]]
+            (concat (map word-list-item items)
+                    (when more? [(sentinel)])))]]
         [:footer.vocabulary__footer.page-footer
          [:div.page-footer__action
           [:button.vocabulary__start.big-button.green-button

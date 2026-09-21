@@ -20,6 +20,9 @@
    :words/previews      (fn previews
                           [word-ids]
                           (words/previews db word-ids))
+   :words/previews-page (fn previews-page
+                          [page]
+                          (words/previews-page db page))
    :words/save!         (fn save!
                           [word]
                           (words/save-word! db clock word))})

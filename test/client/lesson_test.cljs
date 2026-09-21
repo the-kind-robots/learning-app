@@ -452,7 +452,7 @@
                {:id "vocab:zug" :value "der Zug" :days-ago 300}
                {:id "vocab:zurueck" :value "zurück" :days-ago 300}]))
       (let [capabilities    (test-capabilities dbs)
-            {:keys [words]} (await (vocabulary/list capabilities {}))
+            {:keys [words]} (await (vocabulary/list capabilities {:order :most-due}))
             {:keys [lesson-state]}
             (await (sut/start! capabilities
                                {:vocab-pool-size  3
@@ -495,7 +495,7 @@
               ["abend" "abfahrt" "abholen" "ankommen" "aufstehen"
                "bleiben" "bringen" "denken" "essen" "fahren"]))
       (let [capabilities (test-capabilities dbs)
-            urgencies    (->> (await (vocabulary/list capabilities {}))
+            urgencies    (->> (await (vocabulary/list capabilities {:order :most-due}))
                               :words
                               (map :urgency)
                               set)

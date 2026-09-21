@@ -96,27 +96,74 @@
       (assoc word :retention-level (retention/retention-level (reviews word-id []) (now-ms capabilities))))))
 
 
-(defn ^:async list
-  "Vocabulary rows with retention levels, sorted by retention (`:order`
-   :asc for the most due first, :desc for the best remembered first,
-   default :desc) and paged by `:offset`/`:limit`. Each row carries the
-   `:urgency` the sort ran on, for a caller that has to break its ties.
-   `:word-ids`
-   restricts to those words, `:search` to values or translations containing
-   the text. `:total` counts the words before the search filter, so an empty
-   vocabulary and a search with no match tell apart."
-  [{:keys [reviews words] :as capabilities}
-   {:keys [order limit offset search word-ids]
-    :or   {order :desc}}]
+(defn- matching?
+  [search]
+  (fn [{:keys [value translation]}]
+    (or (utils/includes? value search)
+        (some #(utils/includes? (:value %) search) translation))))
+
+
+(defn- page-of
+  [rows offset limit]
+  (cond->> rows
+    offset (drop offset)
+    limit  (take limit)))
+
+
+(defn- ^:async with-retention
+  "The rows of one page, each with its retention level, read by key. Only
+   these words' reviews are read: alphabetical order needs no key from the
+   words the page left behind (#317)."
+  [{:keys [reviews] :as capabilities} rows]
+  (let [by-word (await ((:reviews/by-word reviews) (mapv :id rows)))
+        now     (now-ms capabilities)]
+    (mapv (fn [word]
+            (assoc word :retention-level (retention/retention-level (by-word (:id word) []) now)))
+          rows)))
+
+
+(defn- ^:async alphabetical
+  "A page of the scope in alphabetical order. The word list's order: the id is
+   the normalised value (ADR-0008), so the view is already sorted and a page is
+   a slice of it — the read is the page's size, not the vocabulary's.
+
+   A search is the exception: a substring can sit anywhere in a value or a
+   translation, so the filter has to see every word in scope before it can say
+   which ones the page holds."
+  [{:keys [words] :as capabilities} {:keys [limit offset search word-ids]}]
+  (let [total (if word-ids
+                ;; The membership is the scope: a word deleted from the
+                ;; vocabulary leaves its collections in the same bulk write
+                ;; (`docs-without-word`), so an id here has a word.
+                (clojure.core/count word-ids)
+                (await ((:words/count words))))]
+    (if (utils/non-blank search)
+      (let [matched (->> (await ((:words/previews words) word-ids))
+                         (filter (matching? search))
+                         (sort-by :id))]
+        {:matches (clojure.core/count matched)
+         :total   total
+         :words   (await (with-retention capabilities (vec (page-of matched offset limit))))})
+      (let [rows (if word-ids
+                   ;; The ids are the sort key, so the page is cut from them
+                   ;; and only its words are read.
+                   (await ((:words/previews words) (page-of (sort word-ids) offset limit)))
+                   (await ((:words/previews-page words) {:limit limit :skip offset})))]
+        {:matches total
+         :total   total
+         :words   (await (with-retention capabilities (vec (sort-by :id rows))))}))))
+
+
+(defn- ^:async most-due
+  "A page of the scope with the words most in need of review first — the
+   lesson's order. It ranks by urgency, so every word in scope needs its own
+   key before the first row can be named, and both reads are full (#404,
+   #431)."
+  [{:keys [reviews words] :as capabilities} {:keys [limit offset search word-ids]}]
   (let [words        (await ((:words/previews words) word-ids))
         total        (clojure.core/count words)
-        ;; The page is sorted by retention, so every candidate needs its
-        ;; level; only words the filters exclude are spared the lookup.
         candidates   (cond->> words
-                       (utils/non-blank search)
-                       (filter (fn [{:keys [value translation]}]
-                                 (or (utils/includes? value search)
-                                     (some #(utils/includes? (:value %) search) translation)))))
+                       (utils/non-blank search) (filter (matching? search)))
         ;; A narrowed list reads its reviews by key; the whole vocabulary
         ;; reads every review, which is the cheaper of the two when every
         ;; word is wanted anyway (#404, 9000 reviews: 800 keys 0.8 s, all
@@ -145,12 +192,33 @@
                                    (assoc word
                                           :retention-level (retention/urgency->retention-level urgency)
                                           :urgency urgency))))
-                          (sort-by :urgency (if (= order :asc) > <)))
-        rows         (cond->> rows
-                       offset (drop offset)
-                       limit  (take limit))]
-    {:total total
-     :words (vec rows)}))
+                          (sort-by :urgency >))
+        matches      (clojure.core/count rows)]
+    {:matches matches
+     :total   total
+     :words   (vec (page-of rows offset limit))}))
+
+
+(defn ^:async list
+  "Vocabulary rows with retention levels, paged by `:offset`/`:limit`.
+
+   `:order` says what the caller wants the page to hold — `:alphabetical`
+   (default), the word list's order, or `:most-due`, the lesson's, whose rows
+   also carry the `:urgency` they were ranked by so a caller can break its
+   ties. The two differ in what they cost: alphabetical order is the order the
+   ids are already stored in, so a page reads its own rows; most-due order
+   ranks on a key computed per word, so it reads every word and every review
+   in scope.
+
+   `:word-ids` restricts to those words, `:search` to values or translations
+   containing the text. `:total` counts the words in scope before the search
+   filter, so an empty vocabulary and a search with no match tell apart;
+   `:matches` counts them after it and before the paging, so a caller holding
+   a page can tell whether another one follows."
+  [capabilities {:keys [order] :or {order :alphabetical} :as opts}]
+  (if (= order :most-due)
+    (await (most-due capabilities opts))
+    (await (alphabetical capabilities opts))))
 
 
 (defn ^:async list-active
