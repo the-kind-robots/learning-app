@@ -14,14 +14,14 @@ const GLOSS = 'в любом случае';
 const SENTENCE = 'Ich komme auf jeden Fall mit.';
 const SENTENCE_RU = 'Я обязательно пойду вместе.';
 
-// The phrase-target shape this branch introduced: one item per word of the
-// construction, each carrying the whole phrase as `dictionaryForm` and the
-// same gloss, each with its own `wordIndex`.
+// Plain word-by-word annotation: `structure` says nothing about which words
+// belonged to the construction. `auf` and `jeden` are a preposition and a
+// determiner, so they are left out like any others, and `Fall` is annotated as
+// the noun it is.
 const STRUCTURE = [
-  { usedForm: 'komme', dictionaryForm: 'kommen', translation: 'приходить', wordIndex: 1 },
-  { usedForm: 'auf', dictionaryForm: PHRASE, translation: GLOSS, wordIndex: 2 },
-  { usedForm: 'jeden', dictionaryForm: PHRASE, translation: GLOSS, wordIndex: 3 },
-  { usedForm: 'Fall', dictionaryForm: PHRASE, translation: GLOSS, wordIndex: 4 },
+  { usedForm: 'komme', dictionaryForm: 'mitkommen', translation: 'идти вместе', wordIndex: 1 },
+  { usedForm: 'Fall', dictionaryForm: 'der Fall', translation: 'случай', wordIndex: 4 },
+  { usedForm: 'mit', dictionaryForm: 'mitkommen', translation: 'идти вместе', wordIndex: 5 },
 ];
 
 // Returns the URLs the app asked the endpoint for, growing as it asks.
@@ -110,7 +110,7 @@ test('a phrase asks for an example and the lesson locks it behind the phrase tri
   await expect(progressNow(page)).toHaveAttribute('aria-valuenow', '100');
 });
 
-test('each word of the construction is annotated with the whole phrase', async ({ page }) => {
+test('the example is annotated word by word, with no trace of the construction', async ({ page }) => {
   await addPhraseAndAwaitItsExample(page);
 
   await page.goto('/lesson');
@@ -121,13 +121,16 @@ test('each word of the construction is annotated with the whole phrase', async (
   await page.locator('#lesson-answer').fill(SENTENCE);
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
 
-  // One `wordIndex` per word is what lets three separate tokens name one
-  // construction — the mechanic the whole reversal rests on.
+  // `structure` carries no membership, so the hover on a word of the
+  // construction shows that word's own lemma. `Fall` reads as «случай», and
+  // `auf` and `jeden` are plain words with no card at all.
   const token = (index) => page.locator(`.lesson__answer-token[data-word-index="${index}"]`);
-  await expect(token(2)).toHaveText('auf');
-  await expect(token(3)).toHaveText('jeden');
   await expect(token(4)).toHaveText('Fall');
+  await expect(token(2)).toHaveCount(0);
+  await expect(token(3)).toHaveCount(0);
 
-  await token(3).click();
-  await expect(page.locator('#popover').locator('.token-card__word')).toHaveText(PHRASE);
+  await token(4).click();
+  const card = page.locator('#popover').locator('.token-card__word');
+  await expect(card).toHaveText('der Fall');
+  await expect(card).not.toHaveText(PHRASE);
 });

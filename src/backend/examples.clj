@@ -187,47 +187,6 @@
         (recur (inc word-index))))))
 
 
-(defn- find-span-index
-  "Index of the first sentence word at or after `next-word-index` where every
-   word of `span` matches a consecutive sentence word."
-  [words next-word-index span]
-  (let [span-length (count span)]
-    (loop [word-index next-word-index]
-      (when (<= (+ word-index span-length) (count words))
-        (if (every? true?
-                    (map-indexed
-                     (fn [offset span-word]
-                       (same-word? (nth words (+ word-index offset)) span-word))
-                     span))
-          word-index
-          (recur (inc word-index)))))))
-
-
-(defn- indexed-span
-  "A `usedForm` holding several words becomes one item per word, each with its
-   own `wordIndex` and the span's own `dictionaryForm` and gloss. A provider
-   answering `{usedForm: \"auf jeden Fall\"}` is describing the construction
-   honestly; `wordIndex` is one index per word, so the span is unfolded here
-   rather than rejected. A span whose words are not consecutive in the
-   sentence still has no honest reading, and stays a rejection."
-  [words next-word-index item span]
-  (when-let [word-index (find-span-index words next-word-index span)]
-    (into []
-          (map-indexed
-           (fn [offset span-word]
-             (assoc item :usedForm span-word :wordIndex (+ word-index offset))))
-          span)))
-
-
-(defn- indexed-item
-  [words next-word-index item]
-  (let [span (split-sentence-words (:usedForm item))]
-    (if (< 1 (count span))
-      (indexed-span words next-word-index item span)
-      (when-let [word-index (find-word-index words next-word-index (:usedForm item))]
-        [(assoc item :wordIndex word-index)]))))
-
-
 (defn- add-word-indexes-to-structure
   [sentence structure]
   (let [words (split-sentence-words sentence)]
@@ -235,51 +194,25 @@
            next-word-index 0
            indexed []]
       (if-let [item (first items)]
-        (when-let [items-indexed (indexed-item words next-word-index item)]
+        (when-let [word-index (find-word-index words next-word-index (:usedForm item))]
           (recur (next items)
-                 (inc (:wordIndex (peek items-indexed)))
-                 (into indexed items-indexed)))
+                 (inc word-index)
+                 (conj indexed (assoc item :wordIndex word-index))))
         indexed))))
 
 
-(defn- target-word?
-  "A word of the target itself, compared the way the sentence's words are."
-  [target used-form]
-  (contains? (into #{} (map normalize-text) (split-sentence-words target))
-             (normalize-text (strip-word-edges used-form))))
-
-
-(defn- illegal-duplicate?
-  "A repeated `{usedForm, dictionaryForm}` pair is legitimate only when the
-   target is a phrase and the repeated word is one of its own — `Zeit` in
-   `von Zeit zu Zeit`, which the construction says twice. Anything else
-   repeating is the mistake the guard was put here for: a separable verb
-   annotating the preposition that shares its prefix's spelling, as in
-   `Pass auf deine Sachen auf!`."
-  [target phrase-target? [[used-form dictionary-form] items]]
-  (and (> (count items) 1)
-       (not (and phrase-target?
-                 (dictionary/same-lemma? target dictionary-form)
-                 (target-word? target used-form)))))
-
-
-(defn- structure-has-duplicate-items?
-  [target phrase-target? structure]
-  (boolean
-   (some #(illegal-duplicate? target phrase-target? %)
-         (group-by (juxt :usedForm :dictionaryForm) structure))))
-
-
 (defn- add-word-indexes
-  "The repeat guard runs on the indexed structure, not on what the provider
-   sent: unfolding a span can create a repeated pair the guard never saw, and
-   what must hold is that nothing stored repeats illegally."
-  ([example] (add-word-indexes nil false example))
-  ([target phrase-target? example]
-   (let [example (strip-word-indexes example)]
-     (when-let [structure (add-word-indexes-to-structure (:value example) (:structure example))]
-       (when-not (structure-has-duplicate-items? target phrase-target? structure)
-         (assoc example :structure structure))))))
+  "No pair guard: a word the sentence genuinely says twice is ordinary German
+   — `Zeit` in `Von Zeit zu Zeit …` — and with `structure` annotating words
+   and not membership, nothing tells that apart from a separable prefix
+   doubled onto the preposition sharing its spelling. Rejecting both cost an
+   example for every construction of the first shape. The prompt's own rule
+   against annotating that preposition is what carries the second now, and
+   when the model disobeys it the cost is one wrong tooltip."
+  [example]
+  (let [example (strip-word-indexes example)]
+    (when-let [structure (add-word-indexes-to-structure (:value example) (:structure example))]
+      (assoc example :structure structure))))
 
 
 (defn- log-generation-failure!
@@ -309,19 +242,62 @@
   {:malformed-example
    "The generated example did not match the required JSON shape or text constraints. See `details` for the specific field errors."
    :structure-mismatch
-   "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, and each `usedForm` must match the word at its position. A `usedForm` holding several words is accepted only where the sentence says those words consecutively. A `{usedForm, dictionaryForm}` pair may repeat only for a word the target phrase itself says twice; a separable-verb prefix appears once, not twice."
+   "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, each `usedForm` must be one word of the sentence, and each must match the word at its position."
    :sentence-length-out-of-range
    "The German sentence is outside the accepted length. See `details` for the number of words it must contain."
    :target-lemma-missing
-   "The whole target must appear in the sentence and as a `dictionaryForm` entry in `structure` — the lemma for a word, every word of the construction for a phrase."})
+   "The sentence must contain the whole target: a single lemma as a `dictionaryForm` entry in `structure`, and a multi-word target with every one of its words present, inflected as the sentence needs."})
+
+
+(def ^:private single-lemma-prefixes
+  "First tokens after which a two-token target is still one lemma: the
+   articles a noun is listed with, and the reflexive marker."
+  #{"der" "die" "das" "ein" "eine" "sich"})
+
+
+(defn- several-words?
+  "Whether the target is several words rather than one lemma written with the
+   article or the reflexive the dictionary lists it with. Shape only: nothing
+   downstream asks which words belong to a construction."
+  [target]
+  (let [tokens (split-sentence-words target)]
+    (and (< 1 (count tokens))
+         (not (and (= 2 (count tokens))
+                   (single-lemma-prefixes (str/lower-case (first tokens))))))))
+
+
+(defn- word-present?
+  "A word of the target counts as present when the sentence says it, or when
+   some item names it as a `dictionaryForm` — which is what carries inflection:
+   `verlieren` is in `Er verliert den Kopf.` only through `{verliert,
+   verlieren}`."
+  [sentence-words structure target-word]
+  (or (some #(same-word? % target-word) sentence-words)
+      (some #(dictionary/same-lemma? target-word (:dictionaryForm %)) structure)))
+
+
+(defn- target-present?
+  "One lemma must be named in `structure`, as before. Several words must be in
+   the sentence — every one of them — because with plain word-by-word
+   annotation nothing in `structure` says the construction was the target. An
+   article pair takes whichever of the two answers yes: `die Leiter` is named
+   by its own item, `das heißt` only by the sentence."
+  [target sentence structure]
+  (let [sentence-words (split-sentence-words sentence)
+        target-words   (split-sentence-words target)
+        all-words?     (every? #(word-present? sentence-words structure %) target-words)]
+    (boolean
+     (if (several-words? target)
+       all-words?
+       (or (dictionary/lemma-in-structure? target structure)
+           (and (< 1 (count target-words)) all-words?))))))
 
 
 (defn- example-issue
-  [target word-meta example]
-  (let [phrase? (dictionary/phrase-target? target (:partOfSpeech word-meta))
-        raw     (strip-word-indexes example)
+  [target example]
+  (let [raw     (strip-word-indexes example)
         valid?  (m/validate valid-generated-example-schema raw)
-        indexed (when valid? (add-word-indexes target phrase? raw))]
+        indexed (when valid? (add-word-indexes raw))]
     (cond
       (not valid?)
       (let [explain (me/humanize (m/explain valid-generated-example-schema raw))]
@@ -338,7 +314,7 @@
       {:issue   :sentence-length-out-of-range
        :details (sentence-length-bounds target)}
 
-      (not (dictionary/lemma-in-structure? target (:structure indexed)))
+      (not (target-present? target (:value indexed) (:structure indexed)))
       {:issue :target-lemma-missing})))
 
 
@@ -355,16 +331,18 @@
 
 (def system-prompt
   "One target concept: the target is a lemma or a phrase, and every rule below
-   is written for both. The few-shot block carries one case per distinct shape
-   — noun with article, separable verb, reflexive, homograph, phrase — and the
-   retry messages in `issue-messages` repeat these rules word for word."
+   is written for both. `structure` annotates the sentence word by word under
+   one set of rules whatever the target is — it never records which words
+   belonged to a construction. The few-shot block carries one case per
+   distinct shape, and the retry messages in `issue-messages` repeat these
+   rules word for word."
   (str/join
    "\n"
    [;; What this is
     "You generate learner-facing German example sentences for a vocabulary app."
     "Return only JSON that matches the supplied schema."
     "Input fields: word, translation, part of speech, cefrLevel, context, previousAttempt, previousIssue."
-    "The target is `word`: either a single lemma (`die Leiter`, `aufpassen`, `sich vorstellen`) or a whole phrase (`auf jeden Fall`, `von Zeit zu Zeit`, `das heißt`). Every rule below applies to both."
+    "The target is `word`: either a single lemma (`die Leiter`, `aufpassen`, `sich vorstellen`) or a whole phrase (`auf jeden Fall`, `von Zeit zu Zeit`, `das heißt`). Every rule below applies to both, and `structure` is built the same way for both."
     "Missing cefrLevel => B2."
     ""
     ;; Sense
@@ -387,7 +365,7 @@
     "- `structure` must include every noun, verb (including auxiliaries and modals), adjective, and adverb in the sentence."
     "- Exclude articles, pronouns, prepositions, conjunctions, and pure particles like `zu` or `nicht`."
     "- Detached prefixes of separable verbs are not particles: include them."
-    "- A phrase target overrides the exclusions: every word of the phrase gets its own item, articles and prepositions included."
+    "- The exclusions hold for a phrase target too: annotate the words of the construction that qualify, and leave its articles, prepositions and conjunctions out like any others."
     ""
     ;; Structure: the shape of an item
     "STRUCTURE — THE SHAPE OF AN ITEM"
@@ -398,14 +376,13 @@
     "- For nouns, `dictionaryForm` includes the article."
     "- Reflexive verb `dictionaryForm` keeps `sich`."
     "- For separable verbs with detached prefixes, include one item for the verb part and one for the prefix; both use the full infinitive as `dictionaryForm` and the same Russian gloss."
-    "- For a phrase target, every one of its words uses the whole phrase as `dictionaryForm` and the same Russian gloss."
+    "- A word of a phrase target takes its own lemma and its own gloss, like any other word. Never use the whole phrase as a `dictionaryForm`."
     ""
     ;; Structure: order and repetition
-    "STRUCTURE — ORDER AND REPETITION"
+    "STRUCTURE — ORDER"
     "- Order `structure` items strictly left to right as they appear in the German sentence, and each `usedForm` must match the word at its position."
-    "- Prefer one item per word. A `usedForm` holding several words is accepted only where the sentence says those words consecutively, and the backend then unfolds it into one item per word."
+    "- One item per word: a `usedForm` is a single word of the sentence, never several."
     "- The backend assigns `wordIndex`; do not return `wordIndex`."
-    "- A `{usedForm, dictionaryForm}` pair may repeat only for a word the target phrase itself says twice — `Zeit` in `von Zeit zu Zeit`."
     "- Separable verbs emit the prefix exactly once. If a preposition shares spelling with the prefix (for example `auf` in `Pass auf deine Sachen auf!`), exclude the preposition — only the detached prefix in the verb frame belongs in `structure`."
     ""
     ;; One case per shape
@@ -421,7 +398,8 @@
     "{\"value\":\"Die Leiter steht neben der Wand.\",\"translation\":\"Лестница стоит у стены.\",\"structure\":[{\"usedForm\":\"Leiter\",\"dictionaryForm\":\"die Leiter\",\"translation\":\"лестница\"},{\"usedForm\":\"steht\",\"dictionaryForm\":\"stehen\",\"translation\":\"стоять\"},{\"usedForm\":\"Wand\",\"dictionaryForm\":\"die Wand\",\"translation\":\"стена\"}]}"
     "Do not use `der Leiter` for this meaning."
     "Phrase. word=von Zeit zu Zeit gloss=время от времени:"
-    "{\"value\":\"Von Zeit zu Zeit besuche ich meine Eltern.\",\"translation\":\"Время от времени я навещаю своих родителей.\",\"structure\":[{\"usedForm\":\"Von\",\"dictionaryForm\":\"von Zeit zu Zeit\",\"translation\":\"время от времени\"},{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"von Zeit zu Zeit\",\"translation\":\"время от времени\"},{\"usedForm\":\"zu\",\"dictionaryForm\":\"von Zeit zu Zeit\",\"translation\":\"время от времени\"},{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"von Zeit zu Zeit\",\"translation\":\"время от времени\"},{\"usedForm\":\"besuche\",\"dictionaryForm\":\"besuchen\",\"translation\":\"навещать\"},{\"usedForm\":\"Eltern\",\"dictionaryForm\":\"die Eltern\",\"translation\":\"родители\"}]}"]))
+    "{\"value\":\"Von Zeit zu Zeit besuche ich meine Eltern.\",\"translation\":\"Время от времени я навещаю своих родителей.\",\"structure\":[{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"die Zeit\",\"translation\":\"время\"},{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"die Zeit\",\"translation\":\"время\"},{\"usedForm\":\"besuche\",\"dictionaryForm\":\"besuchen\",\"translation\":\"навещать\"},{\"usedForm\":\"Eltern\",\"dictionaryForm\":\"die Eltern\",\"translation\":\"родители\"}]}"
+    "The phrase is in the sentence, not in `structure`: `von` and `zu` are excluded as prepositions, and each `Zeit` is annotated as the noun it is."]))
 
 
 (defn- previous-issue-payload
@@ -529,16 +507,14 @@
             retry-context nil]
        (let [example  (generate-attempt! word translations context word-meta retry-context)
              failure? (generation-failure? example)
-             result   (when-not failure? (example-issue word word-meta example))
+             result   (when-not failure? (example-issue word example))
              issue    (:issue result)]
          (cond
            (and failure? (not (:retryable? example)))
            example
 
            (and (not failure?) (nil? issue))
-           (add-word-indexes word
-                             (dictionary/phrase-target? word (:partOfSpeech word-meta))
-                             example)
+           (add-word-indexes example)
 
            (< attempt max-attempts)
            (let [retry-ctx (when (and (not failure?) issue)

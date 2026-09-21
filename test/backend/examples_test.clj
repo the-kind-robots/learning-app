@@ -50,13 +50,16 @@
           (is (re-find #"Separable verbs emit the prefix exactly once"
                        (get-in payload [:messages 0 :content])))
           (is (re-find
-               #"A `\{usedForm, dictionaryForm\}` pair may repeat only for a word the target phrase itself says twice"
+               #"One item per word: a `usedForm` is a single word of the sentence, never several"
                (get-in payload [:messages 0 :content])))
           (is (re-find #"Von Zeit zu Zeit besuche ich meine Eltern"
                        (get-in payload [:messages 0 :content]))
               "the phrase shape has a few-shot case of its own")
-          (is (re-find #"every word of the phrase gets its own item"
+          (is (re-find #"Never use the whole phrase as a `dictionaryForm`"
                        (get-in payload [:messages 0 :content])))
+          (is (not (re-find #"every word of the phrase gets its own item"
+                            (get-in payload [:messages 0 :content])))
+              "membership attribution is gone from the prompt")
           (is (re-find #"sich vorstellen"
                        (get-in payload [:messages 0 :content])))
           (is (re-find #"das Verstehen"
@@ -193,7 +196,7 @@
                      :dictionaryForm "aufstehen"
                      :translation    "to stand up"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "aufstehen" nil example)))))))
+             (:issue (#'sut/example-issue "aufstehen" example)))))))
 
 
 (deftest deterministic-example-issues-reject-target-present-only-in-structure
@@ -215,7 +218,7 @@
                      :translation    "парк"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= :structure-mismatch
-               (:issue (#'sut/example-issue "Leiter" nil example))))))))
+               (:issue (#'sut/example-issue "Leiter" example))))))))
 
 
 (deftest deterministic-example-issues-reject-used-form-at-wrong-word-index
@@ -234,12 +237,12 @@
                      :translation    "душа"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= :structure-mismatch
-               (:issue (#'sut/example-issue "aufpassen" nil example))))))))
+               (:issue (#'sut/example-issue "aufpassen" example))))))))
 
 
-(deftest deterministic-example-issues-reject-duplicate-structure-items
+(deftest a-doubled-separable-prefix-is-accepted-and-costs-a-tooltip
   (testing
-    "duplicate {usedForm, dictionaryForm} pairs reject the structure (e.g. a doubled separable-verb prefix mistaken for a preposition)"
+    "the pair guard is gone: with `structure` annotating words, a doubled separable prefix and a word the sentence genuinely says twice are the same shape"
     (let [example {:value "Pass auf deine Sachen auf!"
                    :translation "Береги свои вещи!"
                    :structure
@@ -256,8 +259,11 @@
                      :dictionaryForm "aufpassen"
                      :translation    "беречь"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (= :structure-mismatch
-               (:issue (#'sut/example-issue "aufpassen" nil example))))))))
+        (is
+         (nil? (:issue (#'sut/example-issue "aufpassen" example)))
+         "the preposition wrongly annotated with the verb's gloss is the cost; rejecting this also rejected every `von Zeit zu Zeit`")
+        (is (= [0 1 3 4]
+               (mapv :wordIndex (:structure (#'sut/add-word-indexes example)))))))))
 
 
 (deftest add-word-indexes-handles-last-separable-prefix
@@ -299,7 +305,7 @@
                      :dictionaryForm "der Park"
                      :translation    "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" nil example)))))))
+             (:issue (#'sut/example-issue "Hund" example)))))))
 
 
 (deftest valid-generated-example-rejects-small-latin-tail-in-translation
@@ -320,7 +326,7 @@
                      :dictionaryForm "der Park"
                      :translation    "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" nil example)))))))
+             (:issue (#'sut/example-issue "Hund" example)))))))
 
 
 (deftest valid-generated-example-rejects-latin-in-structure-translation
@@ -341,7 +347,7 @@
                      :dictionaryForm "der Park"
                      :translation    "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" nil example)))))))
+             (:issue (#'sut/example-issue "Hund" example)))))))
 
 
 (deftest valid-generated-example-rejects-cyrillic-in-german-sentence
@@ -356,7 +362,7 @@
                      :dictionaryForm "der Park"
                      :translation    "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" nil example)))))))
+             (:issue (#'sut/example-issue "Hund" example)))))))
 
 
 (deftest valid-generated-example-rejects-multiple-sentences
@@ -374,7 +380,7 @@
                      :dictionaryForm "schnell"
                      :translation    "быстрый"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" nil example)))))))
+             (:issue (#'sut/example-issue "Hund" example)))))))
 
 
 (deftest valid-generated-example-rejects-colon-prefixed-german-meta
@@ -392,7 +398,7 @@
                      :dictionaryForm "der Park"
                      :translation    "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" nil example)))))))
+             (:issue (#'sut/example-issue "Hund" example)))))))
 
 
 (deftest valid-generated-example-rejects-colon-prefixed-russian-meta
@@ -410,49 +416,54 @@
                      :dictionaryForm "der Park"
                      :translation    "парк"}]}]
       (is (= :malformed-example
-             (:issue (#'sut/example-issue "Hund" nil example)))))))
+             (:issue (#'sut/example-issue "Hund" example)))))))
 
 
-(deftest phrase-target-accepts-a-split-construction
-  (testing "a phrase may be rearranged by German word order and still be present"
+(deftest a-multi-word-target-is-found-in-the-sentence
+  (testing "`structure` annotates words, so the construction is checked against the sentence"
     (let [example {:value       "Ich komme auf jeden Fall mit."
-                   :translation "Я обязательно пойду с вами."
+                   :translation "Я обязательно пойду вместе."
                    :structure   [{:usedForm       "komme"
-                                  :dictionaryForm "kommen"
-                                  :translation    "приходить"}
-                                 {:usedForm       "auf"
-                                  :dictionaryForm "auf jeden Fall"
-                                  :translation    "в любом случае"}
-                                 {:usedForm       "jeden"
-                                  :dictionaryForm "auf jeden Fall"
-                                  :translation    "в любом случае"}
+                                  :dictionaryForm "mitkommen"
+                                  :translation    "идти вместе"}
                                  {:usedForm       "Fall"
-                                  :dictionaryForm "auf jeden Fall"
-                                  :translation    "в любом случае"}]}]
+                                  :dictionaryForm "der Fall"
+                                  :translation    "случай"}
+                                 {:usedForm       "mit"
+                                  :dictionaryForm "mitkommen"
+                                  :translation    "идти вместе"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (#'sut/example-issue "auf jeden Fall" nil example)))
-        (is (= [1 2 3 4]
-               (mapv :wordIndex
-                     (:structure (#'sut/add-word-indexes "auf jeden Fall" true example))))
-            "each word of the phrase carries its own index")))))
+        (is (nil? (#'sut/example-issue "auf jeden Fall" example))
+            "auf, jeden and Fall are all words of the sentence")
+        (is (= [1 4 5]
+               (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))
+            "nothing in the structure says those words were the target")))))
 
 
-(deftest phrase-target-accepts-a-word-the-construction-repeats
-  (testing "`von Zeit zu Zeit` says Zeit twice, and both occurrences are its own"
+(deftest an-inflected-target-word-is-found-through-its-dictionary-form
+  (testing "`verlieren` is in `Er verliert den Kopf.` only through the item that names it"
+    (let [example {:value       "Er verliert den Kopf."
+                   :translation "Он теряет голову."
+                   :structure   [{:usedForm       "verliert"
+                                  :dictionaryForm "verlieren"
+                                  :translation    "терять"}
+                                 {:usedForm       "Kopf"
+                                  :dictionaryForm "der Kopf"
+                                  :translation    "голова"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (nil? (#'sut/example-issue "den Kopf verlieren" example)))))))
+
+
+(deftest a-word-the-sentence-says-twice-no-longer-costs-the-example
+  (testing "two identical items are ordinary German, not a mistake to reject"
     (let [example {:value       "Von Zeit zu Zeit besuche ich meine Eltern."
                    :translation "Время от времени я навещаю родителей."
-                   :structure   [{:usedForm       "Von"
-                                  :dictionaryForm "von Zeit zu Zeit"
-                                  :translation    "время от времени"}
+                   :structure   [{:usedForm       "Zeit"
+                                  :dictionaryForm "die Zeit"
+                                  :translation    "время"}
                                  {:usedForm       "Zeit"
-                                  :dictionaryForm "von Zeit zu Zeit"
-                                  :translation    "время от времени"}
-                                 {:usedForm       "zu"
-                                  :dictionaryForm "von Zeit zu Zeit"
-                                  :translation    "время от времени"}
-                                 {:usedForm       "Zeit"
-                                  :dictionaryForm "von Zeit zu Zeit"
-                                  :translation    "время от времени"}
+                                  :dictionaryForm "die Zeit"
+                                  :translation    "время"}
                                  {:usedForm       "besuche"
                                   :dictionaryForm "besuchen"
                                   :translation    "навещать"}
@@ -460,94 +471,14 @@
                                   :dictionaryForm "die Eltern"
                                   :translation    "родители"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (#'sut/example-issue "von Zeit zu Zeit" nil example)))
-        (is (= [0 1 2 3 4 7]
-               (mapv :wordIndex
-                     (:structure (#'sut/add-word-indexes "von Zeit zu Zeit" true example))))
-            "the two Zeit items index their own occurrence")))))
+        (is (nil? (#'sut/example-issue "von Zeit zu Zeit" example)))
+        (is (= [1 3 4 7]
+               (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))
+            "each occurrence indexes its own position")))))
 
 
-(deftest a-spanning-used-form-is-unfolded-into-one-item-per-word
-  (testing "the provider's honest answer for a construction survives a one-index-per-word store"
-    (let [example {:value       "Wir werden das auf jeden Fall schaffen."
-                   :translation "Мы обязательно справимся с этим."
-                   :structure   [{:usedForm       "werden"
-                                  :dictionaryForm "werden"
-                                  :translation    "будем"}
-                                 {:usedForm       "auf jeden Fall"
-                                  :dictionaryForm "auf jeden Fall"
-                                  :translation    "в любом случае"}
-                                 {:usedForm       "schaffen"
-                                  :dictionaryForm "schaffen"
-                                  :translation    "справляться"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (:issue (#'sut/example-issue "auf jeden Fall" nil example)))
-            "this is what the provider actually returns for this phrase")
-        (is (= [["werden" "werden" 1]
-                ["auf" "auf jeden Fall" 3]
-                ["jeden" "auf jeden Fall" 4]
-                ["Fall" "auf jeden Fall" 5]
-                ["schaffen" "schaffen" 6]]
-               (mapv (juxt :usedForm :dictionaryForm :wordIndex)
-                     (:structure (#'sut/add-word-indexes "auf jeden Fall" true example))))
-            "each word of the span keeps the span's dictionaryForm and gets its own index")))))
-
-
-(deftest a-span-whose-words-are-not-consecutive-stays-a-rejection
-  (testing "a span has an honest reading only where the sentence says it whole"
-    (let [example {:value       "Ich komme mit auf jeden Berg heute."
-                   :translation "Я иду с тобой на любую гору сегодня."
-                   :structure   [{:usedForm       "auf jeden Fall"
-                                  :dictionaryForm "auf jeden Fall"
-                                  :translation    "в любом случае"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (= :structure-mismatch
-               (:issue (#'sut/example-issue "auf jeden Fall" nil example))))))))
-
-
-(deftest unfolding-a-span-does-not-open-the-repeat-guard
-  (testing "the guard runs on the indexed structure, so a repeat unfolding creates is judged too"
-    (let [legitimate {:value       "Schritt für Schritt lernt man die Sprache."
-                      :translation "Шаг за шагом человек учит язык."
-                      :structure   [{:usedForm       "Schritt für Schritt"
-                                     :dictionaryForm "Schritt für Schritt"
-                                     :translation    "шаг за шагом"}
-                                    {:usedForm       "lernt"
-                                     :dictionaryForm "lernen"
-                                     :translation    "учить"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (:issue (#'sut/example-issue
-                           "Schritt für Schritt"
-                           {:partOfSpeech "phrase"}
-                           legitimate)))
-            "the repeated Schritt is the construction's own")
-        (is (= [["Schritt" "Schritt für Schritt" 0]
-                ["für" "Schritt für Schritt" 1]
-                ["Schritt" "Schritt für Schritt" 2]
-                ["lernt" "lernen" 3]]
-               (mapv (juxt :usedForm :dictionaryForm :wordIndex)
-                     (:structure (#'sut/add-word-indexes "Schritt für Schritt" true legitimate)))))))))
-
-
-(deftest a-word-target-span-is-unfolded-too
-  (testing "nothing restricts unfolding to phrases, and a noun with its article reads the same way"
-    (let [example {:value       "Der Hund bellt laut."
-                   :translation "Собака громко лает."
-                   :structure   [{:usedForm       "Der Hund"
-                                  :dictionaryForm "der Hund"
-                                  :translation    "собака"}
-                                 {:usedForm       "bellt"
-                                  :dictionaryForm "bellen"
-                                  :translation    "лаять"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (:issue (#'sut/example-issue "der Hund" nil example))))
-        (is (= [["Der" "der Hund" 0] ["Hund" "der Hund" 1] ["bellt" "bellen" 2]]
-               (mapv (juxt :usedForm :dictionaryForm :wordIndex)
-                     (:structure (#'sut/add-word-indexes "der Hund" false example)))))))))
-
-
-(deftest phrase-target-still-rejects-a-repeat-of-its-own-that-is-missing
-  (testing "the construction must be in the sentence, not only in structure"
+(deftest a-multi-word-target-missing-from-the-sentence-is-rejected
+  (testing "the construction must be in the sentence — every word of it"
     (let [example {:value       "Ich besuche meine Eltern."
                    :translation "Я навещаю своих родителей."
                    :structure   [{:usedForm       "besuche"
@@ -558,7 +489,46 @@
                                   :translation    "родители"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= :target-lemma-missing
-               (:issue (#'sut/example-issue "von Zeit zu Zeit" nil example))))))))
+               (:issue (#'sut/example-issue "von Zeit zu Zeit" example))))))))
+
+
+(deftest a-partly-present-construction-is-rejected
+  (testing "most of the words is not the construction"
+    (let [example {:value       "Auf dem Tisch liegt ein Buch."
+                   :translation "На столе лежит книга."
+                   :structure   [{:usedForm       "Tisch"
+                                  :dictionaryForm "der Tisch"
+                                  :translation    "стол"}
+                                 {:usedForm       "liegt"
+                                  :dictionaryForm "liegen"
+                                  :translation    "лежать"}
+                                 {:usedForm       "Buch"
+                                  :dictionaryForm "das Buch"
+                                  :translation    "книга"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (= :target-lemma-missing
+               (:issue (#'sut/example-issue "auf jeden Fall" example)))
+            "`auf` is there, `jeden` and `Fall` are not")))))
+
+
+(deftest an-article-pair-target-passes-on-the-sentence-when-structure-cannot-name-it
+  (testing "`das heißt` is a construction the shape rule reads as an article pair"
+    (let [example {:value       "Es regnet, das heißt, wir bleiben zu Hause."
+                   :translation "Идёт дождь, то есть мы остаёмся дома."
+                   :structure   [{:usedForm       "regnet"
+                                  :dictionaryForm "regnen"
+                                  :translation    "идти дождю"}
+                                 {:usedForm       "heißt"
+                                  :dictionaryForm "heißen"
+                                  :translation    "значить"}
+                                 {:usedForm       "bleiben"
+                                  :dictionaryForm "bleiben"
+                                  :translation    "оставаться"}
+                                 {:usedForm       "Hause"
+                                  :dictionaryForm "das Haus"
+                                  :translation    "дом"}]}]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+        (is (nil? (#'sut/example-issue "das heißt" example)))))))
 
 
 (def ^:private eight-word-phrase
@@ -569,33 +539,29 @@
   (testing "a long phrase gets the room the flat twelve-word ceiling refused"
     (let [long-example  {:value "Ich habe damit überhaupt nichts zu tun gehabt, sagte er dem wartenden Lehrer leise."
                          :translation "Я к этому совершенно не имел отношения, тихо сказал он ждущему учителю."
-                         :structure [{:usedForm       "Ich"
-                                      :dictionaryForm eight-word-phrase
-                                      :translation    "я к этому не имел отношения"}]}
+                         :structure [{:usedForm       "habe"
+                                      :dictionaryForm "haben"
+                                      :translation    "иметь"}
+                                     {:usedForm       "gehabt"
+                                      :dictionaryForm "haben"
+                                      :translation    "иметь"}
+                                     {:usedForm       "Lehrer"
+                                      :dictionaryForm "der Lehrer"
+                                      :translation    "учитель"}]}
           short-example {:value       "Der Hund."
                          :translation "Собака."
                          :structure   [{:usedForm       "Hund"
                                         :dictionaryForm "der Hund"
                                         :translation    "собака"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (#'sut/example-issue eight-word-phrase nil long-example))
+        (is (nil? (#'sut/example-issue eight-word-phrase long-example))
             "fourteen words around an eight-word target is inside the floating ceiling")
         (is (= :sentence-length-out-of-range
-               (:issue (#'sut/example-issue "Hund" nil long-example)))
+               (:issue (#'sut/example-issue "Hund" long-example)))
             "the same sentence is still too long for a one-word target")
         (is (= :sentence-length-out-of-range
-               (:issue (#'sut/example-issue "Hund" nil short-example)))
+               (:issue (#'sut/example-issue "Hund" short-example)))
             "the floor stays where it was")))))
-
-
-(deftest phrase-target-shape-follows-the-dictionary-for-an-article-pair
-  (testing "`das heißt` reads as an article pair until the dictionary says phrase"
-    (is (false? (dictionary/phrase-target? "das heißt")))
-    (is (true? (dictionary/phrase-target? "das heißt" "phrase")))
-    (is (false? (dictionary/phrase-target? "die Leiter")))
-    (is (false? (dictionary/phrase-target? "sich vorstellen")))
-    (is (false? (dictionary/phrase-target? "Hund")))
-    (is (true? (dictionary/phrase-target? "von Zeit zu Zeit")))))
 
 
 (deftest deterministic-example-issues-allow-three-word-sentence
@@ -613,7 +579,6 @@
         (is (= nil
                (#'sut/example-issue
                 "Hund"
-                nil
                 example)))))))
 
 
@@ -638,7 +603,6 @@
         (is (= nil
                (#'sut/example-issue
                 "vorstellen"
-                nil
                 example)))))))
 
 

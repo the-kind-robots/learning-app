@@ -137,32 +137,6 @@
    (re-matches #"(?iu)(der|die|das)\s+.+" (or word ""))))
 
 
-(def ^:private single-lemma-prefixes
-  "First tokens after which a two-token target is still one lemma: the
-   articles a noun is listed with, and the reflexive marker."
-  #{"der" "die" "das" "ein" "eine" "sich"})
-
-
-(defn phrase-target?
-  "True when the generation target is a construction rather than one lemma.
-   `auf jeden Fall` and `von Zeit zu Zeit` are constructions; `die Leiter` and
-   `sich vorstellen` are single lemmas written with the article or the
-   reflexive the dictionary lists them with. A two-token value that reads as
-   such a pair is settled by the dictionary's own part of speech, which is the
-   only thing that knows `das heißt` — the same rule the add form uses.
-
-   Nothing else in validation needs the distinction: `same-lemma?` compares a
-   multi-word target as a whole string on both of its branches, so
-   `lemma-in-structure?` already accepts a phrase without being told."
-  ([target] (phrase-target? target nil))
-  ([target part-of-speech]
-   (let [tokens (str/split (str/trim (or target "")) #"\s+")]
-     (and (> (count tokens) 1)
-          (or (= "phrase" part-of-speech)
-              (not (and (= 2 (count tokens))
-                        (single-lemma-prefixes (str/lower-case (first tokens))))))))))
-
-
 (defn same-lemma?
   "Returns true if dictionary-form refers to the same lemma as word.
    Article-bearing words (e.g. \"die Leiter\") require an exact match so that
@@ -264,11 +238,7 @@
 
 (defn lemma-in-structure?
   "Returns true if structure contains at least one item whose dictionaryForm
-   is the same target as word — a lemma, or the whole phrase when the target
-   is a construction. A multi-word target takes the same comparison either
-   branch of `same-lemma?` gives it: an exact match when it starts with an
-   article, and a match after stripping a leading article or `sich` when it
-   does not, neither of which touches anything but the first token."
+   is the same lemma as word."
   [word structure]
   (boolean
    (some #(same-lemma? word (:dictionaryForm %)) structure)))

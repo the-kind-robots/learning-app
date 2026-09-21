@@ -19,36 +19,29 @@ The system SHALL create an example-fetch task whenever a vocabulary entry is cre
 - **THEN** an example-fetch task document is persisted for that phrase via the examples module, with the same payload shape a word's task has
 
 ### Requirement: A generated example for a phrase carries the whole construction
-When the target of generation is a phrase, the generated German sentence SHALL contain the whole construction, and `structure` SHALL represent it as one item per sentence word it annotates — never one item spanning several words — each carrying the whole phrase as its `dictionaryForm` and the same Russian gloss the sentence was generated for, so every annotated word gets a `wordIndex` of its own. A generated item whose `usedForm` holds several words SHALL be unfolded into one item per word, each keeping the span's `dictionaryForm` and gloss and taking its own `wordIndex`, when and only when those words occur consecutively in the sentence from the position being matched; a span the sentence does not say consecutively SHALL be rejected. A function word of the construction that the inflected sentence does not carry MAY be absent from `structure`. The construction MAY appear inflected and rearranged by German word order, and its words need not be adjacent in the sentence. A word repeated inside the construction SHALL keep an item per occurrence: a repeat is legitimate when the repeated word belongs to the phrase target, and a repeated `{usedForm, dictionaryForm}` pair SHALL still be rejected otherwise, which is what keeps a separable verb from annotating the preposition that shares its prefix's spelling. A phrase that is already a complete sentence SHALL be placed in a sentence that extends or embeds it rather than returned verbatim. A generated example that does not satisfy this SHALL be rejected as invalid and regenerated, as one missing its target lemma already is.
+When the target of generation is a phrase, the generated German sentence SHALL contain the whole construction. It MAY appear inflected and rearranged by German word order, and its words need not be adjacent in the sentence. A phrase that is already a complete sentence SHALL be placed in a sentence that extends or embeds it rather than returned verbatim. An example whose sentence does not carry the whole construction SHALL be rejected as invalid and regenerated.
+
+`structure` SHALL annotate the sentence word by word under the same rules whatever the target is, and SHALL NOT record which words belonged to the construction. Presence of a multi-word target is therefore checked against the sentence: every word of the target SHALL be present, matching either a word of the sentence or the `dictionaryForm` of some `structure` item, which is what carries inflection. A single-lemma target SHALL keep being checked against `structure`, by the `dictionaryForm` that names it.
 
 #### Scenario: Inflected phrase inside a sentence
 - **WHEN** an example is generated for the phrase "den Kopf verlieren"
-- **THEN** the sentence contains the construction inflected, such as "Er verliert den Kopf."
-- **AND** each word of the construction the sentence carries — "den", "Kopf", "verliert" — is its own `structure` item with `dictionaryForm` "den Kopf verlieren" and the same Russian gloss, and none of them spans more than one word
+- **THEN** a sentence such as "Er verliert den Kopf." is accepted
+- **AND** "den" and "Kopf" are found in the sentence, and "verlieren" through the `structure` item whose `dictionaryForm` names it
 
 #### Scenario: Phrase split by German word order
 - **WHEN** an example is generated for the phrase "auf jeden Fall"
 - **THEN** a sentence such as "Ich komme auf jeden Fall mit." is accepted although the construction sits inside the clause
-- **AND** each word of the phrase has its own `structure` item, so each carries its own `wordIndex`
+- **AND** `structure` annotates the sentence's words under the ordinary rules, so "Fall" carries its own lemma and "auf" and "jeden" are left out as a preposition and a determiner
 
-#### Scenario: A generated item spanning the construction
-- **WHEN** generation for "auf jeden Fall" returns a single `structure` item whose `usedForm` is "auf jeden Fall" and the sentence says those three words consecutively
-- **THEN** the item is unfolded into one item per word, each with `dictionaryForm` "auf jeden Fall", the same gloss, and its own `wordIndex`
-- **AND** the same item is rejected when the sentence does not say those words consecutively
-
-#### Scenario: A word repeated inside the construction
+#### Scenario: A word the sentence says twice
 - **WHEN** an example is generated for the phrase "von Zeit zu Zeit"
-- **THEN** the example is accepted although "Zeit" occurs twice in the construction
-- **AND** each occurrence has its own `structure` item and its own `wordIndex`
-
-#### Scenario: A repeat that does not belong to the target is still rejected
-- **WHEN** the target is the separable verb "aufpassen" and `structure` carries the sentence's preposition "auf" beside the detached prefix "auf", both with `dictionaryForm` "aufpassen"
-- **THEN** the example is rejected as invalid and generation is retried
+- **THEN** the example is accepted although "Zeit" occurs twice
+- **AND** each occurrence is its own `structure` item, annotated as the noun it is, with its own `wordIndex`
 
 #### Scenario: Phrase that is already a sentence
 - **WHEN** an example is generated for a phrase that is itself a complete sentence
 - **THEN** the generated sentence extends or embeds it into a turn rather than repeating it unchanged
 
 #### Scenario: Construction missing from the output
-- **WHEN** the generated sentence omits part of the construction, or no `structure` item names the whole phrase as its `dictionaryForm`
+- **WHEN** the generated sentence carries only some of the construction's words
 - **THEN** the example is rejected as invalid and generation is retried, and the retry is told the same rule in the same words the prompt states it in
