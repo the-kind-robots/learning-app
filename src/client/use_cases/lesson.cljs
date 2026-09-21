@@ -46,7 +46,7 @@
     ;; either way and `:limit` only trims afterwards, so nothing more is read
     ;; — and cutting the head here would cut it alphabetically wherever
     ;; urgencies tie. `pick-vocab` owns the whole selection policy.
-    (let [{rows :words} (await (vocabulary/list-active capabilities {:order :asc}))
+    (let [{rows :words} (await (vocabulary/list-active capabilities {:order :most-due}))
           selected      (domain/pick-vocab rows vocab-pool-size vocab-per-lesson)]
       (if-not (seq selected)
         {:error :no-words-available}

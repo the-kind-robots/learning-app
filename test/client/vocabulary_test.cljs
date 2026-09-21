@@ -98,7 +98,14 @@
         (is (= 1 matches)
             "`matches` counts what the search left, `total` what the scope holds")
         (is (= 1 (count words)))
-        (is (= "der Hund" (:value (first words)))))))))
+        (is (= "der Hund" (:value (first words)))))
+      (let [{:keys [matches words total]} (await (sut/list (test-capabilities dbs) {:search "zzz" :limit 50}))]
+        (is (= [] words) "an empty page reads no reviews and returns no rows")
+        (is (= 0 matches))
+        (is
+         (= 3 total)
+         "the scope is still three words, which is how the screen
+                         tells an empty vocabulary from a search with no match"))))))
 
 
 (deftest list-reports-how-many-rows-the-page-left-behind
@@ -119,7 +126,7 @@
 
 
 (deftest count-reads-the-vocab-view-not-the-documents
-  (async-testing "`count` counts vocab view rows and runs no find"
+  (async-testing "`count` reads the view's row count and no rows at all"
     (let [find-calls  (atom 0)
           query-calls (atom [])
           row-count   26]
@@ -131,12 +138,42 @@
                     db/query
                     (fn [_ view opts]
                       (swap! query-calls conj [view opts])
-                      (js/Promise.resolve
-                       {:rows (vec (repeat row-count {:id "vocab:x" :key "vocab:x" :value [nil "x" []]}))}))]
+                      (js/Promise.resolve {:rows [] :total-rows row-count}))]
         (let [cnt (await (sut/count (test-capabilities {:user/db :fake})))]
           (is (= row-count cnt))
           (is (= 0 @find-calls))
-          (is (= [["vocab-preview/rows" {}]] @query-calls)))))))
+          (is (= [["vocab-preview/rows" {:limit 0}]] @query-calls)
+              "`:limit 0` asks for the count the view carries and for no rows"))))))
+
+
+(deftest list-reads-the-page-it-returns-and-nothing-more
+  (async-testing "a first page costs its own rows, whatever the vocabulary holds"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (await (js/Promise.all
+              (into-array (map (fn [i]
+                                 (sut/add! (test-capabilities dbs)
+                                           (str "wort-" (+ 100 i))
+                                           (str "перевод-" i)))
+                               (range 120)))))
+      (let [calls    (atom [])
+            original db/query]
+        (with-redefs [db/query (fn [db view opts]
+                                 (swap! calls conj [view opts])
+                                 (original db view opts))]
+          (let [{:keys [matches total words]} (await (sut/list (test-capabilities dbs) {:limit 50}))
+                previews (->> @calls (filter #(= "vocab-preview/rows" (first %))) (mapv second))
+                reviews  (->> @calls (filter #(= "reviews-by-word/rows" (first %))) (mapv second))]
+            (is (= 50 (count words)))
+            (is (= 120 total))
+            (is (= 120 matches))
+            (is (every? :limit previews)
+                "no read of the whole preview view — the page and the count both carry a limit")
+            (is (some #(= {:limit 50} %) previews)
+                "the page is read as 50 rows off the id-ordered view")
+            (is (= [50] (mapv #(count (:keys %)) reviews))
+                "one review read, keyed by the 50 words on the page"))))))))
 
 
 (deftest list-and-count-return-all-words-beyond-25
@@ -286,6 +323,24 @@
       (await (seed-single-review! dbs "vocab:a-wort" "A-Wort" 5))
       (await (seed-single-review! dbs "vocab:m-wort" "M-Wort" 60))
       (await (seed-single-review! dbs "vocab:z-wort" "Z-Wort" 300))
-      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:order :asc}))]
+      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:order :most-due}))]
         (is (every? zero? (map :retention-level words)))
         (is (= ["vocab:z-wort" "vocab:m-wort" "vocab:a-wort"] (mapv :id words))))))))
+
+
+(deftest list-is-alphabetical-unless-the-caller-asks-for-the-due-ones
+  (async-testing "the word list's order is the alphabet, whatever the retention"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (await (seed-single-review! dbs "vocab:a-wort" "A-Wort" 5))
+      (await (seed-single-review! dbs "vocab:m-wort" "M-Wort" 60))
+      (await (seed-single-review! dbs "vocab:z-wort" "Z-Wort" 300))
+      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {}))]
+        (is (= ["vocab:a-wort" "vocab:m-wort" "vocab:z-wort"] (mapv :id words))
+            "default order, and it is not the most due first")
+        (is (every? :retention-level words)
+            "a level for every row on the page, read by key"))
+      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:limit 2}))]
+        (is (= ["vocab:a-wort" "vocab:m-wort"] (mapv :id words))
+            "the page is the head of the alphabet, not of the due list"))))))

@@ -2,6 +2,11 @@
 
 - [x] 1.1 `use-cases.vocabulary/list` returns `:matches` — the rows left after the search
   filter, before paging — beside the pre-filter `:total`
+- [x] 1.2 `:order :alphabetical` reads the page off the id-keyed preview view;
+  `:order :most-due` keeps the urgency ranking and its full reads (GH-431)
+- [x] 1.3 Retention levels read by key, for the rows of the page only
+- [x] 1.4 `:total` from the view's row count (`{:limit 0}`), or the membership's length in
+  a collection
 
 ## 2. Presenter
 
@@ -27,3 +32,5 @@
 - [x] 5.1 Node tests: presenter paging props, use-case `:matches`, the stored reload effect
 - [x] 5.2 Browser: 50 rows on first render, append on scroll, reset on search, preserved
   across an edit
+- [x] 5.3 Measured click → first row on 1503 words / 7100 reviews, warm, three times,
+  before and after

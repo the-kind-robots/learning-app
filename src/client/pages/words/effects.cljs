@@ -9,14 +9,15 @@
 
 (defn- ^:async show!
   "Reads one page of the active scope and hands it to the view. The page is
-   the first `limit` rows, not a window at an offset: the sort has already
-   read every review, so a growing limit costs the same query and keeps the
-   loaded row count a single number that survives a reload."
+   the first `limit` rows, not a window at an offset: the loaded row count
+   stays one number that survives a reload, and the rows it re-reads are the
+   ones already on screen rather than the vocabulary."
   [dispatch capabilities {:keys [limit search]}]
   (try
     (let [limit (or limit presenter/page-size)
           {:keys [matches total words]}
-          (await (vocabulary/list-active capabilities {:order :asc :search search :limit limit}))]
+          (await (vocabulary/list-active capabilities
+                                         {:order :alphabetical :search search :limit limit}))]
       (dispatch [[:action/show-words
                   {:limit   limit
                    :matches matches

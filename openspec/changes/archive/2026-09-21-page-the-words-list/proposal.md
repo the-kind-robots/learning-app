@@ -7,6 +7,12 @@ with a few thousand words every keystroke in the search box rebuilds every row (
 
 ## What Changes
 
+- The word list is ordered alphabetically — the owner's decision, and what makes the query
+  cheap: the id is the normalised value, so the preview view is already in that order and a
+  page is a slice of it. The lesson keeps drawing the most due words (GH-431); the order
+  becomes a parameter of the query, named for what the caller wants.
+- Retention levels are read only for the rows of the page, by key.
+- `:total` reads the view's row count instead of its rows.
 - The word list renders a first page of 50 rows instead of the whole vocabulary.
 - A sentinel at the end of the list, observed with `IntersectionObserver`, appends the
   next 50 rows when the reader reaches the bottom. No "показать ещё" button — the screen

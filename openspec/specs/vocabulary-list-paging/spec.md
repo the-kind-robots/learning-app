@@ -1,9 +1,51 @@
 # vocabulary-list-paging Specification
 
 ## Purpose
-How many rows the word list puts on screen, how the next page is asked for, and what
-resets or preserves the loaded count.
+What order the word list is in, how many rows it puts on screen, what a page costs to
+read, how the next page is asked for, and what resets or preserves the loaded count.
 ## Requirements
+### Requirement: The word list is ordered alphabetically
+
+The word list SHALL show words in alphabetical order, by the normalised form the word is
+stored under: case and umlaut spelling do not split the order, and no other ranking — how
+due a word is, how well it is remembered — decides where a row sits. The order SHALL NOT
+be German dictionary collation; the stored order is the order, and nothing is read to
+improve on it.
+
+#### Scenario: Words of different retention
+
+- **WHEN** the list holds words that were last reviewed days and months apart
+- **THEN** they are shown in alphabetical order, whatever their retention levels
+
+#### Scenario: The lesson is not affected
+
+- **WHEN** a lesson is started
+- **THEN** it draws the words most in need of review, not the alphabetically first ones
+
+### Requirement: The first page does not cost the whole vocabulary
+
+The first page of the word list SHALL be read as a page: the rows it shows and their
+retention levels, not every word in scope and not every review. The time to the first row
+SHALL therefore not grow with the number of words the vocabulary holds.
+
+#### Scenario: A page of a large vocabulary
+
+- **WHEN** the words screen is opened on a vocabulary of thousands of words
+- **THEN** one page of words is read from storage
+- **AND** reviews are read only for the words on that page
+
+#### Scenario: Counting the vocabulary
+
+- **WHEN** the screen needs to know whether the vocabulary is empty
+- **THEN** it reads the count without reading the words
+
+#### Scenario: A search reads what it has to
+
+- **WHEN** a search query is active
+- **THEN** every word in scope is examined, since a substring can sit anywhere in a value
+  or a translation
+- **AND** retention levels are still read only for the rows the page shows
+
 ### Requirement: The word list renders one page of rows
 
 The word list SHALL render at most one page of rows — 50 — however many words the active
