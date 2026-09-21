@@ -242,7 +242,7 @@
   {:malformed-example
    "The generated example did not match the required JSON shape or text constraints. See `details` for the specific field errors."
    :structure-mismatch
-   "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, each `usedForm` must be one word of the sentence, and each must match the word at its position."
+   "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, and each must match the word at its position. A `usedForm` is exactly one word of the sentence, spelled as the sentence spells it — the inflected form, never the lemma. An expression of several words is annotated one item per word, each with its own `dictionaryForm`, or left out of `structure` altogether — the sentence is where such an expression lives, not `structure`."
    :sentence-length-out-of-range
    "The German sentence is outside the accepted length. See `details` for the number of words it must contain."
    :target-lemma-missing
@@ -370,6 +370,7 @@
     ;; Structure: the shape of an item
     "STRUCTURE — THE SHAPE OF AN ITEM"
     "- Each item in `structure` must be a JSON object with keys `usedForm`, `dictionaryForm`, and `translation`."
+    "- A `usedForm` is exactly one word of the sentence, spelled as the sentence spells it — the inflected form, never the lemma. An expression of several words is annotated one item per word, each with its own `dictionaryForm`, or left out of `structure` altogether — the sentence is where such an expression lives, not `structure`."
     "- Never use arrays like `[\"Fenster\", \"das Fenster\", \"окно\"]` inside `structure`."
     "- Example structure item: `{\"usedForm\":\"Fenster\",\"dictionaryForm\":\"das Fenster\",\"translation\":\"окно\"}`."
     "- Keep `dictionaryForm` lemma-only unless the lemma inherently includes an article or `sich`."
@@ -381,7 +382,6 @@
     ;; Structure: order and repetition
     "STRUCTURE — ORDER"
     "- Order `structure` items strictly left to right as they appear in the German sentence, and each `usedForm` must match the word at its position."
-    "- One item per word: a `usedForm` is a single word of the sentence, never several."
     "- The backend assigns `wordIndex`; do not return `wordIndex`."
     "- Separable verbs emit the prefix exactly once. If a preposition shares spelling with the prefix (for example `auf` in `Pass auf deine Sachen auf!`), exclude the preposition — only the detached prefix in the verb frame belongs in `structure`."
     ""

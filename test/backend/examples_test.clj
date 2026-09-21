@@ -50,7 +50,10 @@
           (is (re-find #"Separable verbs emit the prefix exactly once"
                        (get-in payload [:messages 0 :content])))
           (is (re-find
-               #"One item per word: a `usedForm` is a single word of the sentence, never several"
+               #"A `usedForm` is exactly one word of the sentence, spelled as the sentence spells it"
+               (get-in payload [:messages 0 :content])))
+          (is (re-find
+               #"the sentence is where such an expression lives, not `structure`"
                (get-in payload [:messages 0 :content])))
           (is (re-find #"Von Zeit zu Zeit besuche ich meine Eltern"
                        (get-in payload [:messages 0 :content]))
