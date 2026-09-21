@@ -15,6 +15,16 @@
   (+ (or limit 0) page-size))
 
 
+(defn new-query?
+  "Whether arriving rows answer a different query than the rows on screen.
+   They do when the reader's typing has been read: these rows replace what was
+   being read rather than extending it, and that is when the list goes back to
+   its first row — not on the keystroke 400 ms earlier, with the old rows still
+   under a reader free to scroll them."
+  [state {:keys [search]}]
+  (not= (or search "") (or (:words/search state) "")))
+
+
 (def ^:private first-run-state
   {:cta  "Добавить слово"
    :hint "Добавьте первое слово на главной странице"

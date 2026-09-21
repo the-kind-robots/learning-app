@@ -9,17 +9,24 @@
    query these rows came from, so the reload a sync pull triggers
    (`:action/reload-page`) asks for the page the reader has rather than the
    first one — otherwise a reader 500 rows down loses 450 of them to a pull
-   that happened to bring a document."
+   that happened to bring a document.
+
+   `:words/editing` is left alone. Rows arrive on their own now — the sentinel
+   observer asks for them — and clearing it here shut an open dialog under the
+   reader, one being typed into included (#439)."
   [{:keys [limit search] :as words}]
-  (merge {:page/current  :page/words
-          :page/load     [:effect/load-words {:limit limit :search search}]
-          :words/editing nil}
+  (merge {:page/current :page/words
+          :page/load    [:effect/load-words {:limit limit :search search}]}
          (presenter/page-state words)))
 
 
 (nxr/register-action! :action/show-words
-  (fn show-words [_ words]
-    [[:effect/save (words-shown words)]]))
+  ;; Rows read under a different query replace the ones the reader was
+  ;; reading, and that is the moment the list goes back to its first row.
+  (fn show-words [state words]
+    (cond-> [[:effect/save (words-shown words)]]
+      (presenter/new-query? state words)
+      (conj [:effect/scroll-words-to-top]))))
 
 
 (nxr/register-action! :action/open-word-edit
@@ -35,12 +42,12 @@
 (nxr/register-action! :action/search-words
   ;; A new query starts at the first page: the rows loaded for the old one say
   ;; nothing about how far down this one the reader has read. The list goes
-  ;; back to the top with them — results are read from the first one, and a
-  ;; reader left at the bottom would be sitting on the sentinel, which would
-  ;; ask for the second page before the first was read.
+  ;; back to the top with them, on `:action/show-words` — the rows are 400 ms
+  ;; away and scrolling here moved a reader who was still reading the old ones,
+  ;; then left them free to scroll back down onto the sentinel before the
+  ;; shorter list arrived (#439).
   (fn search-words [_ search]
-    [[:effect/scroll-words-to-top]
-     [:effect/set-words-search {:search search :limit presenter/page-size}]]))
+    [[:effect/set-words-search {:search search :limit presenter/page-size}]]))
 
 
 (nxr/register-action! :action/show-more-words
@@ -55,7 +62,10 @@
 ;; removing a word does not throw the reader back to the first page.
 (nxr/register-action! :action/save-word
   (fn save-word [state {:keys [id translation]}]
-    [[:effect/update-word
+    ;; Saving closes the dialog. It used to close on the rows the save brought
+    ;; back, which also shut it on rows nobody asked for (#439).
+    [[:effect/save {:words/editing nil}]
+     [:effect/update-word
       {:id          id
        :translation translation
        :limit       (:words/limit state)
