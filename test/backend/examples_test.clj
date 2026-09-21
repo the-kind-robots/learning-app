@@ -752,3 +752,69 @@
           (is (= 429 (:status entry)))
           (is (contains? entry :body))
           (is (string? (:body entry))))))))
+
+
+(deftest ensure-word-lookup-index-creates-the-index-the-lookup-reads-by
+  (testing "boot asks dictionary-db for the index the word lookup selects through"
+    (let [captured (atom nil)]
+      (with-redefs [db/request-sync (fn [request]
+                                      (reset! captured request)
+                                      {:status 200
+                                       :body   {:result "created"}})]
+        (dictionary/ensure-word-lookup-index!)
+        (is (= :post (:method @captured)))
+        (is (= "dictionary-db/_index" (:url @captured)))
+        (is (= ["type" "meta.normalized_value"]
+               (get-in @captured [:body :index :fields])))
+        (is (= "json" (get-in @captured [:body :type])))))))
+
+
+(deftest ensure-word-lookup-index-survives-an-unreachable-dictionary
+  (testing "a dictionary database that does not answer is logged, not thrown"
+    (with-redefs [db/request-sync (fn [_request]
+                                    (throw (ex-info "Connection refused" {})))]
+      (is (nil? (dictionary/ensure-word-lookup-index!))))))
+
+
+(deftest lookup-word-meta-carries-part-of-speech-and-cefr-level
+  (testing "a word the dictionary knows contributes both prompt fields"
+    (with-redefs [dictionary/lookup-dictionary-entries
+                  (constantly [{:_id         "lemma:das haus:noun"
+                                :meta        {:cefr_level "a1"}
+                                :pos         "noun"
+                                :translation [{:lang "ru" :value "дом"}]}])]
+      (is (= {:partOfSpeech "noun" :cefrLevel "a1"}
+             (dictionary/lookup-word-meta "das Haus" ["дом"])))))
+
+  (testing "the gloss decides between entries that share a normalized form"
+    (with-redefs [dictionary/lookup-dictionary-entries
+                  (constantly [{:_id         "lemma:der leiter:noun"
+                                :meta        {:cefr_level "c1"}
+                                :pos         "noun"
+                                :translation [{:lang "ru" :value "руководитель"}]}
+                               {:_id         "lemma:die leiter:noun"
+                                :meta        {:cefr_level "b1"}
+                                :pos         "noun"
+                                :translation [{:lang "ru" :value "лестница"}]}])]
+      (is (= {:partOfSpeech "noun" :cefrLevel "b1"}
+             (dictionary/lookup-word-meta "Leiter" ["лестница"])))))
+
+  (testing "a word the dictionary does not know leaves both fields unset"
+    (with-redefs [dictionary/lookup-dictionary-entries (constantly [])]
+      (is (nil? (dictionary/lookup-word-meta "Quasselstrippe" ["болтун"]))))))
+
+
+(deftest generation-request-carries-the-word-meta-the-dictionary-returned
+  (testing "part of speech and CEFR level reach the generation attempt"
+    (let [captured (atom nil)]
+      (with-redefs [dictionary/lookup-dictionary-entries
+                    (constantly [{:_id         "lemma:das haus:noun"
+                                  :meta        {:cefr_level "a1"}
+                                  :pos         "noun"
+                                  :translation [{:lang "ru" :value "дом"}]}])
+                    sut/example-api-request
+                    (fn [_word _translation _context word-meta _retry-context]
+                      (reset! captured word-meta)
+                      (delay {:status 500 :body "{}"}))]
+        (sut/generate-one! {:word "das Haus" :translation "дом"} 1)
+        (is (= {:partOfSpeech "noun" :cefrLevel "a1"} @captured))))))

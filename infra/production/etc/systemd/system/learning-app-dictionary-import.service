@@ -8,6 +8,16 @@ Type=oneshot
 User=webapp
 WorkingDirectory=/var/lib/learning-app/dictionary
 ExecStart=sh -c "COUCHDB_PASS=${COUCHDB_PASS:-$(cat ${COUCHDB_PASS_PATH})} exec /opt/learning-app/dictionary/import.sh --db dictionary-db --reset"
+# --reset drops the database, and with it the CouchDB indexes the app queries
+# through. The app creates them as it starts, so the import restarts it — here
+# rather than in the deploy workflow, because the runbook also has an operator
+# start this unit by hand, and that path would otherwise leave every dictionary
+# lookup scanning the whole dictionary until someone restarted the app for an
+# unrelated reason (GH-436). ExecStartPost runs only when ExecStart succeeded.
+# The "+" prefix is what lets it reach PID 1: this unit runs as webapp with an
+# empty capability bounding set, and uid 0 is what satisfies polkit's
+# manage-units check.
+ExecStartPost=+systemctl start learning-app-restart.service
 
 # Environment
 EnvironmentFile=-/etc/learning-app/environment

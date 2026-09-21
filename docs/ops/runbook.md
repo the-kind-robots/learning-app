@@ -36,6 +36,8 @@ This triggers `learning-app-restart.path`, which restarts `learning-app-run.serv
 systemctl start learning-app-dictionary-import.service
 ```
 The import validates input checksums and writes `/var/lib/learning-app/dictionary/import-metrics.json`.
+It resets the database, so on success it also restarts `learning-app-run.service` — the app recreates
+the CouchDB indexes it queries through as it starts.
 
 ## Infra deploy failed: manual recovery
 
