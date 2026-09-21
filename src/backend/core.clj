@@ -8,6 +8,7 @@
    [clojure.string :as str]
    [db :as db]
    [examples :as examples]
+   [examples.dictionary :as dictionary]
    [hiccup :as hiccup]
    [migrations :as migrations]
    [next.jdbc :as jdbc]
@@ -808,6 +809,9 @@
     (migrations/ensure-migrated! db-spec)
     ;; Report orphan userdbs; CouchDB being down logs a warning, never blocks boot.
     (reconciliation/report! db-spec)
+    ;; Example generation reads the dictionary through an index; create it under
+    ;; the same rule — CouchDB being down logs a warning, never blocks boot.
+    (dictionary/ensure-word-lookup-index!)
     (restart-server! #'ring-handler port)
     (println "Serving" url)))
 
