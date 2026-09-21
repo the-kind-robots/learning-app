@@ -1,6 +1,7 @@
 (ns use-cases.vocabulary
   (:refer-clojure :exclude [list count get])
   (:require
+   [clojure.string :as str]
    [domain.phrase :as phrase]
    [domain.retention :as retention]
    [domain.vocabulary :as domain]
@@ -14,20 +15,56 @@
   (await ((:words/find-by-value words) value)))
 
 
+(defn- entered-translation
+  "A phrase's text is collapsed to single spaces on submit — its field is
+   multi-line and the line breaks are visual only."
+  [kind translation]
+  (cond-> translation
+    (= :phrase kind) phrase/collapsed))
+
+
+(defn- translation-entries
+  "One entered translation is one entry, for either kind. Blank gives none,
+   which is what `add!` answers `:empty-translations` to."
+  [kind translation]
+  (if (= :phrase kind)
+    (if (str/blank? translation) [] [(phrase/translation-entry translation)])
+    (domain/parse-translations translation)))
+
+
+(defn- new-entry
+  [kind value translation entries]
+  (if (= :phrase kind)
+    (phrase/new-phrase value translation)
+    (domain/new-word value entries)))
+
+
 (defn ^:async add!
-  "Adds a new vocabulary word with an initial review and queues a
-   collection-scoped example fetch. If a duplicate exists (case-insensitive,
-   article-stripped), merges translations and does not re-fetch examples.
-   Returns {:word-id id :created? true/false}."
-  [{:keys [collections examples reviews words] :as capabilities} value translation]
-  (let [parsed (domain/parse-translations translation)]
-    (if (empty? parsed)
+  "Adds a vocabulary entry of `kind` — `:word` or `:phrase` — with an initial
+   review, and queues a collection-scoped example fetch. A phrase asks for an
+   example like a word does (#371); the kind decides only how the translation
+   is read and which document is built.
+
+   A duplicate value is one entry whatever its kind: translations merge, the
+   kind is left alone, and an example is fetched only when the active
+   collection has none for it yet. Returns a promise of
+   {:word-id id :created? bool} or {:error :empty-translations}.
+
+   `kind` has no default on purpose. Made optional, this becomes a two-arity
+   function, and `:static-fns` then compiles every call site to
+   `add_BANG_.cljs$core$IFn$_invoke$arity$4` — a property a plain test stub
+   does not carry, so `with-redefs` stops intercepting and the effect throws
+   where it used to run."
+  [{:keys [collections examples reviews words] :as capabilities} value translation kind]
+  (let [translation (entered-translation kind translation)
+        entries     (translation-entries kind translation)]
+    (if (empty? entries)
       {:error :empty-translations}
-      (let [existing (await (find-duplicate capabilities value))]
+      (let [existing      (await (find-duplicate capabilities value))
+            collection-id ((:collections/active-id collections))]
         (if existing
-          (let [merged        (domain/merge-translations (:translation existing) parsed)
-                updated       (assoc existing :translation merged)
-                collection-id ((:collections/active-id collections))]
+          (let [merged  (domain/merge-translations (:translation existing) entries)
+                updated (assoc existing :translation merged)]
             (await ((:words/save! words) updated))
             (when collection-id
               (await ((:collections/add-word! collections) (:id existing) collection-id))
@@ -35,15 +72,14 @@
                 (let [collection-name (:name (await ((:collections/get collections) collection-id)))]
                   ((:examples/request! examples) updated collection-id collection-name))))
             {:word-id (:id existing) :created? false})
-          (let [word (domain/new-word value parsed)
-                {:keys [id]} (await ((:words/save! words) word))
-                collection-id ((:collections/active-id collections))
+          (let [entry        (new-entry kind value translation entries)
+                {:keys [id]} (await ((:words/save! words) entry))
                 collection-name (when collection-id
                                   (:name (await ((:collections/get collections) collection-id))))]
             (await ((:reviews/save! reviews) id true translation))
             (when collection-id
               (await ((:collections/add-word! collections) id collection-id)))
-            ((:examples/request! examples) word collection-id collection-name)
+            ((:examples/request! examples) entry collection-id collection-name)
             {:word-id id :created? true}))))))
 
 

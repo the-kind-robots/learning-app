@@ -4,7 +4,6 @@
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
    [use-cases.collections :as collections]
-   [use-cases.phrase :as phrase]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -110,8 +109,7 @@
   (fn ^:async add-word
     [{:keys [dispatch capabilities]} _ {:keys [value translation focus-id mode]}]
     (try
-      (let [add!   (if (= :phrase mode) phrase/add! vocabulary/add!)
-            result (await (add! capabilities value translation))]
+      (let [result (await (vocabulary/add! capabilities value translation (or mode :word)))]
         (if (:error result)
           (dispatch [[:action/show-word-error (:error result)]])
           (let [total (await (vocabulary/count capabilities))

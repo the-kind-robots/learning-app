@@ -35,7 +35,7 @@
                   (db/request-sync
                    {:method :post
                     :url    (str dictionary-db-name "/_find")
-                    :body   {:selector {"type"                  "dictionary-entry"
+                    :body   {:selector {"type" "dictionary-entry"
                                         "meta.normalized_value" normalized}
                              :limit    20}}))]
     (vec
@@ -63,7 +63,7 @@
                     (db/request-sync
                      {:method :post
                       :url    (str dictionary-db-name "/_all_docs")
-                      :body   {:keys         ids
+                      :body   {:keys ids
                                :include_docs true}}))]
       (->> (get-in response [:body :rows])
            (keep :doc)
@@ -144,7 +144,7 @@
    articles and reflexive pronouns before comparing, so \"vorstellen\" matches
    \"sich vorstellen\"."
   [word dictionary-form]
-  (let [target          (normalize-dictionary-form word)
+  (let [target (normalize-dictionary-form word)
         dictionary-form (normalize-dictionary-form dictionary-form)]
     (when (and target dictionary-form)
       (if (has-article? word)
@@ -196,14 +196,14 @@
             exact-docs
             (let [surface-docs (surface-form-dictionary-entry-docs normalized)]
               (cond
-                (nil? exact-docs) nil
+                (nil? exact-docs)   nil
                 (nil? surface-docs) exact-docs
-                :else (merge-dictionary-entry-docs exact-docs surface-docs)))))
+                :else               (merge-dictionary-entry-docs exact-docs surface-docs)))))
         (catch Exception error
           (log-dictionary-validation-failure!
            (merge
             {:dictionary-form normalized
-             :error           (.getMessage error)}
+             :error (.getMessage error)}
             (ex-data error)))
           nil)))))
 

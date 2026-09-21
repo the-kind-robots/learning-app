@@ -3,6 +3,7 @@
 - Status: accepted
 - Date: 2026-08-15
 - Extends: 0008
+- Amended in part by: #371
 
 ## Context
 
@@ -36,7 +37,11 @@ Domain rules keyed on the kind, not on the namespace:
   merge- and edit-time alike;
 - a phrase trial requires exact typing and writes to the same review log
   as any other entry;
-- no LLM example is requested for a phrase.
+- ~~no LLM example is requested for a phrase.~~ No longer holds — reversed by
+  #371, which found the reasoning behind it ("a phrase is its own example")
+  false in use. A phrase asks for an example, and gets an example trial,
+  exactly as a word does; what that example must contain is a requirement in
+  `openspec/specs/examples/spec.md`, not here.
 
 Adding a phrase whose value already exists merges translations into that
 document and leaves its kind alone: changing what an entry is belongs to the
