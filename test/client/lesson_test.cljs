@@ -50,7 +50,7 @@
       :words       (words/start! {:db dbs :clock clock})
       :collections {:collections/active-id (fn [] nil)
                     :collections/get       (fn [_] nil)}
-      :examples    {:examples/list     (fn [word-ids _coll-id] (examples/list dbs word-ids nil))
+      :examples    {:examples/list     (fn [word-ids] (examples/list dbs word-ids))
                     :examples/request! request!}})))
 
 

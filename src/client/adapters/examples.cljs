@@ -1,6 +1,6 @@
 (ns adapters.examples
   "Client module for fetching example sentences from the backend."
-  (:refer-clojure :exclude [list find])
+  (:refer-clojure :exclude [list])
   (:require
    [adapters.repository :as repository]
    [db.pouch :as dbs]
@@ -110,32 +110,27 @@
     (dbs/insert dbs schema example-doc)))
 
 
-(defn- collection-selector
-  "Selector clause for example queries. Themed cards see only their own
-   collection-scoped examples. The main card (nil collection-id) acts as
-   a union view — no filter is applied, so any example for the word
-   surfaces regardless of which collection generated it."
-  [collection-id]
-  (when collection-id
-    {:collection-id collection-id}))
-
-
-(defn ^:async find
-  "Retrieves the example document for a given word-id and collection-id, or nil."
-  [dbs word-id collection-id]
-  (let [selector (merge {:word-id word-id}
-                        (collection-selector collection-id))
-        {examples :docs} (await (dbs/find dbs schema {:selector selector}))]
-    (some-> (first examples) doc->example)))
-
-
 (defn ^:async list
-  "Retrieves example documents for the given word-ids and collection-id."
-  [dbs word-ids collection-id]
-  (let [selector (merge {:word-id {:$in word-ids}}
-                        (collection-selector collection-id))
-        {examples :docs} (await (dbs/find-all dbs schema {:selector selector}))]
-    (mapv doc->example examples)))
+  "Every example this device holds for `word-ids`, whatever collection each
+   carries. Which of them answers a card is the reader's question, and it is
+   answered in one place — `use-cases.examples` — rather than restated as a
+   selector here."
+  [dbs word-ids]
+  (let [{:keys [docs]} (await (dbs/find-all dbs schema {:selector {:word-id {:$in word-ids}}}))]
+    (mapv doc->example docs)))
+
+
+(defn ^:async of-word
+  "Every example held for one word, read through the word index. The list
+   above takes `$in`, which PouchDB answers by reading the type and filtering
+   in memory; a single word is the question the hot path asks, and it has an
+   index."
+  [dbs word-id]
+  (let [{:keys [docs]} (await (dbs/find dbs
+                                        schema
+                                        {:selector  {:word-id word-id}
+                                         :use-index "by-type-word-id"}))]
+    (mapv doc->example docs)))
 
 
 (defn ^:async remove!
@@ -151,36 +146,61 @@
    device-db bulk write. Called when a collection is deleted to keep
    example storage from accumulating orphans."
   [dbs collection-id]
-  (let [{examples :docs} (await (dbs/find-all dbs schema {:selector {:collection-id collection-id}}))]
-    (when (seq examples)
-      (await (dbs/bulk-docs dbs schema (mapv repository/tombstone examples))))))
+  (let [{:keys [docs]} (await (dbs/find-all dbs schema {:selector {:collection-id collection-id}}))]
+    (when (seq docs)
+      (await (dbs/bulk-docs dbs schema (mapv repository/tombstone docs))))))
 
 
 (defn ^:async purge-by-word!
   "Tombstones every example of `word-id` in one device-db bulk write. Called
    after the word itself is gone from user-db."
   [dbs word-id]
-  (let [{examples :docs} (await (dbs/find-all dbs schema {:selector {:word-id word-id}}))]
-    (when (seq examples)
-      (await (dbs/bulk-docs dbs schema (mapv repository/tombstone examples))))))
+  (let [{:keys [docs]} (await (dbs/find-all dbs schema {:selector {:word-id word-id}}))]
+    (when (seq docs)
+      (await (dbs/bulk-docs dbs schema (mapv repository/tombstone docs))))))
+
+
+(def fetch-task-type
+  "The task type an example fetch is queued under. Public because clearing what
+   an account left behind has to name it (`sync/forget-account-data!`)."
+  "example-fetch")
+
+
+(defn- fetch-data
+  "What a fetch needs to run without reading the entry back."
+  [word collection-id collection-name]
+  {:collection-id collection-id
+   :collection-name collection-name
+   :translations  (russian-translations word)
+   :word          (:value word)
+   :word-id       (:id word)})
+
+
+(defn- fetch-id
+  "The id of the fetch for one pair. The pair is the work, so the pair is the
+   identity: asking twice writes the same id twice, and the second is a
+   conflict the database refuses — nobody has to read the queue to find out
+   what is already in it."
+  [word-id collection-id]
+  (str "task:" fetch-task-type ":" word-id ":" collection-id))
 
 
 (defn request!
-  "Queues an example fetch for `word` — `{:id :value :translation}` — in
-   `collection-id`. The task carries what the fetch needs, so it runs
-   without reading the word back."
-  [dbs clock word collection-id collection-name]
-  (tasks/create-task! dbs
-                      clock
-                      "example-fetch"
-                      {:collection-id collection-id
-                       :collection-name collection-name
-                       :translations  (russian-translations word)
-                       :word          (:value word)
-                       :word-id       (:id word)}))
+  "Queues a fetch for each of `requests` — `{:collection-id :collection-name
+   :word}`, where the word is `{:id :value :translation}` — in one write. One
+   form for one and for a vocabulary's worth: a device catching up asks for as
+   many pairs as it is missing, and adding a word asks for one."
+  [dbs clock requests]
+  (tasks/create-tasks! dbs
+                       clock
+                       fetch-task-type
+                       (mapv (fn [{:keys [collection-id collection-name word]}]
+                               {:id   (fetch-id (:id word) collection-id)
+                                :data (fetch-data word collection-id collection-name)})
+                             requests)))
 
 
-(defmethod tasks/execute-task "example-fetch"
+(defmethod tasks/execute-task fetch-task-type
   [{:keys [data]} {:keys [clock dbs]}]
   (let [{:keys [collection-id collection-name translations word word-id]} data]
     ((fn ^:async f

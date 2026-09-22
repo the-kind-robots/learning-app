@@ -8,7 +8,8 @@
    [client.support.schemas :as schemas]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
-   [db.pouch :as sut]))
+   [db.pouch :as sut]
+   [userdb :as userdb]))
 
 
 (def local-name (db-fixtures/db-name "client.db.pouch-test.local"))
@@ -17,7 +18,17 @@
 (def remote-name (db-fixtures/db-name "client.db.pouch-test.remote"))
 
 
-(use-fixtures :each (db-fixtures/db-fixture-multi [local-name remote-name]))
+(def account-id 7)
+
+
+(def account-db-name
+  "Where `sync-once!` looks for the account's copy: the origin, `/db/`, and the
+   name db-per-user gives the account's database. Pointing the origin at the
+   test directory makes that a local database this test can seed."
+  (str "target/pouch/db/" (userdb/db-name account-id)))
+
+
+(use-fixtures :each (db-fixtures/db-fixture-multi [local-name remote-name account-db-name]))
 
 
 (defn- ^:async sync-pass!
@@ -107,3 +118,34 @@
                   (set (by-word "vocab:a"))))
            (is (= [{:id "vocab:a" :kind nil :translation nil :value "a"}] previews))
            (is (= [] (await (words/previews dbs ["vocab:none"]))))))))))
+
+
+(deftest a-pass-reports-the-ids-the-pull-wrote-under-their-types
+  (async-testing "what the pull brought home, grouped by type, and not what the push sent"
+    (db-fixtures/with-test-db
+      local-name
+      (^:async fn
+       [local]
+       (.mkdirSync (js/require "fs") "target/pouch/db" #js {:recursive true})
+       (let [account-db (db/use account-db-name)]
+         (await (db/insert local {:_id "vocab:hund" :type "vocab" :value "Hund"}))
+         (await (db/insert account-db {:_id "vocab:katze" :type "vocab" :value "Katze"}))
+         (await (db/insert account-db {:_id "vocab:maus" :type "vocab" :value "Maus"}))
+         (await (db/insert account-db {:_id "coll-tiere" :type "collection" :name "Tiere"}))
+         (await (db/insert account-db {:_id "review-1" :type "review" :word-id "vocab:katze"}))
+         ;; The origin is read off `location`, which a node test has not.
+         (set! (.-location js/globalThis) #js {:origin "target/pouch"})
+         (try
+           (let [{:keys [pulled pulled-ids pushed]}
+                 (await (sut/sync-once! {:user/db local} :user/db account-id))]
+             (is (= 4 pulled))
+             (is (= 1 pushed))
+             (is (= {"vocab"      #{"vocab:katze" "vocab:maus"}
+                     "collection" #{"coll-tiere"}
+                     "review"     #{"review-1"}}
+                    pulled-ids)
+                 "every type the pass wrote, so a reader takes the ones it owns")
+             (is (not (contains? (get pulled-ids "vocab") "vocab:hund"))
+                 "the document this device pushed is not one it has to fetch an example for"))
+           (finally
+            (js/Reflect.deleteProperty js/globalThis "location"))))))))

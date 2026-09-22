@@ -43,14 +43,14 @@
      :reviews     (reviews/start! {:db dbs :clock clock})
      :words       (words/start! {:db dbs :clock clock})
      ;; Vocabulary use-case calls into collections (active-id) and examples
-     ;; (request!/find) to scope per-collection examples. Stub these as
+     ;; (request!/list) to scope per-collection examples. Stub these as
      ;; main-card-active no-ops so tests stay isolated.
      :collections {:collections/active-id     (fn [] nil)
                    :collections/get           (fn [_] nil)
                    :collections/add-word!     (fn [_ _] (js/Promise.resolve nil))
                    :collections/docs-without-word (fn [_] (js/Promise.resolve []))
                    :collections/exclude-word! (fn [_ _] (js/Promise.resolve nil))}
-     :examples    {:examples/find     (fn [_ _] (js/Promise.resolve nil))
+     :examples    {:examples/of-word  (fn [_] (js/Promise.resolve []))
                    :examples/purge-by-word! (fn [word-id] (examples/purge-by-word! dbs word-id))
                    :examples/request! (fn [_ _ _] nil)}}))
 

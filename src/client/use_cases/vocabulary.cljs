@@ -6,6 +6,7 @@
    [domain.retention :as retention]
    [domain.vocabulary :as domain]
    [use-cases.collections :as collections]
+   [use-cases.examples :as examples]
    [utils :as utils]))
 
 
@@ -68,9 +69,12 @@
             (await ((:words/save! words) updated))
             (when collection-id
               (await ((:collections/add-word! collections) (:id existing) collection-id))
-              (when-not (await ((:examples/find examples) (:id existing) collection-id))
+              (when (await (examples/needs-example? capabilities (:id existing) collection-id))
                 (let [collection-name (:name (await ((:collections/get collections) collection-id)))]
-                  ((:examples/request! examples) updated collection-id collection-name))))
+                  ((:examples/request! examples)
+                   [{:collection-id collection-id
+                     :collection-name collection-name
+                     :word updated}]))))
             {:word-id (:id existing) :created? false})
           (let [entry        (new-entry kind value translation entries)
                 {:keys [id]} (await ((:words/save! words) entry))
@@ -79,7 +83,10 @@
             (await ((:reviews/save! reviews) id true translation))
             (when collection-id
               (await ((:collections/add-word! collections) id collection-id)))
-            ((:examples/request! examples) entry collection-id collection-name)
+            ((:examples/request! examples)
+             [{:collection-id collection-id
+               :collection-name collection-name
+               :word entry}])
             {:word-id id :created? true}))))))
 
 

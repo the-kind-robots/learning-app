@@ -58,22 +58,52 @@
   (or (some-> direction .-docs_written) 0))
 
 
+(defn- written-ids-by-type
+  "The ids one batch wrote, grouped by the `type` their documents carry. The
+   type is read and not interpreted: which of them is worth anything is known
+   by whoever declared the schema, and this namespace declares none."
+  [^js change]
+  (reduce (fn [by-type ^js doc]
+            (update by-type (.-type doc) (fnil conj #{}) (.-_id doc)))
+          {}
+          (some-> change .-docs)))
+
+
 (defn sync-once!
   "Runs one bidirectional replication pass of db-key against the account's copy
-   on the server. Resolves with what the pass did — `{:pulled n :pushed n}`,
-   documents written on each side — and never rejects: a failed pass resolves
-   nil, so a caller can fire it on a trigger without guarding every one."
+   on the server. Resolves with what the pass did — `{:pulled n :pushed n
+   :pulled-ids {type #{id}}}`, documents written on each side and the ids the
+   pull wrote here, grouped by the type their documents carry — and never
+   rejects: a failed pass resolves nil, so a caller can fire it on a trigger
+   without guarding every one.
+
+   Grouped rather than listed, so a reader takes the types it owns and nothing
+   is read for the rest: a keyed read over ids that name nothing it knows costs
+   a lookup per id and answers none of them.
+
+   The ids come from the pass's own `change` events, where PouchDB hands over
+   the batch it has just written; the `complete` result carries the counters
+   alone. Reading them back off the changes feed afterwards would mean keeping
+   a sequence number across passes and would answer with this device's own
+   writes as well."
   [dbs db-key account-id]
-  (let [remote (str (.. js/globalThis -location -origin)
-                    "/db/"
-                    ((db->remote-name db-key) account-id))]
+  (let [pulled-ids (atom {})
+        remote     (str (.. js/globalThis -location -origin)
+                        "/db/"
+                        ((db->remote-name db-key) account-id))]
     (js/Promise.
      (fn [resolve _reject]
        (doto (db/sync (db-key dbs) {:filter user-doc? :live false :remote-url remote})
+         (.on "change"
+              (fn [^js info]
+                (when (= "pull" (.-direction info))
+                  (swap! pulled-ids
+                         #(merge-with into % (written-ids-by-type (.-change info)))))))
          (.on "complete"
               (fn [^js info]
-                (resolve {:pulled (docs-written (some-> info .-pull))
-                          :pushed (docs-written (some-> info .-push))})))
+                (resolve {:pulled     (docs-written (some-> info .-pull))
+                          :pulled-ids @pulled-ids
+                          :pushed     (docs-written (some-> info .-push))})))
          (.on "error"
               (fn [err]
                 (log/warn :db/sync-failed {:db db-key :error (str err)})

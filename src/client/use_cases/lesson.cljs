@@ -2,6 +2,7 @@
   (:require
    [domain.lesson :as domain]
    [lambdaisland.glogi :as log]
+   [use-cases.examples :as examples]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -53,7 +54,11 @@
         (let [collection-id   ((:collections/active-id collections))
               vocab           (mapv lesson-vocab selected)
               word-ids        (mapv :id vocab)
-              lesson-examples (await ((:examples/list examples) word-ids collection-id))
+              ;; Which examples a read in this collection sees is one rule, and
+              ;; it lives in `use-cases.examples`; the repository hands over
+              ;; what it holds for these entries and this reads by that rule.
+              lesson-examples (-> (await ((:examples/list examples) word-ids))
+                                  (examples/visible-in collection-id))
               lesson-state    (domain/initial-state vocab lesson-examples trial-selector)]
           (await ((:lessons/save! lessons) lesson-state))
           {:lesson-state lesson-state})))

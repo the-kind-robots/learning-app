@@ -17,6 +17,13 @@
    :indexes [{:name "by-type-run-at-created-at" :fields [:type :run-at :created-at]}]})
 
 
+(def ^:private alive
+  "Selector clause for a task the queue will still run: one that was never
+   dead-lettered."
+  {:$or [{:status {:$exists false}}
+         {:status {:$ne "failed"}}]})
+
+
 (defn- now-iso
   [clock]
   ((:clock/now-iso clock)))
@@ -28,9 +35,12 @@
 
 
 (defn create-task
-  "Create a task document."
-  [task-type data now-iso]
-  {:task-type  task-type
+  "A task document under `id`, which the caller composes from the work itself.
+   Two requests that mean the same work carry the same id, so the second is a
+   write conflict the database refuses rather than a duplicate nobody notices."
+  [id task-type data now-iso]
+  {:_id        id
+   :task-type  task-type
    :data       data
    :attempts   0
    :run-at     now-iso
@@ -68,10 +78,9 @@
   (let [{:keys [docs]}
         (await (dbs/find dbs
                          schema
-                         {:selector  {:run-at     {:$lte now-iso}
-                                      :created-at {:$exists true}
-                                      :$or        [{:status {:$exists false}}
-                                                   {:status {:$ne "failed"}}]}
+                         {:selector  (merge {:run-at     {:$lte now-iso}
+                                             :created-at {:$exists true}}
+                                            alive)
                           :sort      [{:type :asc}
                                       {:run-at :asc}
                                       {:created-at :asc}]
@@ -91,16 +100,27 @@
      (dbs/insert dbs schema (assoc task :attempts attempts :run-at next-run)))))
 
 
-(defn- dead-letter!
+(def ^:private failed-suffix
+  "What a dead letter's id ends with. The failure is kept for reading, under a
+   key of its own: the live id belongs to work that may be asked for again,
+   and a failure holding it would refuse that request for the life of the
+   device."
+  ":failed")
+
+
+(defn- ^:async dead-letter!
   [dbs clock task reason]
   (let [now-iso (now-iso clock)]
-    (dbs/insert dbs
-                schema
-                (assoc task
-                       :status         "failed"
-                       :failure-reason reason
-                       :failed-at      now-iso
-                       :run-at         nil))))
+    (await (dbs/insert dbs
+                       schema
+                       (-> task
+                           (assoc :_id            (str (:_id task) failed-suffix)
+                                  :status         "failed"
+                                  :failure-reason reason
+                                  :failed-at      now-iso
+                                  :run-at         nil)
+                           (dissoc :_rev))))
+    (await (dbs/remove dbs schema task))))
 
 
 (defn- remove-with-latest-rev!
@@ -187,10 +207,9 @@
   (let [{:keys [docs]}
         (await (dbs/find dbs
                          schema
-                         {:selector  {:run-at     {:$exists true}
-                                      :created-at {:$exists true}
-                                      :$or        [{:status {:$exists false}}
-                                                   {:status {:$ne "failed"}}]}
+                         {:selector  (merge {:run-at     {:$exists true}
+                                             :created-at {:$exists true}}
+                                            alive)
                           :sort      [{:type :asc}
                                       {:run-at :asc}
                                       {:created-at :asc}]
@@ -253,8 +272,23 @@
   (flush!))
 
 
-(defn ^:async create-task!
-  [dbs clock task-type data]
-  (let [now-iso (now-iso clock)]
-    (await (dbs/insert dbs schema (create-task task-type data now-iso)))
-    (flush!)))
+(defn ^:async create-tasks!
+  "Writes one task per entry of `tasks` — `{:id :data}` — in a single bulk
+   write, then runs the queue. A device catching up on a whole vocabulary
+   queues that many at once, and they have no reason to be that many inserts;
+   one that queues a single task takes the same road.
+
+   A task whose id is already there is left as it is. That is what makes
+   asking twice free: the queue holds the work once, and neither caller has to
+   read the queue first to find out."
+  [dbs clock task-type tasks]
+  (when (seq tasks)
+    (let [now-iso (now-iso clock)]
+      (await (dbs/bulk-docs dbs
+                            schema
+                            (mapv (fn [{:keys [data id]}]
+                                    (assoc (create-task id task-type data now-iso)
+                                           :type
+                                           (:type schema)))
+                                  tasks)))
+      (flush!))))
