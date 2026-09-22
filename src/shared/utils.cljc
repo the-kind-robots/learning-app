@@ -180,3 +180,14 @@
   [date]
   #?(:clj (.getTime ^java.util.Date date)
      :cljs (.getTime date)))
+
+
+#?(:clj
+   (defn sha256-hex
+     "The SHA-256 of `text`, hex. Server-side only: the client has no use for a
+      digest and no `MessageDigest` to build one with."
+     [^String text]
+     (.formatHex
+      (java.util.HexFormat/of)
+      (.digest (doto (java.security.MessageDigest/getInstance "SHA-256")
+                 (.update (.getBytes text "UTF-8")))))))
