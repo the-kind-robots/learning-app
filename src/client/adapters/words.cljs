@@ -9,16 +9,24 @@
 
 
 (def schema
-  {:type  "vocab"
-   :db    :user/db
-   :views {"vocab-preview"
-           {:map
-            "function (doc) { if (doc.type === 'vocab') emit(doc._id, [doc.kind, doc.value, doc.translation]); }"}}})
+  {:type "vocab"
+   :db :user/db
+   :views
+   {"vocab-preview"
+    {:map
+     "function (doc) { if (doc.type === 'vocab') emit([doc._id.replace(/^vocab:/, '').replace(/^(?:der|die|das) /, ''), doc._id], [doc.kind, doc.value, doc.translation]); }"}}})
 
 
 (def ^:private preview-view
-  "One row per word, keyed by id, valued `[kind value translation]` — what a
-   list of words shows, without fetching the documents."
+  "One row per word, keyed by what the word is filed under —
+   `domain.vocabulary/filed-under`, said again in JavaScript because the map
+   function runs inside the design document — and valued
+   `[kind value translation]`: what a list of words shows, without fetching
+   the documents.
+
+   The key is not the document id. The id keeps the German article
+   (`vocab:der zug`) and is frozen (ADR-0008), so ordering on it files every
+   noun under its article (#438)."
   (dbs/view schema "vocab-preview"))
 
 
@@ -40,19 +48,20 @@
 (defn ^:async previews
   "Every word and phrase as `{:id :kind :value :translation}` — what a list
    shows — or only `word-ids` when given. Read from the vocab view, so no
-   document is fetched."
+   document is fetched. An id is turned into the key it was emitted under,
+   which is derived from it, so the lookup stays one keyed read."
   [dbs word-ids]
   (let [{rows :rows} (await (dbs/query dbs
                                        preview-view
-                                       (cond-> {} word-ids (assoc :keys (vec word-ids)))))]
+                                       (cond-> {}
+                                         word-ids (assoc :keys (mapv vocabulary/filed-under word-ids)))))]
     (mapv preview rows)))
 
 
 (defn ^:async previews-page
   "One page of words in alphabetical order, `limit` rows from `skip`. The view
-   is keyed by the document id and the id is the normalised value (ADR-0008),
-   so the view is already in that order and a page costs its own rows — not
-   the vocabulary's."
+   is keyed by what the word is filed under, so the view is already in that
+   order and a page costs its own rows — not the vocabulary's."
   [dbs {:keys [limit skip]}]
   (let [{rows :rows} (await (dbs/query dbs
                                        preview-view

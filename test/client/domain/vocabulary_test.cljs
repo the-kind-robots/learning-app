@@ -96,3 +96,30 @@
            (sut/merge-translations [{:lang "ru" :value "пёс"}]
                                    [{:lang "ru" :value "пёс"}
                                     {:lang "ru" :value "собака"}])))))
+
+
+(def ^:private issue-438-words
+  ["der Hund" "die Katze" "das Auto" "der Zug" "die Bank" "aufstehen"])
+
+
+(deftest a-word-is-filed-without-its-article
+  ;; The issue's own illustration lists `das Auto` before `aufstehen`; `auf`
+  ;; sorts before `aut`, so the alphabet puts the verb first. The article is
+  ;; what this proves — Auto under A, Bank under B, Zug under Z.
+  (testing "the reader looks for der Zug under Z, not under D (#438)"
+    (is (= ["aufstehen" "das Auto" "die Bank" "der Hund" "die Katze" "der Zug"]
+           (->> issue-438-words
+                (sort-by (comp sut/filed-under sut/vocab-id))
+                vec))))
+  (testing "only a whole article is dropped, so a word that merely starts like one keeps its letter"
+    (is (= ["dasselbe" "der Dieb" "diebisch"]
+           (->> ["diebisch" "der Dieb" "dasselbe"]
+                (sort-by (comp sut/filed-under sut/vocab-id))
+                vec))))
+  (testing "the article is only ignored, never removed from what is stored"
+    (is (= "vocab:der zug" (sut/vocab-id "der Zug"))))
+  (testing "an article-less word and the same noun with one tie on the first element"
+    (is (= [["zug" "vocab:der zug"] ["zug" "vocab:zug"]]
+           (->> ["Zug" "der Zug"]
+                (sort-by (comp sut/filed-under sut/vocab-id))
+                (mapv (comp sut/filed-under sut/vocab-id)))))))

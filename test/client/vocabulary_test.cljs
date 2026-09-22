@@ -367,3 +367,44 @@
       (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:limit 2}))]
         (is (= ["vocab:a-wort" "vocab:m-wort"] (mapv :id words))
             "the page is the head of the alphabet, not of the due list"))))))
+(def ^:private nouns-and-a-verb
+  "The issue's own six words. `aufstehen` before `das Auto`: `auf` sorts
+   before `aut`, whatever the issue's illustration says."
+  [["der Hund" "пёс"]
+   ["die Katze" "кот"]
+   ["das Auto" "машина"]
+   ["der Zug" "поезд"]
+   ["die Bank" "скамейка"]
+   ["aufstehen" "вставать"]])
+
+
+(def ^:private filed-order
+  ["aufstehen" "das Auto" "die Bank" "der Hund" "die Katze" "der Zug"])
+
+
+(defn- ^:async seed-nouns!
+  [dbs]
+  (doseq [[value translation] nouns-and-a-verb]
+    (await (sut/add! (test-capabilities dbs) value translation :word))))
+
+
+(deftest the-list-files-a-noun-under-its-word-not-its-article
+  (async-testing "the article is ignored while ordering, on every alphabetical path (#438)"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (await (seed-nouns! dbs))
+      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:limit 50}))]
+        (is (= filed-order (mapv :value words)) "the whole vocabulary, paged off the view"))
+      (let [page-1 (await (sut/list (test-capabilities dbs) {:limit 3 :offset 0}))
+            page-2 (await (sut/list (test-capabilities dbs) {:limit 3 :offset 3}))]
+        (is (= filed-order (into (mapv :value (:words page-1)) (mapv :value (:words page-2))))
+            "a page past the first continues the order, none repeated and none skipped"))
+      (let [ids (mapv :id (:words (await (sut/list (test-capabilities dbs) {:limit 50}))))
+            {:keys [words]} (await (sut/list (test-capabilities dbs)
+                                             {:limit 50 :word-ids (shuffle ids)}))]
+        (is (= filed-order (mapv :value words)) "a collection-scoped page sorts on the same key"))
+      ;; `z` matches Katze and Zug and nothing else here. Ordered by id they
+      ;; would come back `der Zug`, `die Katze`.
+      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:limit 50 :search "z"}))]
+        (is (= ["die Katze" "der Zug"] (mapv :value words)) "so does a searched page"))))))

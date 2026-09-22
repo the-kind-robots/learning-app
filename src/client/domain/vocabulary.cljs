@@ -42,6 +42,28 @@
   (str id-prefix (normalize-value value)))
 
 
+(def ^:private article
+  "A German definite article at the head of a normalised value. Only these
+   three and only followed by a space, so `dasselbe` and `Diebstahl` keep
+   their first letter."
+  #"^(?:der|die|das) ")
+
+
+(defn filed-under
+  "Where a word sits in the alphabetical list, read off its id: the normalised
+   value without its article, then the id itself to break the tie between
+   `der Zug` and a bare `Zug`.
+
+   The id keeps the article — it is `vocab:der zug` — because it is the
+   identity two devices converge on and is frozen (ADR-0008). Ordering on it
+   files every noun under its article, so the reader finds no Z for `der Zug`
+   (#438). `adapters.words` emits this key from the view's map function; the
+   JavaScript there is the same rule said again, and a test holds the two
+   together."
+  [id]
+  [(str/replace (str/replace id #"^vocab:" "") article "") id])
+
+
 (defn new-word
   [value translations]
   {:id          (vocab-id value)
