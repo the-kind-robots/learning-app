@@ -65,7 +65,7 @@ In those cases, use the narrower workflow skill directly.
    - When the work does need a change: use `openspec-propose-change` to create it and the first artifact.
    - The change should describe the user-visible bug or feature outcome, not just an implementation detail.
    - Prefer proper OpenSpec delta specs under `openspec/changes/<name>/specs/**/spec.md`.
-   - If this repo intentionally updates `openspec/specs/**` directly for a small change, record that as a deliberate direct-spec mode in the task notes so archive warnings about missing deltas are expected.
+   - A change that genuinely alters no specs declares `skip_specs: true` in its own `openspec/changes/<name>/.openspec.yaml` (CLI 1.7.0+). That is the supported way to say "no deltas here": `openspec instructions apply` then skips the spec artifact instead of warning, and `archive` stops asking for deltas. The marker is only honoured when that `.openspec.yaml` is valid change metadata — `schema: <name>` naming a known schema — and a change declaring it must carry no files under `specs/`. Use the flag; do not invent a "direct-spec mode" in the task notes.
 
 4. Implement.
    - With an OpenSpec change, use `openspec-apply-change` and read the change context first, then implement the scoped fix.
@@ -83,11 +83,7 @@ In those cases, use the narrower workflow skill directly.
    - When the question is whether UI is visually stable, anchored, centered correctly, or free of jumps, verify the actual rendered layout with precise visual instrumentation: frame-by-frame geometry, performance/layout traces, animation tooling, or an equivalent browser-level measurement.
    - Be explicit about what was and was not proven. If you only proved the DOM state or swap path, say that you did not yet prove visual stability.
    - Use `openspec-verify-change` when there is an OpenSpec change and it is implementation-complete.
-   - Run OpenSpec CLI commands with telemetry disabled unless the user explicitly opts in:
-
-```bash
-OPENSPEC_TELEMETRY=0 openspec ...
-```
+   - Run OpenSpec CLI commands plainly — `openspec ...`. Telemetry is off by configuration, not by a per-command prefix; see **OpenSpec Telemetry** below for the one-time setup and how to check it.
 
 6. Close the OpenSpec loop, when step 3 opened one.
    - Work that carries no OpenSpec change has nothing to close here; go to step 7.
@@ -153,14 +149,27 @@ When finishing a task:
 - Do not silently switch to another browser tool just because the preferred repo-owned CDP workflow failed once; repair the preferred tooling first unless the user explicitly approves a fallback.
 - Do not archive OpenSpec after the feature PR is merged. Archive before PR merge so one PR contains implementation, spec updates, and archive.
 - Do not push archive commits directly to protected `master`; if late archive is unavoidable, create a separate PR and note the workflow miss.
-- Do not manufacture a requirement to satisfy `openspec validate`. "No deltas found" on work that changes product behaviour means the delta is missing; on repository process it means step 3 should not have created a change at all.
+- Do not manufacture a requirement to satisfy `openspec validate`. "No deltas found" on work that changes product behaviour means the delta is missing; on repository process it means step 3 should not have created a change at all. When a change exists and genuinely alters no specs, `skip_specs: true` in its `.openspec.yaml` is the supported answer — never an invented requirement. That flag does not license opening a change for repository process work: such work still opens none.
 - Do not open an OpenSpec change for a hook, skill, script, rules file or CI edit. That is the ceremony #400 removed.
 
 ## OpenSpec Telemetry
 
 OpenSpec CLI currently includes PostHog telemetry. Local inspection of the installed CLI shows it sends an anonymous `command_executed` event with command name, OpenSpec version, `surface=cli`, and `$ip=null`; it stores a random anonymous ID in `~/.config/openspec/config.json`. It does not send arguments, paths, or file content by design, but this repo should still avoid unsolicited telemetry.
 
-Run OpenSpec commands with `OPENSPEC_TELEMETRY=0` by default. Treat PostHog flush/network errors as telemetry noise only when the OpenSpec command itself already succeeded.
+The mechanism is configuration, not a prefix on every command:
+
+```bash
+openspec config set telemetry.enabled false
+openspec config get telemetry.enabled   # must print: false
+```
+
+Since CLI 1.8.0 that one setting disables both the telemetry event and the outbound update check. Run OpenSpec commands plainly afterwards.
+
+Two things to know about where it lands. `openspec config` is global-scope only (`--scope` accepts nothing else), so the setting is written to `~/.config/openspec/config.json` — **per machine, not per repo**. The project's `openspec/config.yaml` cannot carry it: its schema accepts only `schema`, `context`, `rules`, `operations`, `store` and `githubCopilot`, and strips anything else silently, so a `telemetry:` key added there would look set and do nothing. Treat the command above as one-time setup on each machine and verify it with `config get` rather than assuming a fresh checkout inherited it.
+
+Where a machine cannot be configured, `DO_NOT_TRACK=true` (honoured since 1.13.1) or `OPENSPEC_TELEMETRY=0` still suppress both requests for a single invocation. They are the fallback, not the default.
+
+Treat PostHog flush/network errors as telemetry noise only when the OpenSpec command itself already succeeded.
 
 ## Output Expectations
 
