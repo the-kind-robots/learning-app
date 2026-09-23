@@ -1,12 +1,15 @@
 (ns sync
   (:require
+   [adapters.examples :as examples]
    [adapters.identity :as identity]
+   [adapters.repository :as repository]
    [db :as db]
    [db.pouch :as pouch]
    [domain.vocabulary :as domain]
    [goog.functions :as gfn]
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
+   [tasks :as tasks]
    [utils :as utils]))
 
 
@@ -48,19 +51,20 @@
 
 
 (def ^:private vocabulary-with-conflicts
-  "Vocabulary ids are content-addressed under a `vocab:` prefix (ADR-0008), so
-   the entries can be read as a key range rather than by scanning every review,
-   collection and example in the database. `￰` sorts past anything an id
-   can carry, which makes the range the whole prefix. Phrases live in this
-   range too — they are vocabulary documents with a `:kind`.
+  "Vocabulary ids are content-addressed under one prefix (ADR-0008), which the
+   domain owns and this asks for, so the entries can be read as a key range
+   rather than by scanning every review, collection and example in the
+   database. `￰` sorts past anything an id can carry, which makes the range
+   the whole prefix. Phrases live in this range too — they are vocabulary
+   documents with a `:kind`.
 
    `:conflicts` is what this whole query is for, and only `all-docs`, `get` and
    `changes` honour it — `find` accepts the option and silently answers without
    the conflicts, which would look like a database that never conflicts."
   {:conflicts    true
-   :endkey       "vocab:￰"
+   :endkey       (str domain/id-prefix "￰")
    :include-docs true
-   :startkey     "vocab:"})
+   :startkey     domain/id-prefix})
 
 
 (defn ^:async resolve-vocab-conflicts!
@@ -78,16 +82,47 @@
       (log/warn :sync/conflict-resolution-failed {:error (ex-message err)}))))
 
 
+;; Who is told when a pass comes home. The engine publishes; what listens, and
+;; what it does with the news, is none of its business (#432).
+(defonce ^:private pass-listeners (atom #{}))
+
+
+(defn on-pass!
+  "Registers `listener`, called with each completed pass's own result. Returns
+   a function that unregisters it."
+  [listener]
+  (swap! pass-listeners conj listener)
+  #(swap! pass-listeners disj listener))
+
+
+(defn- announce-pass!
+  [result]
+  (doseq [listener @pass-listeners]
+    (try
+      (listener result)
+      (catch :default err
+        (log/warn :sync/pass-listener-failed {:error (ex-message err)})))))
+
+
 (defn ^:async sync-once!
   "Runs one replication pass and resolves the conflicts it may have brought
-   home. Resolves with what the pass did, `{:pulled n :pushed n}`, or nil
-   when it failed; never rejects, so callers can fire it freely on triggers.
+   home. Resolves with what the pass did, `{:pulled n :pushed n :pulled-ids
+   [...]}`, or nil when it failed; never rejects, so callers can fire it freely
+   on triggers.
    A pass that pulled nothing brought no conflict home, so nothing is
-   resolved and — for the caller — nothing has changed."
+   resolved and — for the caller — nothing has changed.
+
+   Listeners registered through `on-pass!` are told what the pass brought, ids
+   included, so what they do is bounded by this pass rather than by everything
+   the device holds. They answer nothing and are not awaited — the pass is what
+   the screen redraws after and what the throttle measures from, so it ends
+   when the replication does — and each is called inside a guard, so one that
+   throws still leaves a completed pass reporting what it replicated."
   [dbs account-id]
   (when-let [{:keys [pulled] :as result} (await (pouch/sync-once! dbs :user/db account-id))]
     (when (pos? pulled)
       (await (resolve-vocab-conflicts! (:user/db dbs))))
+    (announce-pass! result)
     result))
 
 
@@ -149,7 +184,10 @@
   "Drives replication by triggers when the device has an account: a throttled
    push on every local user-db change, plus a pull returned as :sync/pull!
    for the UI to call on data-page entry. Without a stored identity the device
-   is local-only — no network call, inert pull (ADR-0006)."
+   is local-only — no network call, inert pull (ADR-0006).
+
+   `:sync/on-pass` is where a listener registers to hear what each completed
+   pass brought; see `sync-once!`."
   [{dbs :db}]
   (try
     (if-let [{:keys [id] :as identity} (await (identity/load-identity!))]
@@ -185,16 +223,21 @@
                                            (push!)))]
           (log/info :sync/ready {:user-id id})
           {:sync/account-id id
+           :sync/on-pass    on-pass!
            :sync/pairing-confirmed! #(pairing-confirmed! dbs %)
            :sync/pull!      pull!
            :sync/unwatch    unwatch}))
       (do
         (log/info :sync/local-only {})
+        ;; A device with no account runs no pass, so there is nothing to hear:
+        ;; the subscription is inert, like the pull beside it.
         {:sync/account-id nil
+         :sync/on-pass    (constantly nil)
          :sync/pull!      (constantly nil)}))
     (catch js/Error err
       (log/warn :sync/start-failed {:error (ex-message err)})
       {:sync/account-id nil
+       :sync/on-pass    (constantly nil)
        :sync/pull!      (constantly nil)})))
 
 
@@ -260,15 +303,51 @@
   (js/URLSearchParams. (.. js/window -location -hash (slice 1))))
 
 
+(defn- of-the-account?
+  "Whether a device-db document was held on behalf of the account, rather than
+   on behalf of this device. The examples the device fetched and the fetches
+   still queued belong to the account; the stored identity and the migration
+   records belong to the device and outlive any account it carries.
+
+   Asked of the schemas that own those documents, so a type renamed there is
+   renamed here."
+  [{:keys [task-type type]}]
+  (or (= (:type examples/schema) type)
+      (and (= (:type tasks/schema) type)
+           (= examples/fetch-task-type task-type))))
+
+
+(defn ^:async forget-account-data!
+  "Deletes what device-db held for the account that was here.
+
+   Vocabulary ids are content-addressed (ADR-0008), so without this the next
+   account is shown the previous one's sentences — generated under its theme
+   names — and the backfill, finding those pairs answered, never asks for any
+   of its own. Queued fetches would go out under the new session too.
+
+   Addressed rather than destroyed: device-db is also where the identity this
+   device is about to store lives."
+  [device-db]
+  (try
+    (let [{rows :rows} (await (db/all-docs device-db {:include-docs true}))
+          theirs       (filter #(of-the-account? (:doc %)) rows)]
+      (when (seq theirs)
+        (log/info :sync/forgetting-account-data {:count (count theirs)})
+        (await (db/bulk-docs device-db (mapv #(repository/tombstone (:doc %)) theirs)))))
+    (catch :default err
+      (log/warn :sync/forget-account-data-failed {:error (ex-message err)}))))
+
+
 (defn ^:async check-incoming-auth!
   "Handles an incoming credential: #key=TOKEN (QR pair, recovery, share) or
    #invite=TOKEN (provision a new account, ADR-0006).
 
    A key is validated against the server before this device adopts it, and the
-   local user-db is destroyed only when the key turns out to belong to a
-   different account than the one stored — otherwise the local data stays and
-   merges. Must run before :db/pouch starts, so that a wipe leaves the fresh
-   PouchDB instance empty. The cookie is not written here: `start!` derives it
+   local data is cleared only when the key turns out to belong to a different
+   account than the one stored — otherwise the local data stays and merges.
+   Clearing is user-db destroyed and, in device-db, what belonged to that
+   account (`forget-account-data!`). Must run before :db/pouch starts, so that
+   a wipe leaves the fresh PouchDB instance empty. The cookie is not written here: `start!` derives it
    from the stored identity later in the same boot.
 
    Returns nil — side effects only. The router drops the fragment when it
@@ -287,7 +366,8 @@
               ;; own: a handle that existed at destroy time never errors, it
               ;; hangs on every later call.
               (when (not= (:id stored) account-id)
-                (await (db/destroy (db/use "user-db")))))
+                (await (db/destroy (db/use "user-db")))
+                (await (forget-account-data! (db/use "device-db")))))
             (await (identity/save-identity! {:id account-id :token token}))
             ;; The echo that ends pairing (ADR-0009): the QR carried a nonce,
             ;; the receipt carries it back through ordinary replication, and

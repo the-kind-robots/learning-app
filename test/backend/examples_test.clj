@@ -6,6 +6,7 @@
    [examples :as sut]
    [examples.dictionary :as dictionary]
    [examples.provider :as provider]
+   [malli.core :as m]
    [org.httpkit.client :as client]))
 
 
@@ -121,6 +122,13 @@
             (is (= 180 (:max_tokens payload)))))))))
 
 
+(defn- user-payload
+  "The JSON object the user message of a captured request carries."
+  [request]
+  (let [content (get-in (cheshire/parse-string (:body request) true) [:messages 1 :content])]
+    (cheshire/parse-string (re-find #"(?m)^\{.*\}$" content) true)))
+
+
 (deftest example-api-request-serializes-translations-as-array
   (testing "user prompt sends every confirmed translation so the model can pick the fitting sense"
     (let [captured (atom nil)]
@@ -131,12 +139,26 @@
                                                  :api-key "groq-test-key"
                                                  :model   "openai/gpt-oss-20b"})]
         (is (= ::request (sut/example-api-request "Bank" ["банк" "скамейка"] nil nil nil)))
-        (let [payload      (cheshire/parse-string (:body @captured) true)
-              user-message (get-in payload [:messages 1 :content])
-              payload-line (re-find #"(?m)^\{.*\}$" user-message)
-              user-payload (cheshire/parse-string payload-line true)]
-          (is (= ["банк" "скамейка"] (:translation user-payload)))
-          (is (= "Bank" (:word user-payload))))))))
+        (let [asked (user-payload @captured)]
+          (is (= ["банк" "скамейка"] (:translation asked)))
+          (is (= "Bank" (:word asked))))))))
+
+
+(deftest example-api-request-carries-the-collection-context
+  (testing "the collection a word is learned in reaches the prompt; the main card sends none"
+    (let [captured (atom nil)]
+      (with-redefs [client/request  (fn [request]
+                                      (reset! captured request)
+                                      ::request)
+                    provider/config (constantly {:api-url "https://api.groq.com/openai/v1/chat/completions"
+                                                 :api-key "groq-test-key"
+                                                 :model   "openai/gpt-oss-20b"})]
+        (sut/example-api-request "Bank" ["скамейка"] "Park" nil nil)
+        (is (= "Park" (:context (user-payload @captured))))
+        (sut/example-api-request "Bank" ["скамейка"] "   " nil nil)
+        (is (nil? (:context (user-payload @captured))) "a blank context is not a context")
+        (sut/example-api-request "Bank" ["скамейка"] nil nil nil)
+        (is (nil? (:context (user-payload @captured))))))))
 
 
 (deftest example-api-request-includes-retry-feedback
@@ -187,7 +209,7 @@
       (with-redefs [sut/example-api-request (fn [_word _translation _context _word-meta _retry-context]
                                               (delay {:status 200 :body body}))
                     dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (sut/generate-one! {:word "aufstehen" :translation "вставать"})))))))
+        (is (nil? (sut/generate-one! (sut/question {:word "aufstehen" :translation "вставать"}))))))))
 
 
 (deftest deterministic-example-issues-stop-at-structural-invalidity
@@ -638,7 +660,7 @@
                                               next-example))
                     dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= (#'sut/add-word-indexes good-example)
-               (sut/generate-one! {:word "Leiter" :translation "лестница"} 2)))
+               (sut/generate-one! (sut/question {:word "Leiter" :translation "лестница"}) 2)))
         (is (= [nil
                 {:example bad-example
                  :details {:max 12 :min 3}
@@ -658,7 +680,37 @@
                                             example)
                     dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= (#'sut/add-word-indexes example)
-               (sut/generate-one! {:word "Leiter" :translation "лестница"} 1)))))))
+               (sut/generate-one! (sut/question {:word "Leiter" :translation "лестница"}) 1)))))))
+
+
+(deftest every-shape-of-question-is-a-question
+  (testing "each branch of what a caller may send normalizes into one shape"
+    (doseq [asked [{:word "Hund"}
+                   {:word "Hund" :translation "собака"}
+                   {:word "Hund" :translation ["собака" "пёс"]}
+                   {:word "Hund" :translation ["  собака " "   "]}
+                   {:word " Hund " :translation nil :context "   "}
+                   {:word "Hund" :translation [] :context "Tiere"}]]
+      (is (m/validate sut/question-schema (sut/question asked))
+          (str "not a question: " (pr-str asked))))))
+
+
+(deftest a-question-reads-what-the-caller-sent
+  (testing "one gloss as a bare string"
+    (is (= ["собака"] (:translations (sut/question {:word "Hund" :translation "собака"})))))
+  (testing "several as a collection, sorted — their order is this device's, not anyone's"
+    (is (= ["пёс" "собака"]
+           (:translations (sut/question {:word "Hund" :translation ["собака" "пёс"]})))))
+  (testing "none at all"
+    (is (= [] (:translations (sut/question {:word "Hund"})))))
+  (testing "blanks and duplicates are not glosses"
+    (is (= ["собака"]
+           (:translations (sut/question {:word "Hund" :translation [" собака " "   " "собака"]})))))
+  (testing "the word keeps its case and loses its spacing"
+    (is (= "Hund" (:word (sut/question {:word " Hund "})))))
+  (testing "a blank context is no context"
+    (is (nil? (:context (sut/question {:word "Hund" :context "   "}))))
+    (is (= "Tiere" (:context (sut/question {:word "Hund" :context " Tiere "}))))))
 
 
 (deftest lookup-dictionary-entries-uses-live-dictionary-db
@@ -723,7 +775,7 @@
                                                   (delay (throw (ex-info "network down" {:status 0}))))
                     sut/log-generation-failure! (fn [data]
                                                   (swap! logged conj data))]
-        (is (nil? (sut/generate-one! {:word "Hund" :translation "собака"} 1)))
+        (is (nil? (sut/generate-one! (sut/question {:word "Hund" :translation "собака"}) 1)))
         (is (some #(= "Hund" (:word %)) @logged))
         (is (some #(= :transport (:context %)) @logged))
         (is (some #(= "network down" (:error %)) @logged))))))
@@ -743,7 +795,7 @@
              "{\"error\":{\"message\":\"Rate limit exceeded\",\"type\":\"tokens\",\"code\":\"rate_limit_exceeded\"}}"}))
          sut/log-generation-failure! (fn [data]
                                        (swap! logged conj data))]
-        (is (sut/generation-failure? (sut/generate-one! {:word "Leiter" :translation "лестница"} 3)))
+        (is (sut/generation-failure? (sut/generate-one! (sut/question {:word "Leiter" :translation "лестница"}) 3)))
         (is (= 1 @calls))
         (is (= 1 (count @logged)))
         (let [entry (first @logged)]
@@ -752,3 +804,69 @@
           (is (= 429 (:status entry)))
           (is (contains? entry :body))
           (is (string? (:body entry))))))))
+
+
+(deftest ensure-word-lookup-index-creates-the-index-the-lookup-reads-by
+  (testing "boot asks dictionary-db for the index the word lookup selects through"
+    (let [captured (atom nil)]
+      (with-redefs [db/request-sync (fn [request]
+                                      (reset! captured request)
+                                      {:status 200
+                                       :body   {:result "created"}})]
+        (dictionary/ensure-word-lookup-index!)
+        (is (= :post (:method @captured)))
+        (is (= "dictionary-db/_index" (:url @captured)))
+        (is (= ["type" "meta.normalized_value"]
+               (get-in @captured [:body :index :fields])))
+        (is (= "json" (get-in @captured [:body :type])))))))
+
+
+(deftest ensure-word-lookup-index-survives-an-unreachable-dictionary
+  (testing "a dictionary database that does not answer is logged, not thrown"
+    (with-redefs [db/request-sync (fn [_request]
+                                    (throw (ex-info "Connection refused" {})))]
+      (is (nil? (dictionary/ensure-word-lookup-index!))))))
+
+
+(deftest lookup-word-meta-carries-part-of-speech-and-cefr-level
+  (testing "a word the dictionary knows contributes both prompt fields"
+    (with-redefs [dictionary/lookup-dictionary-entries
+                  (constantly [{:_id         "lemma:das haus:noun"
+                                :meta        {:cefr_level "a1"}
+                                :pos         "noun"
+                                :translation [{:lang "ru" :value "дом"}]}])]
+      (is (= {:partOfSpeech "noun" :cefrLevel "a1"}
+             (dictionary/lookup-word-meta "das Haus" ["дом"])))))
+
+  (testing "the gloss decides between entries that share a normalized form"
+    (with-redefs [dictionary/lookup-dictionary-entries
+                  (constantly [{:_id         "lemma:der leiter:noun"
+                                :meta        {:cefr_level "c1"}
+                                :pos         "noun"
+                                :translation [{:lang "ru" :value "руководитель"}]}
+                               {:_id         "lemma:die leiter:noun"
+                                :meta        {:cefr_level "b1"}
+                                :pos         "noun"
+                                :translation [{:lang "ru" :value "лестница"}]}])]
+      (is (= {:partOfSpeech "noun" :cefrLevel "b1"}
+             (dictionary/lookup-word-meta "Leiter" ["лестница"])))))
+
+  (testing "a word the dictionary does not know leaves both fields unset"
+    (with-redefs [dictionary/lookup-dictionary-entries (constantly [])]
+      (is (nil? (dictionary/lookup-word-meta "Quasselstrippe" ["болтун"]))))))
+
+
+(deftest generation-request-carries-the-word-meta-the-dictionary-returned
+  (testing "part of speech and CEFR level reach the generation attempt"
+    (let [captured (atom nil)]
+      (with-redefs [dictionary/lookup-dictionary-entries
+                    (constantly [{:_id         "lemma:das haus:noun"
+                                  :meta        {:cefr_level "a1"}
+                                  :pos         "noun"
+                                  :translation [{:lang "ru" :value "дом"}]}])
+                    sut/example-api-request
+                    (fn [_word _translation _context word-meta _retry-context]
+                      (reset! captured word-meta)
+                      (delay {:status 500 :body "{}"}))]
+        (sut/generate-one! (sut/question {:word "das Haus" :translation "дом"}) 1)
+        (is (= {:partOfSpeech "noun" :cefrLevel "a1"} @captured))))))

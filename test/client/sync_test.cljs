@@ -2,16 +2,21 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [adapters.identity :as identity]
    [client.support.db-fixtures :as db-fixtures]
-   [cljs.test :refer-macros [deftest is use-fixtures]]
+   [cljs.test :refer-macros [deftest is testing use-fixtures]]
    [db :as db]
+   [db.pouch :as pouch]
    [sync :as sut]))
 
 
 (def user-db-name (db-fixtures/db-name "client.sync-test.user"))
 
 
-(use-fixtures :each (db-fixtures/db-fixture user-db-name))
+(def device-db-name (db-fixtures/db-name "client.sync-test.device"))
+
+
+(use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name device-db-name]))
 
 
 ;; Revisions of one document in the same generation and without a shared parent
@@ -222,3 +227,141 @@
        (is (empty? (await (conflicts-of user-db "vocab:hase"))))
        (is (= #{"заяц" "кролик"}
               (into #{} (map :value) (:translation (await (db/get user-db "vocab:hase")))))))))))
+
+
+(defn- ^:async pass-heard-by
+  "Runs one pass with `listener` subscribed, and unsubscribes afterwards."
+  [listener pass]
+  (let [unsubscribe (sut/on-pass! listener)]
+    (try
+      (await
+       (db-fixtures/with-test-db
+         user-db-name
+         (^:async fn
+          [user-db]
+          (with-redefs [pouch/sync-once! (fn [_ _] (js/Promise.resolve pass))]
+            (await (sut/sync-once! {:user/db user-db} "account"))))))
+      (finally
+       (unsubscribe)))))
+
+
+(deftest a-completed-pass-tells-whoever-is-listening-what-it-brought
+  (async-testing "the engine publishes; what listens is none of its business"
+    (let [heard (atom [])
+          hear  #(swap! heard conj %)]
+      (is (= {:pulled 1 :pulled-ids ["vocab:hund"] :pushed 0}
+             (await (pass-heard-by hear {:pulled 1 :pulled-ids ["vocab:hund"] :pushed 0}))))
+      (is (= [{:pulled 1 :pulled-ids ["vocab:hund"] :pushed 0}] @heard)
+          "the ids the pull wrote reach the listener")
+      (await (pass-heard-by hear {:pulled 0 :pulled-ids [] :pushed 2}))
+      (is (= 2 (count @heard)) "a push-only pass still announces, with nothing in it")
+      (await (pass-heard-by hear nil))
+      (is (= 2 (count @heard)) "a failed pass announces nothing"))))
+
+
+(deftest a-listener-that-unsubscribes-is-not-called-again
+  (async-testing "the subscription hands back the way out"
+    (let [heard (atom 0)]
+      (await (pass-heard-by (fn [_] (swap! heard inc)) {:pulled 0 :pulled-ids [] :pushed 1}))
+      (is (= 1 @heard))
+      (await
+       (db-fixtures/with-test-db
+         user-db-name
+         (^:async fn
+          [user-db]
+          (with-redefs [pouch/sync-once! (fn [_ _]
+                                           (js/Promise.resolve {:pulled 0 :pulled-ids [] :pushed 1}))]
+            (await (sut/sync-once! {:user/db user-db} "account"))))))
+      (is (= 1 @heard) "nobody is listening any more"))))
+
+
+;;
+;; Adopting a key that belongs to another account
+;;
+
+
+(defn- ^:async device-doc-ids
+  [device-db]
+  (let [{rows :rows} (await (db/all-docs device-db))]
+    (set (map :id rows))))
+
+
+(defn- ^:async seed-device-db!
+  "What a device holds after a while on one account: examples it fetched, a
+   fetch still queued, one that was dead-lettered, and the two documents that
+   belong to the device rather than to the account."
+  [device-db]
+  (await (db/insert device-db {:_id "example-hund" :type "example" :word-id "vocab:hund"}))
+  (await (db/insert device-db {:_id "task-queued" :type "task" :task-type "example-fetch"
+                               :data {:word-id "vocab:katze"}}))
+  (await (db/insert device-db {:_id "task-dead" :type "task" :task-type "example-fetch"
+                               :status "failed" :data {:word-id "vocab:maus"}}))
+  (await (db/insert device-db {:_id "identity:local" :type "identity" :user-id 1 :token "old"}))
+  (await (db/insert device-db {:_id "migration:001" :type "migration"})))
+
+
+(defn- ^:async adopt-key!
+  "Runs the incoming-credential path for `#key=...`, with the databases it
+   opens by name pointed at the test ones and the network call answered with
+   `account-id`."
+  [device-db user-db account-id]
+  (set! (.-window js/globalThis) #js {:location #js {:hash "#key=token-of-the-other"}})
+  (try
+    (with-redefs [db/use                  (fn [name] (if (= "device-db" name) device-db user-db))
+                  identity/load-identity! (fn [] (js/Promise.resolve {:id 1 :token "old"}))
+                  identity/account-id!    (fn [_] (js/Promise.resolve account-id))
+                  identity/save-identity! (fn [_] (js/Promise.resolve nil))]
+      (await (sut/check-incoming-auth! nil)))
+    (finally
+     (js/Reflect.deleteProperty js/globalThis "window"))))
+
+
+(deftest a-key-of-another-account-takes-the-old-account-s-examples-with-it
+  (async-testing "examples and queued fetches are the account's; the identity is the device's"
+    (await
+     (db-fixtures/with-test-dbs
+      [user-db-name device-db-name]
+      (^:async fn
+       [[user-db device-db]]
+       (await (seed-device-db! device-db))
+       (await (adopt-key! device-db user-db 2))
+       (let [ids (await (device-doc-ids device-db))]
+         (is (not (contains? ids "example-hund"))
+             "content-addressed ids would show the next account this sentence")
+         (is (not (contains? ids "task-queued")))
+         (is (not (contains? ids "task-dead")))
+         (testing "and what belongs to the device stays"
+           (is (contains? ids "identity:local"))
+           (is (contains? ids "migration:001")))))))))
+
+
+(deftest a-key-of-the-same-account-keeps-everything
+  (async-testing "the same account on another device is a merge, not a change of hands"
+    (await
+     (db-fixtures/with-test-dbs
+      [user-db-name device-db-name]
+      (^:async fn
+       [[user-db device-db]]
+       (await (seed-device-db! device-db))
+       (await (adopt-key! device-db user-db 1))
+       (let [ids (await (device-doc-ids device-db))]
+         (is (contains? ids "example-hund"))
+         (is (contains? ids "task-queued"))))))))
+
+
+(def ^:private a-completed-pass
+  {:pulled 1 :pulled-ids ["vocab:hund"] :pushed 0})
+
+
+(deftest a-pass-does-not-wait-for-what-it-announces
+  (async-testing "the screen redraws and the throttle starts when replication is done"
+    (let [finished (atom false)
+          listener (fn [_] (js/setTimeout #(reset! finished true) 0) nil)]
+      (is (= a-completed-pass (await (pass-heard-by listener a-completed-pass))))
+      (is (false? @finished) "the pass was over before the work it started"))))
+
+
+(deftest a-listener-that-fails-does-not-fail-the-pass
+  (async-testing "a device that cannot read what it is missing still replicated"
+    (is (= a-completed-pass
+           (await (pass-heard-by (fn [_] (throw (js/Error. "no view"))) a-completed-pass))))))

@@ -29,6 +29,37 @@
                      :body   (:body response)}))))
 
 
+(def ^:private word-lookup-index
+  "The index `exact-dictionary-entry-docs` selects through. Both of its fields
+   are constrained by equality there, so a composite index answers the selector
+   as a key range. Without it CouchDB plans the query against the `_all_docs`
+   special index — a read of the whole dictionary, which outlives the request
+   timeout and leaves every word looking unknown."
+  {:ddoc  "dictionary-entry-normalized-value"
+   :index {:fields ["type" "meta.normalized_value"]}
+   :name  "dictionary-entry-normalized-value"
+   :type  "json"})
+
+
+(defn ensure-word-lookup-index!
+  "Creates the index the word lookup reads by. CouchDB's `_index` is idempotent:
+   an identical definition answers `exists` and rebuilds nothing, so this runs on
+   every boot. A dictionary database that does not answer is logged and nothing
+   more — an app that cannot generate examples still serves."
+  []
+  (try
+    (assert-success!
+     (db/request-sync
+      {:method :post
+       :url    (str dictionary-db-name "/_index")
+       :body   word-lookup-index}))
+    (t/event! ::word-lookup-index-ensured {:level :info})
+    (catch Exception error
+      (t/event! ::word-lookup-index-unavailable
+                {:level :warn
+                 :data  (merge {:error (.getMessage error)} (ex-data error))}))))
+
+
 (defn- exact-dictionary-entry-docs
   [normalized]
   (let [response (assert-success!

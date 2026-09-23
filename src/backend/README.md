@@ -22,6 +22,7 @@ src/backend/
 ├── core.clj                          # Entry point — starts http-kit, wires routes
 ├── examples.clj                      # Fixture/example data helpers
 ├── examples/
+│   ├── cache.clj                     # Generated examples, keyed by their request
 │   ├── dictionary.clj                # Example dictionary entries
 │   └── provider.clj                  # Example data provider
 ├── reitit/http/interceptors/
@@ -59,4 +60,4 @@ Queries built with HoneySQL; executed via next.jdbc.
 
 ## API conventions
 
-Routes defined in `core.clj` using reitit. Interceptors handle JSON coercion and keyword parameter normalization. Malli schemas validate request/response shapes.
+Routes defined in `core.clj` using reitit. Interceptors handle JSON coercion and keyword parameter normalization. Route parameters are checked in the handler itself. Malli describes the shapes at the edges — the example the provider is asked to return, and the question the example cache is keyed by.

@@ -42,8 +42,14 @@
       :collections {:collections/active-id (fn [] active-id)
                     :collections/add-word! (fn [_ _] (js/Promise.resolve nil))
                     :collections/get       (fn [id] (js/Promise.resolve {:id id :name "Поездка"}))}
-      :examples    {:examples/find     (fn [_ _] (js/Promise.resolve existing-example))
-                    :examples/request! (fn [& args] (swap! example-requests conj (vec args)) nil)}
+      :examples    {:examples/of-word  (fn [word-id]
+                                         (js/Promise.resolve
+                                          (if existing-example
+                                            [(assoc existing-example
+                                                    :collection-id active-id
+                                                    :word-id word-id)]
+                                            [])))
+                    :examples/request! (fn [requests] (swap! example-requests into requests) nil)}
       :reviews     (reviews/start! {:clock clock :db dbs})
       :words       (words/start! {:clock clock :db dbs})})))
 
@@ -71,7 +77,7 @@
         (is (= word-id (:word-id (first reviews))))
         (is (= 1 (count @example-requests))
             "a phrase asks for an example like a word does")
-        (is (= "phrase" (:kind (ffirst @example-requests)))))))))
+        (is (= "phrase" (:kind (:word (first @example-requests))))))))))
 
 
 (deftest add-queues-the-example-with-the-active-collection
@@ -83,7 +89,7 @@
             capabilities     (test-capabilities dbs example-requests {:active-id "collection-1"})]
         (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase))
         (is (= 1 (count @example-requests)))
-        (let [[_entry collection-id collection-name] (first @example-requests)]
+        (let [{:keys [collection-id collection-name]} (first @example-requests)]
           (is (= "collection-1" collection-id))
           (is (= "Поездка" collection-name))))))))
 

@@ -6,6 +6,7 @@
    [domain.retention :as retention]
    [domain.vocabulary :as domain]
    [use-cases.collections :as collections]
+   [use-cases.examples :as examples]
    [utils :as utils]))
 
 
@@ -68,9 +69,12 @@
             (await ((:words/save! words) updated))
             (when collection-id
               (await ((:collections/add-word! collections) (:id existing) collection-id))
-              (when-not (await ((:examples/find examples) (:id existing) collection-id))
+              (when (await (examples/needs-example? capabilities (:id existing) collection-id))
                 (let [collection-name (:name (await ((:collections/get collections) collection-id)))]
-                  ((:examples/request! examples) updated collection-id collection-name))))
+                  ((:examples/request! examples)
+                   [{:collection-id collection-id
+                     :collection-name collection-name
+                     :word updated}]))))
             {:word-id (:id existing) :created? false})
           (let [entry        (new-entry kind value translation entries)
                 {:keys [id]} (await ((:words/save! words) entry))
@@ -79,7 +83,10 @@
             (await ((:reviews/save! reviews) id true translation))
             (when collection-id
               (await ((:collections/add-word! collections) id collection-id)))
-            ((:examples/request! examples) entry collection-id collection-name)
+            ((:examples/request! examples)
+             [{:collection-id collection-id
+               :collection-name collection-name
+               :word entry}])
             {:word-id id :created? true}))))))
 
 
@@ -123,9 +130,11 @@
 
 
 (defn- ^:async alphabetical
-  "A page of the scope in alphabetical order. The word list's order: the id is
-   the normalised value (ADR-0008), so the view is already sorted and a page is
-   a slice of it — the read is the page's size, not the vocabulary's.
+  "A page of the scope in alphabetical order. The word list's order: the view
+   is keyed by what a word is filed under (`domain/filed-under`), so it is
+   already sorted and a page is a slice of it — the read is the page's size,
+   not the vocabulary's. The scoped and searched variants sort on that same
+   key here, so all three arrive in one order.
 
    A search is the exception: a substring can sit anywhere in a value or a
    translation, so the filter has to see every word in scope before it can say
@@ -140,18 +149,20 @@
     (if (utils/non-blank search)
       (let [matched (->> (await ((:words/previews words) word-ids))
                          (filter (matching? search))
-                         (sort-by :id))]
+                         (sort-by (comp domain/filed-under :id)))]
         {:matches (clojure.core/count matched)
          :total   total
          :words   (await (with-retention capabilities (vec (page-of matched offset limit))))})
       (let [rows (if word-ids
-                   ;; The ids are the sort key, so the page is cut from them
+                   ;; The ids carry the sort key, so the page is cut from them
                    ;; and only its words are read.
-                   (await ((:words/previews words) (page-of (sort word-ids) offset limit)))
+                   (await ((:words/previews words)
+                           (page-of (sort-by domain/filed-under word-ids) offset limit)))
                    (await ((:words/previews-page words) {:limit limit :skip offset})))]
         {:matches total
          :total   total
-         :words   (await (with-retention capabilities (vec (sort-by :id rows))))}))))
+         :words   (await (with-retention capabilities
+                                         (vec (sort-by (comp domain/filed-under :id) rows))))}))))
 
 
 (defn- ^:async most-due
@@ -206,7 +217,7 @@
    (default), the word list's order, or `:most-due`, the lesson's, whose rows
    also carry the `:urgency` they were ranked by so a caller can break its
    ties. The two differ in what they cost: alphabetical order is the order the
-   ids are already stored in, so a page reads its own rows; most-due order
+   view is already keyed in, so a page reads its own rows; most-due order
    ranks on a key computed per word, so it reads every word and every review
    in scope.
 

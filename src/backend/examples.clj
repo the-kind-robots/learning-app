@@ -224,16 +224,54 @@
    "Examples generation failed"))
 
 
-(defn- normalize-translations
-  "Accepts a string, a collection of strings, or nil. Returns a vector of
-   non-blank strings, preserving order and deduping."
+(defn- glosses
+  "The Russian glosses of a question, from a string, a collection of strings or
+   nil: trimmed, blanks and duplicates dropped, order kept."
   [translation]
-  (let [raw (cond
-              (nil? translation)        []
-              (string? translation)     [translation]
-              (sequential? translation) translation
-              :else                     [])]
-    (->> raw (remove str/blank?) distinct vec)))
+  (->> (cond
+         (nil? translation)        []
+         (string? translation)     [translation]
+         (sequential? translation) translation
+         :else                     [])
+       (keep #(some-> % str/trim not-empty))
+       distinct
+       vec))
+
+
+(defn question
+  "What a caller is asking for, normalized: the German word, the Russian
+   glosses they confirmed, and the collection they are learning the word in.
+
+   Normalized once, here, before anyone reads it. The sentence a question
+   produces and the row it is cached under have to be built from the same
+   glosses — `\" собака \"` and `\"собака\"` are one question and must
+   not be two prompts — and the way to have that is one value, passed on as
+   it is, not two normalizations that happen to agree.
+
+   The glosses are sorted: the order a device sends them in follows the order
+   its own translations were merged in and means nothing to anyone else, so
+   the same set asked in another order is the same question — and the prompt
+   is none the worse for reading them in a fixed one.
+
+   The word keeps its case: German case carries meaning, and `Essen` is not
+   `essen`. A blank context is no context."
+  [{:keys [context translation word]}]
+  {:context      (utils/non-blank (some-> context str/trim))
+   :translations (vec (sort (glosses translation)))
+   :word         (utils/non-blank (some-> word str/trim))})
+
+
+(def question-schema
+  "What `question` answers with, and what everything downstream of it accepts.
+   Closed: a map carrying `:translation` — the caller's own key, one letter
+   away — would be read as a question with no glosses at all.
+
+   The word is never blank: the endpoint answers `400` before building a
+   question, so one without a word does not exist."
+  [:map {:closed true}
+   [:context [:maybe [:string {:min 1}]]]
+   [:translations [:vector [:string {:min 1}]]]
+   [:word [:string {:min 1}]]])
 
 
 (def ^:private issue-messages
@@ -402,6 +440,49 @@
     "The phrase is in the sentence, not in `structure`: `von` and `zu` are excluded as prepositions, and each `Zeit` is annotated as the noun it is."]))
 
 
+(defn word-meta
+  "What the dictionary says about the question's word: part of speech and
+   level, or nil when it says nothing. Read once per question — the prompt
+   carries it and the cache key covers it, and those have to be the same
+   reading."
+  [{:keys [translations word]}]
+  (dictionary/lookup-word-meta word translations))
+
+
+(defn- generation-version
+  "What a generated sentence depends on besides the question itself: the prompt
+   it was asked with, the models configured to answer it, and what the
+   dictionary said about the word — the part of speech and the level go into
+   the prompt, and `nil` when the dictionary answered nothing is as much a part
+   of the sentence as a part of speech is."
+  [word-meta]
+  (let [{:keys [model models]} (provider/config)]
+    {:models    (or models [model])
+     :prompt    system-prompt
+     :word-meta word-meta}))
+
+
+(def ^:private digested
+  "Hashed once per generation. The prompt runs to several kilobytes and every
+   request would otherwise serialize and hash all of it — twice on a miss —
+   for a value that changes when the build does, or when a word's dictionary
+   entry does."
+  (memoize (fn [version] (utils/sha256-hex (cheshire/generate-string version)))))
+
+
+(defn generation-digest
+  "The digest of the generation a question would be answered by. Part of what a
+   cached answer is keyed by, so editing the prompt, moving to another model or
+   the word arriving in the dictionary is an ordinary miss — the stored rows
+   simply stop being found, and there is nothing to invalidate by hand.
+
+   A sentence generated while the dictionary was away is keyed under that
+   absence and kept: every device would otherwise pay for the same answer,
+   which is when the saving is needed most."
+  [question]
+  (digested (generation-version (word-meta question))))
+
+
 (defn- previous-issue-payload
   [{:keys [issue details]}]
   (cond-> {:issue   (name issue)
@@ -490,19 +571,24 @@
 
 
 (defn generate-one!
-  "Generates a German example sentence for word/translation.
-  `translation` may be a single string or a collection of strings; all are
-  passed through to the prompt and validation so any can be the chosen sense.
+  "Generates a German example sentence for a `question` — `{:context
+   :translations :word}` as `question` answers with. Every gloss is passed
+   through to the prompt and to validation, so any of them can be the sense
+   the sentence takes.
+
+  Takes the question as it is and normalizes nothing: the glosses it generates
+  from are the glosses the answer is keyed by, which is only true while there
+  is one normalization and one value.
+
   Returns one of:
   * success — map with keys :value, :translation, :structure
     (a vector of maps with :usedForm, :dictionaryForm, :translation);
   * generation-failure map on a hard error (e.g. 429);
   * nil when all attempts are exhausted."
-  ([input]
-   (generate-one! input 3))
-  ([{:keys [word translation context]} max-attempts]
-   (let [translations (normalize-translations translation)
-         word-meta    (dictionary/lookup-word-meta word translations)]
+  ([question]
+   (generate-one! question 3))
+  ([{:keys [context translations word] :as question} max-attempts]
+   (let [word-meta (word-meta question)]
      (loop [attempt       1
             retry-context nil]
        (let [example  (generate-attempt! word translations context word-meta retry-context)
@@ -543,4 +629,4 @@
 
 
 (comment
-  (generate-one! {:word "das Entsetzen" :translation ["ужас" "испуг"]}))
+  (generate-one! (question {:word "das Entsetzen" :translation ["ужас" "испуг"]})))

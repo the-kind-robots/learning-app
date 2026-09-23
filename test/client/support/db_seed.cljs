@@ -11,14 +11,17 @@
 
 
 (defn- vocab-doc
-  "Vocab doc, defaulting :_id to its content-addressed id when not given."
-  [{id :_id value :value translation :translation}]
-  {:_id         (or id (vocabulary/vocab-id value))
-   :type        "vocab"
-   :value       value
-   :translation [{:lang "ru" :value translation}]
-   :created-at  time/test-now-iso
-   :modified-at time/test-now-iso})
+  "Vocab doc, defaulting :_id to its content-addressed id when not given.
+   `:kind` is what makes it a phrase; a word document carries none, which is
+   also what every document written before phrases existed looks like."
+  [{id :_id kind :kind value :value translation :translation}]
+  (cond-> {:_id         (or id (vocabulary/vocab-id value))
+           :type        "vocab"
+           :value       value
+           :translation [{:lang "ru" :value translation}]
+           :created-at  time/test-now-iso
+           :modified-at time/test-now-iso}
+    kind (assoc :kind kind)))
 
 
 (defn- review-doc
@@ -31,15 +34,21 @@
 
 
 (defn- example-doc
-  [{id :_id word-id :word-id word :word value :value translation :translation}]
-  {:_id         id
-   :type        "example"
-   :word-id     word-id
-   :word        word
-   :value       value
-   :translation translation
-   :structure   []
-   :created-at  time/test-now-iso})
+  [{id          :_id
+    collection-id :collection-id
+    word-id     :word-id
+    word        :word
+    value       :value
+    translation :translation}]
+  (cond-> {:_id         id
+           :type        "example"
+           :word-id     word-id
+           :word        word
+           :value       value
+           :translation translation
+           :structure   []
+           :created-at  time/test-now-iso}
+    collection-id (assoc :collection-id collection-id)))
 
 
 (defn ^:async seed-vocabulary!

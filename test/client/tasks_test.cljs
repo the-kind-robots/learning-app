@@ -102,9 +102,11 @@
 
 (deftest create-task-builds-correct-document
   (let [now-iso "2024-01-01T00:00:00.000Z"
-        task    (sut/create-task "my-type" {:word-id "word-123"} now-iso)]
+        task    (sut/create-task "task:my-type:word-123" "my-type" {:word-id "word-123"} now-iso)]
     (is (nil? (:type task)) "the engine stamps the type from tasks/schema on insert")
     (is (= "task" (:type sut/schema)))
+    (is (= "task:my-type:word-123" (:_id task))
+        "the caller names the work, so asking twice writes once")
     (is (= "my-type" (:task-type task)))
     (is (= {:word-id "word-123"} (:data task)))
     (is (nil? (:word-id task)))
@@ -138,9 +140,9 @@
   (async-testing "`run-cycle!` removes tasks after success"
     (with-mocked-env {}
       (^:async fn [{device-db :device/db :as dbs}]
-        (await (sut/create-task! dbs (test-clock) "succeed-task" {:word-id "word-1"}))
-        (await (sut/create-task! dbs (test-clock) "succeed-task" {:word-id "word-2"}))
-        (await (sut/create-task! dbs (test-clock) "succeed-task" {:word-id "word-3"}))
+        (await (sut/create-tasks! dbs (test-clock) "succeed-task" [{:id (str "succeed-task" ":" "word-1") :data {:word-id "word-1"}}]))
+        (await (sut/create-tasks! dbs (test-clock) "succeed-task" [{:id (str "succeed-task" ":" "word-2") :data {:word-id "word-2"}}]))
+        (await (sut/create-tasks! dbs (test-clock) "succeed-task" [{:id (str "succeed-task" ":" "word-3") :data {:word-id "word-3"}}]))
         (await (#'sut/run-cycle! dbs (test-clock)))
         (let [tasks (await (get-tasks-by-type device-db "succeed-task"))]
           (is (empty? tasks)))))))
@@ -151,8 +153,8 @@
     (with-mocked-env {}
       (^:async fn [dbs]
         (reset! handled-tasks [])
-        (await (sut/create-task! dbs (test-clock) "tracking-task" {:word-id "word-1"}))
-        (await (sut/create-task! dbs (test-clock) "tracking-task" {:word-id "word-2"}))
+        (await (sut/create-tasks! dbs (test-clock) "tracking-task" [{:id (str "tracking-task" ":" "word-1") :data {:word-id "word-1"}}]))
+        (await (sut/create-tasks! dbs (test-clock) "tracking-task" [{:id (str "tracking-task" ":" "word-2") :data {:word-id "word-2"}}]))
         (await (#'sut/run-cycle! dbs (test-clock)))
         (is (= 2 (count @handled-tasks)))))))
 
@@ -161,7 +163,7 @@
   (async-testing "`run-cycle!` schedules retry on failure"
     (with-mocked-env {:now-ms 1000}
       (^:async fn [{device-db :device/db :as dbs}]
-        (await (sut/create-task! dbs (test-clock) "fail-task" {:word-id "word-1"}))
+        (await (sut/create-tasks! dbs (test-clock) "fail-task" [{:id (str "fail-task" ":" "word-1") :data {:word-id "word-1"}}]))
         (await (#'sut/run-cycle! dbs (test-clock)))
         (let [tasks (await (get-tasks-by-type device-db "fail-task"))
               task  (first tasks)]
@@ -174,7 +176,7 @@
   (async-testing "`run-cycle!` uses retry-after hints from task handlers"
     (with-mocked-env {:now-ms 1000}
       (^:async fn [{device-db :device/db :as dbs}]
-        (await (sut/create-task! dbs (test-clock) "hinted-fail-task" {:word-id "word-1"}))
+        (await (sut/create-tasks! dbs (test-clock) "hinted-fail-task" [{:id (str "hinted-fail-task" ":" "word-1") :data {:word-id "word-1"}}]))
         (await (#'sut/run-cycle! dbs (test-clock)))
         (let [tasks (await (get-tasks-by-type device-db "hinted-fail-task"))
               task  (first tasks)]
@@ -187,7 +189,7 @@
   (async-testing "`run-cycle!` catches handler exceptions"
     (with-mocked-env {:now-ms 1000}
       (^:async fn [{device-db :device/db :as dbs}]
-        (await (sut/create-task! dbs (test-clock) "error-task" {:word-id "word-1"}))
+        (await (sut/create-tasks! dbs (test-clock) "error-task" [{:id (str "error-task" ":" "word-1") :data {:word-id "word-1"}}]))
         (await (#'sut/run-cycle! dbs (test-clock)))
         (let [tasks (await (get-tasks-by-type device-db "error-task"))]
           (is (= 1 (count tasks)))
@@ -198,8 +200,8 @@
   (async-testing "`run-cycle!` dead-letters unknown task types"
     (with-mocked-env {}
       (^:async fn [{device-db :device/db :as dbs}]
-        (await (sut/create-task! dbs (test-clock) "unknown-task" {:word-id "word-1"}))
-        (await (sut/create-task! dbs (test-clock) "unknown-task" {:word-id "word-2"}))
+        (await (sut/create-tasks! dbs (test-clock) "unknown-task" [{:id (str "unknown-task" ":" "word-1") :data {:word-id "word-1"}}]))
+        (await (sut/create-tasks! dbs (test-clock) "unknown-task" [{:id (str "unknown-task" ":" "word-2") :data {:word-id "word-2"}}]))
         (await (#'sut/run-cycle! dbs (test-clock)))
         (let [dead-letters (await (get-tasks-by-status device-db "failed"))]
           (is (= 2 (count dead-letters)))
@@ -210,7 +212,7 @@
   (async-testing "`run-cycle!` skips processing when offline"
     (with-mocked-env {:online? false :now 1000}
       (^:async fn [{device-db :device/db :as dbs}]
-        (await (sut/create-task! dbs (test-clock) "succeed-task" {:word-id "word-1"}))
+        (await (sut/create-tasks! dbs (test-clock) "succeed-task" [{:id (str "succeed-task" ":" "word-1") :data {:word-id "word-1"}}]))
         (await (#'sut/run-cycle! dbs (test-clock)))
         (let [task  (await (get-task-by-id device-db "word-1"))
               tasks (await (get-tasks-by-type device-db "succeed-task"))]
@@ -222,7 +224,7 @@
   (async-testing "`run-cycle!` reacts to stop signal"
     (with-mocked-env {}
       (^:async fn [{device-db :device/db :as dbs}]
-        (await (sut/create-task! dbs (test-clock) "succeed-task" {:word-id "word-1"}))
+        (await (sut/create-tasks! dbs (test-clock) "succeed-task" [{:id (str "succeed-task" ":" "word-1") :data {:word-id "word-1"}}]))
         (sut/stop!)
         (await (#'sut/run-cycle! dbs (test-clock)))
         (let [task  (await (get-task-by-id device-db "word-1"))
@@ -242,7 +244,7 @@
                            :run-at     (utils/ms->iso 9999)
                            :created-at (utils/ms->iso 0)
                            :attempts   0}))
-        (await (sut/create-task! dbs (test-clock) "succeed-task" {:word-id "now-word"}))
+        (await (sut/create-tasks! dbs (test-clock) "succeed-task" [{:word-id "now-word"}]))
         (await (#'sut/run-cycle! dbs (test-clock)))
         (let [tasks (await (get-tasks-by-type device-db "succeed-task"))]
           (is (= 1 (count tasks)))
@@ -250,11 +252,11 @@
 
 
 (deftest create-task-triggers-immediate-execution
-  (async-testing "`create-task!` triggers flush which processes the task"
+  (async-testing "`create-tasks!` triggers flush which processes the task"
     (with-mocked-env {}
       (^:async fn [{device-db :device/db :as dbs}]
         (reset! @#'sut/state {:enabled? true :dbs dbs :clock (test-clock)})
-        (await (sut/create-task! dbs (test-clock) "succeed-task" {:word-id "eager-word"}))
+        (await (sut/create-tasks! dbs (test-clock) "succeed-task" [{:word-id "eager-word"}]))
         (await (js/Promise. (fn [res] (js/setTimeout res 100))))
         (let [tasks (await (get-tasks-by-type device-db "succeed-task"))]
           (is (empty? tasks) "Task should be processed immediately after creation"))))))
