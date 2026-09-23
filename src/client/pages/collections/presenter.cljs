@@ -14,11 +14,18 @@
   "main")
 
 
+(def ^:private name-lang
+  "The language a collection name is written in, so a long word hyphenates
+   at its syllables. «Всё подряд» is not a collection name and has none."
+  "de")
+
+
 (defn- target
   "One tappable thing: a tile, a folder header or a row."
-  [state {:keys [id name count tap active? deletable?]}]
+  [state {:keys [id name lang count tap active? deletable?]}]
   {:id           id
    :name         name
+   :lang         lang
    :count        count
    :active?      active?
    :editing?     (= id (:collections/editing-id state))
@@ -32,6 +39,7 @@
   (target state
           {:id         id
            :name       shown-name
+           :lang       name-lang
            :count      (count word-ids)
            :active?    (= id (:collections/active-id state))
            :deletable? true
@@ -74,6 +82,7 @@
                       :count     (union-count (cons parent children))
                       :tappable? true)
                {:name      name
+                :lang      name-lang
                 :count     (union-count children)
                 :tappable? false})]
     {:key     (str "folder:" (collections/canonical name))

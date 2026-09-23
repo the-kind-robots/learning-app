@@ -71,7 +71,7 @@
 (deftest a-folder-without-a-parent-has-a-label-for-a-header
   (let [[_ folder] (sut/tiles {:collections/items [(collection "g" "Grammatik / Konnektoren" "x" "y")]})
         head       (:head folder)]
-    (is (= {:name "Grammatik" :count 2 :tappable? false} head)
+    (is (= {:name "Grammatik" :lang "de" :count 2 :tappable? false} head)
         "a caption with the children's union: no id, no tap, nothing to delete")
     (is (= [2] (mapv :count (:rows folder))))))
 
@@ -82,3 +82,13 @@
     (is (false? (:loading? props)))
     (is (= ["Всё подряд" "A" "B"] (mapv :name (:tiles props)))
         "one alphabetical sequence; the columns are the stylesheet's job")))
+
+
+(deftest collection-names-are-german-all-words-is-not
+  (let [items [(collection "solo" "Solo")
+               (collection "k1" "Kurs / Kapitel 1")]
+        [main folder solo] (sut/tiles {:collections/items items})]
+    (is (nil? (:lang main)) "«Всё подряд» is the app's label, not a name")
+    (is (= "de" (:lang solo)))
+    (is (= "de" (:lang (:head folder))) "a label names a folder too")
+    (is (= ["de"] (mapv :lang (:rows folder))))))

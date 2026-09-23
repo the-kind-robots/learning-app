@@ -4,18 +4,18 @@
    [pages.collections.effects :as sut]))
 
 
-(deftest a-cancel-without-movement-is-a-tap
-  (testing "within 10 px and 2 px of scroll the cancelled tap fires"
-    (is (true? (:fired? (sut/on-cancel {:moved-px 0 :scroll-delta 0}))))
-    (is (some? (sut/on-cancel {:moved-px 10 :scroll-delta 2})))
-    (is (some? (sut/on-cancel {})) "no move seen counts as 0"))
+(deftest a-lift-without-movement-is-a-tap
+  (testing "within 10 px of travel and 2 px of scroll, measured at the lift, the cancelled tap fires"
+    (is (true? (:fired? (sut/on-lift {:moved-px 0 :scroll-delta 0}))))
+    (is (some? (sut/on-lift {:moved-px 10 :scroll-delta 2})))
+    (is (some? (sut/on-lift {})) "no move seen counts as 0"))
   (testing "a drag or a scroll is not a tap"
-    (is (nil? (sut/on-cancel {:moved-px 11 :scroll-delta 0})))
-    (is (nil? (sut/on-cancel {:moved-px 0 :scroll-delta 3})))
-    (is (nil? (sut/on-cancel {:moved-px 0 :scroll-delta -3})))))
+    (is (nil? (sut/on-lift {:moved-px 11 :scroll-delta 0})))
+    (is (nil? (sut/on-lift {:moved-px 0 :scroll-delta 3})))
+    (is (nil? (sut/on-lift {:moved-px 0 :scroll-delta -3})))))
 
 
 (deftest a-gesture-fires-at-most-once
-  (testing "a cancel after the gesture fired — a long press, an earlier cancel — is nothing"
-    (is (nil? (sut/on-cancel {:moved-px 0 :scroll-delta 0 :fired? true})))
-    (is (nil? (sut/on-cancel (sut/on-cancel {:moved-px 0 :scroll-delta 0}))))))
+  (testing "a lift after the gesture fired — a long press — is nothing"
+    (is (nil? (sut/on-lift {:moved-px 0 :scroll-delta 0 :fired? true})))
+    (is (nil? (sut/on-lift (sut/on-lift {:moved-px 0 :scroll-delta 0}))))))
