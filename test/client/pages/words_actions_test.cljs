@@ -12,8 +12,10 @@
 
 
 (defn- reload-effect
-  "What `:action/reload-page` re-dispatches after a sync pull: the effect the
-   page stored under `:page/load`."
+  "What `:action/reload-page` re-dispatches after a sync pull: what the page
+   stored under `:page/load`. An action rather than the effect, so the pull's
+   read is numbered when it happens rather than carrying the number of the
+   read that produced these rows (GH-439)."
   [state]
   (:page/load state))
 
@@ -25,7 +27,7 @@
                                   :search  ""
                                   :total   400
                                   :words   (word-rows 150)})]
-      (is (= [:effect/load-words {:limit 150 :search ""}] (reload-effect state))
+      (is (= [:action/load-words {:limit 150 :search ""}] (reload-effect state))
           "the reload asks for the 150 rows on screen, not the first page")
       (is (= 150 (:words/limit state)))))
   (testing "the first page is still the first page"
@@ -34,7 +36,7 @@
                                   :search  ""
                                   :total   400
                                   :words   (word-rows presenter/page-size)})]
-      (is (= [:effect/load-words {:limit 50 :search ""}] (reload-effect state))))))
+      (is (= [:action/load-words {:limit 50 :search ""}] (reload-effect state))))))
 
 
 (deftest a-background-reload-keeps-the-query
@@ -44,5 +46,5 @@
                                   :search  "hund"
                                   :total   400
                                   :words   (word-rows 100)})]
-      (is (= [:effect/load-words {:limit 100 :search "hund"}] (reload-effect state)))
+      (is (= [:action/load-words {:limit 100 :search "hund"}] (reload-effect state)))
       (is (= "hund" (:words/search state))))))

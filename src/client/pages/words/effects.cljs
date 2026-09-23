@@ -7,23 +7,10 @@
    [use-cases.vocabulary :as vocabulary]))
 
 
-;; Reads of the list are numbered. Five callers write `:words/*` — the first
-;; render, the search, the next page, and the reloads after an edit and after a
-;; synchronisation pull — and the storage they go through answers in its own
-;; order. A read writes only while its number is still the last one claimed, so
-;; a page asked for before a search cannot land after it and put the unfiltered
-;; rows back under a search box that still holds the query (#439).
-(defonce ^:private read-seq (atom 0))
-
-
-(defn- claim-read!
-  []
-  (swap! read-seq inc))
-
-
 (defn- ^:async show!
-  "Reads one page of the active scope and hands it to the view, unless a later
-   read has been claimed in the meantime. The page is the first `limit` rows,
+  "Reads one page of the active scope and hands it to the view, stamped with
+   the number of the read that asked for it — `:action/show-words` drops rows
+   whose read a later one has overtaken. The page is the first `limit` rows,
    not a window at an offset: the loaded row count stays one number that
    survives a reload, and the rows it re-reads are the ones already on screen
    rather than the vocabulary."
@@ -33,29 +20,22 @@
           {:keys [matches total words]}
           (await (vocabulary/list-active capabilities
                                          {:order :alphabetical :search search :limit limit}))]
-      (when (= token @read-seq)
-        (dispatch [[:action/show-words
-                    {:limit   limit
-                     :matches matches
-                     :search  search
-                     :total   total
-                     :words   words}]])))
+      (dispatch [[:action/show-words
+                  {:limit   limit
+                   :matches matches
+                   :search  search
+                   :token   token
+                   :total   total
+                   :words   words}]]))
     (catch js/Error err
       (log/error :effect/load-words {:error (str err)}))))
-
-
-;; The read number of a search whose 400 ms have not run out yet, or whose rows
-;; have not arrived. Reaching the end of the list while one is outstanding would
-;; ask for a page of the query being replaced, so load-more stands down until it
-;; is over.
-(defonce ^:private pending-search (atom nil))
 
 
 (def ^:private search!
   (gfn/debounce
    (fn search! [dispatch capabilities opts token]
      (.finally (show! dispatch capabilities opts token)
-               (fn [] (swap! pending-search #(when (not= % token) %)))))
+               (fn [] (dispatch [[:action/words-search-settled token]]))))
    400))
 
 
@@ -89,19 +69,14 @@
 
 (nxr/register-effect! :effect/load-words
   (fn load-words
-    [{:keys [capabilities dispatch]} _ opts]
-    (show! dispatch capabilities opts (claim-read!))))
+    [{:keys [capabilities dispatch]} _ opts token]
+    (show! dispatch capabilities opts token)))
 
 
 (nxr/register-effect! :effect/set-words-search
-  ;; The read is claimed on the keystroke, not when the debounce runs out:
-  ;; from here on this query is what the list is going to hold, and a page
-  ;; asked for in between would be answering for the query it replaces.
   (fn set-words-search
-    [{:keys [capabilities dispatch]} _ opts]
-    (let [token (claim-read!)]
-      (reset! pending-search token)
-      (search! dispatch capabilities opts token))))
+    [{:keys [capabilities dispatch]} _ opts token]
+    (search! dispatch capabilities opts token)))
 
 
 (nxr/register-effect! :effect/scroll-words-to-top
@@ -115,11 +90,11 @@
   ;; a re-render that replaces the sentinel node is enough. The flag makes
   ;; the second call a no-op instead of a second query.
   (fn ^:async load-more-words
-    [{:keys [capabilities dispatch]} _ opts]
-    (when-not (or @loading-more? @pending-search)
+    [{:keys [capabilities dispatch]} _ opts token]
+    (when-not @loading-more?
       (reset! loading-more? true)
       (try
-        (await (show! dispatch capabilities opts (claim-read!)))
+        (await (show! dispatch capabilities opts token))
         (finally
          (reset! loading-more? false))))))
 
@@ -152,17 +127,17 @@
 
 (nxr/register-effect! :effect/update-word
   (fn ^:async update-word
-    [{:keys [capabilities dispatch]} _ {:keys [id translation] :as opts}]
+    [{:keys [capabilities dispatch]} _ {:keys [id translation] :as opts} token]
     (try
       (await (vocabulary/update! capabilities id translation))
-      (await (show! dispatch capabilities opts (claim-read!)))
+      (await (show! dispatch capabilities opts token))
       (catch js/Error err
         (log/error :effect/update-word {:error (str err)})))))
 
 
 (nxr/register-effect! :effect/delete-word
   (fn ^:async delete-word
-    [{:keys [capabilities dispatch]} _ {:keys [id value] :as opts}]
+    [{:keys [capabilities dispatch]} _ {:keys [id value] :as opts} token]
     (let [collection-id ((:collections/active-id (:collections capabilities)))
           prompt        (if collection-id
                           (str "Убрать «" value "» из набора?")
@@ -174,6 +149,6 @@
         (dispatch [[:action/close-word-edit]])
         (try
           (await (vocabulary/remove-from-active! capabilities id))
-          (await (show! dispatch capabilities opts (claim-read!)))
+          (await (show! dispatch capabilities opts token))
           (catch js/Error err
             (log/error :effect/delete-word {:error (str err)})))))))

@@ -599,7 +599,7 @@
      ;; `:words/editing` on their way in (#439), so leaving the screen with a
      ;; word open would otherwise bring it back on the return.
      :controllers [{:start #(dispatch [[:action/close-word-edit]
-                                       [:effect/load-words]
+                                       [:action/load-words]
                                        [:effect/sync-pull]])}]}]
    ["/lesson"
     {:name        :page/lesson

@@ -101,7 +101,7 @@
     (with-redefs [vocabulary/list-active list-stub]
       (reset! unanswered {})
       (let [{:keys [store] :as system} (test-system)]
-        (nxr/dispatch system {} [[:effect/load-words {:limit 100 :search ""}]])
+        (nxr/dispatch system {} [[:action/load-words {:limit 100 :search ""}]])
         (nxr/dispatch system {} [[:action/search-words "wort1"]])
         (await (debounce-elapsed))
         (answer! ["wort1" presenter/page-size] 11 11)
@@ -137,7 +137,7 @@
     (with-redefs [vocabulary/list-active list-stub]
       (reset! unanswered {})
       (let [{:keys [store] :as system} (test-system)]
-        (nxr/dispatch system {} [[:effect/load-words {:limit 100 :search ""}]])
+        (nxr/dispatch system {} [[:action/load-words {:limit 100 :search ""}]])
         (await (settled))
         (nxr/dispatch system {} [[:action/open-word-edit {:id "word-3" :value "Wort3"}]])
         (answer! ["" 100] 100 130)
@@ -163,13 +163,46 @@
         (is (nil? (:words/editing @store)))))))
 
 
+(deftest the-screen-reads-its-first-page-on-entry
+  (async-testing "the route controller asks with no options and gets a first page"
+    (with-redefs [vocabulary/list-active list-stub]
+      (reset! unanswered {})
+      (let [{:keys [store] :as system} (test-system)]
+        (nxr/dispatch system {} [[:action/load-words]])
+        (await (settled))
+        (answer! [nil presenter/page-size] presenter/page-size 130)
+        (await (settled))
+        (is (= presenter/page-size (count (:words/items @store))))
+        (is (= 1 (:words/read-token @store)) "the entry read is numbered")))))
+
+
+(deftest the-reload-a-pull-triggers-is-numbered-when-it-happens
+  (async-testing "the stored :page/load re-read lands, rather than carrying a spent number"
+    (with-redefs [vocabulary/list-active list-stub]
+      (reset! unanswered {})
+      (let [{:keys [store] :as system} (test-system)]
+        (nxr/dispatch system {} [[:action/load-words {:limit 100 :search "wort1"}]])
+        (await (settled))
+        (answer! ["wort1" 100] 11 11)
+        (await (settled))
+        (is (= [:action/load-words {:limit 100 :search "wort1"}] (:page/load @store)))
+
+        ;; What `:action/reload-page` does with it.
+        (nxr/dispatch system {} [(:page/load @store)])
+        (await (settled))
+        (answer! ["wort1" 100] 9 9)
+        (await (settled))
+        (is (= 9 (count (:words/items @store)))
+            "the pull's rows replaced the ones on screen")))))
+
+
 (deftest the-list-goes-back-to-its-first-row-on-the-rows-not-the-keystroke
   (async-testing "the reset rides the render that swaps the rows"
     (with-redefs [vocabulary/list-active list-stub]
       (reset! unanswered {})
       (reset! scrolls 0)
       (let [{:keys [store] :as system} (test-system)]
-        (nxr/dispatch system {} [[:effect/load-words {:limit 50 :search ""}]])
+        (nxr/dispatch system {} [[:action/load-words {:limit 50 :search ""}]])
         (await (settled))
         (answer! ["" 50] 50 130)
         (await (settled))
@@ -182,7 +215,7 @@
         (await (settled))
         (is (= 1 @scrolls) "on the rows the query brought")
 
-        (nxr/dispatch system {} [[:effect/load-words {:limit 100 :search "wort1"}]])
+        (nxr/dispatch system {} [[:action/load-words {:limit 100 :search "wort1"}]])
         (await (settled))
         (answer! ["wort1" 100] 11 11)
         (await (settled))
