@@ -204,16 +204,17 @@ artifacts:
     requires:
       - proposal
   - id: adr
-    generates: "../../../adr/*.md"
+    generates: adr/*.md
     description: Architecture Decision Records distilled from design for future reference
     template: adr.md
     instruction: >
       Distill significant decisions from design.md into Architecture Decision
-      Records that live in <repo>/adr/ and persist across changes. The path
-      <repo>/adr/ means the target repository's top-level adr/ folder beside
-      openspec/, not any folder inside openspec/. ADR files MUST be written
-      outside openspec/ and MUST NOT be written under
-      openspec/changes/<change>/.
+      Records. An ADR is born in its change: write it to
+      openspec/changes/<change>/adr/, beside proposal.md and design.md.
+      Archiving moves it to <repo>/adr/ — the target repository's top-level
+      adr/ folder beside openspec/ — where accepted ADRs accumulate and
+      persist across changes. An ADR still sitting in an unarchived change is
+      a proposed decision, not yet one of the accumulated set.
 
 
       IRON RULE — ADRs are immutable once accepted. You MUST NOT edit a prior
@@ -221,7 +222,7 @@ artifacts:
       date — nothing). To change a previously accepted decision, record a NEW
       ADR whose Status is "accepted, supersedes ADR-NNNN" and whose
       `Supersedes:` field names the prior one. Design consumers derive what is
-      currently in force by walking Supersedes links across the folder — the
+      currently in force by walking Supersedes links across <repo>/adr/ — the
       prior ADR's contents stay frozen as a historical record.
 
 
@@ -246,16 +247,18 @@ artifacts:
 
 
       3. For each qualifying decision, create a NEW file at
-      <repo>/adr/NNNN-kebab-title.md, where NNNN is a 4-digit sequence one
-      greater than the highest existing. Use the template (MADR-short). If
-      this decision replaces a prior in-force ADR, set Status to
-      "accepted, supersedes ADR-NNNN", populate the `Supersedes:` field, and
-      explain in Context why the prior decision is being revisited. Do NOT
-      touch the prior ADR's file — leave it exactly as it was.
+      adr/NNNN-kebab-title.md inside this change directory, where NNNN is a
+      4-digit sequence one greater than the highest number in <repo>/adr/. Use
+      the template (MADR-short). If this decision replaces a prior in-force
+      ADR, set Status to "accepted, supersedes ADR-NNNN", populate the
+      `Supersedes:` field, and explain in Context why the prior decision is
+      being revisited. Do NOT touch the prior ADR's file — leave it exactly as
+      it was.
 
 
-      4. If nothing meets the bar, do not invent ADRs. The step still completes
-      as long as <repo>/adr/ already contains at least one ADR file.
+      4. If nothing meets the bar, do not invent ADRs. This artifact is
+      satisfied by any file in this change's adr/, so a change with no
+      qualifying decision leaves it open.
 
 
       Filename convention: NNNN-kebab-title.md (e.g.,

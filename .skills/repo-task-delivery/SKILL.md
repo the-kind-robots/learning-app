@@ -90,6 +90,7 @@ In those cases, use the narrower workflow skill directly.
    - Close OpenSpec before opening or merging the feature PR.
    - Use the proper OpenSpec tools: `openspec-sync-specs` when specs must be synced while the change stays active, or `openspec-archive-change` when the change is complete.
    - If the change is complete, archive it on the delivery branch before PR creation.
+   - **Move the change's ADRs out first.** An ADR is born in `openspec/changes/<name>/adr/` and belongs in the repository's top-level `adr/` folder once accepted. Before `openspec archive` runs, `git mv openspec/changes/<name>/adr/*.md adr/` — a move, not a copy, and not after the fact. Archiving first carries the ADRs into `openspec/changes/archive/`, where nothing reads them: the design and adr steps build the supersession graph from top-level `adr/` only.
    - Keep the archive move and main spec updates in the same delivery branch and same PR as the implementation.
    - Do not merge implementation first and archive later unless the user explicitly chooses a follow-up PR.
 
