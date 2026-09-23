@@ -13,10 +13,14 @@
 ;; What a tap on a card decides, without the DOM.
 ;;
 ;; Chrome cancels a touch it hands to the scroller — more readily while the
-;; main thread is busy — and then no `click` follows. A cancel during which
-;; the finger did not move and the page did not scroll was still a tap, and
-;; is taken as one. A gesture fires at most once: a `click` that Chrome
-;; delivers after a recovered cancel is a no-op.
+;; main thread is busy — and then no `click` follows. It cancels as the
+;; scroll begins: before the page has moved, and on Android before any
+;; `pointermove`, since moves inside the touch slop are never sent. So the
+;; cancel itself says nothing; the touch events keep coming after it, and
+;; the gesture is judged when the finger lifts. A lift that travelled no
+;; farther than a tap and scrolled nothing was a tap, and is taken as one. A
+;; gesture fires at most once: a `click` that Chrome delivers after a
+;; recovered tap is a no-op.
 ;;
 
 
@@ -27,23 +31,23 @@
 
 
 (def max-scroll-px
-  "A cancel that scrolled the page more than this was a scroll."
+  "A touch that scrolled the page more than this was a scroll."
   2)
 
 
 (defn recoverable?
-  "True when a cancelled pointer travelled at most `max-move-px` and the page
-   scrolled at most `max-scroll-px` since pointerdown. A gesture with no move
-   seen has travelled 0."
+  "True when a cancelled touch travelled at most `max-move-px` and the page
+   scrolled at most `max-scroll-px` between pointerdown and the lift. A
+   gesture with no move seen has travelled 0."
   [{:keys [moved-px scroll-delta]}]
   (and (<= (or moved-px 0) max-move-px)
        (<= (js/Math.abs (or scroll-delta 0)) max-scroll-px)))
 
 
-(defn on-cancel
-  "The gesture after a pointercancel that counts as its tap, `:fired?` set —
-   or nil when it does not: the gesture already fired, the pointer moved,
-   or the page scrolled."
+(defn on-lift
+  "The gesture, when the finger of a cancelled touch lifts, that counts as
+   its tap, `:fired?` set — or nil when it does not: the gesture already
+   fired, the finger moved, or the page scrolled."
   [gesture]
   (when (and (not (:fired? gesture)) (recoverable? gesture))
     (assoc gesture :fired? true)))
@@ -85,12 +89,13 @@
 
 (defn- track-gesture!
   "Follows one pointer from its pointerdown on `card-id`: how far it moved,
-   whether the page scrolled, and whether the gesture already fired. On
-   pointercancel a tap the browser took without movement is recovered by
-   dispatching `tap-actions`. `on-long-press`, when given, fires after
-   `long-press-delay-ms` unless the pointer moved or lifted first. Either
-   way a fired gesture swallows the click that may still follow, so it
-   fires once. One closure per gesture: its window listeners hang off one
+   whether the page scrolled, and whether the gesture already fired. A
+   touch the browser cancels is followed on through its touch events, and
+   when the finger lifts a tap is recovered by dispatching `tap-actions`.
+   `on-long-press`, when given, fires after `long-press-delay-ms` unless the
+   finger moved or lifted first, before or after a cancel. Either way a
+   fired gesture swallows the click that may still follow, so it fires
+   once. One closure per gesture: its window listeners hang off one
    AbortController, so the gesture ends with one abort."
   [{:keys [dispatch dispatch-data]} card-id tap-actions on-long-press]
   (let [event     (:replicant/dom-event dispatch-data)
@@ -110,23 +115,36 @@
                     (js/clearTimeout timer)
                     (.abort listeners))
         listen    (fn [type f]
-                    (js/window.addEventListener type f #js {:signal (.-signal listeners)}))]
-    (listen "pointermove"
-            (fn [e]
-              (let [dist (js/Math.hypot (- (.-clientX e) start-x)
-                                        (- (.-clientY e) start-y))]
-                (vswap! gesture update :moved-px max dist)
-                (when (> dist max-move-px)
-                  (js/clearTimeout timer)))))
+                    (js/window.addEventListener type f #js {:passive true :signal (.-signal listeners)}))
+        moved-to  (fn [^js at]
+                    (let [dist (js/Math.hypot (- (.-clientX at) start-x)
+                                              (- (.-clientY at) start-y))]
+                      (vswap! gesture update :moved-px max dist)
+                      (when (> dist max-move-px)
+                        (js/clearTimeout timer))))
+        touch     (fn [^js e] (aget (.-changedTouches e) 0))]
+    (listen "pointermove" moved-to)
     (listen "pointerup" (fn [_] (finish)))
+    ;; Only a touch goes on after its cancel; any other pointer ends here.
     (listen "pointercancel"
-            (fn [_]
-              (finish)
-              (when-let [tap (on-cancel (assoc @gesture :scroll-delta (- (scroll-top) start-st)))]
-                (vreset! gesture tap)
-                (trace! "tap-recovered" {:movedPx (:moved-px tap) :scrollDelta (:scroll-delta tap)})
-                (swallow-next-click! card-id)
-                (dispatch tap-actions))))))
+            (fn [^js e]
+              (if (= "touch" (.-pointerType e))
+                (vswap! gesture assoc :cancelled? true)
+                (finish))))
+    (listen "touchmove" (fn [e] (moved-to (touch e))))
+    (listen "touchcancel" (fn [_] (finish)))
+    (listen "touchend"
+            (fn [e]
+              ;; A touch that was not cancelled ended at its pointerup,
+              ;; which already aborted this listener.
+              (when (:cancelled? @gesture)
+                (moved-to (touch e))
+                (finish)
+                (when-let [tap (on-lift (assoc @gesture :scroll-delta (- (scroll-top) start-st)))]
+                  (vreset! gesture tap)
+                  (trace! "tap-recovered" {:movedPx (:moved-px tap) :scrollDelta (:scroll-delta tap)})
+                  (swallow-next-click! card-id)
+                  (dispatch tap-actions)))))))
 
 
 (nxr/register-effect! :effect/begin-long-press

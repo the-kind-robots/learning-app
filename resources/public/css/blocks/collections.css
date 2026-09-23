@@ -140,6 +140,9 @@ body:has(.switcher) {
   color: rgb(var(--color-black-text));
   font-size: 16px;
   font-weight: 800;
+  /* Names carry `lang="de"`: a long word breaks at a syllable, with a
+     hyphen. `anywhere` stays for a string with no hyphenation point. */
+  hyphens: auto;
   letter-spacing: -0.2px;
   line-height: 1.15;
   margin: 0;
@@ -227,6 +230,7 @@ body:has(.switcher) {
   color: rgb(var(--color-wolf));
   font-size: 12px;
   font-weight: 800;
+  hyphens: auto;
   letter-spacing: 0.08em;
   line-height: 1.15;
   min-width: 0;
@@ -279,6 +283,7 @@ body:has(.switcher) {
 }
 
 .tile__row-name {
+  hyphens: auto;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -333,10 +338,53 @@ body:has(.switcher) {
   z-index: 4;
 }
 
+/*
+ * In editing mode the ✕ stands where the count stood and the count is
+ * hidden, keeping its box, so the name neither narrows nor moves. Where the
+ * count shares the name's line it reserves the ✕'s width all the time, so
+ * the ✕ never reaches the name; the ✕'s glyph lines up with the count's
+ * digits. Offsets are the targets' paddings, less half the difference
+ * between the ✕ box and a line of the count.
+ */
+.tile__head .tile__count,
+.tile__row .tile__count {
+  min-width: 24px;
+  text-align: right;
+}
+
+.tile__head .tile__close {
+  justify-items: end;
+  right: 12px;
+  top: 8px;
+}
+
 .tile__row .tile__close {
-  right: 28px;
-  top: 50%;
-  transform: translateY(-50%);
+  justify-items: end;
+  right: 0;
+  top: 5px;
+}
+
+/* An editing row reaches 12 px past its tile's padding on each side and
+   pads its target by as much, so the count stays put; the ✕ follows the
+   count, not the row's edge. Without this a row that leaves editing moves
+   its ✕ 12 px while it fades out. */
+.tile__row--editing .tile__close {
+  right: 12px;
+}
+
+/* A plain tile's count sits under the name, at the bottom left. */
+.tile > .tile__close {
+  bottom: 6px;
+  justify-items: start;
+  left: 12px;
+  right: auto;
+  top: auto;
+}
+
+.tile--editing .tile__count,
+.tile__head--editing .tile__count,
+.tile__row--editing .tile__count {
+  visibility: hidden;
 }
 
 .tile__close:hover {

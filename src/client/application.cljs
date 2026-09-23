@@ -427,7 +427,8 @@
    [:polyline {:points "9 14 12 17 15 14"}]])
 
 
-(defn- sync-icon
+(defn- devices-icon
+  "A laptop beside a phone: connecting devices, not reloading the page."
   []
   [:svg.app-shell__icon
    {:aria-hidden    "true"
@@ -437,9 +438,10 @@
     :stroke-linejoin "round"
     :stroke-width   "1.8"
     :viewBox        "0 0 24 24"}
-   [:polyline {:points "23 4 23 10 17 10"}]
-   [:polyline {:points "1 20 1 14 7 14"}]
-   [:path {:d "M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"}]])
+   [:path {:d "M13 14H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1"}]
+   [:path {:d "M1.5 18H13"}]
+   [:rect {:x "16" :y "9" :width "6" :height "11" :rx "1.5"}]
+   [:path {:d "M19 17.2h0"}]])
 
 
 (defn- sync-menu-dialog
@@ -542,7 +544,7 @@
            :title      "Синхронизация"
            :aria-label "Синхронизация"
            :on         {:click [[:action/open-sync-menu]]}}
-          (sync-icon)])
+          (devices-icon)])
        (case page
          :page/home        (collections-icon)
          :page/collections (close-icon)

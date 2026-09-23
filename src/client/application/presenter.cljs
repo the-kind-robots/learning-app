@@ -8,7 +8,8 @@
 
    `:show-sync?` is where the invite gate becomes visible (ADR-0006): sync has
    no entry point until an account exists, and an account exists only once an
-   invite has been redeemed.
+   invite has been redeemed. Connecting a device is a home-page errand, so the
+   entry point is offered there and nowhere else.
 
    `:build-mark` comes from the bundle rather than the state — nothing the app
    does changes which build is running — and is empty in a release build."
@@ -18,7 +19,8 @@
    :page          (:page/current state)
    :pairing       (:app/pairing state)
    :show-install? (boolean (:pwa/install-available? state))
-   :show-sync?    (some? (:app/account-id state))
+   :show-sync?    (and (= :page/home (:page/current state))
+                       (some? (:app/account-id state)))
    :show-update?  (boolean (:pwa/new-build-waiting? state))})
 
 

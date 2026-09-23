@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change push-notified-sync. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: One fan-in feed per node
 
 The backend SHALL watch CouchDB's `_db_updates` feed in a single longpoll loop per node and SHALL map each updated `userdb-N` to account `N`. The loop SHALL start and stop with the HTTP server, survive failed feed turns by backing off before the next attempt, and never crash the server. The backoff SHALL depend on the failure: an authentication refusal (401/403) waits minutes and logs an error; any other failure waits seconds and logs a warning.
@@ -75,3 +77,17 @@ A navigation SHALL run no sync pass when a pass completed less than 30 s earlier
 - **WHEN** a poke arrives within 30 s of a completed pass
 - **THEN** a pass runs
 
+### Requirement: The device-sync control is on the home page only
+The system SHALL offer the device-sync control, named «Синхронизация», in the header of the home page only, and only once the device has an account. The control SHALL draw a laptop beside a phone. Every other page SHALL render no such control.
+
+#### Scenario: Home page with an account
+- **WHEN** a device with an account opens the home page
+- **THEN** the header shows the «Синхронизация» control
+
+#### Scenario: Another page with an account
+- **WHEN** a device with an account opens the words list, a lesson or the themes screen
+- **THEN** the header shows no «Синхронизация» control
+
+#### Scenario: No account
+- **WHEN** a device without an account opens the home page
+- **THEN** the header shows no «Синхронизация» control
