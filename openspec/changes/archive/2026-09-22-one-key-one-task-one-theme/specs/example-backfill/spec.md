@@ -1,0 +1,138 @@
+## MODIFIED Requirements
+
+### Requirement: A replication pass queues the example fetches the device owes
+
+After a completed replication pass the device SHALL count what is missing over what that pass
+brought home, and SHALL NOT read the rest of the vocabulary. Examples live in `device-db` and never
+replicate, so a document that arrived by replication can leave a pair without an example here.
+
+What is missing is counted over vocabulary entries, and a phrase is one: words and phrases are the
+same document type and ask for an example alike (`specs/examples/spec.md`). Nothing in this
+requirement reads an entry's kind.
+
+A pass SHALL count the entries it brought, and SHALL unfold a collection it brought into the entries
+that collection names. A theme document is rewritten whole every time anyone adds an entry to it on
+any device, so a pass that brings one is how this device learns that an entry was themed elsewhere;
+what that costs is the size of the theme, which is the read a start does anyway.
+
+The pairs a fetch is owed for follow the lookup rules in `specs/examples-schema/spec.md`:
+
+- for every named collection and every entry in it, when no example carries that entry and that
+  collection — a named collection's lookup is strict by `collection-id`, so an example generated
+  elsewhere does not answer it;
+- for every entry that belongs to no collection, when no example carries that entry at all — the
+  main card is a union view, so any example for the entry answers it.
+
+An entry already covered by an existing example SHALL NOT be queued. The same rule SHALL decide a
+single pair when an entry is added to a collection by hand, so both answers agree.
+
+#### Scenario: A word arrived by replication without its example
+
+- **WHEN** a replication pass brings a word document
+- **AND** that word has no example document
+- **THEN** an example-fetch task is queued for it
+
+#### Scenario: A phrase arrived by replication without its example
+
+- **WHEN** a replication pass brings a phrase document
+- **AND** that phrase has no example document
+- **THEN** an example-fetch task is queued for it, carrying the phrase's own Russian translations
+
+#### Scenario: A phrase in a named collection
+
+- **WHEN** a phrase belongs to collection T and its only example carries a different collection, or none
+- **THEN** an example-fetch task is queued for that phrase with `collection-id = T` and T's name
+
+#### Scenario: A collection arrived naming an entry this device already held
+
+- **WHEN** a replication pass brings a collection document naming entry W
+- **AND** no example carries W and that collection
+- **THEN** an example-fetch task is queued for the pair (W, that collection)
+
+#### Scenario: A word the pass did not bring
+
+- **WHEN** a replication pass completes
+- **AND** a word the pass did not bring, and that no collection the pass brought names, has no
+  example
+- **THEN** no task is queued for it by this pass
+
+#### Scenario: A pass that pulled nothing
+
+- **WHEN** a replication pass completes having written nothing on this device — a push-only pass
+- **THEN** nothing is counted and the vocabulary is not read
+
+#### Scenario: A word that already has its example
+
+- **WHEN** a replication pass brings a word whose example is already stored for the pair it is
+  looked up under
+- **THEN** no example-fetch task is queued for it
+
+#### Scenario: A word in a collection whose example came from another collection
+
+- **WHEN** a word belongs to collection T and its only example carries a different collection, or none
+- **THEN** an example-fetch task is queued for that word with `collection-id = T` and T's name
+
+#### Scenario: A word in no collection with any example
+
+- **WHEN** a word belongs to no collection and an example exists for it under some collection
+- **THEN** no task is queued — the main card's union lookup already answers
+
+#### Scenario: A word added by hand to a collection that has no example for it
+
+- **WHEN** a word already in the vocabulary is added to a named collection
+- **AND** no example carries that word and that collection
+- **THEN** an example-fetch task is queued for that pair, as a backfill pass would queue it
+
+## REMOVED Requirements
+
+### Requirement: A backfill queues every missing pair and nothing already queued
+
+**Reason**: "Already queued" was read from the database — the live queue, collected into a set of
+pairs — for a fact the task's own identity carries. Replaced by "A backfill queues every missing
+pair, and one pair is one task".
+
+**Migration**: None. A task written before this carries a generated id; the first backfill after it
+writes the pair's own id, and the queue runs both.
+
+## ADDED Requirements
+
+### Requirement: A backfill queues every missing pair, and one pair is one task
+
+A backfill SHALL queue a task for every pair it finds missing, with no cap. Queueing writes task
+documents and generates nothing: the pace belongs to the task queue, which runs a few fetches at a
+time and backs off on the provider's terms, so a cap here would only leave a remainder nobody is
+responsible for.
+
+A fetch task's identity SHALL be the pair it is for. Asking for a pair that is already queued SHALL
+therefore write nothing and SHALL NOT be an error — no reader has to know what the queue holds, and
+two backfills may run at once.
+
+A task that was dead-lettered SHALL NOT hold the identity of the pair, so the pair can be asked for
+again; the failure SHALL be kept under an identity of its own for reading.
+
+The tasks of one backfill SHALL be written together rather than one at a time — a device catching up
+on a whole vocabulary queues as many as it is missing.
+
+#### Scenario: A device is missing more pairs than any cap would allow
+
+- **WHEN** a start finds a hundred and twenty missing pairs
+- **THEN** a hundred and twenty example-fetch tasks are queued
+- **AND** nothing is left for a later pass to pick up
+
+#### Scenario: A pass repeated before the queue drains
+
+- **WHEN** a backfill runs while example-fetch tasks are still queued
+- **THEN** the pairs those tasks carry are named again and no second task is written for them
+
+#### Scenario: Two askers, one pair
+
+- **WHEN** a backfill queues the fetch for a pair
+- **AND** the reader adds that same entry to that same collection by hand
+- **THEN** the queue holds one task for the pair
+
+#### Scenario: A fetch that was dead-lettered
+
+- **WHEN** an example-fetch task has been dead-lettered for a pair
+- **AND** a backfill runs
+- **THEN** the pair counts as missing and a task is queued for it
+- **AND** the dead-lettered task is still there to read

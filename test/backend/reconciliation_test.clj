@@ -1,12 +1,10 @@
 (ns backend.reconciliation-test
   (:require
+   [backend.support.db :as support.db]
    [clojure.test :refer [deftest is testing]]
    [db :as db]
-   [migrations :as migrations]
    [next.jdbc :as jdbc]
-   [reconciliation :as sut])
-  (:import
-   [java.io File]))
+   [reconciliation :as sut]))
 
 
 (set! *warn-on-reflection* true)
@@ -14,12 +12,7 @@
 
 (defn- migrated-db
   []
-  (let [file (doto (File/createTempFile "reconciliation-test" ".db")
-               (.deleteOnExit))]
-    ;; SQLite wants to create the file itself.
-    (.delete file)
-    (doto {:dbtype "sqlite" :dbname (.getAbsolutePath file)}
-      (migrations/ensure-migrated!))))
+  (support.db/migrated-db "reconciliation-test"))
 
 
 (defn- add-account!

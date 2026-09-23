@@ -30,9 +30,16 @@
           (remove #(seen (:value %)) new-translations))))
 
 
+(def id-prefix
+  "What every vocabulary id starts with (ADR-0008). Here because it is the
+   naming rule itself, not a storage detail: whoever reads vocabulary by key
+   range asks for it rather than spelling it again."
+  "vocab:")
+
+
 (defn vocab-id
   [value]
-  (str "vocab:" (normalize-value value)))
+  (str id-prefix (normalize-value value)))
 
 
 (defn new-word
