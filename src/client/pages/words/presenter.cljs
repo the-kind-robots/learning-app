@@ -15,43 +15,6 @@
   (+ (or limit 0) page-size))
 
 
-(defn next-read-token
-  "The number for the next read of the list. Reads are numbered because five
-   callers write `:words/*` — the first render, the search, the next page, and
-   the reloads after an edit and after a synchronisation pull — and the
-   storage they go through answers in its own order."
-  [state]
-  (inc (or (:words/read-token state) 0)))
-
-
-(defn current-read?
-  "Whether these rows answer the read the list is still waiting for. A read
-   that a later one overtook is dropped, so a page asked for before a search
-   cannot land after it and put the unfiltered rows back under a search box
-   that still holds the query."
-  [state {:keys [token]}]
-  (= token (:words/read-token state)))
-
-
-(defn more-to-read?
-  "Whether reaching the end should ask for another page. A search that has not
-   answered yet says no: its rows replace the ones that page would extend, and
-   the query the page would carry is already the one being replaced."
-  [state]
-  (boolean (and (:words/more? state)
-                (nil? (:words/pending-search state)))))
-
-
-(defn new-query?
-  "Whether arriving rows answer a different query than the rows on screen.
-   They do when the reader's typing has been read: these rows replace what was
-   being read rather than extending it, and that is when the list goes back to
-   its first row — not on the keystroke 400 ms earlier, with the old rows still
-   under a reader free to scroll them."
-  [state {:keys [search]}]
-  (not= (or search "") (or (:words/search state) "")))
-
-
 (def ^:private first-run-state
   {:cta  "Добавить слово"
    :hint "Добавьте первое слово на главной странице"
