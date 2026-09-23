@@ -5,12 +5,12 @@
 
 (defn start!
   [{:keys [clock db]}]
-  {:examples/find           (fn find
-                              [word-id collection-id]
-                              (examples/find db word-id collection-id))
-   :examples/list           (fn list
-                              [word-ids collection-id]
-                              (examples/list db word-ids collection-id))
+  {:examples/list           (fn list
+                              [word-ids]
+                              (examples/list db word-ids))
+   :examples/of-word        (fn of-word
+                              [word-id]
+                              (examples/of-word db word-id))
    :examples/purge-by-collection! (fn purge-by-collection!
                                     [collection-id]
                                     (examples/purge-by-collection! db collection-id))
@@ -21,5 +21,5 @@
                               [example-id]
                               (examples/remove! db example-id))
    :examples/request!       (fn request!
-                              [word collection-id collection-name]
-                              (examples/request! db clock word collection-id collection-name))})
+                              [requests]
+                              (examples/request! db clock requests))})

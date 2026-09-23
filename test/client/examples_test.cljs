@@ -173,26 +173,6 @@
                           (sut/save-example! nil nil "word-123" "Hund" nil example)))))
 
 
-(deftest find-returns-example-when-exists
-  (async-testing "`find` returns example when it exists"
-    (with-test-db
-      (^:async fn
-       [db]
-       (await (db/insert db {:type "example" :word-id "word-123" :value "test"}))
-       (let [result (await (sut/find {:device/db db} "word-123" nil))]
-         (is (some? result))
-         (is (= "word-123" (:word-id result))))))))
-
-
-(deftest find-returns-nil-when-not-exists
-  (async-testing "`find` returns nil when not found"
-    (with-test-db
-      (^:async fn
-       [db]
-       (let [result (await (sut/find {:device/db db} "nonexistent" nil))]
-         (is (nil? result)))))))
-
-
 (deftest remove-deletes-existing-document
   (async-testing "`remove!` deletes existing document"
     (with-test-db
@@ -328,6 +308,50 @@
          (set! js/fetch original-fetch))))))
 
 
+(deftest a-fetch-is-one-task-per-pair
+  (async-testing "the pair is the identity, so asking twice writes once"
+    (await
+     (with-test-dbs
+      (^:async fn
+       [dbs]
+       (let [request {:collection-id "collection-1"
+                      :collection-name "\u041f\u043e\u0435\u0437\u0434\u043a\u0430"
+                      :word {:id "vocab:hund" :value "Hund" :translation []}}]
+         (await (sut/request! dbs (test-clock) [request]))
+         (await (sut/request! dbs (test-clock) [request]))
+         (let [tasks (await (db-queries/fetch-by-type (:device/db dbs) "task"))]
+           (is (= 1 (count tasks)))
+           (is (= "task:example-fetch:vocab:hund:collection-1" (:_id (first tasks)))
+               "the id names the pair, so the second write is a conflict"))))))))
+
+
+(deftest a-dead-lettered-fetch-leaves-its-pair-askable
+  (async-testing "the failure is kept under a key of its own"
+    (await
+     (with-test-dbs
+      (^:async fn
+       [dbs]
+       (let [request {:collection-id nil
+                      :collection-name nil
+                      :word {:id "vocab:hund" :value "Hund" :translation []}}]
+         (await (sut/request! dbs (test-clock) [request]))
+         (let [[task] (await (db-queries/fetch-by-type (:device/db dbs) "task"))]
+           ;; What the queue does with a task it will never run again.
+           (await (tasks/execute-task (assoc task :task-type "unknown-to-everyone")
+                                      {:dbs dbs :clock (test-clock)}))
+           (await (db/remove (:device/db dbs) task))
+           (await (db/insert (:device/db dbs)
+                             (-> task
+                                 (assoc :_id (str (:_id task) ":failed") :status "failed")
+                                 (dissoc :_rev)))))
+         (await (sut/request! dbs (test-clock) [request]))
+         (let [ids (set (map :_id (await (db-queries/fetch-by-type (:device/db dbs) "task"))))]
+           (is (contains? ids "task:example-fetch:vocab:hund:")
+               "the live id is free again, so the pair can be asked for")
+           (is (contains? ids "task:example-fetch:vocab:hund::failed")
+               "and the failure is still there to read"))))))))
+
+
 (deftest request-queues-the-same-task-for-a-phrase
   (async-testing "GH-371: the fetch path reads a vocabulary entry, not a word"
     (await
@@ -338,7 +362,11 @@
                      :kind        "phrase"
                      :translation [{:lang "ru" :value "во всяком случае"}]
                      :value       "auf jeden Fall"}]
-         (await (sut/request! dbs (test-clock) phrase "collection-1" "Поездка"))
+         (await (sut/request! dbs
+                              (test-clock)
+                              [{:collection-id "collection-1"
+                                :collection-name "Поездка"
+                                :word phrase}]))
          (let [tasks (await (db-queries/fetch-by-type (:device/db dbs) "task"))
                {:keys [data task-type]} (first tasks)]
            (is (= 1 (count tasks)))

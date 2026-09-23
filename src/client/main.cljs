@@ -40,7 +40,8 @@
    [runtime.system :as system]
    [service-worker]
    [sync]
-   [tasks]))
+   [tasks]
+   [use-cases.examples]))
 
 
 (def ^:private schemas
@@ -87,6 +88,11 @@
     :db/pouch              {:after [:identity/incoming]
                             :start (fn [_] (pouch/init! schemas))}
 
+    ;; Starting it asks for every example this device is missing and hands back
+    ;; the hook the engine calls when a pass is home, knowing nothing else about
+    ;; it. A component of its own, with its ports named again rather than taken
+    ;; from :app/capabilities, because that one already depends on
+    ;; :sync/identity — which is what needs the hook.
     :sync/identity         {:requires {:db :db/pouch}
                             :start    sync/start!
                             :stop     sync/stop!}
@@ -142,6 +148,27 @@
                                        :reviews           :port/reviews
                                        :words             :port/words}
                             :start    identity}
+
+    ;; Starting it asks for every example this device is missing, and it
+    ;; subscribes for what each later pass brings. The engine publishes ids
+    ;; grouped by document type and interprets none of them (#432); the two
+    ;; types the backfill has anything to say about are named here, by the
+    ;; schemas that own them.
+    :examples/backfill     {:requires {:capabilities :app/capabilities}
+                            :start
+                            (fn [{:keys [capabilities]}]
+                              (let [listen   (get-in capabilities
+                                                     [:capabilities/sync :sync/on-pass])
+                                    backfill (use-cases.examples/start! capabilities)
+                                    ours     (fn [pulled-ids]
+                                               (into (get pulled-ids
+                                                          (:type words-adapter/schema)
+                                                          #{})
+                                                     (get pulled-ids
+                                                          (:type collections-adapter/schema)
+                                                          #{})))]
+                                (listen (fn [{:keys [pulled-ids]}]
+                                          (backfill {:pulled-ids (ours pulled-ids)})))))}
 
     :app/render            {:requires {:capabilities   :app/capabilities
                                        :service-worker :worker/service-worker

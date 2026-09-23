@@ -8,6 +8,7 @@
    [clojure.string :as str]
    [db :as db]
    [examples :as examples]
+   [examples.cache :as cache]
    [examples.dictionary :as dictionary]
    [hiccup :as hiccup]
    [migrations :as migrations]
@@ -213,14 +214,6 @@
 ;;
 
 
-(defn- sha256-hex
-  [^String s]
-  (.formatHex
-   (HexFormat/of)
-   (.digest (doto (MessageDigest/getInstance "SHA-256")
-              (.update (.getBytes s "UTF-8"))))))
-
-
 (def ^:private ^SecureRandom secure-random (SecureRandom.))
 
 
@@ -253,7 +246,7 @@
                 ;; which connection options the caller carries.
                 (let [{:keys [id]} (jdbc/execute-one! tx
                                      ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
-                                      (sha256-hex token)]
+                                      (utils/sha256-hex token)]
                                      {:builder-fn result-set/as-unqualified-maps})
                       dbname       (userdb/db-name id)]
                   (when (db/exists? dbname)
@@ -281,7 +274,7 @@
   (when (utils/non-blank token)
     (:id (jdbc/execute-one! db
            ["SELECT id FROM users WHERE token_sha256 = ?"
-            (sha256-hex token)]
+            (utils/sha256-hex token)]
            {:builder-fn result-set/as-unqualified-maps}))))
 
 
@@ -294,7 +287,7 @@
    (let [token (random-token)]
      (jdbc/execute! db
        ["INSERT INTO grants (sha256, expires_at) VALUES (?, ?)"
-        (sha256-hex token) (+ (System/currentTimeMillis) ttl-ms)])
+        (utils/sha256-hex token) (+ (System/currentTimeMillis) ttl-ms)])
      token)))
 
 
@@ -325,7 +318,7 @@
      ["UPDATE grants SET used_at = UNIXEPOCH()
       WHERE sha256 = ? AND used_at IS NULL AND expires_at > ?
       RETURNING sha256"
-      (sha256-hex token) (System/currentTimeMillis)])))
+      (utils/sha256-hex token) (System/currentTimeMillis)])))
 
 
 (comment
@@ -596,33 +589,56 @@
      ["/api/examples"
       {:get
        (fn [request]
-         (let [{:keys [context word translation]} (:params request)
-               context (utils/non-blank context)]
-           (cond
-             (nil? (on-connection [db db-spec]
-                     (authenticated-user-id db (request-token request))))
-             {:status 401 :body ""}
+         ;; One connection for the whole answer — the session, the lookup and
+         ;; the write. There is no pool, so each `on-connection` was a file
+         ;; opened and closed; the request holds one instead, generation
+         ;; included, and SQLite readers do not block each other.
+         (on-connection [db db-spec]
+           (let [{:keys [word]} (:params request)]
+             (cond
+               (nil? (authenticated-user-id db (request-token request)))
+               {:status 401 :body ""}
 
-             (str/blank? word)
-             {:status  400
-              :headers {"Content-Type" "application/json"}
-              :body    (cheshire/generate-string {:error "Missing 'word' parameter"})}
+               (str/blank? word)
+               {:status  400
+                :headers {"Content-Type" "application/json"}
+                :body    (cheshire/generate-string {:error "Missing 'word' parameter"})}
 
-             :else
-             (let [result (examples/generate-one! {:context     context
-                                                   :translation translation
-                                                   :word        word})]
-               (if (examples/valid-example? result)
-                 {:status  200
-                  :headers {"Content-Type" "application/json"}
-                  :body    (cheshire/generate-string result)}
-                 {:status  (or (:status result) 502)
-                  :headers (cond-> {"Content-Type" "application/json"}
-                             (:retry-after-ms result)
-                             (assoc "Retry-After"
-                                    (str (max 1 (long (Math/ceil (/ (:retry-after-ms result) 1000.0)))))))
-                  :body    (cheshire/generate-string
-                            {:error "Examples are temporarily unavailable"})})))))}]
+               :else
+               ;; One value through all of it: the question is normalized once,
+               ;; and the cache and the provider are handed the same one. Built
+               ;; twice, or taken apart on the way, a gloss differing only in
+               ;; spacing keys one question and asks another.
+               (let [question (examples/question (:params request))
+                     stored   (cache/lookup db question)
+                     result   (when-not stored (examples/generate-one! question))]
+                 (cond
+                   ;; A hit answers without the provider — that saving is the
+                   ;; whole point of the table. Authentication still ran above.
+                   ;; The cache holds the example as data, so a hit renders here
+                   ;; exactly as a fresh generation does.
+                   stored
+                   {:status  200
+                    :headers {"Content-Type" "application/json"}
+                    :body    (cheshire/generate-string stored)}
+
+                   (examples/valid-example? result)
+                   (do
+                     ;; Only a result the endpoint would serve is kept: a bad
+                     ;; answer cached once is served to everyone forever.
+                     (cache/store! db question result)
+                     {:status  200
+                      :headers {"Content-Type" "application/json"}
+                      :body    (cheshire/generate-string result)})
+
+                   :else
+                   {:status  (or (:status result) 502)
+                    :headers (cond-> {"Content-Type" "application/json"}
+                               (:retry-after-ms result)
+                               (assoc "Retry-After"
+                                      (str (max 1 (long (Math/ceil (/ (:retry-after-ms result) 1000.0)))))))
+                    :body    (cheshire/generate-string
+                              {:error "Examples are temporarily unavailable"})}))))))}]
 
      ["/api/sync/updates"
       {:get

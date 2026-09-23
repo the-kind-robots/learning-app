@@ -1,17 +1,21 @@
 (ns backend.core-test
   (:require
+   [backend.support.db :as support.db]
+   [cheshire.core :as cheshire]
    [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
    [core :as sut]
    [db :as db]
    [examples :as examples]
-   [migrations :as migrations]
+   [examples.dictionary :as dictionary]
    [next.jdbc :as jdbc]
    [next.jdbc.result-set :as result-set]
    [org.httpkit.client :as client]
-   [org.httpkit.server :as server])
+   [org.httpkit.server :as server]
+   [utils :as utils])
   (:import
-   [java.io File]))
+   [java.io File]
+   [java.net URLEncoder]))
 
 
 (set! *warn-on-reflection* true)
@@ -19,18 +23,13 @@
 
 (defn- migrated-db
   []
-  (let [file (doto (File/createTempFile "core-test" ".db")
-               (.deleteOnExit))]
-    ;; SQLite wants to create the file itself.
-    (.delete file)
-    (doto {:dbtype "sqlite" :dbname (.getAbsolutePath file)}
-      (migrations/ensure-migrated!))))
+  (support.db/migrated-db "core-test"))
 
 
 (defn- add-account!
   [db id token]
   (jdbc/execute! db
-    ["INSERT INTO users (id, token_sha256) VALUES (?, ?)" id (#'sut/sha256-hex token)]))
+    ["INSERT INTO users (id, token_sha256) VALUES (?, ?)" id (utils/sha256-hex token)]))
 
 
 (deftest a-token-authenticates-the-account-it-was-minted-for
@@ -51,7 +50,7 @@
         token "token-of-one"]
     (add-account! db 1 token)
     (testing "only the hash is written"
-      (is (= [(#'sut/sha256-hex token)]
+      (is (= [(utils/sha256-hex token)]
              (map :token_sha256
                   (jdbc/execute! db
                     ["SELECT token_sha256 FROM users"]
@@ -159,6 +158,192 @@
             (is (= 400 (:status (ask "token-of-one" ""))))))
         (finally
          (sut/stop-server!))))))
+
+
+(defn- with-example-server
+  "Serves `/api/examples` against a fresh database holding one account, with
+   `generate!` in the provider's place. Calls (f ask), where ask takes a query
+   string and returns the response of an authenticated request. `prepare!` runs
+   against that database before the server starts, for a test that wants it in
+   some other state."
+  ([generate! f]
+   (with-example-server generate! f identity))
+  ([generate! f prepare!]
+   (let [db (migrated-db)]
+     (add-account! db 1 "token-of-one")
+     (prepare! db)
+     (with-redefs [sut/db-spec db
+                   examples/generate-one! generate!]
+       (sut/start-server! sut/app-handler 0)
+       (try
+         (let [port (server/server-port @sut/server)]
+           (f (fn ask
+                ([query] (ask query "token-of-one"))
+                ([query cookie]
+                 @(client/request
+                   (cond-> {:method :get
+                            :url    (str "http://localhost:" port "/api/examples" query)}
+                     cookie (assoc :headers {"Cookie" (str "auth-token=" cookie)})))))))
+         (finally
+          (sut/stop-server!)))))))
+
+
+(def ^:private generated
+  "What `generate-one!` answers with: an example whose `structure` items carry
+   the `wordIndex` the backend assigned. The cache keeps this shape and no
+   other, so a fixture without it would be dropped and every count of
+   generations here would read as a cache that never hits."
+  {:structure   [{:dictionaryForm "der Hund"
+                  :translation    "собака"
+                  :usedForm       "Hund"
+                  :wordIndex      1}
+                 {:dictionaryForm "bellen"
+                  :translation    "лает"
+                  :usedForm       "bellt"
+                  :wordIndex      2}]
+   :translation "Собака лает."
+   :value       "Der Hund bellt."})
+
+
+(deftest a-question-already-answered-never-reaches-the-provider
+  (let [generations (atom 0)]
+    (with-example-server
+     (fn [_] (swap! generations inc) generated)
+     (fn [ask]
+       (let [first-response (ask "?word=Hund&translation=собака")]
+         (testing "the first request generates"
+           (is (= 200 (:status first-response)))
+           (is (= 1 @generations))))
+       (testing "the second is served from the cache, and the provider is not called"
+         (let [again (ask "?word=Hund&translation=собака")]
+           (is (= 200 (:status again)))
+           (is (str/includes? (:body again) "Der Hund bellt."))
+           (is (= 1 @generations))))
+       (testing "the same glosses in another order are the same question"
+         (ask "?word=Hund&translation=пёс&translation=собака")
+         (is (= 2 @generations) "two glosses are a different question than one")
+         (ask "?word=Hund&translation=собака&translation=пёс")
+         (is (= 2 @generations)))
+       (testing "a different collection context is a different question"
+         (ask "?word=Hund&translation=собака&context=Tiere")
+         (is (= 3 @generations)))))))
+
+
+(defn- query
+  "A query string with its values percent-encoded, the way a browser sends
+   them — a Cyrillic gloss written raw into the URL never survives the trip."
+  [& pairs]
+  (str "?"
+       (str/join "&"
+                 (for [[k v] (partition 2 pairs)]
+                   (str k "=" (URLEncoder/encode (str v) "UTF-8"))))))
+
+
+(deftest a-hit-serves-what-a-generation-would
+  (testing "the cache holds data, so the second caller is answered like the first"
+    (let [generations (atom 0)]
+      (with-example-server
+       (fn [_] (swap! generations inc) generated)
+       (fn [ask]
+         (let [generated-body (:body (ask (query "word" "Hund" "translation" "собака")))
+               cached-body    (:body (ask (query "word" "Hund" "translation" "собака")))]
+           (is (= 1 @generations) "the second request never reached the provider")
+           (is (= (cheshire/parse-string generated-body true)
+                  (cheshire/parse-string cached-body true)))
+           (is (= generated (cheshire/parse-string cached-body true))
+               "including the structure items and their indexes")))))))
+
+
+(deftest the-prompt-is-built-from-the-glosses-the-key-is-built-from
+  (testing "spacing and order fold into the key, so they must fold into the generation too"
+    (let [asked (atom [])]
+      (with-example-server
+       ;; What reaches the provider is the question itself, glosses included.
+       (fn [question] (swap! asked conj (:translations question)) generated)
+       (fn [ask]
+         (ask (query "word" "Hund" "translation" "  собака "))
+         (is (= [["собака"]] @asked) "the gloss reaches the provider trimmed")
+         (ask (query "word" "Hund" "translation" "собака"))
+         (is (= [["собака"]] @asked) "and the untrimmed question was cached under that same key")
+         (ask (query "word" "Bank" "translation" "скамейка" "translation" "банк"))
+         (ask (query "word" "Bank" "translation" "банк" "translation" "скамейка"))
+         (is (= [["собака"] ["банк" "скамейка"]] @asked)
+             "one generation for both orders, and the prompt gets the order the key has"))))))
+
+
+(deftest a-word-the-dictionary-answers-for-is-a-different-question
+  (testing "the metadata goes into the prompt, so it goes into the key"
+    (let [generations (atom 0)
+          entry       {:pos         "noun"
+                       :meta        {:cefr_level "a1"}
+                       :translation [{:lang "ru" :value "собака"}]}]
+      (with-example-server
+       (fn [_] (swap! generations inc) generated)
+       (fn [ask]
+         (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+           (is (= 200 (:status (ask (query "word" "Hund" "translation" "собака")))))
+           (testing "and the answer given while the dictionary was away is kept"
+             (is (= 200 (:status (ask (query "word" "Hund" "translation" "собака")))))
+             (is (= 1 @generations))))
+         (testing "the word arriving in the dictionary is a miss, like an edited prompt"
+           (with-redefs [dictionary/lookup-dictionary-entries (constantly [entry])]
+             (is (= 200 (:status (ask (query "word" "Hund" "translation" "собака")))))
+             (is (= 2 @generations)))))))))
+
+
+(deftest a-broken-cache-still-answers-the-question
+  (testing "the table is gone: the read misses, the write is dropped, the caller is served"
+    (let [generations (atom 0)]
+      (with-example-server
+       (fn [_] (swap! generations inc) generated)
+       (fn [ask]
+         (let [response (ask "?word=Hund&translation=собака")]
+           (is (= 200 (:status response)))
+           (is (str/includes? (:body response) "Der Hund bellt.")))
+         (testing "and the next caller is served too, by generating again"
+           (is (= 200 (:status (ask "?word=Hund&translation=собака"))))
+           (is (= 2 @generations))))
+       (fn [db] (jdbc/execute! db ["DROP TABLE example_cache"]))))))
+
+
+(deftest a-refused-generation-is-never-cached
+  (let [generations (atom 0)]
+    (with-example-server
+     (fn [_]
+       (swap! generations inc)
+       ;; What the provider path returns when it gives up: not an example.
+       {:status 429 :retry-after-ms 2000})
+     (fn [ask]
+       (testing "the caller is told it failed"
+         (is (= 429 (:status (ask "?word=Hund&translation=собака")))))
+       (testing "and the next caller generates again rather than being served the failure"
+         (is (= 429 (:status (ask "?word=Hund&translation=собака"))))
+         (is (= 2 @generations)))))))
+
+
+(deftest a-malformed-example-is-never-cached
+  (let [generations (atom 0)]
+    (with-example-server
+     (fn [_]
+       (swap! generations inc)
+       ;; Shape of an example, but with nothing to show: `valid-example?`
+       ;; refuses it, and so must the cache.
+       {:value "Der Hund bellt." :translation "   "})
+     (fn [ask]
+       (is (= 502 (:status (ask "?word=Hund&translation=собака"))))
+       (is (= 502 (:status (ask "?word=Hund&translation=собака"))))
+       (is (= 2 @generations))))))
+
+
+(deftest a-cached-answer-still-needs-a-session
+  (with-example-server
+   (constantly generated)
+   (fn [ask]
+     (is (= 200 (:status (ask (query "word" "Hund")))))
+     (testing "the word is in the cache, and an anonymous caller still gets nothing"
+       (let [response (ask (query "word" "Hund") nil)]
+         (is (= 401 (:status response)))
+         (is (not (str/includes? (:body response) "Der Hund bellt."))))))))
 
 
 (deftest the-build-and-the-server-agree-on-where-the-version-lives
