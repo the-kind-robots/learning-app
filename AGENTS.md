@@ -42,6 +42,8 @@ The guards read command text and the working directory, so they stop accidents, 
 
 **Settle a decision before writing it down.** A decision about what a person does — which gesture is common, whether a control is a target or a label, what someone reads — cannot be settled by the codebase. Name those decisions before the first artifact. Take the measurement where one exists; otherwise ask the owner in one line with two named options. Until it is answered it is a line in the issue, not a spec: a test written from an unsettled decision passes and proves nothing.
 
+**Design a screen before building it.** Does this work build a new screen, or change how an existing one looks or is laid out — a theme, a redesign, a new layout? Then invoke the `frontend-design:frontend-design` skill before the first artifact: spec, design notes or code. A point fix to a layout bug — an overflow, a misaligned control — does not. The executor has the Skill tool and the plugin skills, so whoever writes the first artifact invokes it; a coordinator that settles the design itself passes the skill's direction along in the hand-off.
+
 **Verify the symptom where it appeared.** A fix proven on a fixture is not proven on the stand it was for. When the report came from a phone, the tunnel or the live nginx, the verification goes there before the work is called done.
 
 # Clojure REPL Evaluation
