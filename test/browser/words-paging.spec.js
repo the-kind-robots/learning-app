@@ -50,6 +50,18 @@ async function scrollToBottom(page) {
 const listScrollTop = (page) =>
   page.locator('.vocabulary__list').evaluate((node) => node.scrollTop);
 
+// Stops `gap` pixels short of the end of the loaded rows and reports, in the
+// same task, where the sentinel sits relative to the visible bottom of the
+// list. Nothing can re-layout in between — the observer answers in a later
+// task — so a positive gap here is the sentinel being off screen at the moment
+// the scroll happened.
+const scrollToWithin = (page, gap) =>
+  page.locator('.vocabulary__list').evaluate((list, gap) => {
+    list.scrollTop = list.scrollHeight - list.clientHeight - gap;
+    const sentinel = document.querySelector('li.word-list__sentinel');
+    return sentinel.getBoundingClientRect().top - list.getBoundingClientRect().bottom;
+  }, gap);
+
 test('the words list renders one page and grows as the reader reaches the bottom', async ({ page }) => {
   await page.goto('/');
   await seedWords(page, SEEDED);
@@ -106,6 +118,82 @@ test('editing a word keeps the rows the reader had loaded', async ({ page }) => 
   await page.getByRole('button', { name: 'Сохранить' }).click();
 
   await expect(rows(page).nth(3)).toContainText('исправленный перевод');
+  // The rows no longer close the dialog on their way in (GH-439), so the save
+  // closes it itself.
+  await expect(page.locator('dialog.word-edit-dialog')).toHaveCount(0);
   await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
   await page.screenshot({ path: 'test-results/words-paging/after-edit.png', fullPage: false });
+});
+
+// GH-439. The margin the observer is built with only widens its root, and the
+// root has to be the box that clips the sentinel: left to the default it is the
+// viewport, which clips nothing here, so the page was asked for only once the
+// reader had scrolled the sentinel into view and could then watch the query
+// run.
+test('the next page is asked for before the end of the rows is on screen', async ({ page }) => {
+  await page.goto('/');
+  await seedWords(page, SEEDED);
+  await openWords(page);
+
+  await expect(rows(page)).toHaveCount(PAGE_SIZE);
+
+  const gap = await scrollToWithin(page, 150);
+  expect(gap).toBeGreaterThan(100);
+
+  await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+  await page.screenshot({ path: 'test-results/words-paging/lookahead.png', fullPage: false });
+});
+
+// GH-439. Reaching the end during the 400 ms the search waits used to ask for
+// the next page of the query being replaced. That page was answered after the
+// matching rows and put the whole vocabulary back while the box kept the
+// query — and the scroll to the top, spent on the keystroke against rows that
+// had not changed yet, had already been undone by the scroll back down.
+test('reaching the end while a query is still being read does not undo it', async ({ page }) => {
+  await page.goto('/');
+  await seedWords(page, SEEDED);
+  await openWords(page);
+
+  await scrollToBottom(page);
+  await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+
+  // 'wort01' matches wort010..wort019 — ten rows, well under a page, so an
+  // unfiltered page arriving afterwards is unmistakable.
+  await page.getByPlaceholder('Поиск').fill('wort01');
+  await scrollToBottom(page);
+
+  await expect(rows(page)).toHaveCount(10);
+  await expect(page.getByPlaceholder('Поиск')).toHaveValue('wort01');
+  await expect(sentinel(page)).toHaveCount(0);
+  expect(await listScrollTop(page)).toBe(0);
+
+  // A read asked for before the query can only arrive after it. Auto-waiting
+  // says "wait until true" and there is nothing here to wait for, so the only
+  // way to establish that no such page lands is to let time pass first.
+  await page.waitForTimeout(1500);
+  await expect(rows(page)).toHaveCount(10);
+  await page.screenshot({ path: 'test-results/words-paging/query-survives.png', fullPage: false });
+});
+
+// GH-439. Rows used to clear `:words/editing` on their way in, which was
+// invisible while only the reader's own actions brought rows and became a
+// dialog shutting itself once the sentinel started asking for them.
+test('a word stays open while the next page loads', async ({ page }) => {
+  await page.goto('/');
+  await seedWords(page, SEEDED);
+  await openWords(page);
+
+  await rows(page).nth(3).getByRole('button').click();
+  const translation = page.getByRole('textbox', { name: 'Перевод' });
+  await translation.fill('печатаю прямо сейчас');
+
+  // The dialog is modal, so the list behind it is inert to a click but not to
+  // a scroll driven from script — which is what a page arriving in the
+  // background looks like from the list's side.
+  await scrollToWithin(page, 150);
+
+  await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+  await expect(page.locator('dialog.word-edit-dialog')).toBeVisible();
+  await expect(translation).toHaveValue('печатаю прямо сейчас');
+  await page.screenshot({ path: 'test-results/words-paging/dialog-survives-page.png', fullPage: false });
 });

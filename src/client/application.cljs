@@ -595,7 +595,12 @@
      :controllers [{:start #(dispatch [[:effect/load-home] [:effect/sync-pull]])}]}]
    ["/words"
     {:name        :page/words
-     :controllers [{:start #(dispatch [[:effect/load-words] [:effect/sync-pull]])}]}]
+     ;; Entering the screen opens no dialog. The rows no longer clear
+     ;; `:words/editing` on their way in (#439), so leaving the screen with a
+     ;; word open would otherwise bring it back on the return.
+     :controllers [{:start #(dispatch [[:action/close-word-edit]
+                                       [:action/load-words]
+                                       [:effect/sync-pull]])}]}]
    ["/lesson"
     {:name        :page/lesson
      :controllers [{:start #(dispatch [[:effect/load-lesson] [:effect/sync-pull]])}]}]
