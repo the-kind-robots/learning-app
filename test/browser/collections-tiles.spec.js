@@ -140,6 +140,27 @@ test('renaming a collection to a name already taken is refused, so one tile per 
   await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toHaveCount(1);
 });
 
+// The issue's repro (#460): the collections icon is clicked while the caret
+// is still in the heading. The click's mousedown takes focus, so the rename
+// starts on that blur and the themes screen opens before its write lands.
+test('a rename left in the heading shows on the themes screen opened from it', async ({ page }) => {
+  await page.goto('/');
+  await seedCollections(page, [['xa', 'xxx, aaa', []]]);
+  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'xxx, aaa 0', exact: true }).click();
+
+  const heading = page.getByRole('heading', { name: 'xxx, aaa' });
+  await expect(heading).toBeVisible();
+  await heading.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('xxx / aaa');
+  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+
+  await expect(page.getByRole('heading', { name: 'xxx 0', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'aaa 0', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /xxx, aaa/ })).toHaveCount(0);
+});
+
 test('tapping a row opens that collection', async ({ page }) => {
   await page.goto('/');
   await seedCollections(page, course);

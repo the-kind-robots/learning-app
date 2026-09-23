@@ -65,11 +65,14 @@
       (testing "a blank name keeps the current one"
         (is (= {:name "Kurs"} (await (sut/rename-active! (port "c:kurs" renames) "  "))))
         (is (= [] @renames)))
+      (testing "the current name again writes nothing"
+        (is (= {:name "Kurs"} (await (sut/rename-active! (port "c:kurs" renames) " Kurs "))))
+        (is (= [] @renames)))
       (testing "the collection's own name in another case is a rename, not a duplicate"
-        (is (= {:name "KURS"} (await (sut/rename-active! (port "c:kurs" renames) "KURS"))))
+        (is (= {:name "KURS" :renamed? true} (await (sut/rename-active! (port "c:kurs" renames) "KURS"))))
         (is (= [["c:kurs" "KURS"]] @renames)))
       (testing "a free name is written"
-        (is (= {:name "Neu"} (await (sut/rename-active! (port "c:kurs" renames) " Neu "))))
+        (is (= {:name "Neu" :renamed? true} (await (sut/rename-active! (port "c:kurs" renames) " Neu "))))
         (is (= [["c:kurs" "KURS"] ["c:kurs" "Neu"]] @renames)))
       (testing "no active collection"
         (is (nil? (await (sut/rename-active! (port nil renames) "Neu"))))))))
