@@ -9,6 +9,7 @@ test.use({ viewport: { width: 384, height: 800 } });
 // Enough tiles that the screen scrolls, and the names from the report.
 const collections = [
   ['arbeit-meet', 'Arbeit/Meetings und Besprechungen mit Kollegen', ['vocab:a', 'vocab:b', 'vocab:c']],
+  ['arbeit-mail', 'Arbeit/E-Mails', ['vocab:i']],
   ['reise', 'Reise', ['vocab:a']],
   ['reise-unt', 'Reise/Unterkunftsmöglichkeiten', ['vocab:d', 'vocab:e']],
   ['dt-muend', 'Deutsch-Test/Mündliche Prüfung Teil 1', ['vocab:f']],
@@ -263,4 +264,47 @@ test('a long German word breaks at a syllable with a hyphen', async ({ baseURL }
     await context.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// Owner's report on #459: moving editing from one row to another made the
+// ✕ jump. A row in editing mode is 24 px wider (it reaches past the tile's
+// padding), and a ✕ placed from the row's edge moved 12 px while fading
+// out. Sampled every frame across the switch, each visible ✕ stays put.
+test('moving editing between rows of a folder moves no ✕', async ({ page }) => {
+  await openCollections(page);
+  const fromLabel = 'Удалить набор «Meetings und Besprechungen mit Kollegen»';
+  const toLabel = 'Удалить набор «E-Mails»';
+  const from = page.getByRole('button', { name: 'Meetings und Besprechungen mit Kollegen 3', exact: true });
+  const to = page.getByRole('button', { name: 'E-Mails 1', exact: true });
+  const fromClose = page.getByRole('button', { name: fromLabel, includeHidden: true });
+  const toClose = page.getByRole('button', { name: toLabel, includeHidden: true });
+  // Where each ✕ stands at rest: the outgoing one in editing, the incoming
+  // one before it is shown.
+  const toRest = await toClose.boundingBox();
+  await longPress(page, from, fromClose);
+  const fromRest = await fromClose.boundingBox();
+
+  await page.evaluate(() => {
+    const closes = [...document.querySelectorAll('.tile__row .tile__close')];
+    window.__frames = [];
+    const sample = () => {
+      window.__frames.push(closes.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { label: el.getAttribute('aria-label'), x: r.x, y: r.y, opacity: Number(getComputedStyle(el).opacity) };
+      }));
+      if (window.__frames.length < 60) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await longPress(page, to, toClose);
+  await expect.poll(() => page.evaluate(() => window.__frames.length)).toBe(60);
+
+  const visible = (await page.evaluate(() => window.__frames)).flat().filter((c) => c.opacity > 0);
+  const fromSeen = visible.filter((c) => c.label === fromLabel);
+  const toSeen = visible.filter((c) => c.label === toLabel);
+  // Both were caught mid-fade, or the sampling proves nothing.
+  expect(fromSeen.some((c) => c.opacity < 1)).toBe(true);
+  expect(toSeen.some((c) => c.opacity < 1)).toBe(true);
+  for (const c of fromSeen) expect([c.x, c.y]).toEqual([fromRest.x, fromRest.y]);
+  for (const c of toSeen) expect([c.x, c.y]).toEqual([toRest.x, toRest.y]);
 });

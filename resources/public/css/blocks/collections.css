@@ -360,8 +360,16 @@ body:has(.switcher) {
 
 .tile__row .tile__close {
   justify-items: end;
-  right: 12px;
+  right: 0;
   top: 5px;
+}
+
+/* An editing row reaches 12 px past its tile's padding on each side and
+   pads its target by as much, so the count stays put; the ✕ follows the
+   count, not the row's edge. Without this a row that leaves editing moves
+   its ✕ 12 px while it fades out. */
+.tile__row--editing .tile__close {
+  right: 12px;
 }
 
 /* A plain tile's count sits under the name, at the bottom left. */
