@@ -126,7 +126,7 @@
 
 /* Shell actions sit in one row so any of them can be absent without leaving a
    hole: the trace export in a development build, install only when
-   installable, sync only with an account, the corner icon only on
+   installable, sync only on home with an account, the corner icon only on
    home/collections. */
 .app-shell__actions {
   align-items: center;
