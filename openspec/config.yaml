@@ -8,4 +8,4 @@ context: |
   Repo: src/shared, src/client, src/backend.
   UI: Hiccup + htmx, BEM; keep JS minimal.
   Tests: no backend tests yet; ClojureScript via shadow-cljs node tests.
-  Commits: start with GH-<issue-number> <system-reminder>.
+  Commits: start with GH-<issue-number> <subject>.
