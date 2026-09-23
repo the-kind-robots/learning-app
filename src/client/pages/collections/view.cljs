@@ -43,9 +43,9 @@
 
 
 (defn- name-and-count
-  [{:keys [name count]}]
+  [{:keys [name lang count]}]
   (list
-   [:span.tile__name name]
+   [:span.tile__name {:lang lang} name]
    [:span.tile__count count]))
 
 
@@ -73,7 +73,7 @@
             (when editing? "tile__row--editing")]}
    (close-button row)
    [:button.tile__row-target (target-attrs row)
-    [:span.tile__row-name (:name row)]
+    [:span.tile__row-name {:lang (:lang row)} (:name row)]
     [:span.tile__count (:count row)]]])
 
 
@@ -81,7 +81,7 @@
   "The parent collection when it has a document; a plain label with the
    count otherwise. Tappable means a button, so a label stays a heading and
    a target never is one."
-  [{:keys [tappable? name count] :as head}]
+  [{:keys [tappable? name lang count] :as head}]
   (if tappable?
     [:div.tile__head
      {:class [(when (:active? head) "tile__head--active")
@@ -90,7 +90,7 @@
      [:button.tile__head-target (target-attrs head)
       (name-and-count head)]]
     [:h2.tile__label
-     [:span.tile__label-text name]
+     [:span.tile__label-text {:lang lang} name]
      [:span.tile__count count]]))
 
 
