@@ -9,6 +9,7 @@
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [db.pouch :as sut]
+   [domain.vocabulary :as vocabulary]
    [userdb :as userdb]))
 
 
@@ -149,3 +150,32 @@
                  "the document this device pushed is not one it has to fetch an example for"))
            (finally
             (js/Reflect.deleteProperty js/globalThis "location"))))))))
+
+
+(def ^:private nouns-and-a-verb
+  "The issue's own six words. `aufstehen` before `das Auto`: `auf` sorts
+   before `aut`, whatever the issue's illustration says."
+  ["der Hund" "die Katze" "das Auto" "der Zug" "die Bank" "aufstehen"])
+
+
+(deftest the-preview-view-files-a-noun-under-its-word-not-its-article
+  (async-testing "a page off the view comes back with the article ignored, and the next page continues it (#438)"
+    (db-fixtures/with-test-db
+      local-name
+      (^:async fn
+       [local]
+       (let [dbs {:user/db local}]
+         (await (js/Promise.all
+                 (into-array
+                  (for [value nouns-and-a-verb]
+                    (sut/insert dbs words/schema {:_id (vocabulary/vocab-id value) :value value})))))
+         (let [first-page  (await (words/previews-page dbs {:limit 3 :skip 0}))
+               second-page (await (words/previews-page dbs {:limit 3 :skip 3}))]
+           (is (= ["aufstehen" "das Auto" "die Bank"] (mapv :value first-page))
+               "the article is ignored while ordering and still shown in full")
+           (is (= ["der Hund" "die Katze" "der Zug"] (mapv :value second-page))
+               "a page past the first continues the same order"))
+         (is (= ["der Zug"]
+                (mapv :value (await (words/previews dbs [(vocabulary/vocab-id "der Zug")]))))
+             "a row is still found by the id the word is stored under")
+         (is (= [] (await (words/previews dbs ["vocab:none"])))))))))
