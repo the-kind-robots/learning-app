@@ -33,13 +33,21 @@
 (def id-prefix
   "What every vocabulary id starts with (ADR-0008). Here because it is the
    naming rule itself, not a storage detail: whoever reads vocabulary by key
-   range asks for it rather than spelling it again."
+   range asks for it rather than spelling it again. It carries no regular
+   expression metacharacter, which is what lets `adapters.words` splice it
+   into the pattern its view's JavaScript is built from."
   "vocab:")
 
 
 (defn vocab-id
   [value]
   (str id-prefix (normalize-value value)))
+
+
+(defn- without-prefix
+  [id]
+  (cond-> id
+    (str/starts-with? id id-prefix) (subs (count id-prefix))))
 
 
 (def ^:private article
@@ -61,7 +69,7 @@
    JavaScript there is the same rule said again, and a test holds the two
    together."
   [id]
-  [(str/replace (str/replace id #"^vocab:" "") article "") id])
+  [(str/replace (without-prefix id) article "") id])
 
 
 (defn new-word

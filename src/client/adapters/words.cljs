@@ -8,13 +8,22 @@
    [domain.vocabulary :as vocabulary]))
 
 
+(def ^:private preview-map
+  "`domain.vocabulary/filed-under` said in JavaScript, because a view's map
+   function runs inside the design document and nothing of ours is in scope
+   there. The id prefix is spliced in from the one place that owns it rather
+   than typed again: typed, it would survive a change to the prefix without a
+   word of complaint and quietly key every row by the whole id — which is the
+   defect #438 fixed, back with every test still green."
+  (str "function (doc) { if (doc.type === 'vocab') emit([doc._id.replace(/^"
+       vocabulary/id-prefix
+       "/, '').replace(/^(?:der|die|das) /, ''), doc._id], [doc.kind, doc.value, doc.translation]); }"))
+
+
 (def schema
-  {:type "vocab"
-   :db :user/db
-   :views
-   {"vocab-preview"
-    {:map
-     "function (doc) { if (doc.type === 'vocab') emit([doc._id.replace(/^vocab:/, '').replace(/^(?:der|die|das) /, ''), doc._id], [doc.kind, doc.value, doc.translation]); }"}}})
+  {:type  "vocab"
+   :db    :user/db
+   :views {"vocab-preview" {:map preview-map}}})
 
 
 (def ^:private preview-view
