@@ -44,7 +44,7 @@ The system SHALL put a named collection's tile, folder header or folder row into
 - **THEN** no editing state is entered and no delete control appears
 
 ### Requirement: A collection is renamed on the home screen heading
-The system SHALL let the user rename the active collection by editing the home screen's heading. A name another collection already carries — trimmed, case-insensitive — SHALL be refused the way a blank one is: the heading shows the current name again and no document is written.
+The system SHALL let the user rename the active collection by editing the home screen's heading. A name another collection already carries — trimmed, case-insensitive — SHALL be refused the way a blank one is: the heading shows the current name again and no document is written. A rename SHALL reach whichever screen is on display when its write lands, so a themes screen opened from the heading while the name is still being written shows the new name.
 
 #### Scenario: Rename updates the stored name
 - **WHEN** the user edits the home screen heading and submits a non-blank value no other collection carries
@@ -55,6 +55,11 @@ The system SHALL let the user rename the active collection by editing the home s
 - **WHEN** the user submits a name another collection carries
 - **THEN** the heading shows the current name again
 - **AND** the collection document is unchanged
+
+#### Scenario: The themes screen opened from the heading shows the new name
+- **WHEN** the user types a new name into the heading and, with the caret still in it, taps the collections icon
+- **THEN** the themes screen shows the collection under the new name
+- **AND** no tile carries the old name
 
 ### Requirement: Opening the themes screen switches to it at once
 The system SHALL switch to the themes screen the moment it is opened and SHALL show a loading state there until its collections are available. A reload of the screen that is already open (after a sync pull) SHALL keep the current collections on screen until the new ones arrive, with no loading state in between.

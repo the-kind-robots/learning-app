@@ -5,6 +5,7 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [application]
    [cljs.test :refer-macros [deftest is testing]]
    [clojure.string :as str]
    [nexus.registry :as nxr]
@@ -14,9 +15,9 @@
    [use-cases.vocabulary :as vocabulary]))
 
 
-;; Minimal nexus bootstrap: the production registrations for these live in
-;; `application` (browser-only requires), so the test registers its own
-;; state fn, capability injection and a plain unbatched :effect/save.
+;; Minimal nexus bootstrap over `application`'s registrations: the test
+;; replaces its state fn, capability injection and batched :effect/save with
+;; plain unbatched ones.
 
 
 (nxr/register-system->state!
@@ -42,8 +43,8 @@
   (fn [_ _ _]))
 
 
-;; Registered by `application` in the browser; a keydown test dispatches them
-;; and nexus needs a handler for each.
+;; `application`'s own reach for a DOM event the test does not have; these
+;; stay inert.
 (nxr/register-effect! :effect/prevent-default
   (fn [_ _]))
 
@@ -308,3 +309,52 @@
       ;; And so does the top.
       (arrow "ArrowUp")
       (is (= ["Hund"] (active-lemmas store))))))
+
+
+;; The rename in the heading (#460), through `application`'s own
+;; `:action/reload-page`: it runs whatever the page on display stored as
+;; `:page/load`, which here only counts.
+
+
+(def ^:private reloads (atom 0))
+
+
+(nxr/register-effect! :effect/count-reload
+  (fn [_ _]
+    (swap! reloads inc)))
+
+
+(defn- rename-system
+  [writes]
+  {:store        (atom {:page/load [:effect/count-reload]})
+   :capabilities {:collections
+                  {:collections/active-id (fn [] "c:kurs")
+                   :collections/get       (fn [_] (js/Promise.resolve {:id "c:kurs" :name "Kurs"}))
+                   :collections/list      (fn []
+                                            (js/Promise.resolve [{:id "c:kurs" :name "Kurs"}
+                                                                 {:id "c:gram" :name "Grammatik"}]))
+                   :collections/rename!   (fn [id name]
+                                            (swap! writes conj [id name])
+                                            (js/Promise.resolve nil))}}})
+
+
+(defn- settled
+  "Resolves once every promise the effect chained has run."
+  []
+  (js/Promise. (fn [resolve _] (js/setTimeout resolve 0))))
+
+
+(deftest a-rename-that-writes-reloads-the-screen-on-display
+  (async-testing "GH-460: the screen on display reads again after the write"
+    (let [writes (atom [])
+          system (rename-system writes)]
+      (reset! reloads 0)
+      (nxr/dispatch system {} [[:effect/rename-active-collection " Neu "]])
+      (await (settled))
+      (is (= [["c:kurs" "Neu"]] @writes))
+      (is (= 1 @reloads))
+      (testing "a refused name writes nothing and asks no screen to read"
+        (nxr/dispatch system {} [[:effect/rename-active-collection "grammatik"]])
+        (await (settled))
+        (is (= [["c:kurs" "Neu"]] @writes))
+        (is (= 1 @reloads))))))

@@ -98,9 +98,15 @@
       ;; not change renders nothing (#213) — the heading would keep what was
       ;; typed. So it is written by hand, through the same effect Escape
       ;; already uses.
-      (when-let [{:keys [name]} (await (collections/rename-active! capabilities new-name))]
-        (dispatch [[:effect/save {:home/active-coll-name name}]
-                   [:effect/set-target-text name]]))
+      ;;
+      ;; The write lands after the blur that started it, and the tap that
+      ;; blurred the heading may have opened another screen, which has read
+      ;; its data by then (#460). So a write reloads whichever screen is on
+      ;; display, as a pull that brought documents does: home re-reads its
+      ;; heading, the themes screen its tiles.
+      (when-let [{:keys [name renamed?]} (await (collections/rename-active! capabilities new-name))]
+        (dispatch (cond-> [[:effect/set-target-text name]]
+                    renamed? (conj [:action/reload-page]))))
       (catch js/Error err
         (log/error :effect/rename-active-collection {:error (str err)})))))
 

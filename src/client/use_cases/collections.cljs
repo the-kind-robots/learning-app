@@ -84,8 +84,8 @@
    so does a name another collection already carries by the equality
    `create!` and the folder lookup use — two documents under one name
    would show as a folder plus a stray tile. Returns {:name final-name},
-   with `:noop :duplicate` when the name was taken, or nil when no
-   collection is active."
+   with `:renamed? true` when the document was written, `:noop :duplicate`
+   when the name was taken, or nil when no collection is active."
   [{:keys [collections]} new-name]
   (when-let [active-id ((:collections/active-id collections))]
     (when-let [coll (await ((:collections/get collections) active-id))]
@@ -96,8 +96,10 @@
             taken?   (some #(and (not= (:id %) active-id)
                                  (collections/same-name? (:name %) trimmed))
                            existing)
-            final    (if (or (str/blank? trimmed) taken?) current trimmed)]
-        (when (not= final current)
+            final    (if (or (str/blank? trimmed) taken?) current trimmed)
+            renamed? (not= final current)]
+        (when renamed?
           (await ((:collections/rename! collections) active-id final)))
         (cond-> {:name final}
-          taken? (assoc :noop :duplicate))))))
+          renamed? (assoc :renamed? true)
+          taken?   (assoc :noop :duplicate))))))
