@@ -35,14 +35,14 @@
    on the active collection's target. It goes on a
    `<button>` every time, so nothing claims a role it cannot carry and a
    keyboard reaches every target."
-  [{:keys [id tap deletable? current]}]
-  {:aria-current       current
+  [{:keys [id tap deletable? active?]}]
+  {:aria-current (when active? "true")
    :data-collection-id id
-   :on                 {:click       tap
-                        :pointerdown (if deletable?
-                                       [[:effect/begin-long-press id tap]]
-                                       [[:effect/begin-tap id tap]])}
-   :type               "button"})
+   :on {:click       tap
+        :pointerdown (if deletable?
+                       [[:effect/begin-long-press id tap]]
+                       [[:effect/begin-tap id tap]])}
+   :type "button"})
 
 
 (defn- name-and-count

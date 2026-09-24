@@ -13,9 +13,9 @@
 
 ## 3. Current
 
-- [x] 3.1 Presenter `:current`; view `aria-current`.
+- [x] 3.1 View: `aria-current` from `:active?`.
 
 ## 4. Tests
 
-- [x] 4.1 Unit: neighbour choice, message, `:current`.
+- [x] 4.1 Unit: neighbour choice, message.
 - [x] 4.2 Browser: Tab order with ✕, Enter deletes, focus on neighbour, status text, `aria-current`, folder parent deletion; a touch delete reveals no ✕.

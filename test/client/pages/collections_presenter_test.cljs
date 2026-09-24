@@ -94,16 +94,6 @@
     (is (= ["de"] (mapv :lang (:rows folder))))))
 
 
-(deftest only-the-active-target-is-current
-  (let [items [(collection "solo" "Solo") (collection "k1" "Kurs / Kapitel 1")]
-        [main folder solo] (sut/tiles {:collections/items items :collections/active-id "k1"})]
-    (is (= "true" (:current (first (:rows folder)))))
-    (is (nil? (:current main)))
-    (is (nil? (:current solo))))
-  (is (= "true" (:current (first (sut/tiles {:collections/items []}))))
-      "no active collection makes «Всё подряд» current"))
-
-
 (deftest the-status-line-names-the-deleted-collection
   (is (= "Набор «Solo» удалён"
          (:announcement (sut/page-props {:collections/deleted-name "Solo"}))))

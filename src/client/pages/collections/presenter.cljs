@@ -28,7 +28,6 @@
    :lang         lang
    :count        count
    :active?      active?
-   :current      (when active? "true")
    :editing?     (= id (:collections/editing-id state))
    :deletable?   deletable?
    :delete-label (when deletable? (str "Удалить набор «" name "»"))
