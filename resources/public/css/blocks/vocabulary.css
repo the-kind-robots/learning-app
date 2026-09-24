@@ -44,22 +44,6 @@ body:has(.vocabulary) #app {
   display: none;
 }
 
-/* The heading names the screen for assistive technology only: the screen is
-   left by the shell's corner ✕, and the rows are the first thing under the
-   bar. */
-.vocabulary__title {
-  border: 0;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  padding: 0;
-  position: absolute;
-  white-space: nowrap;
-  width: 1px;
-}
-
 /* The footer's top half: its background and gutters, and a
    `page-footer__action` like the button below it, so field and button share
    their width. The 12px under the field is the gap to the button with the

@@ -120,7 +120,7 @@
        (list
         ;; The screen is left by the shell's corner ✕; the heading stays for
         ;; assistive technology only.
-        [:h1.vocabulary__title "Мои слова"]
+        [:h1.vocabulary__title.visually-hidden "Мои слова"]
         [:div.vocabulary__list
          [:ul.word-list
           {:id "word-list"}
