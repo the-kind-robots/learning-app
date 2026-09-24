@@ -81,6 +81,7 @@ Important behavior:
 - `Area`, `Size` and `Status` are ordinary project fields, set by name through `gh project item-edit`; `Area` and `Size` are skipped with a warning when the target project does not expose them.
 - `Priority` is not a project field. It is the organization's native issue field, written with the `setIssueFieldValue` mutation — `updateProjectV2ItemFieldValue` refuses a column backed by an issue field. Valid options are `Urgent`, `High`, `Medium`, `Low`; the retired `Blocker`/`Critical`/`Major`/`Minor`/`Trivial` are rejected with the replacement named.
 - Reading Priority back needs the `ProjectV2ItemIssueFieldValue` fragment. A plain `ProjectV2ItemFieldSingleSelectValue` query returns nothing for it, which looks exactly like "unset" and is not.
+- `--milestone <title>` puts the issue in an open milestone, on creation and on reuse alike (`gh issue edit --milestone`). The title is checked against the repo's open milestones before anything is created; an unknown one fails the run. Milestones are never created by the script.
 - Missing labels are skipped with a warning instead of aborting issue creation.
 - When the run ends with an issue number, `rename_session.sh` renames the running Claude Code session to `<number> <issue title>` and prints `Session Name: ...`. Outside a Claude Code session it is a silent no-op, and a failed rename never fails the flow.
 - If no assignee or status is provided, the workflow defaults to `@me` and `Backlog`.
