@@ -1,7 +1,7 @@
 # app-logic-testing Specification
 
 ## Purpose
-TBD - created by archiving change add-app-logic-tests. Update Purpose after archive.
+Define how application logic is tested without a browser or network: which flows the unit tests cover, and how domain logic is kept apart from side effects so it can be tested with fakes.
 ## Requirements
 ### Requirement: Word operations are covered by unit tests
 The system SHALL provide unit tests for adding, updating, filtering, and deleting words using a local PouchDB instance, without external network services.

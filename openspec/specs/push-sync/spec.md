@@ -1,7 +1,7 @@
 # push-sync Specification
 
 ## Purpose
-TBD - created by archiving change push-notified-sync. Update Purpose after archive.
+Define how a change on one device reaches the others promptly: the backend watches CouchDB and pokes the account's open clients, which then pull through the normal sync path without redundant passes or needless redraws.
 
 ## Requirements
 

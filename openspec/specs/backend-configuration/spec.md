@@ -1,7 +1,7 @@
 # backend-configuration Specification
 
 ## Purpose
-TBD - created by archiving change configurable-db-path. Update Purpose after archive.
+Define how the backend is configured from its environment — database location, variable naming, CouchDB credentials — and how a source checkout is told apart from a packaged deployment, including the dev build's distinct PWA identity.
 ## Requirements
 ### Requirement: Database path is configurable via environment
 The backend SHALL resolve its SQLite database path from `LEARNING_APP__DB_PATH`, defaulting to `app.db` relative to the working directory when the variable is unset. The resolved spec SHALL live in exactly one place, used by the server, handlers, and migrations alike.

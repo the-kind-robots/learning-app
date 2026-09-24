@@ -1,7 +1,7 @@
 # staging-environment Specification
 
 ## Purpose
-TBD - created by archiving change staging-container. Update Purpose after archive.
+Define the staging container that verifies the packaged infrastructure without a server, what it may and may not claim, and when CI runs it.
 ## Requirements
 ### Requirement: The packaged shape is verifiable without a server
 A staging run SHALL build the infra deb exactly as CI builds it, install it inside a systemd container, and verify the resulting shape by script: services under their production sandboxes, nginx answering, the authentication boundary — including that a client-supplied CouchDB proxy-auth header does not reach an upstream — migrations against the configured database path, legacy database adoption, and a backup archive carrying both stores. Each assertion SHALL report PASS or FAIL on its own line and the run SHALL exit nonzero when any assertion fails.

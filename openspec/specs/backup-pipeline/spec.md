@@ -1,7 +1,7 @@
 # backup-pipeline Specification
 
 ## Purpose
-TBD - created by archiving change couchdb-in-backups. Update Purpose after archive.
+Define how the production data stores are backed up together, how a restore is proven rather than assumed, and where the backup key is kept.
 ## Requirements
 ### Requirement: Both stores are backed up as one coherent archive
 Every backup run SHALL capture the SQLite database and the CouchDB data tree in a single archive, taken back to back, so a restore recovers matching account rows and userdbs. Backup SHALL read CouchDB with access scoped to the backup service.
