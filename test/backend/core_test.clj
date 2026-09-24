@@ -12,6 +12,7 @@
    [next.jdbc.result-set :as result-set]
    [org.httpkit.client :as client]
    [org.httpkit.server :as server]
+   [taoensso.telemere :as t]
    [utils :as utils])
   (:import
    [java.io File]
@@ -530,3 +531,28 @@
       (#'sut/adopt-database! legacy {:dbname (.getPath target)})
       (is (= "real-bytes" (slurp target)) "adopted over the empty placeholder")
       (is (not (.exists legacy))))))
+
+
+(defn- signal-of
+  "The last signal a query on db leaves, with debug signals let through."
+  [db sql-params]
+  (t/with-min-level :debug
+    (t/with-signal
+      (sut/on-connection [conn db]
+        (try (jdbc/execute! conn sql-params)
+             (catch Exception _))))))
+
+
+(deftest a-query-leaves-a-signal-with-its-sql-and-no-parameters
+  (let [db (migrated-db)]
+    (testing "a successful query is logged at debug"
+      (let [{:keys [level id data]} (signal-of db ["SELECT ? AS secret" "tok-123"])]
+        (is (= [:debug :core/query] [level id]))
+        (is (= "SELECT ? AS secret" (:sql data)))
+        (is (nat-int? (:ms data)))
+        (is (not (str/includes? (pr-str data) "tok-123")))))
+    (testing "a failing query is logged at error with its cause"
+      (let [{:keys [level id data error]} (signal-of db ["SELECT * FROM no_such_table"])]
+        (is (= [:error :core/query-failed] [level id]))
+        (is (= "SELECT * FROM no_such_table" (:sql data)))
+        (is (instance? Throwable error))))))

@@ -162,17 +162,17 @@
   `(with-open [connection# (jdbc/get-connection ~connectable)]
      (let [~sym (-> connection#
                     (jdbc/with-logging
+                     ;; The SQL text only: parameters and results carry
+                     ;; tokens and user data.
                      (fn [_sym# sql-params#]
-                       {:time  (System/currentTimeMillis)
-                        :query sql-params#})
+                       {:started-ms (System/currentTimeMillis)
+                        :sql        (first sql-params#)})
                      (fn [_sym# state# result#]
-                       (let [data#      {:time   (str (- (System/currentTimeMillis) (:time state#))
-                                                      " ms")
-                                         :query  (:query state#)
-                                         :result result#}
-                             log-level# (if (instance? Throwable result#)
-                                          :error
-                                          :debug)])))
+                       (let [data# {:sql (:sql state#)
+                                    :ms  (- (System/currentTimeMillis) (:started-ms state#))}]
+                         (if (instance? Throwable result#)
+                           (t/event! ::query-failed {:level :error :error result# :data data#})
+                           (t/event! ::query {:level :debug :data data#})))))
                     (jdbc/with-options jdbc/unqualified-snake-kebab-opts))]
 
        ;; Enable foreign key constraints in SQLite, as they are disabled by default.
