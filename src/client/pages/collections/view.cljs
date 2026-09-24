@@ -127,7 +127,7 @@
   (let [{:keys [loading? tiles announcement]} (presenter/page-props state)]
     [:div.switcher
      {:on {:click [[:effect/exit-editing-on-background]]}}
-     [:h1.switcher__title "Наборы"]
+     [:h1.switcher__title.visually-hidden "Наборы"]
      (if loading?
        [:div.switcher__loading {:role "status" :aria-live "polite"}
         [:p.switcher__loading-text "Загружаем…"]]
@@ -139,5 +139,5 @@
             (plain-tile tile)))])
      ;; Outside the masonry, whose children are tiles only. On screen from
      ;; the first render, so a message written into it is announced.
-     [:p.switcher__status {:role "status"} announcement]
+     [:p.switcher__status.visually-hidden {:role "status"} announcement]
      (add-button)]))

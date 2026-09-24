@@ -23,3 +23,5 @@
 @import url("./blocks/pwa-install.css") layer(blocks);
 @import url("./blocks/collections.css") layer(blocks);
 @import url("./blocks/sync-dialogs.css") layer(blocks);
+
+@import url("./utilities/visually-hidden.css") layer(utilities);

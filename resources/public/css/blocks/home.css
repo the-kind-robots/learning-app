@@ -214,23 +214,6 @@
   width: 100%;
 }
 
-/* Keep structure accessible, hide visually (CSS can be revised later). */
-.home__title,
-.home__lesson-title,
-.home__add-legend,
-.home__add-form-label {
-  border: 0;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  padding: 0;
-  position: absolute;
-  white-space: nowrap;
-  width: 1px;
-}
-
 @media (min-width: 700px) {
   .home__add-fieldset {
     gap: 24px;

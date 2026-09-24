@@ -33,7 +33,7 @@
      :autocorrect "off"
      :on {:submit [[:effect/prevent-default]
                    [:action/check-answer [:event.form.field/value "answer"]]]}}
-    [:label.lesson__input-label {:for "lesson-answer"} "Ответ на немецком"]
+    [:label.lesson__input-label.visually-hidden {:for "lesson-answer"} "Ответ на немецком"]
     [:textarea.lesson__input
      {:id          "lesson-answer"
       :name        "answer"
@@ -156,7 +156,7 @@
 (defn empty-state
   []
   [:div.lesson
-   [:h1.lesson__title "Урок"]
+   [:h1.lesson__title.visually-hidden "Урок"]
    [:main.lesson__body
     [:div.lesson__empty
      [:div.lesson__empty-state
@@ -176,7 +176,7 @@
           answer-hint  (presenter/answer-hint-props state)]
       [:div.lesson
        (when answer-hint (answer-hint-popover answer-hint))
-       [:h1.lesson__title "Урок"]
+       [:h1.lesson__title.visually-hidden "Урок"]
        [:header.lesson__header
         (progress lesson-state {})
         [:button.lesson__cancel

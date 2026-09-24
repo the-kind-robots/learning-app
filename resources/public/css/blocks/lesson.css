@@ -55,21 +55,6 @@
   }
 }
 
-/* Structural headings/labels stay in the DOM for accessibility. */
-.lesson__title,
-.lesson__input-label {
-  border: 0;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  padding: 0;
-  position: absolute;
-  white-space: nowrap;
-  width: 1px;
-}
-
 .lesson__progress-shell {
   display: flex;
   flex: 1 1 auto;
