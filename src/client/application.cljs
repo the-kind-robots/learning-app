@@ -218,13 +218,11 @@
     [[:effect/navigate :page/collections]]))
 
 
-;; The corner ✕ closes whichever screen is on display. A lesson is ended the
-;; way its cancellation always ended it, which takes the app home itself.
+;; The corner ✕ closes whichever screen is on display. What leaving does to a
+;; screen's own work belongs to its route: the lesson ends on its `:stop`.
 (nxr/register-action! :action/close-screen
-  (fn close-screen [state]
-    (if (= :page/lesson (:page/current state))
-      [[:action/cancel-lesson]]
-      [[:action/go-to-home]])))
+  (fn close-screen [_]
+    [[:action/go-to-home]]))
 
 
 ;;
@@ -623,7 +621,10 @@
                                        [:effect/sync-pull]])}]}]
    ["/lesson"
     {:name        :page/lesson
-     :controllers [{:start #(dispatch [[:effect/load-lesson] [:effect/sync-pull]])}]}]
+     ;; Leaving the route ends the lesson, whatever did the leaving: Back,
+     ;; the corner ✕, the finish button (#484).
+     :controllers [{:start #(dispatch [[:effect/load-lesson] [:effect/sync-pull]])
+                    :stop  #(dispatch [[:effect/end-lesson]])}]}]
    ["/collections"
     {:name        :page/collections
      :controllers [{:start #(dispatch [[:action/open-collections]

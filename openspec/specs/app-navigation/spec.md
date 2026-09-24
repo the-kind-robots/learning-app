@@ -6,7 +6,7 @@ Define how a screen is closed and what the browser's Back does across the app.
 ## Requirements
 
 ### Requirement: Every screen but home closes from the corner
-The words, lesson and themes screens SHALL each carry one close control (✕), labelled «Закрыть», in the top-right corner of the shell bar — the control the themes screen carries. The home screen SHALL carry no close control. Closing a screen SHALL return home; closing the lesson SHALL end it first, exactly as its cancellation did. No screen SHALL carry a second control of its own that leaves it for home.
+The words, lesson and themes screens SHALL each carry one close control (✕), labelled «Закрыть», in the top-right corner of the shell bar — the control the themes screen carries. The home screen SHALL carry no close control. Closing a screen SHALL return home, the same way for every screen; what leaving a screen does to that screen's own work belongs to the screen. No screen SHALL carry a second control of its own that leaves it for home.
 
 #### Scenario: A close control on each screen but home
 - **WHEN** the words, lesson or themes screen is on display
@@ -19,7 +19,7 @@ The words, lesson and themes screens SHALL each carry one close control (✕), l
 
 #### Scenario: Closing an active lesson
 - **WHEN** the user taps «Закрыть» during a lesson
-- **THEN** the lesson ends as a cancelled lesson and the home screen is on display
+- **THEN** the home screen is on display
 
 ### Requirement: The words screen shows no heading and no back button
 The words screen SHALL show neither a back button nor a visible heading; the rows start under the shell bar with a gap. With the keyboard closed, its search field SHALL sit at the foot of the screen, directly above the lesson button and as wide as it. Where the browser lets the keyboard overlay the page, the open keyboard SHALL cover the lesson button, which stays at the bottom of the screen, and the search field SHALL sit directly above the keyboard. A browser that cannot overlay the keyboard MAY carry the search field and the lesson button above it together. The screen SHALL keep the level-one heading «Мои слова» for assistive technology, visually hidden.

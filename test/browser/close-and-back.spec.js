@@ -132,3 +132,87 @@ test('a screen opened directly has home beneath it, reload included', async ({ p
   await page.goBack();
   await expect(page).toHaveURL(/\/favicon\.ico$/);
 });
+
+// Leaving a lesson ends it, whatever did the leaving: Back, the corner close,
+// the finish button (#484). The stored lesson is the evidence — nothing on
+// home renders it, and entering again would start fresh either way. Read at
+// the engine level, as test/browser/README.md prescribes.
+async function storedLessons(page) {
+  return page.evaluate(async () => {
+    const kw = cljs.core.keyword;
+    const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
+    const found = await db.find(db.use('device-db'), toClj({ selector: { type: 'lesson' } }));
+    return cljs.core.count(cljs.core.get(found, kw('docs')));
+  });
+}
+
+const ANSWERS = { дом: 'Haus', собака: 'Hund' };
+
+async function addWords(page) {
+  for (const [translation, word] of Object.entries(ANSWERS)) {
+    await page.getByLabel('Слово (немецкий)').fill(word);
+    await page.getByLabel('Перевод (русский)').fill(translation);
+    await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
+    await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
+  }
+}
+
+const progress = (page) => page.getByRole('progressbar', { name: 'Прогресс урока' });
+
+async function startLesson(page) {
+  await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
+  await expect(page).toHaveURL(/\/lesson$/);
+  await expect(progress(page)).toHaveAttribute('aria-valuenow', '0');
+  await expect.poll(() => storedLessons(page)).toBe(1);
+}
+
+// The answer field is on screen only while a trial waits for its answer, so
+// the prompt read after it is the current trial's, not the one just passed.
+async function answerCorrectly(page) {
+  await expect(page.locator('#lesson-answer')).toBeVisible();
+  const prompt = (await page.locator('.lesson__prompt').textContent()).trim();
+  await page.locator('#lesson-answer').fill(ANSWERS[prompt]);
+  await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
+  await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
+}
+
+test('Back out of a lesson ends it; entering again starts fresh', async ({ page }) => {
+  await page.goto('/home');
+  await addWords(page);
+  await startLesson(page);
+  await answerCorrectly(page);
+  await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
+  await expect(progress(page)).not.toHaveAttribute('aria-valuenow', '0');
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(homeHeading(page)).toBeVisible();
+  await expect.poll(() => storedLessons(page)).toBe(0);
+
+  await startLesson(page);
+});
+
+test('closing a lesson from the corner ends it', async ({ page }) => {
+  await page.goto('/home');
+  await addWords(page);
+  await startLesson(page);
+  await answerCorrectly(page);
+
+  await close(page).click();
+  await expect(homeHeading(page)).toBeVisible();
+  await expect.poll(() => storedLessons(page)).toBe(0);
+});
+
+test('finishing a lesson ends it and goes home', async ({ page }) => {
+  await page.goto('/home');
+  await addWords(page);
+  await startLesson(page);
+  await answerCorrectly(page);
+  await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
+  await answerCorrectly(page);
+
+  await page.getByRole('button', { name: 'ЗАКОНЧИТЬ' }).click();
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(homeHeading(page)).toBeVisible();
+  await expect.poll(() => storedLessons(page)).toBe(0);
+});

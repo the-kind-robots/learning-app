@@ -51,12 +51,12 @@
         (log/error :effect/next-trial {:error (str err)})))))
 
 
+;; Run by the route's `:stop`, after the navigation away: it only ends.
 (nxr/register-effect! :effect/end-lesson
   (fn ^:async end-lesson
-    [{:keys [capabilities dispatch]} _]
+    [{:keys [capabilities]} _]
     (try
       (await (lesson/finish! capabilities))
-      (dispatch [[:action/go-to-home]])
       (catch js/Error err
         (log/error :effect/end-lesson {:error (str err)})))))
 
