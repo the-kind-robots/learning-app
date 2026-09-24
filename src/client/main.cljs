@@ -36,6 +36,7 @@
    [reitit.frontend :as rf]
    [reitit.frontend.controllers :as rfc]
    [reitit.frontend.easy :as rfe]
+   [reitit.frontend.history :as rfh]
    [replicant.dom :as r]
    [runtime.system :as system]
    [service-worker]
@@ -224,10 +225,12 @@
                                        :document/listeners]
                             :start    (fn [{:keys [render]}]
                                         (let [dispatch    (:dispatch render)
-                                              controllers (atom nil)]
+                                              controllers (atom nil)
+                                              router      (rf/router (application/routes dispatch))]
+                                          (navigation/put-home-beneath!
+                                           #(some? (rf/match-by-path router %)))
                                           (rfe/start!
-                                           (rf/router
-                                            (application/routes dispatch))
+                                           router
                                            (fn [match _history]
                                              (if match
                                                (reset! controllers (rfc/apply-controllers @controllers match))
@@ -235,7 +238,16 @@
                                                ;; entry rather than pushing one. That also drops the fragment,
                                                ;; taking an incoming credential out of the address bar.
                                                (rfe/replace-state :page/home)))
-                                           {:use-fragment false})))}}))
+                                           ;; A shell link takes its own click and asks
+                                           ;; the navigation port (ADR-0015); reitit's
+                                           ;; anchor handler does not look at
+                                           ;; `defaultPrevented` and would push the
+                                           ;; same path a second time.
+                                           {:ignore-anchor-click?
+                                            (fn [router ^goog.events.BrowserEvent e el uri]
+                                              (and (not (.. e getBrowserEvent -defaultPrevented))
+                                                   (rfh/ignore-anchor-click? router e el uri)))
+                                            :use-fragment false})))}}))
 
 
 (defn ^:async ^:export start

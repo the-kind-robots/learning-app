@@ -24,3 +24,11 @@
       (is (false? (:show-sync? (sut/shell-props {:page/current   page
                                                  :app/account-id "7"})))
           (str page)))))
+
+
+(deftest shell-props-puts-the-grid-on-home-and-the-close-mark-elsewhere
+  (is (= :collections (:corner (sut/shell-props {:page/current :page/home}))))
+  (doseq [page [:page/words :page/lesson :page/collections]]
+    (is (= :close (:corner (sut/shell-props {:page/current page}))) (str page)))
+  (testing "no page on display yet, no corner control"
+    (is (nil? (:corner (sut/shell-props {:page/current :page/loading}))))))

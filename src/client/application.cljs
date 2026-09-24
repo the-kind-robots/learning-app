@@ -213,6 +213,20 @@
     [[:effect/select-all]]))
 
 
+(nxr/register-action! :action/go-to-collections
+  (fn go-to-collections [_]
+    [[:effect/navigate :page/collections]]))
+
+
+;; The corner ✕ closes whichever screen is on display. A lesson is ended the
+;; way its cancellation always ended it, which takes the app home itself.
+(nxr/register-action! :action/close-screen
+  (fn close-screen [state]
+    (if (= :page/lesson (:page/current state))
+      [[:action/cancel-lesson]]
+      [[:action/go-to-home]])))
+
+
 ;;
 ;; Placeholder
 ;;
@@ -372,7 +386,8 @@
   [:a.app-shell__corner-icon
    {:href       "/collections"
     :aria-label "Открыть наборы"
-    :title      "Наборы"}
+    :title      "Наборы"
+    :on         {:click [[:effect/prevent-default] [:action/go-to-collections]]}}
    [:svg.app-shell__corner-icon-svg
     {:viewBox "0 0 16 16" :aria-hidden "true"}
     [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
@@ -386,7 +401,8 @@
   [:a.app-shell__corner-icon
    {:href       "/home"
     :aria-label "Закрыть"
-    :title      "Закрыть"}
+    :title      "Закрыть"
+    :on         {:click [[:effect/prevent-default] [:action/close-screen]]}}
    [:svg.app-shell__corner-icon-svg
     {:viewBox "0 0 16 16" :aria-hidden "true"}
     [:path
@@ -485,7 +501,7 @@
 
 (defn- render
   [state]
-  (let [{:keys [build-mark menu-open? page pairing show-install? show-sync? show-update?]}
+  (let [{:keys [build-mark corner menu-open? page pairing show-install? show-sync? show-update?]}
         (presenter/shell-props state)]
     (list
      ;; One bar across the top holds the three slots: the word mark, the build
@@ -495,7 +511,9 @@
      ;; the bar rather than between its neighbours.
      [:div.app-shell__bar
       [:div.app-shell__bar-slot
-       [:a.app-shell__logo {:href "/home"}
+       [:a.app-shell__logo
+        {:href "/home"
+         :on   {:click [[:effect/prevent-default] [:action/go-to-home]]}}
         "Sprecha"
         ;; A development build's word mark ends in a red D. A letter of the
         ;; name, nothing to tap; the ^boolean on the flag is what lets Closure
@@ -545,9 +563,9 @@
            :aria-label "Синхронизация"
            :on         {:click [[:action/open-sync-menu]]}}
           (devices-icon)])
-       (case page
-         :page/home        (collections-icon)
-         :page/collections (close-icon)
+       (case corner
+         :collections (collections-icon)
+         :close       (close-icon)
          nil)]]
      (install-guide/render state)
      (when menu-open?

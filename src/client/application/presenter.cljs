@@ -11,10 +11,18 @@
    invite has been redeemed. Connecting a device is a home-page errand, so the
    entry point is offered there and nowhere else.
 
+   `:corner` is the control in the top-right corner: the themes icon on home,
+   the close mark on every other page (ADR-0015). Nil while no page is on
+   display yet.
+
    `:build-mark` comes from the bundle rather than the state — nothing the app
    does changes which build is running — and is empty in a release build."
   [state]
   {:build-mark    build-identity/stamp
+   :corner        (case (:page/current state)
+                    :page/home :collections
+                    (:page/collections :page/lesson :page/words) :close
+                    nil)
    :menu-open?    (boolean (:app/sync-menu-open? state))
    :page          (:page/current state)
    :pairing       (:app/pairing state)

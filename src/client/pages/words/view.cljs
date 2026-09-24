@@ -115,11 +115,9 @@
          [:li.word-list__empty.word-list__empty--no-words
           (empty-state placeholder)]]]
        (list
-        [:header.vocabulary__header
-         [:button.vocabulary__back
-          {:on {:click [[:action/go-to-home]]}}
-          "← Назад"]
-         [:h1.vocabulary__title "Мои слова"]]
+        ;; The screen is left by the shell's corner ✕; the heading stays for
+        ;; assistive technology only.
+        [:h1.vocabulary__title "Мои слова"]
         [:form.vocabulary__search
          {:autocapitalize "none"
           :autocorrect "off"

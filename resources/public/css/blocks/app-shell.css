@@ -126,8 +126,8 @@
 
 /* Shell actions sit in one row so any of them can be absent without leaving a
    hole: the trace export in a development build, install only when
-   installable, sync only on home with an account, the corner icon only on
-   home/collections. */
+   installable, sync only on home with an account, the grid icon on
+   home and the close mark on every other page. */
 .app-shell__actions {
   align-items: center;
   display: flex;
