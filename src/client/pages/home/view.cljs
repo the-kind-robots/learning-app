@@ -35,11 +35,11 @@
                       :translation [:event.form.field/value "translation"]
                       :focus-id    "new-word-value"}]]}}
      [:fieldset.home__add-fieldset
-      [:legend.home__add-legend (:legend copy)]
+      [:legend.home__add-legend.visually-hidden (:legend copy)]
       [:div.home__add-form-row
        [:div.autocomplete
         [:div.home__add-label-row
-         [:label.home__add-form-label {:for "new-word-value"} (:value-label copy)]]
+         [:label.home__add-form-label.visually-hidden {:for "new-word-value"} (:value-label copy)]]
         [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-value"
           :name         "value"
@@ -67,7 +67,7 @@
          (for [item items]
            (suggestion-item item))]]
        [:div.home__add-translation
-        [:label.home__add-form-label {:for "new-word-translation"} "Перевод (русский)"]
+        [:label.home__add-form-label.visually-hidden {:for "new-word-translation"} "Перевод (русский)"]
         [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-translation"
           :name         "translation"
@@ -120,7 +120,7 @@
                       {:alt? [:event.keyboard/alt?]
                        :key  [:event.keyboard/key]}]]}}
      [:header.home__intro
-      [:h1.home__title "Главная"]
+      [:h1.home__title.visually-hidden "Главная"]
       [:p.home__subtitle
        {:style {:visibility (if empty-vocab? "visible" "hidden")}}
        "Быстро добавляйте слова и учите немецкий даже без сети."]]
@@ -146,7 +146,7 @@
 
      [:footer#home-lesson-footer.home__footer.page-footer
       {:hidden empty-vocab?}
-      [:h2.home__lesson-title "Урок"]
+      [:h2.home__lesson-title.visually-hidden "Урок"]
       [:div.page-footer__action
        [:button.home__lesson-button.big-button.green-button
         {:on {:click [[:action/go-to-lesson]]}}
