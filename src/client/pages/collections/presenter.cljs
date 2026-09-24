@@ -135,7 +135,16 @@
        vec))
 
 
+(defn announcement
+  "What the status line says: the collection just deleted, by the name its
+   target showed, or nothing."
+  [state]
+  (when-let [deleted (:collections/deleted-name state)]
+    (str "Набор «" deleted "» удалён")))
+
+
 (defn page-props
   [state]
-  {:loading? (boolean (:collections/loading? state))
-   :tiles    (tiles state)})
+  {:loading?     (boolean (:collections/loading? state))
+   :tiles        (tiles state)
+   :announcement (announcement state)})

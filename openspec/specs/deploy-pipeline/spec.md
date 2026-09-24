@@ -1,7 +1,7 @@
 # deploy-pipeline Specification
 
 ## Purpose
-TBD - created by archiving change atomic-artifact-swap. Update Purpose after archive.
+Define how a built artifact travels from CI to the server: one jar recipe for every consumer, integrity checks on each download, an atomic swap of the live jar, and restarts that put shipped configuration and a reloaded dictionary into effect.
 ## Requirements
 ### Requirement: Live app jar is replaced only by verified atomic rename
 The deploy pipeline SHALL write the new jar to a temporary path on the same filesystem as `/opt/learning-app/learning-app.jar`, verify the upload's integrity against a checksum recorded at build time, and install it with a single rename. The live jar SHALL never be written in place, and no torn artifact SHALL ever become the live jar.

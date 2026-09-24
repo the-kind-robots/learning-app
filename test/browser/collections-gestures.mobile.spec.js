@@ -171,17 +171,18 @@ for (const { kind, target, name, count, remove } of [
   test(`in editing mode the ✕ on a ${kind} takes the count's place and leaves the name alone`, async ({ page }) => {
     await openCollections(page);
     const button = page.getByRole('button', { name: target, exact: true });
-    // Found by their text, not through the button: a hidden count leaves
-    // the button's accessible name.
     const nameEl = page.getByText(name, { exact: true });
     const countEl = nameEl.locator('xpath=following-sibling::span[1]');
     await expect(countEl).toHaveText(count);
     const before = await nameEl.evaluate(layoutBox);
-    const close = page.getByRole('button', { name: remove, includeHidden: true });
+    const close = page.getByRole('button', { name: remove });
 
     await longPress(page, button, close);
 
-    await expect(countEl).toBeHidden();
+    // Transparent, not `visibility: hidden`: the count stays in the
+    // target's accessible name.
+    await expect(countEl).toHaveCSS('opacity', '0');
+    await expect(button).toBeVisible();
     expect(await nameEl.evaluate(layoutBox)).toEqual(before);
     const closeBox = await close.boundingBox();
     expect(overlaps(closeBox, await nameEl.boundingBox())).toBe(false);
@@ -194,6 +195,26 @@ for (const { kind, target, name, count, remove } of [
     expect(mid.y).toBeLessThan(closeBox.y + closeBox.height);
   });
 }
+
+// The keyboard's reveal is `:focus-visible`: the focus a touch delete hands
+// to the neighbour shows no ✕ of its own.
+test('a tap on the ✕ deletes and reveals no other ✕', async ({ page }) => {
+  await openCollections(page);
+  const button = page.getByRole('button', { name: 'Alltag 0', exact: true });
+  const close = page.getByRole('button', { name: 'Удалить набор «Alltag»' });
+  await longPress(page, button, close);
+
+  const finger = await touch(page);
+  const { x, y } = await centre(close);
+  await finger.down(x, y);
+  await finger.up();
+
+  await expect(button).toHaveCount(0);
+  await expect(page.locator('.masonry [data-collection-id]:focus')).toHaveCount(1);
+  const shown = await page.locator('.tile__close').evaluateAll(
+    (els) => els.filter((el) => getComputedStyle(el).opacity !== '0').length);
+  expect(shown).toBe(0);
+});
 
 test('names are German, «Всё подряд» is not, and nothing overflows its tile', async ({ page }) => {
   await openCollections(page);
@@ -276,8 +297,8 @@ test('moving editing between rows of a folder moves no ✕', async ({ page }) =>
   const toLabel = 'Удалить набор «E-Mails»';
   const from = page.getByRole('button', { name: 'Meetings und Besprechungen mit Kollegen 3', exact: true });
   const to = page.getByRole('button', { name: 'E-Mails 1', exact: true });
-  const fromClose = page.getByRole('button', { name: fromLabel, includeHidden: true });
-  const toClose = page.getByRole('button', { name: toLabel, includeHidden: true });
+  const fromClose = page.getByRole('button', { name: fromLabel });
+  const toClose = page.getByRole('button', { name: toLabel });
   // Where each ✕ stands at rest: the outgoing one in editing, the incoming
   // one before it is shown.
   const toRest = await toClose.boundingBox();

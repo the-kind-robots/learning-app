@@ -126,10 +126,10 @@
    in memory; a single word is the question the hot path asks, and it has an
    index."
   [dbs word-id]
-  (let [{:keys [docs]} (await (dbs/find dbs
-                                        schema
-                                        {:selector  {:word-id word-id}
-                                         :use-index "by-type-word-id"}))]
+  (let [{:keys [docs]} (await (dbs/find-all dbs
+                                            schema
+                                            {:selector  {:word-id word-id}
+                                             :use-index "by-type-word-id"}))]
     (mapv doc->example docs)))
 
 

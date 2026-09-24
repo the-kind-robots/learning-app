@@ -1,7 +1,7 @@
 # example-backfill Specification
 
 ## Purpose
-TBD - created by archiving change share-examples-across-devices. Update Purpose after archive.
+Define how a device catches up on example sentences it is missing for its vocabulary, after replication and on start, without letting that work disturb sync.
 
 ## Requirements
 

@@ -24,7 +24,8 @@
     [[:effect/save
       {:page/current (:page/current shown)
        :page/load    (:page/load shown)
-       :collections/loading? true}]]))
+       :collections/loading? true
+       :collections/deleted-name nil}]]))
 
 
 (defn- unchanged-or
@@ -48,6 +49,15 @@
 (nxr/register-action! :action/show-collections
   (fn show-collections [state summary]
     [[:effect/save (collections-shown state summary)]]))
+
+
+(nxr/register-action! :action/show-deleted
+  ;; The screen without the deleted collection, the status line naming it,
+  ;; and focus on the neighbour picked before the delete.
+  (fn show-deleted [state summary {:keys [name focus-id]}]
+    [[:effect/save (assoc (collections-shown state summary)
+                          :collections/deleted-name name)]
+     [:effect/focus-collection focus-id]]))
 
 
 (nxr/register-action! :action/handle-tab-click

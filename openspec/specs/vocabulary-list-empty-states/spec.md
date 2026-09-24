@@ -1,8 +1,7 @@
 # vocabulary-list-empty-states Specification
 
 ## Purpose
-Define what the words screen shows when the vocabulary is empty and when a search matches nothing.
-
+Define what the word list shows when it has nothing to list, telling an empty vocabulary apart from a filter that matched nothing.
 ## Requirements
 
 ### Requirement: An empty vocabulary shows the first-run invitation

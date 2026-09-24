@@ -64,35 +64,95 @@ test('collections with a slash fold into folder tiles whose header counts the un
 // alone announces a control the keyboard cannot reach. Tab is the only honest
 // test of that — `.focus()` does nothing on an unfocusable element and would
 // pass either way — so this walks focus and keeps what it lands on.
-test('a keyboard reaches a plain tile, a folder header and a row', async ({ page }) => {
+async function focusedStop(page) {
+  return page.evaluate(() => {
+    const el = document.activeElement;
+    if (!el || !el.closest('.masonry')) return null;
+    // A target carries its collection id; a ✕ is named by its label.
+    return el.getAttribute('data-collection-id') || el.getAttribute('aria-label');
+  });
+}
+
+async function tabUntil(page, locator, key = 'Tab') {
+  const reached = [];
+  for (let step = 0; step < 40; step += 1) {
+    await page.keyboard.press(key);
+    const stop = await focusedStop(page);
+    if (stop) reached.push(stop);
+    if (await locator.evaluate((el) => el === document.activeElement)) break;
+  }
+  return reached;
+}
+
+test('a keyboard reaches every target, each ✕ right after its own', async ({ page }) => {
   await page.goto('/');
   await seedCollections(page, course.concat([['solo', 'Solo', ['vocab:a']]]));
 
   await page.getByRole('link', { name: 'Открыть наборы' }).click();
-  // Last in the reading order, so the walk passes the other two on the way.
+  // Last in the reading order, so the walk passes the others on the way.
   const tile = page.getByRole('button', { name: 'Solo 1', exact: true });
   await expect(tile).toBeVisible();
 
-  const reached = [];
-  for (let step = 0; step < 40; step += 1) {
-    await page.keyboard.press('Tab');
-    // Every target carries its collection id; the close buttons are
-    // `tabindex="-1"` and carry none, so focus skips them and so does this.
-    const id = await page.evaluate(() => {
-      const el = document.activeElement;
-      return el && el.closest('.masonry') ? el.getAttribute('data-collection-id') : null;
-    });
-    if (id) reached.push(id);
-    if (await tile.evaluate((el) => el === document.activeElement)) break;
-  }
   // «Всё подряд», the Grammatik folder's one row, the Kurs header and its
-  // two rows, then the plain tile: every target, in reading order.
-  expect(reached).toEqual(
-    ['main', 'collection:gram', 'collection:kurs', 'collection:k1', 'collection:k2', 'collection:solo']);
-  await expect(tile).toBeFocused();
+  // two rows, then the plain tile: every target in reading order, and every
+  // named collection's ✕ right after it.
+  expect(await tabUntil(page, page.getByRole('button', { name: 'Удалить набор «Solo»' }))).toEqual([
+    'main',
+    'collection:gram', 'Удалить набор «Konnektoren»',
+    'collection:kurs', 'Удалить набор «Kurs»',
+    'collection:k1', 'Удалить набор «Kapitel 1»',
+    'collection:k2', 'Удалить набор «Kapitel 2»',
+    'collection:solo', 'Удалить набор «Solo»',
+  ]);
 
+  await page.keyboard.press('Shift+Tab');
+  await expect(tile).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Solo', exact: true })).toBeVisible();
+});
+
+test('the ✕ shows for keyboard focus, deletes on Enter and hands focus to the neighbour', async ({ page }) => {
+  await page.goto('/');
+  await seedCollections(page, course.concat([['solo', 'Solo', ['vocab:a']]]));
+  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  const tile = page.getByRole('button', { name: 'Solo 1', exact: true });
+  await tile.click();
+  await expect(page.getByRole('heading', { name: 'Solo', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+
+  // The active collection is the current one, and only it.
+  await expect(tile).toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('.masonry [aria-current]')).toHaveCount(1);
+
+  // Hidden and untappable until keyboard focus comes in.
+  const close = page.getByRole('button', { name: 'Удалить набор «Solo»' });
+  await expect(close).toHaveCSS('opacity', '0');
+  await expect(close).toHaveCSS('pointer-events', 'none');
+
+  await tabUntil(page, tile);
+  await expect(close).toHaveCSS('opacity', '1');
+  await expect(close).toHaveCSS('pointer-events', 'auto');
+  await expect(tile.locator('.tile__count')).toHaveCSS('opacity', '0');
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+
+  // Last on the screen: focus falls back to the target before it, the Kurs
+  // folder's last row.
+  await page.keyboard.press('Enter');
+  await expect(tile).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Kapitel 2 1', exact: true })).toBeFocused();
+  await expect(page.getByRole('status')).toHaveText('Набор «Solo» удалён');
+  expect(await collectionNames(page)).not.toContain('Solo');
+  // The active collection is gone, so «Всё подряд» is current.
+  await expect(page.getByRole('button', { name: 'Всё подряд 0', exact: true })).toHaveAttribute('aria-current', 'true');
+
+  // A folder's parent leaves a label behind; its first row takes the focus.
+  await tabUntil(page, page.getByRole('button', { name: 'Удалить набор «Kurs»' }), 'Shift+Tab');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: 'Kurs 4', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Kurs 3', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toBeFocused();
+  await expect(page.getByRole('status')).toHaveText('Набор «Kurs» удалён');
 });
 
 test('a folder header with no document is a label; creating the parent through «+» makes it the tile', async ({ page }) => {

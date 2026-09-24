@@ -19,3 +19,11 @@
   (testing "a lift after the gesture fired — a long press — is nothing"
     (is (nil? (sut/on-lift {:moved-px 0 :scroll-delta 0 :fired? true})))
     (is (nil? (sut/on-lift (sut/on-lift {:moved-px 0 :scroll-delta 0}))))))
+
+
+(deftest focus-goes-to-the-next-target-else-the-previous
+  (let [ids ["main" "collection:kurs" "collection:k1" "collection:solo"]]
+    (is (= "collection:k1" (sut/neighbour ids "collection:kurs"))
+        "a deleted folder parent leaves a label; its first row follows it")
+    (is (= "collection:k1" (sut/neighbour ids "collection:solo")) "the last target falls back")
+    (is (= "collection:solo" (sut/neighbour ids "collection:k1")))))
