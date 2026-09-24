@@ -105,9 +105,11 @@
 (defn page
   [state]
   (let [{:words/keys [items search editing more? vocabulary?] placeholder :words/empty-state} state]
-    ;; No `data-vk-overlay`: as on the lesson, the keyboard resizes the
-    ;; viewport, and the tray with the search field rides above it.
+    ;; `data-vk-overlay`, as on home: the keyboard is laid over the page, so
+    ;; it covers the lesson button fixed at the bottom while the search bar,
+    ;; which closes the column, stands on the keyboard's inset.
     [:div.vocabulary
+     {:data-vk-overlay true}
      (when editing (edit-dialog editing))
      (if-not vocabulary?
        [:div.vocabulary__list
@@ -127,12 +129,14 @@
             (concat (map word-list-item items)
                     (when more? [(sentinel)])))]]
         ;; The search field sits under the thumb, above the lesson button and
-        ;; as wide as it — the lesson's answer field over its button.
-        [:footer.vocabulary__footer.page-footer
-         [:form.vocabulary__search.page-footer__action
-          {:autocapitalize "none"
-           :autocorrect "off"
-           :on {:submit [[:effect/prevent-default]]}}
+        ;; as wide as it. It closes the column rather than joining the footer:
+        ;; the footer is fixed and stays behind an open keyboard, the field
+        ;; rides on top of it.
+        [:form.vocabulary__search-bar
+         {:autocapitalize "none"
+          :autocorrect "off"
+          :on {:submit [[:effect/prevent-default]]}}
+         [:div.page-footer__action
           [:div.input
            [:span.input__search-icon]
            [:input.input__input-area.input__input-area--icon
@@ -143,7 +147,8 @@
              :placeholder    "Поиск"
              :spellcheck     "false"
              :default-value  search
-             :on             {:input [[:action/search-words [:event.target/value]]]}}]]]
+             :on             {:input [[:action/search-words [:event.target/value]]]}}]]]]
+        [:footer.vocabulary__footer.page-footer
          [:div.page-footer__action
           [:button.vocabulary__start.big-button.green-button
            {:on {:click [[:action/go-to-lesson]]}}

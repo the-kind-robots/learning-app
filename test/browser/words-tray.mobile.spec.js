@@ -7,23 +7,21 @@ test('on a phone the search sits above the lesson button, the rows under the bar
   await tray.expectAirUnderTheBar(page);
 });
 
-// An emulated keyboard: headless Chrome has none, so the viewport is shrunk
-// the way `interactive-widget=resizes-content` shrinks it when one opens.
-// What a real keyboard does on a device is not proven here.
-test('with the viewport shrunk as by a keyboard, the tray stays on screen', async ({ page }) => {
+// Only the closed keyboard is measured here. Headless Chrome has no keyboard
+// and so no `keyboard-inset-height` to give; the field on the keyboard and
+// the button behind it are checked on a phone.
+test('the screen asks for the keyboard overlay and fixes the lesson button to the bottom', async ({ page }) => {
   await tray.openWordsWithAWord(page);
-  // The screen does not ask Chrome to lay the keyboard over the content, so
-  // Chrome resizes the viewport for it — what the lesson relies on.
+
   const overlays = await page.evaluate(() =>
-    'virtualKeyboard' in navigator ? navigator.virtualKeyboard.overlaysContent : false);
-  expect(overlays).toBe(false);
+    'virtualKeyboard' in navigator ? navigator.virtualKeyboard.overlaysContent : null);
+  expect(overlays).toBe(true);
 
-  await tray.searchBox(page).click();
-  await page.keyboard.type('Ha');
-  await page.setViewportSize({ width: 390, height: 500 });
-
-  await expect(tray.searchBox(page)).toBeInViewport({ ratio: 1 });
-  await expect(tray.lessonButton(page)).toBeInViewport({ ratio: 1 });
-  await expect(page.getByPlaceholder('Поиск')).toBeFocused();
-  await tray.expectSearchAboveTheButton(page);
+  const footer = page.getByRole('contentinfo').filter({ has: tray.lessonButton(page) });
+  const { position, bottom } = await footer.evaluate((el) => ({
+    position: getComputedStyle(el).position,
+    bottom: el.getBoundingClientRect().bottom,
+  }));
+  expect(position).toBe('fixed');
+  expect(bottom).toBe(page.viewportSize().height);
 });

@@ -11,19 +11,32 @@ body:has(.vocabulary) #app {
   height: 100%;
 }
 
-/* The lesson's geometry (lesson.css): a fixed full-viewport column with the
-   tray in flow at its foot. The page sets `interactive-widget=resizes-content`
-   and this screen does not opt into the keyboard overlay, so an open keyboard
-   shrinks the viewport, the column follows, and the tray with the search
-   field stays above the keyboard while the list gives up the height.
+/* A fixed full-viewport column: the rows, then the search bar closing it.
+   The lesson button is not in it — the footer is fixed to the bottom, as on
+   home (home.css), and the column reserves its height at the foot.
+
+   The screen opts into the keyboard overlay (`data-vk-overlay`), so an open
+   keyboard is laid over the page: it covers the fixed footer, and the column
+   reserves the keyboard's inset instead of the footer's, which puts the
+   search bar directly on top of the keyboard while the list gives up the
+   height. A browser without the VirtualKeyboard API resizes the viewport
+   instead (`interactive-widget=resizes-content`), and the footer rides up
+   under the search bar.
+
    The top padding is the shell bar (16px from the top, 28px tall) plus 24px
    of air before the rows; there are no spacing tokens to name it by. */
 .vocabulary {
+  /* The fixed footer: the button, its padding below, the safe area. */
+  --words-footer-height: calc(50px + 16px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   inset: 0;
   overflow: hidden;
   padding-top: calc(16px + 28px + 24px);
+  /* fallback */
+  padding-bottom: var(--words-footer-height);
+  /* when supported: reserve either the footer or the keyboard */
+  padding-bottom: max(var(--words-footer-height), env(keyboard-inset-height, 0px));
   position: fixed;
 }
 
@@ -47,9 +60,17 @@ body:has(.vocabulary) #app {
   width: 1px;
 }
 
-/* A `page-footer__action` like the button below it, so the two share their
-   gutters and their width. */
-.vocabulary__search > .input {
+/* The footer's top half: its background and gutters, and a
+   `page-footer__action` like the button below it, so field and button share
+   their width. The 12px under the field is the gap to the button with the
+   keyboard closed, and the air above the keyboard with it open. */
+.vocabulary__search-bar {
+  background: rgb(var(--color-polar));
+  flex: none;
+  padding: 16px 16px 12px;
+}
+
+.vocabulary__search-bar .input {
   width: 100%;
 }
 
@@ -99,22 +120,31 @@ body:has(.vocabulary) #app {
   padding: 0 24px;
 }
 
+/* No top padding: the search bar above ends in the gap. Its height is
+   `--words-footer-height`. */
 .vocabulary__footer {
-  --page-footer-gap: 12px;
-  --page-footer-padding-top: 16px;
+  --page-footer-gap: 0px;
+  --page-footer-padding-top: 0px;
   --page-footer-padding-x: 16px;
   --page-footer-padding-bottom: 16px;
   background: rgb(var(--color-polar));
-  flex: none;
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
 }
 
 .vocabulary__start {
   display: block;
 }
 
-.vocabulary:has(.word-list__empty--no-words) .vocabulary__search,
+.vocabulary:has(.word-list__empty--no-words) .vocabulary__search-bar,
 .vocabulary:has(.word-list__empty--no-words) .vocabulary__footer {
   display: none;
+}
+
+.vocabulary:has(.word-list__empty--no-words) {
+  padding-bottom: 0;
 }
 
 .vocabulary:has(.word-list__empty--no-words) .vocabulary__list {
