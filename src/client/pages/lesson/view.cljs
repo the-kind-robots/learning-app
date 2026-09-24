@@ -70,10 +70,11 @@
       [:button.big-button
        {:id   (if finished? "lesson-finish" "lesson-next")
         :type "button"
-        :on   {:click   (if finished?
-                          [[:action/go-to-home]]
-                          [[:action/next-trial]])
-               :keydown [[:action/click-if-enter [:event.keyboard/key]]]}}
+        ;; A native button already clicks on Enter; a keydown handler
+        ;; clicking it again advanced the lesson twice (#277).
+        :on   {:click (if finished?
+                        [[:action/go-to-home]]
+                        [[:action/next-trial]])}}
        (if finished? "ЗАКОНЧИТЬ" "ДАЛЕЕ")]]]]])
 
 
@@ -92,8 +93,7 @@
      [:button.big-button
       {:id   "lesson-next"
        :type "button"
-       :on   {:click   [[:action/next-trial]]
-              :keydown [[:action/click-if-enter [:event.keyboard/key]]]}}
+       :on   {:click [[:action/next-trial]]}}
       "ДАЛЕЕ"]]]])
 
 
