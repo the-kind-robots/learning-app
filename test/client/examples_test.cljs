@@ -173,6 +173,22 @@
                           (sut/save-example! nil nil "word-123" "Hund" nil example)))))
 
 
+(deftest of-word-reads-past-the-default-page
+  (async-testing "`of-word` returns every example of a word, not the first 25"
+    (with-test-db
+      (^:async fn
+       [db]
+       (let [dbs     {:device/db db}
+             collection-ids (mapv #(str "collection-" %) (range 30))
+             example {:value "Der Hund" :translation "The dog" :structure []}]
+         (doseq [collection-id collection-ids]
+           (await (sut/save-example! dbs (test-clock) "word-1" "Hund" collection-id example)))
+         (await (sut/save-example! dbs (test-clock) "word-2" "Katze" nil example))
+         (let [examples (await (sut/of-word dbs "word-1"))]
+           (is (= 30 (count examples)))
+           (is (= (set collection-ids) (set (map :collection-id examples))))))))))
+
+
 (deftest remove-deletes-existing-document
   (async-testing "`remove!` deletes existing document"
     (with-test-db
