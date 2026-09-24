@@ -1,7 +1,7 @@
 # browser-test-suite Specification
 
 ## Purpose
-TBD - created by archiving change headless-playwright-suite. Update Purpose after archive.
+Define the headless browser suite that proves user-visible behaviour on a fixture stand, how its scenarios locate what they assert, and where it runs in CI.
 ## Requirements
 ### Requirement: Repeatable browser scenarios run headless inside WSL
 The repository SHALL provide a Playwright suite that runs headless inside WSL against the system Google Chrome (`channel: "chrome"`, no browser download) and a locally started backend. The suite SHALL NOT depend on the Windows browser, the shared dev stand, or mirrored networking.

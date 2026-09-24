@@ -1,7 +1,7 @@
 # client-runtime-dependencies Specification
 
 ## Purpose
-TBD - created by archiving change refactor-client-parallel-work. Update Purpose after archive.
+Define how the client runtime owns its long-lived dependencies: their lifecycle and start order, the small capabilities they expose to features, and how migrations and background tasks stay behind those boundaries.
 ## Requirements
 ### Requirement: Runtime system owns client dependencies
 The client runtime MUST keep long-lived dependencies and implementation resources outside Nexus app state.

@@ -1,7 +1,7 @@
 # repo-agent-infrastructure Specification
 
 ## Purpose
-TBD - created by archiving change keep-only-codex-agent-files. Update Purpose after archive.
+Define the repository-owned infrastructure that coding agents work through: worktree placement, skill paths, the coordinator guard, the inbox that feeds the board, and the GitHub-invoked agent.
 ## Requirements
 ### Requirement: Backend port is overridable via environment variable
 The backend server SHALL read its listening port from the `LEARNING_APP_PORT` environment variable when set, falling back to 8083 when absent.
