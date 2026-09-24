@@ -28,6 +28,7 @@
    :lang         lang
    :count        count
    :active?      active?
+   :current      (when active? "true")
    :editing?     (= id (:collections/editing-id state))
    :deletable?   deletable?
    :delete-label (when deletable? (str "Удалить набор «" name "»"))
@@ -135,7 +136,16 @@
        vec))
 
 
+(defn announcement
+  "What the status line says: the collection just deleted, by the name its
+   target showed, or nothing."
+  [state]
+  (when-let [deleted (:collections/deleted-name state)]
+    (str "Набор «" deleted "» удалён")))
+
+
 (defn page-props
   [state]
-  {:loading? (boolean (:collections/loading? state))
-   :tiles    (tiles state)})
+  {:loading?     (boolean (:collections/loading? state))
+   :tiles        (tiles state)
+   :announcement (announcement state)})
