@@ -105,6 +105,9 @@
 (defn page
   [state]
   (let [{:words/keys [items search editing more? vocabulary?] placeholder :words/empty-state} state]
+    ;; `data-vk-overlay`, as on home: the keyboard is laid over the page, so
+    ;; it covers the lesson button fixed at the bottom while the search bar,
+    ;; which closes the column, stands on the keyboard's inset.
     [:div.vocabulary
      {:data-vk-overlay true}
      (when editing (edit-dialog editing))
@@ -115,26 +118,9 @@
          [:li.word-list__empty.word-list__empty--no-words
           (empty-state placeholder)]]]
        (list
-        [:header.vocabulary__header
-         [:button.vocabulary__back
-          {:on {:click [[:action/go-to-home]]}}
-          "← Назад"]
-         [:h1.vocabulary__title "Мои слова"]]
-        [:form.vocabulary__search
-         {:autocapitalize "none"
-          :autocorrect "off"
-          :on {:submit [[:effect/prevent-default]]}}
-         [:div.input
-          [:span.input__search-icon]
-          [:input.input__input-area.input__input-area--icon
-           {:autocapitalize "none"
-            :autocomplete   "off"
-            :autocorrect    "off"
-            :enterkeyhint   "search"
-            :placeholder    "Поиск"
-            :spellcheck     "false"
-            :default-value  search
-            :on             {:input [[:action/search-words [:event.target/value]]]}}]]]
+        ;; The screen is left by the shell's corner ✕; the heading stays for
+        ;; assistive technology only.
+        [:h1.vocabulary__title.visually-hidden "Мои слова"]
         [:div.vocabulary__list
          [:ul.word-list
           {:id "word-list"}
@@ -142,6 +128,26 @@
             [:li.word-list__empty (empty-state placeholder)]
             (concat (map word-list-item items)
                     (when more? [(sentinel)])))]]
+        ;; The search field sits under the thumb, above the lesson button and
+        ;; as wide as it. It closes the column rather than joining the footer:
+        ;; the footer is fixed and stays behind an open keyboard, the field
+        ;; rides on top of it.
+        [:form.vocabulary__search-bar
+         {:autocapitalize "none"
+          :autocorrect "off"
+          :on {:submit [[:effect/prevent-default]]}}
+         [:div.page-footer__action
+          [:div.input
+           [:span.input__search-icon]
+           [:input.input__input-area.input__input-area--icon
+            {:autocapitalize "none"
+             :autocomplete   "off"
+             :autocorrect    "off"
+             :enterkeyhint   "search"
+             :placeholder    "Поиск"
+             :spellcheck     "false"
+             :default-value  search
+             :on             {:input [[:action/search-words [:event.target/value]]]}}]]]]
         [:footer.vocabulary__footer.page-footer
          [:div.page-footer__action
           [:button.vocabulary__start.big-button.green-button

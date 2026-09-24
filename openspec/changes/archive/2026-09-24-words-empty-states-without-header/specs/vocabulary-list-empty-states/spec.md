@@ -1,8 +1,4 @@
-# vocabulary-list-empty-states Specification
-
-## Purpose
-Define what the word list shows when it has nothing to list, telling an empty vocabulary apart from a filter that matched nothing.
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: An empty vocabulary shows the first-run invitation
 
@@ -38,23 +34,3 @@ in the search box, so it can be edited or cleared in place.
 
 - **WHEN** the user clears a search query that matched nothing
 - **THEN** the list of words returns without a page reload
-
-### Requirement: The presenter decides which empty state applies
-
-The word list view SHALL NOT compute the distinction between an empty
-vocabulary and a filtered-out list. `pages.words.presenter` SHALL derive it from
-the row count in the active scope and the rows left after filtering, and SHALL
-hand the view ready props: the list rows, the empty-state text, hint and
-call-to-action, and whether the page chrome applies.
-
-#### Scenario: Matching rows leave no empty state
-
-- **WHEN** the presenter is given rows that survived the filter
-- **THEN** it returns those rows and no empty-state props
-
-#### Scenario: Presenter distinguishes the two empty cases
-
-- **WHEN** the presenter is given no rows and a scope total of zero
-- **THEN** it returns the first-run empty-state props
-- **WHEN** the presenter is given no rows and a non-zero scope total
-- **THEN** it returns the no-matches empty-state props

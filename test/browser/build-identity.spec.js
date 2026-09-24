@@ -11,9 +11,9 @@ const stampPattern = new RegExp(`^${shortCommit}\\+? \\d\\d\\.\\d\\d \\d\\d:\\d\
 // Like the metrics specs: the shell renders and the instrumentation installs
 // with the render component, which the runtime starts asynchronously, so a
 // bare goto proves nothing.
-// The word mark ends in a red D in a development build, so the link's name is
+// The word mark ends in a red D in a development build, so the button's name is
 // "SprechaD" here and "Sprecha" in a release build.
-const wordMark = (page) => page.getByRole('link', { name: /^Sprecha/ });
+const wordMark = (page) => page.getByRole('button', { name: /^Sprecha/ });
 
 async function waitForShell(page) {
   await page.goto('/home');
@@ -62,7 +62,7 @@ for (const width of [384, 1280]) {
     const logo = await wordMark(page).boundingBox();
     // The leftmost and the rightmost member of the actions row on the home page.
     const firstAction = await page.getByRole('button', { name: 'Экспортировать трассу' }).boundingBox();
-    const lastAction = await page.getByRole('link', { name: 'Открыть наборы' }).boundingBox();
+    const lastAction = await page.getByRole('button', { name: 'Открыть наборы' }).boundingBox();
     // Where a fixed `right: 0` lands, which is what the row's own `right: 16px`
     // was measured from before the bar held it: the viewport minus whatever
     // gutter the scrollbar reserves, and not `clientWidth`, which ignores it.

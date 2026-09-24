@@ -224,10 +224,11 @@
                                        :document/listeners]
                             :start    (fn [{:keys [render]}]
                                         (let [dispatch    (:dispatch render)
-                                              controllers (atom nil)]
+                                              controllers (atom nil)
+                                              router      (rf/router (application/routes dispatch))]
+                                          (navigation/put-home-beneath! router)
                                           (rfe/start!
-                                           (rf/router
-                                            (application/routes dispatch))
+                                           router
                                            (fn [match _history]
                                              (if match
                                                (reset! controllers (rfc/apply-controllers @controllers match))
@@ -235,7 +236,11 @@
                                                ;; entry rather than pushing one. That also drops the fragment,
                                                ;; taking an incoming credential out of the address bar.
                                                (rfe/replace-state :page/home)))
-                                           {:use-fragment false})))}}))
+                                           ;; Reitit's anchor handler stays out: every
+                                           ;; shell link takes its own click and asks
+                                           ;; the navigation port (ADR-0015).
+                                           {:ignore-anchor-click? (constantly false)
+                                            :use-fragment false})))}}))
 
 
 (defn ^:async ^:export start

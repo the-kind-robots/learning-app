@@ -33,7 +33,7 @@ async function seedCollections(page) {
 async function openCollections(page, base = '') {
   await page.goto(base + '/');
   await seedCollections(page);
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
   await expect(page.getByRole('button', { name: 'Alltag 0', exact: true })).toBeVisible();
 }
 
@@ -93,7 +93,7 @@ test('a swipe that starts on a tile scrolls and activates nothing', async ({ pag
   await nothingHappensFor(page, 300);
 
   // Still the themes screen: an activation would have gone home.
-  await expect(page.getByRole('link', { name: 'Открыть наборы' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Открыть наборы' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Наборы' })).toBeAttached();
   // Without the cancel this would prove nothing about the recovery.
   expect(await page.evaluate(() => window.__pointer.cancels)).toBeGreaterThan(0);

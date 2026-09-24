@@ -31,28 +31,12 @@
   gap: 12px;
   margin: 0 auto;
   max-width: 600px;
+  /* The 44px row the lesson's own ✕ once set, above the top padding: the
+     corner ✕ took its place, and the challenge below keeps where it stood. */
+  min-height: calc(56px + 44px);
   /* top: clears the fixed app-shell logo (top:16px + height:28px = 44px). */
   padding: 56px 16px 0;
   width: 100%;
-}
-
-.lesson__cancel {
-  align-items: center;
-  background: none;
-  border: none;
-  cursor: pointer;
-  display: inline-flex;
-  height: 44px;
-  justify-content: center;
-  outline: 0;
-  padding: 0;
-  width: 44px;
-}
-
-@media (hover: hover) {
-  .lesson__cancel:hover {
-    filter: var(--web-ui_button-filter-hover, brightness(1.1));
-  }
 }
 
 .lesson__progress-shell {
@@ -303,6 +287,7 @@
 
 @media (min-width: 700px) {
   .lesson__header {
+    min-height: calc(64px + 44px);
     padding-top: 64px;
   }
 

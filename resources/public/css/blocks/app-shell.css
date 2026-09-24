@@ -110,10 +110,16 @@
   pointer-events: auto;
 }
 
+/* A button that reads as the word mark: its background, border and padding
+   are cleared. */
 .app-shell__logo {
   align-items: center;
+  background: none;
+  border: 0;
   color: rgb(var(--color-black-text));
+  cursor: pointer;
   display: inline-flex;
+  padding: 0;
   height: 28px;
   font-family: Nunito, sans-serif;
   font-size: 18px;
@@ -126,8 +132,8 @@
 
 /* Shell actions sit in one row so any of them can be absent without leaving a
    hole: the trace export in a development build, install only when
-   installable, sync only on home with an account, the corner icon only on
-   home/collections. */
+   installable, sync only on home with an account, the grid icon on
+   home and the close mark on every other page. */
 .app-shell__actions {
   align-items: center;
   display: flex;
@@ -137,12 +143,18 @@
   min-width: 0;
 }
 
+/* The grid and the close mark, both buttons: the
+   background, border and padding a button brings are cleared. */
 .app-shell__corner-icon {
   align-items: center;
+  background: none;
+  border: 0;
   color: rgb(var(--color-black-text));
+  cursor: pointer;
   display: inline-flex;
   height: 28px;
   justify-content: center;
+  padding: 0;
   text-decoration: none;
   transition: opacity 0.15s, transform 0.15s;
   width: 28px;

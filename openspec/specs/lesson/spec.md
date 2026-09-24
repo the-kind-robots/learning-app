@@ -2,7 +2,9 @@
 
 ## Purpose
 The lesson spec defines the behavior and state management for interactive learning sessions where users practice vocabulary through trials. It covers lesson initialization, trial progression, and configuration options for customizing the learning experience.
+
 ## Requirements
+
 ### Requirement: Lesson state includes options object
 The system SHALL create lesson state with an options object containing configuration settings.
 
@@ -119,19 +121,6 @@ The system SHALL keep example structure data on lesson example trials so the cor
 - **THEN** it builds answer segments from the German answer text plus each structure item `wordIndex`
 - **AND** annotated segments keep the matching `dictionaryForm` and `translation`
 
-### Requirement: Lesson exit replaces browser history
-The system SHALL replace the current browser history entry when a learner exits a lesson through completion or cancellation.
-
-#### Scenario: Finished lesson exit
-- **WHEN** a learner completes the final lesson trial and exits the lesson flow
-- **THEN** the app navigates to the home page
-- **AND** the navigation replaces the current history entry so the lesson page is not restored by pressing browser Back
-
-#### Scenario: Cancelled lesson exit
-- **WHEN** a learner cancels an active lesson
-- **THEN** the app navigates to the home page
-- **AND** the navigation replaces the current history entry so the cancelled lesson screen is not restored by pressing browser Back
-
 ### Requirement: Error reveal labels the correct answer with short copy
 The lesson error footer SHALL label the revealed correct answer with the header «Правильно:».
 
@@ -223,3 +212,15 @@ The lesson's items SHALL be drawn from that pool uniformly at random, without re
 - **WHEN** one item is strictly more due than a field of equally due items that fills the pool
 - **THEN** the more due item is in the pool on every lesson
 
+### Requirement: Leaving a lesson returns home
+The system SHALL show the home screen when a learner finishes a lesson or cancels it, and pressing the browser's Back there SHALL NOT restore the lesson.
+
+#### Scenario: Finished lesson exit
+- **WHEN** a learner completes the final lesson trial and exits the lesson flow
+- **THEN** the home screen is on display
+- **AND** pressing the browser's Back does not show the lesson
+
+#### Scenario: Cancelled lesson exit
+- **WHEN** a learner cancels an active lesson
+- **THEN** the home screen is on display
+- **AND** pressing the browser's Back does not show the lesson

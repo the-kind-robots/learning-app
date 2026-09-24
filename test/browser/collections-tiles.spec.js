@@ -43,7 +43,7 @@ test('collections with a slash fold into folder tiles whose header counts the un
   await page.goto('/');
   await seedCollections(page, course);
 
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
 
   // The header's name is its text: the folder key and the union count —
   // a, b, c, d with b once.
@@ -88,7 +88,7 @@ test('a keyboard reaches every target, each ✕ right after its own', async ({ p
   await page.goto('/');
   await seedCollections(page, course.concat([['solo', 'Solo', ['vocab:a']]]));
 
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
   // Last in the reading order, so the walk passes the others on the way.
   const tile = page.getByRole('button', { name: 'Solo 1', exact: true });
   await expect(tile).toBeVisible();
@@ -114,11 +114,11 @@ test('a keyboard reaches every target, each ✕ right after its own', async ({ p
 test('the ✕ shows for keyboard focus, deletes on Enter and hands focus to the neighbour', async ({ page }) => {
   await page.goto('/');
   await seedCollections(page, course.concat([['solo', 'Solo', ['vocab:a']]]));
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
   const tile = page.getByRole('button', { name: 'Solo 1', exact: true });
   await tile.click();
   await expect(page.getByRole('heading', { name: 'Solo', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
 
   // The active collection is the current one, and only it.
   await expect(tile).toHaveAttribute('aria-current', 'true');
@@ -158,7 +158,7 @@ test('the ✕ shows for keyboard focus, deletes on Enter and hands focus to the 
 test('a folder header with no document is a label; creating the parent through «+» makes it the tile', async ({ page }) => {
   await page.goto('/');
   await seedCollections(page, course);
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
 
   // The label takes no tap: still on the themes screen, no document written.
   await page.getByRole('heading', { name: 'Grammatik 2', exact: true }).click();
@@ -177,7 +177,7 @@ test('a folder header with no document is a label; creating the parent through �
 test('renaming a collection to a name already taken is refused, so one tile per name', async ({ page }) => {
   await page.goto('/');
   await seedCollections(page, course);
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
   await page.getByRole('button', { name: 'Kurs 4', exact: true }).click();
 
   // The heading is the inline rename (contenteditable plaintext-only, which
@@ -195,7 +195,7 @@ test('renaming a collection to a name already taken is refused, so one tile per 
   expect(names.filter((n) => n.trim().toLowerCase() === 'kurs / kapitel 1')).toEqual(['Kurs / Kapitel 1']);
   expect(names.filter((n) => n.trim().toLowerCase() === 'kurs')).toEqual(['Kurs']);
 
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
   await expect(page.getByRole('button', { name: 'Kurs 4', exact: true })).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toHaveCount(1);
 });
@@ -206,7 +206,7 @@ test('renaming a collection to a name already taken is refused, so one tile per 
 test('a rename left in the heading shows on the themes screen opened from it', async ({ page }) => {
   await page.goto('/');
   await seedCollections(page, [['xa', 'xxx, aaa', []]]);
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
   await page.getByRole('button', { name: 'xxx, aaa 0', exact: true }).click();
 
   const heading = page.getByRole('heading', { name: 'xxx, aaa' });
@@ -214,7 +214,7 @@ test('a rename left in the heading shows on the themes screen opened from it', a
   await heading.click();
   await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.type('xxx / aaa');
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
 
   await expect(page.getByRole('heading', { name: 'xxx 0', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'aaa 0', exact: true })).toBeVisible();
@@ -224,7 +224,7 @@ test('a rename left in the heading shows on the themes screen opened from it', a
 test('tapping a row opens that collection', async ({ page }) => {
   await page.goto('/');
   await seedCollections(page, course);
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
 
   await page.getByRole('button', { name: 'Kapitel 1 2', exact: true }).click();
 
@@ -235,7 +235,7 @@ test('the words list on a parent shows its children\'s words', async ({ page }) 
   await page.goto('/');
   await seedWords(page, ['a', 'b', 'c', 'd', 'e', 'f']);
   await seedCollections(page, course);
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
   await page.getByRole('button', { name: 'Kurs 4', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Kurs' })).toBeVisible();
 

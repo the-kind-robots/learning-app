@@ -53,11 +53,10 @@
 
 (nxr/register-effect! :effect/end-lesson
   (fn ^:async end-lesson
-    [{:keys [capabilities]} _]
+    [{:keys [capabilities dispatch]} _]
     (try
       (await (lesson/finish! capabilities))
-      (when-let [replace (get-in capabilities [:navigation :navigation/replace])]
-        (replace :page/home))
+      (dispatch [[:action/go-to-home]])
       (catch js/Error err
         (log/error :effect/end-lesson {:error (str err)})))))
 
