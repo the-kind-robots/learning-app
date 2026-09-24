@@ -13,6 +13,15 @@ async function addWord(page) {
   await expect(page.getByRole('button', { name: 'Список слов' })).toBeVisible();
 }
 
+// Waits for the rows, not only the address: a words read still in flight
+// when the test leaves would land after home's and put the words screen back
+// on display at /home — a race in the page loads, not in the history.
+async function openWords(page) {
+  await page.getByRole('button', { name: 'Список слов' }).click();
+  await expect(page).toHaveURL(/\/words$/);
+  await expect(page.getByRole('listitem').filter({ hasText: 'Haus' })).toBeVisible();
+}
+
 // A page of the same origin before the app, so Back from home has somewhere
 // outside the app to land. Chrome replaces the initial about:blank entry, so
 // that one would not do.
@@ -70,8 +79,7 @@ test('closing a screen leaves nothing of the app behind home', async ({ page }) 
   await openAppAfterAnotherPage(page);
   await addWord(page);
 
-  await page.getByRole('button', { name: 'Список слов' }).click();
-  await expect(page).toHaveURL(/\/words$/);
+  await openWords(page);
   await close(page).click();
   await expect(page).toHaveURL(/\/home$/);
   await expect(homeHeading(page)).toBeVisible();
@@ -84,8 +92,7 @@ test('Back from a screen is home, and Back from home leaves the app', async ({ p
   await openAppAfterAnotherPage(page);
   await addWord(page);
 
-  await page.getByRole('button', { name: 'Список слов' }).click();
-  await expect(page).toHaveURL(/\/words$/);
+  await openWords(page);
   await page.goBack();
   await expect(page).toHaveURL(/\/home$/);
   await expect(homeHeading(page)).toBeVisible();
@@ -98,10 +105,10 @@ test('a screen opened from a screen takes its place', async ({ page }) => {
   await openAppAfterAnotherPage(page);
   await addWord(page);
 
-  await page.getByRole('button', { name: 'Список слов' }).click();
-  await expect(page).toHaveURL(/\/words$/);
+  await openWords(page);
   await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
   await expect(page).toHaveURL(/\/lesson$/);
+  await expect(page.getByRole('progressbar', { name: 'Прогресс урока' })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/home$/);
   await expect(homeHeading(page)).toBeVisible();
@@ -111,10 +118,12 @@ test('a screen opened directly has home beneath it, reload included', async ({ p
   await page.goto('/favicon.ico');
   await page.goto('/words');
   await expect(page).toHaveURL(/\/words$/);
+  await expect(page.getByText('Слов пока нет')).toBeVisible();
   await expect(close(page)).toHaveCount(1);
 
   // A reload finds the entry already standing on home and adds nothing.
   await page.reload();
+  await expect(page.getByText('Слов пока нет')).toBeVisible();
   await expect(close(page)).toHaveCount(1);
 
   await page.goBack();

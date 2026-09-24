@@ -105,8 +105,9 @@
 (defn page
   [state]
   (let [{:words/keys [items search editing more? vocabulary?] placeholder :words/empty-state} state]
+    ;; No `data-vk-overlay`: as on the lesson, the keyboard resizes the
+    ;; viewport, and the tray with the search field rides above it.
     [:div.vocabulary
-     {:data-vk-overlay true}
      (when editing (edit-dialog editing))
      (if-not vocabulary?
        [:div.vocabulary__list
@@ -118,21 +119,6 @@
         ;; The screen is left by the shell's corner ✕; the heading stays for
         ;; assistive technology only.
         [:h1.vocabulary__title "Мои слова"]
-        [:form.vocabulary__search
-         {:autocapitalize "none"
-          :autocorrect "off"
-          :on {:submit [[:effect/prevent-default]]}}
-         [:div.input
-          [:span.input__search-icon]
-          [:input.input__input-area.input__input-area--icon
-           {:autocapitalize "none"
-            :autocomplete   "off"
-            :autocorrect    "off"
-            :enterkeyhint   "search"
-            :placeholder    "Поиск"
-            :spellcheck     "false"
-            :default-value  search
-            :on             {:input [[:action/search-words [:event.target/value]]]}}]]]
         [:div.vocabulary__list
          [:ul.word-list
           {:id "word-list"}
@@ -140,7 +126,24 @@
             [:li.word-list__empty (empty-state placeholder)]
             (concat (map word-list-item items)
                     (when more? [(sentinel)])))]]
+        ;; The search field sits under the thumb, above the lesson button and
+        ;; as wide as it — the lesson's answer field over its button.
         [:footer.vocabulary__footer.page-footer
+         [:form.vocabulary__search.page-footer__action
+          {:autocapitalize "none"
+           :autocorrect "off"
+           :on {:submit [[:effect/prevent-default]]}}
+          [:div.input
+           [:span.input__search-icon]
+           [:input.input__input-area.input__input-area--icon
+            {:autocapitalize "none"
+             :autocomplete   "off"
+             :autocorrect    "off"
+             :enterkeyhint   "search"
+             :placeholder    "Поиск"
+             :spellcheck     "false"
+             :default-value  search
+             :on             {:input [[:action/search-words [:event.target/value]]]}}]]]
          [:div.page-footer__action
           [:button.vocabulary__start.big-button.green-button
            {:on {:click [[:action/go-to-lesson]]}}

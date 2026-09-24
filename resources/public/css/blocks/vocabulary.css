@@ -11,17 +11,20 @@ body:has(.vocabulary) #app {
   height: 100%;
 }
 
+/* The lesson's geometry (lesson.css): a fixed full-viewport column with the
+   tray in flow at its foot. The page sets `interactive-widget=resizes-content`
+   and this screen does not opt into the keyboard overlay, so an open keyboard
+   shrinks the viewport, the column follows, and the tray with the search
+   field stays above the keyboard while the list gives up the height.
+   The top padding is the shell bar (16px from the top, 28px tall) plus 24px
+   of air before the rows; there are no spacing tokens to name it by. */
 .vocabulary {
   display: flex;
   flex-direction: column;
-  margin: 0 auto;
-  max-width: 600px;
-  height: 100svh;
-  min-height: 100svh;
+  inset: 0;
   overflow: hidden;
-  padding-bottom: calc(80px + env(safe-area-inset-bottom));
-  padding-top: 56px;
-  width: 100%;
+  padding-top: calc(16px + 28px + 24px);
+  position: fixed;
 }
 
 .vocabulary__state {
@@ -29,8 +32,8 @@ body:has(.vocabulary) #app {
 }
 
 /* The heading names the screen for assistive technology only: the screen is
-   left by the shell's corner ✕, and the search field is the first thing under
-   the bar. */
+   left by the shell's corner ✕, and the rows are the first thing under the
+   bar. */
 .vocabulary__title {
   border: 0;
   clip: rect(0 0 0 0);
@@ -44,17 +47,22 @@ body:has(.vocabulary) #app {
   width: 1px;
 }
 
-.vocabulary__search {
-  padding: 0 16px 16px;
+/* A `page-footer__action` like the button below it, so the two share their
+   gutters and their width. */
+.vocabulary__search > .input {
+  width: 100%;
 }
 
 .vocabulary__list {
   border-top: 1px solid rgb(0 0 0 / 0.08);
   flex: 1;
+  margin-inline: auto;
+  max-width: 600px;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding-bottom: calc(16px + env(keyboard-inset-height));
+  padding-bottom: 16px;
+  width: 100%;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
@@ -92,16 +100,12 @@ body:has(.vocabulary) #app {
 }
 
 .vocabulary__footer {
-  --page-footer-gap: 0px;
+  --page-footer-gap: 12px;
   --page-footer-padding-top: 16px;
   --page-footer-padding-x: 16px;
   --page-footer-padding-bottom: 16px;
   background: rgb(var(--color-polar));
-  bottom: 0;
-  left: 0;
-  position: fixed;
-  right: 0;
-  z-index: 10;
+  flex: none;
 }
 
 .vocabulary__start {
