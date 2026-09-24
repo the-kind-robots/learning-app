@@ -71,7 +71,7 @@
        {:id   (if finished? "lesson-finish" "lesson-next")
         :type "button"
         :on   {:click   (if finished?
-                          [[:action/finish-lesson]]
+                          [[:action/go-to-home]]
                           [[:action/next-trial]])
                :keydown [[:action/click-if-enter [:event.keyboard/key]]]}}
        (if finished? "ЗАКОНЧИТЬ" "ДАЛЕЕ")]]]]])

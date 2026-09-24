@@ -35,15 +35,6 @@
     [[:effect/next-trial]]))
 
 
-(def ^:private end-lesson-handler (fn [_] [[:effect/end-lesson]]))
-
-
-(nxr/register-action! :action/cancel-lesson end-lesson-handler)
-
-
-(nxr/register-action! :action/finish-lesson end-lesson-handler)
-
-
 (nxr/register-action! :action/open-answer-hint
   (fn open-answer-hint [_ word-index]
     [[:effect/save {:lesson/open-hint-index word-index}]
