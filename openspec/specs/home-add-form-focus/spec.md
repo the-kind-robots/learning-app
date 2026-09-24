@@ -1,7 +1,7 @@
 # home-add-form-focus Specification
 
 ## Purpose
-TBD - created by archiving change restore-home-add-form-focus. Update Purpose after archive.
+Define how the home add-word form behaves under keyboard and touch: focus after submit, the autocomplete suggestion list and its keyboard navigation, the translation field, and the shortcut that starts a lesson.
 ## Requirements
 ### Requirement: Successful desktop add-word submit restores primary input focus
 The system SHALL restore focus to the German word input after a successful home add-word submit on desktop-style pointer devices.

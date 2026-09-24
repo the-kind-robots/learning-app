@@ -1,7 +1,7 @@
 # repo-browser-debugging Specification
 
 ## Purpose
-TBD - created by archiving change improve-tracked-workflow-and-project-cdp-browser-handling. Update Purpose after archive.
+Define the browser tooling for debugging the app in a real browser: the project CDP workflow and its repair hints, and the in-page metrics a development build exposes.
 ## Requirements
 ### Requirement: Project-specific CDP workflow is preferred for learning-app browser debugging
 The repository SHALL prefer the project-specific CDP workflow for browser debugging of `sprecha.localhost` and `sprecha.de`.

@@ -1,7 +1,7 @@
 # identity-provisioning Specification
 
 ## Purpose
-TBD - created by archiving change recycled-id-guard. Update Purpose after archive.
+Define how accounts and their CouchDB userdbs are provisioned and kept consistent, so a recycled account id cannot inherit someone else's data and an operator can mint invites.
 ## Requirements
 ### Requirement: A recycled account id never inherits an existing userdb
 Provisioning SHALL refuse to create an account whose derived userdb already exists in CouchDB, leaving the user row unwritten and the stale userdb untouched. The refusal SHALL be observable to the operator.

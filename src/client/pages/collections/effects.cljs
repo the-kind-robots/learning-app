@@ -195,15 +195,42 @@
         (log/error :effect/prompt-create-collection {:error (str err)})))))
 
 
+(defn neighbour
+  "The target that takes focus once `deleted` is gone, from the targets' ids
+   in keyboard order: the one after it, else the one before. A deleted
+   folder parent leaves a label, and its first row follows it."
+  [ids deleted]
+  (let [[before [_ & after]] (split-with #(not= deleted %) ids)]
+    (or (first after) (last before))))
+
+
+(defn- target-ids
+  "The ids of the themes screen's targets, in document order."
+  []
+  (->> (js/Array.from (js/document.querySelectorAll ".masonry [data-collection-id]"))
+       (map #(.getAttribute ^js % "data-collection-id"))))
+
+
 (nxr/register-effect! :effect/delete-collection
   (fn ^:async delete-collection!
-    [{:keys [capabilities dispatch]} _ {:keys [id]}]
-    (try
-      (await (collections/delete! capabilities id))
-      (catch js/Error err
-        (log/error :effect/delete-collection {:error (str err)}))
-      (finally
-       (dispatch [[:effect/load-collections]])))))
+    [{:keys [capabilities dispatch]} _ {:keys [id name]}]
+    ;; Picked before the delete: afterwards the deleted target is gone.
+    (let [focus-id (neighbour (target-ids) id)]
+      (try
+        (await (collections/delete! capabilities id))
+        (let [data (await (collections/summary capabilities))]
+          (dispatch [[:action/show-deleted data {:name name :focus-id focus-id}]]))
+        (catch js/Error err
+          (log/error :effect/delete-collection {:error (str err)})
+          (dispatch [[:effect/load-collections]]))))))
+
+
+(nxr/register-effect! :effect/focus-collection
+  ;; The render after a save is synchronous, so the target is on the page.
+  (fn focus-collection [_ _ id]
+    (some-> (js/document.querySelector
+             (str ".masonry [data-collection-id=\"" (js/CSS.escape id) "\"]"))
+            .focus)))
 
 
 (nxr/register-effect! :effect/switch-active-collection

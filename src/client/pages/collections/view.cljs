@@ -15,31 +15,34 @@
 
 
 (defn- close-button
-  "The delete control, revealed by the editing state."
-  [{:keys [id editing? delete-label]}]
+  "The delete control. It follows its target in the DOM, so the keyboard
+   reaches it right after that target, and it is always in the Tab order;
+   the CSS shows it in the editing state or while keyboard focus is on the
+   target or on itself."
+  [{:keys [id name delete-label]}]
   [:button.tile__close
-   {:type        "button"
-    :aria-label  delete-label
-    :aria-hidden (when-not editing? "true")
-    :tabindex    (when-not editing? "-1")
-    :on          {:pointerdown [[:effect/stop-propagation]]
-                  :click       [[:effect/stop-propagation]
-                                [:effect/delete-collection {:id id}]]}}
+   {:type       "button"
+    :aria-label delete-label
+    :on         {:pointerdown [[:effect/stop-propagation]]
+                 :click       [[:effect/stop-propagation]
+                               [:effect/delete-collection {:id id :name name}]]}}
    (close-icon)])
 
 
 (defn- target-attrs
   "What every tappable thing carries: its id for the gesture tracking, its
-   tap, and a long press where there is something to delete. It goes on a
+   tap, a long press where there is something to delete, and `aria-current`
+   on the active collection's target. It goes on a
    `<button>` every time, so nothing claims a role it cannot carry and a
    keyboard reaches every target."
-  [{:keys [id tap deletable?]}]
-  {:data-collection-id id
-   :type "button"
-   :on   {:click       tap
-          :pointerdown (if deletable?
-                         [[:effect/begin-long-press id tap]]
-                         [[:effect/begin-tap id tap]])}})
+  [{:keys [id tap deletable? active?]}]
+  {:aria-current (when active? "true")
+   :data-collection-id id
+   :on {:click       tap
+        :pointerdown (if deletable?
+                       [[:effect/begin-long-press id tap]]
+                       [[:effect/begin-tap id tap]])}
+   :type "button"})
 
 
 (defn- name-and-count
@@ -58,9 +61,9 @@
    {:replicant/key key
     :class [(when active? "tile--active")
             (when editing? "tile--editing")]}
-   (when deletable? (close-button tile))
    [:button.tile__target (target-attrs tile)
-    (name-and-count tile)]])
+    (name-and-count tile)]
+   (when deletable? (close-button tile))])
 
 
 (defn- folder-row
@@ -71,10 +74,10 @@
    {:replicant/key id
     :class [(when active? "tile__row--active")
             (when editing? "tile__row--editing")]}
-   (close-button row)
    [:button.tile__row-target (target-attrs row)
     [:span.tile__row-name {:lang (:lang row)} (:name row)]
-    [:span.tile__count (:count row)]]])
+    [:span.tile__count (:count row)]]
+   (close-button row)])
 
 
 (defn- folder-head
@@ -86,9 +89,9 @@
     [:div.tile__head
      {:class [(when (:active? head) "tile__head--active")
               (when (:editing? head) "tile__head--editing")]}
-     (when (:deletable? head) (close-button head))
      [:button.tile__head-target (target-attrs head)
-      (name-and-count head)]]
+      (name-and-count head)]
+     (when (:deletable? head) (close-button head))]
     [:h2.tile__label
      [:span.tile__label-text {:lang lang} name]
      [:span.tile__count count]]))
@@ -121,7 +124,7 @@
 
 (defn page
   [state]
-  (let [{:keys [loading? tiles]} (presenter/page-props state)]
+  (let [{:keys [loading? tiles announcement]} (presenter/page-props state)]
     [:div.switcher
      {:on {:click [[:effect/exit-editing-on-background]]}}
      [:h1.switcher__title "Наборы"]
@@ -134,4 +137,7 @@
           (if (:folder? tile)
             (folder-tile tile)
             (plain-tile tile)))])
+     ;; Outside the masonry, whose children are tiles only. On screen from
+     ;; the first render, so a message written into it is announced.
+     [:p.switcher__status {:role "status"} announcement]
      (add-button)]))
