@@ -537,10 +537,10 @@
   "The last signal a query on db leaves, with debug signals let through."
   [db sql-params]
   (t/with-min-level :debug
-    (t/with-signal
-      (sut/on-connection [conn db]
-        (try (jdbc/execute! conn sql-params)
-             (catch Exception _))))))
+                    (t/with-signal
+                     (sut/on-connection [conn db]
+                       (try (jdbc/execute! conn sql-params)
+                            (catch Exception _))))))
 
 
 (deftest a-query-leaves-a-signal-with-its-sql-and-no-parameters
