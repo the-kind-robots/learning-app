@@ -52,6 +52,20 @@ body:has(.switcher) {
   margin: 0;
 }
 
+/* The status line: announced, not shown. */
+.switcher__status {
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
 
 /* Masonry */
 
@@ -315,8 +329,10 @@ body:has(.switcher) {
 
 
 /*
- * Close (X) button — quiet red glyph, only revealed when its tile or row
- * is in the editing state (entered via long press). No background or border.
+ * Close (X) button — quiet red glyph, revealed when its tile, header or row
+ * is in the editing state (entered via long press) or holds keyboard focus.
+ * It is always in the Tab order, right after its target. No background or
+ * border.
  */
 .tile__close {
   align-items: center;
@@ -381,10 +397,21 @@ body:has(.switcher) {
   top: auto;
 }
 
+/*
+ * Keyboard focus on a target or on its ✕ shows the ✕ as editing mode does.
+ * `:focus-visible`, not `:focus-within`: a click focuses a button too, and a
+ * pointer keeps the long press. A plain tile's own children only, so a
+ * folder tile does not reveal every row at once. The count goes transparent,
+ * not `visibility: hidden`, which would drop it from the focused target's
+ * accessible name.
+ */
 .tile--editing .tile__count,
 .tile__head--editing .tile__count,
-.tile__row--editing .tile__count {
-  visibility: hidden;
+.tile__row--editing .tile__count,
+.tile:has(> .tile__target:focus-visible, > .tile__close:focus-visible) .tile__count,
+.tile__head:has(:focus-visible) .tile__count,
+.tile__row:has(:focus-visible) .tile__count {
+  opacity: 0;
 }
 
 .tile__close:hover {
@@ -393,9 +420,43 @@ body:has(.switcher) {
 
 .tile--editing .tile__close,
 .tile__head--editing .tile__close,
-.tile__row--editing .tile__close {
+.tile__row--editing .tile__close,
+.tile:has(> .tile__target:focus-visible, > .tile__close:focus-visible) > .tile__close,
+.tile__head:has(:focus-visible) .tile__close,
+.tile__row:has(:focus-visible) .tile__close {
   opacity: 1;
   pointer-events: auto;
+}
+
+/*
+ * The keyboard's ring: dark ink, which reads on the page, on the tile's
+ * white and on its tint whatever the accent. Around a plain tile it clears
+ * the accent border and stands on the page; a header, a row and a ✕ are
+ * ringed where they are, on the tile's white.
+ */
+.tile__target:focus-visible,
+.tile__head-target:focus-visible,
+.tile__row-target:focus-visible,
+.tile__close:focus-visible {
+  outline: 2px solid rgb(var(--color-eel));
+}
+
+/* The target fills the tile inside its border, 4 px at the bottom. */
+.tile__target:focus-visible {
+  border-radius: 12px;
+  outline-offset: 6px;
+  outline-width: 3px;
+}
+
+.tile__head-target:focus-visible,
+.tile__row-target:focus-visible {
+  border-radius: 8px;
+  outline-offset: 1px;
+}
+
+.tile__close:focus-visible {
+  border-radius: 6px;
+  outline-offset: 0;
 }
 
 .tile__close-icon {

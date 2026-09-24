@@ -19,6 +19,7 @@ Options:
   --priority <option>           Priority to set on the issue: Urgent|High|Medium|Low
                                 (native org issue field, not a project field)
   --size <option>               Size field option to set
+  --milestone <title>           Open milestone to put the issue in (must already exist)
   --status <option>             Status field option to set
   --mode <issue|draft-convert>  Default: issue
   --owner <login>               Project owner (default: GHWF_OWNER)
@@ -322,6 +323,7 @@ issue_number_override=""
 area_option="${GHWF_DEFAULT_AREA:-}"
 priority_option="${GHWF_DEFAULT_PRIORITY:-}"
 size_option="${GHWF_DEFAULT_SIZE:-}"
+milestone_title=""
 status_option="${GHWF_DEFAULT_STATUS:-Backlog}"
 mode="issue"
 branch_name=""
@@ -370,6 +372,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --size)
       size_option="$2"
+      shift 2
+      ;;
+    --milestone)
+      milestone_title="$2"
       shift 2
       ;;
     --status)
@@ -454,6 +460,14 @@ done
 retired_priority="$(retired_priority_replacement "$priority_option")"
 [[ -z "$retired_priority" ]] || die "Priority '$priority_option' was retired with the old board; the scale is now Urgent/High/Medium/Low. Use '$retired_priority'."
 
+# Same reason: an unknown milestone must stop the run before an issue exists, not after,
+# when `gh issue edit --milestone` refuses it. Milestones are never created here.
+if [[ -n "$milestone_title" ]]; then
+  open_milestones="$(gh api "repos/$repo/milestones?state=open" --paginate --jq '.[].title')"
+  grep -Fxq -- "$milestone_title" <<<"$open_milestones" \
+    || die "Milestone '$milestone_title' is not an open milestone of '$repo'. Open: $(paste -sd '/' <<<"$open_milestones")"
+fi
+
 graphql_budget_before="$(graphql_remaining)"
 
 issue_url=""
@@ -536,6 +550,7 @@ if [[ -n "$issue_number" ]]; then
   edit_args=(issue edit "$issue_number" -R "$repo")
   append_existing_labels edit_args "$labels_csv" "--add-label"
   append_assignees edit_args "$assignees_csv" "--add-assignee"
+  [[ -z "$milestone_title" ]] || edit_args+=(--milestone "$milestone_title")
   if [[ "${#edit_args[@]}" -gt 5 ]]; then
     gh "${edit_args[@]}" >/dev/null
   fi
@@ -579,12 +594,6 @@ if [[ -n "$development_branch" ]]; then
   else
     echo "Checked Out Branch: $development_branch"
   fi
-fi
-
-# Name the Claude Code session after the issue. No-op outside a session; never fails the flow.
-if [[ -n "$issue_number" ]]; then
-  session_title="$(gh issue view "$issue_number" -R "$repo" --json title --jq '.title' 2>/dev/null || true)"
-  bash "$(dirname "${BASH_SOURCE[0]}")/rename_session.sh" "$issue_number" "${session_title:-$title}" || true
 fi
 
 # A run that quietly eats a tenth of the hourly budget is only noticed an hour later, when
