@@ -118,11 +118,9 @@ test('a warm start is distinguishable from a cold one', async ({ page }) => {
   );
   const warm = (await readMetrics(page)).dictionary;
 
-  // Readiness is measured on the main thread, so it survives where the
-  // worker's own telemetry does not: once the service worker controls the
-  // page it serves the worker script by bare path and the `telemetry=1`
-  // parameter is lost with the query string (#299). Hence no assertion on
-  // `cache-hit` here — only on the duration, which is the point anyway.
+  // Only the duration is asserted, which is the point here. The worker's
+  // `cache-hit` phase under a controlled reload is service-worker-cache.spec.js's
+  // business (#299): this reload is not guaranteed to be controlled.
   expect(warm['ready-ms']).toBeGreaterThan(0);
   expect(warm['ready-ms']).toBeLessThan(cold['ready-ms']);
 });

@@ -88,6 +88,13 @@ self.addEventListener("activate", event => {
 });
 
 
+// Only a same-origin success is worth keeping (#315): the bucket lives until
+// the next deploy, so one cached 404 or 500 would be served on every later
+// load. An opaque or error response goes to the page and nowhere else.
+function cacheable(response) {
+  return response.ok && response.type === "basic";
+}
+
 async function cacheFirst(request, cacheKey) {
   const cached = await caches.match(request);
   if (cached) return cached;
@@ -96,13 +103,20 @@ async function cacheFirst(request, cacheKey) {
   // params or Vary headers that prevent an exact match against the precached entry.
   if (cacheKey) {
     const cachedByPath = await caches.match(cacheKey);
-    if (cachedByPath) return cachedByPath;
+    // Re-wrapped, because the precached response carries the bare path as its
+    // URL, and a worker built from it takes that URL as its own location —
+    // `/js/sqlite3-worker.js?sqlite3.dir=/js&telemetry=1` lost its parameters
+    // under a controlled page (#299). A constructed response has no URL, so
+    // the browser gives it the request's.
+    if (cachedByPath) return new Response(cachedByPath.body, cachedByPath);
   }
 
   const response = await fetch(request);
-  const cache = await caches.open(SW_VERSION);
-  // Clone before caching: Response body is a one-time-read stream; the original goes to the browser.
-  cache.put(request, response.clone());
+  if (cacheable(response)) {
+    const cache = await caches.open(SW_VERSION);
+    // Clone before caching: Response body is a one-time-read stream; the original goes to the browser.
+    cache.put(request, response.clone());
+  }
   return response;
 }
 
@@ -125,9 +139,12 @@ async function navigationNetworkFirst(request) {
 async function networkFirstCached(request, cacheKey) {
   try {
     const response = await fetch(request);
-    const cache = await caches.open(SW_VERSION);
-    // Refresh the cache on every successful fetch so the offline copy stays warm.
-    cache.put(cacheKey || request, response.clone());
+    // Refresh the cache on every successful fetch so the offline copy stays
+    // warm — and only then: a failed answer must not replace the good copy.
+    if (cacheable(response)) {
+      const cache = await caches.open(SW_VERSION);
+      cache.put(cacheKey || request, response.clone());
+    }
     return response;
   } catch (error) {
     const cached = await caches.match(cacheKey || request);
