@@ -398,11 +398,11 @@
 
 (defn- close-icon
   []
-  [:a.app-shell__corner-icon
-   {:href       "/home"
+  [:button.app-shell__corner-icon
+   {:type       "button"
     :aria-label "Закрыть"
     :title      "Закрыть"
-    :on         {:click [[:effect/prevent-default] [:action/close-screen]]}}
+    :on         {:click [[:action/close-screen]]}}
    [:svg.app-shell__corner-icon-svg
     {:viewBox "0 0 16 16" :aria-hidden "true"}
     [:path

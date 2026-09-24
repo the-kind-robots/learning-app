@@ -137,12 +137,18 @@
   min-width: 0;
 }
 
+/* A link (the grid) or a button (the close mark) with the same box: the
+   background, border and padding a button brings are cleared. */
 .app-shell__corner-icon {
   align-items: center;
+  background: none;
+  border: 0;
   color: rgb(var(--color-black-text));
+  cursor: pointer;
   display: inline-flex;
   height: 28px;
   justify-content: center;
+  padding: 0;
   text-decoration: none;
   transition: opacity 0.15s, transform 0.15s;
   width: 28px;

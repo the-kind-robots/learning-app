@@ -27,7 +27,7 @@ async function expectSearchAboveTheButton(page) {
 }
 
 async function expectAirUnderTheBar(page) {
-  const close = await page.getByRole('link', { name: 'Закрыть' }).boundingBox();
+  const close = await page.getByRole('button', { name: 'Закрыть' }).boundingBox();
   const row = await page.getByRole('listitem').filter({ hasText: 'Haus' }).boundingBox();
   expect(row.y - (close.y + close.height)).toBeGreaterThanOrEqual(20);
 }

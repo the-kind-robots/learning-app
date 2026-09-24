@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 // Every screen but home closes from the corner, and home has no app screen
 // behind it (#411, ADR-0015).
 
-const close = (page) => page.getByRole('link', { name: 'Закрыть' });
+const close = (page) => page.getByRole('button', { name: 'Закрыть' });
 const homeHeading = (page) => page.getByRole('heading', { name: 'Главная' });
 
 async function addWord(page) {

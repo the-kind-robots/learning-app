@@ -36,7 +36,6 @@
    [reitit.frontend :as rf]
    [reitit.frontend.controllers :as rfc]
    [reitit.frontend.easy :as rfe]
-   [reitit.frontend.history :as rfh]
    [replicant.dom :as r]
    [runtime.system :as system]
    [service-worker]
@@ -227,8 +226,7 @@
                                         (let [dispatch    (:dispatch render)
                                               controllers (atom nil)
                                               router      (rf/router (application/routes dispatch))]
-                                          (navigation/put-home-beneath!
-                                           #(some? (rf/match-by-path router %)))
+                                          (navigation/put-home-beneath! router)
                                           (rfe/start!
                                            router
                                            (fn [match _history]
@@ -238,15 +236,10 @@
                                                ;; entry rather than pushing one. That also drops the fragment,
                                                ;; taking an incoming credential out of the address bar.
                                                (rfe/replace-state :page/home)))
-                                           ;; A shell link takes its own click and asks
-                                           ;; the navigation port (ADR-0015); reitit's
-                                           ;; anchor handler does not look at
-                                           ;; `defaultPrevented` and would push the
-                                           ;; same path a second time.
-                                           {:ignore-anchor-click?
-                                            (fn [router ^goog.events.BrowserEvent e el uri]
-                                              (and (not (.. e getBrowserEvent -defaultPrevented))
-                                                   (rfh/ignore-anchor-click? router e el uri)))
+                                           ;; Reitit's anchor handler stays out: every
+                                           ;; shell link takes its own click and asks
+                                           ;; the navigation port (ADR-0015).
+                                           {:ignore-anchor-click? (constantly false)
                                             :use-fragment false})))}}))
 
 
