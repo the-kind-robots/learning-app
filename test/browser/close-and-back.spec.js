@@ -34,7 +34,7 @@ async function openAppAfterAnotherPage(page) {
 test('home has no close mark; words, themes and lesson each have one', async ({ page }) => {
   await page.goto('/home');
   await expect(homeHeading(page)).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Открыть наборы' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Открыть наборы' })).toBeVisible();
   await expect(close(page)).toHaveCount(0);
 
   await addWord(page);
@@ -45,7 +45,7 @@ test('home has no close mark; words, themes and lesson each have one', async ({ 
   await close(page).click();
   await expect(homeHeading(page)).toBeVisible();
 
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
   await expect(page).toHaveURL(/\/collections$/);
   await expect(close(page)).toHaveCount(1);
   await close(page).click();

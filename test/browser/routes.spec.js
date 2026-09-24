@@ -6,7 +6,7 @@ test('route entry renders shell and lists', async ({ page }) => {
   await expect(page).toHaveURL(/\/home$/);
   await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
   // A development build's word mark ends in a red D, a release build's does not.
-  await expect(page.getByRole('link', { name: /^Sprecha/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Sprecha/ })).toBeVisible();
 
   // Direct entry to the words route loads its data (empty state here).
   await page.goto('/words');

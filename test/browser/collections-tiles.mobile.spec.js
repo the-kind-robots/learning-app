@@ -20,7 +20,7 @@ test('twelve collections fit a phone screen without scrolling', async ({ page })
   await page.goto('/');
   await seedCollections(page, names);
 
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
 
   for (const name of names) {
     await expect(page.getByRole('button', { name: name + ' 0', exact: true })).toBeInViewport({ ratio: 1 });
@@ -40,7 +40,7 @@ test('twelve collections fit a phone screen without scrolling', async ({ page })
 test('a rename left in the heading shows on the themes screen tapped open from it', async ({ page }) => {
   await page.goto('/');
   await seedCollections(page, ['xxx, aaa']);
-  await page.getByRole('link', { name: 'Открыть наборы' }).tap();
+  await page.getByRole('button', { name: 'Открыть наборы' }).tap();
   await page.getByRole('button', { name: 'xxx, aaa 0', exact: true }).tap();
 
   const heading = page.getByRole('heading', { name: 'xxx, aaa' });
@@ -48,7 +48,7 @@ test('a rename left in the heading shows on the themes screen tapped open from i
   await heading.tap();
   await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.type('xxx / aaa');
-  await page.getByRole('link', { name: 'Открыть наборы' }).tap();
+  await page.getByRole('button', { name: 'Открыть наборы' }).tap();
 
   await expect(page.getByRole('heading', { name: 'xxx 0', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'aaa 0', exact: true })).toBeVisible();

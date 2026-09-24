@@ -54,7 +54,7 @@ test('opening the themes screen shows a loading state before its tiles', async (
   await addWord(page, 'der Hund', 'пёс');
   await seedVocabulary(page, 200);
 
-  await page.getByRole('link', { name: 'Открыть наборы' }).click();
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
 
   // The first read after a seed also builds the words view over every
   // document for the count; the loading state is on screen for all of it.

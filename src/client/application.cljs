@@ -383,11 +383,11 @@
 
 (defn- collections-icon
   []
-  [:a.app-shell__corner-icon
-   {:href       "/collections"
+  [:button.app-shell__corner-icon
+   {:type       "button"
     :aria-label "Открыть наборы"
     :title      "Наборы"
-    :on         {:click [[:effect/prevent-default] [:action/go-to-collections]]}}
+    :on         {:click [[:action/go-to-collections]]}}
    [:svg.app-shell__corner-icon-svg
     {:viewBox "0 0 16 16" :aria-hidden "true"}
     [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
@@ -511,9 +511,9 @@
      ;; the bar rather than between its neighbours.
      [:div.app-shell__bar
       [:div.app-shell__bar-slot
-       [:a.app-shell__logo
-        {:href "/home"
-         :on   {:click [[:effect/prevent-default] [:action/go-to-home]]}}
+       [:button.app-shell__logo
+        {:type "button"
+         :on   {:click [[:action/go-to-home]]}}
         "Sprecha"
         ;; A development build's word mark ends in a red D. A letter of the
         ;; name, nothing to tap; the ^boolean on the flag is what lets Closure
