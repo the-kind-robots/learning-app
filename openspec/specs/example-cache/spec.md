@@ -1,7 +1,7 @@
 # example-cache Specification
 
 ## Purpose
-TBD - created by archiving change share-examples-across-devices. Update Purpose after archive.
+Define the server-side cache of generated example sentences, so a request already answered is served again without paying the provider, and the cache never becomes a reason to refuse a request.
 
 ## Requirements
 

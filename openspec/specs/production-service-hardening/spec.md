@@ -1,7 +1,7 @@
 # production-service-hardening Specification
 
 ## Purpose
-TBD - created by archiving change harden-systemd-services. Update Purpose after archive.
+Define the security boundary of the production services: systemd sandboxing and directory ownership, CouchDB admin provisioning, the proxy-auth headers nginx must strip, and rate limits on endpoints that cost money.
 ## Requirements
 ### Requirement: Service units are sandboxed to their observed needs
 Every learning-app unit with a `[Service]` section SHALL declare a systemd hardening block that leaves writable only the paths the service demonstrably writes, reachable only the address families it demonstrably uses, and grants no capabilities beyond what its user and task require. Directives whose compatibility with the workload cannot be established SHALL be omitted and the omission recorded, never guessed at.
