@@ -1,7 +1,7 @@
 # example-fetch-error-clarity Specification
 
 ## Purpose
-TBD - created by archiving change handle-invalid-example-fetch-warnings. Update Purpose after archive.
+Define how example fetching handles a malformed response or an unavailable generator, so neither becomes a broken example saved on the device.
 ## Requirements
 ### Requirement: Example fetch rejects malformed success payloads before local save
 The system SHALL reject malformed example payloads before attempting to save them as local example documents.

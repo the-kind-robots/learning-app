@@ -1,7 +1,7 @@
 # backend-operations Specification
 
 ## Purpose
-TBD - created by archiving change graceful-backend-shutdown. Update Purpose after archive.
+Define how the backend process behaves across its own lifecycle, so a service stop lets in-flight requests finish instead of cutting them off.
 ## Requirements
 ### Requirement: SIGTERM stops the backend gracefully
 On SIGTERM the backend SHALL stop accepting connections first, then let in-flight requests finish within a bounded drain timeout before the JVM exits. Per-request SQLite connections close as their requests complete — draining is the cleanup.

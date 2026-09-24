@@ -1,7 +1,7 @@
 # main-thread-runtime Specification
 
 ## Purpose
-TBD - created by archiving change replicant-nexus-migration. Update Purpose after archive.
+Define the client application runtime: the app boots and renders on the main thread with Replicant and Nexus, and the Service Worker is reduced to a versioned cache for static assets and the app shell.
 ## Requirements
 ### Requirement: App boots from main thread entry point
 The system SHALL initialise the application from a main-thread ClojureScript entry point (`main.cljs`) loaded by the backend app shell, replacing the Service Worker as the application runtime.

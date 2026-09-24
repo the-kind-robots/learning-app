@@ -92,3 +92,9 @@
     (is (= "de" (:lang solo)))
     (is (= "de" (:lang (:head folder))) "a label names a folder too")
     (is (= ["de"] (mapv :lang (:rows folder))))))
+
+
+(deftest the-status-line-names-the-deleted-collection
+  (is (= "Набор «Solo» удалён"
+         (:announcement (sut/page-props {:collections/deleted-name "Solo"}))))
+  (is (nil? (:announcement (sut/page-props {})))))

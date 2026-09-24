@@ -1,7 +1,7 @@
 # vocabulary-list-empty-states Specification
 
 ## Purpose
-TBD - created by archiving change scope-word-list-empty-state-to-filter. Update Purpose after archive.
+Define what the word list shows when it has nothing to list, telling an empty vocabulary apart from a filter that matched nothing.
 ## Requirements
 ### Requirement: An empty vocabulary shows the first-run invitation
 

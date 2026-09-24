@@ -1,7 +1,7 @@
 # sqlite-dictionary-worker Specification
 
 ## Purpose
-TBD - created by archiving change replicant-nexus-migration. Update Purpose after archive.
+Define the Dedicated Worker that hosts the SQLite dictionary in the browser, the RPC the main thread uses to query it, and the completion query that feeds home autocomplete.
 ## Requirements
 ### Requirement: Dictionary SQLite runs in a Dedicated Worker
 The system SHALL run the SQLite dictionary (`opfs-sahpool` VFS) inside a Dedicated Worker;
