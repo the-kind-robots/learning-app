@@ -83,7 +83,6 @@ Important behavior:
 - Reading Priority back needs the `ProjectV2ItemIssueFieldValue` fragment. A plain `ProjectV2ItemFieldSingleSelectValue` query returns nothing for it, which looks exactly like "unset" and is not.
 - `--milestone <title>` puts the issue in an open milestone, on creation and on reuse alike (`gh issue edit --milestone`). The title is checked against the repo's open milestones before anything is created; an unknown one fails the run. Milestones are never created by the script.
 - Missing labels are skipped with a warning instead of aborting issue creation.
-- When the run ends with an issue number, `rename_session.sh` renames the running Claude Code session to `<number> <issue title>` and prints `Session Name: ...`. Outside a Claude Code session it is a silent no-op, and a failed rename never fails the flow.
 - If no assignee or status is provided, the workflow defaults to `@me` and `Backlog`.
 - For active work, pass `--status "In progress"` explicitly.
 - After the current task is merged or closed, do not keep reusing its branch/issue for the next non-trivial repo scope; start a fresh issue/branch unless the user is clearly asking only for final closeout steps.
