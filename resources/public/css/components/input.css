@@ -1,6 +1,6 @@
 .input {
   align-items: center;
-  background: rgb(var(--color-polar));
+  background: rgb(var(--color-snow));
   border: 2px solid rgb(var(--color-swan));
   border-radius: 12px;
   box-sizing: border-box;
