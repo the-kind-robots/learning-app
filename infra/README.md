@@ -33,7 +33,7 @@ infra/
     │       │   ├── run.sh    # Bridges systemd credentials into env vars, starts the jar
     │       │   └── check-credentials.sh  # Deploy preflight: are the named credentials present
     │       └── dictionary/
-    │           └── import.sh # Dictionary import script (runs as systemd service)
+    │           └── import.sh # Dictionary import script (runs as systemd service); the only copy — Deploy Dictionary uploads this file too
     └── usr/share/learning-app/
         ├── admin-setup.sh    # First-run admin initialization
         └── backup.sh         # DB backup script (called by backup timer)

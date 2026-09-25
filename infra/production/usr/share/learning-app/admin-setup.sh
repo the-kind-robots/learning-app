@@ -36,10 +36,8 @@ deployer_key=""
 borg_repo=""
 openrouter_changed=false
 couchdb_changed=false
-borg_changed=false
-borg_repo_changed=false
+db_auth_secret_changed=false
 cert_issued=false
-deployer_key_added=false
 app_was_active=false
 nginx_was_active=false
 couchdb_old_password=""
@@ -146,9 +144,6 @@ write_credential() {
       couchdb_admin_password)
         couchdb_changed=true
         ;;
-      borg-passphrase)
-        borg_changed=true
-        ;;
     esac
   else
     info "Credential ${name} exists; skipping"
@@ -169,8 +164,8 @@ store_credential() {
     couchdb_admin_password)
       couchdb_changed=true
       ;;
-    borg-passphrase)
-      borg_changed=true
+    db_auth_secret)
+      db_auth_secret_changed=true
       ;;
   esac
 }
@@ -212,7 +207,6 @@ if [ -n "${deployer_key}" ]; then
   if ! grep -qx "${deployer_key}" /home/deployer/.ssh/authorized_keys; then
     printf '%s\n' "${deployer_key}" >> /home/deployer/.ssh/authorized_keys
     chown deployer:deployer /home/deployer/.ssh/authorized_keys
-    deployer_key_added=true
   else
     info "Deployer key already present; skipping"
   fi
@@ -239,7 +233,6 @@ set_borg_repo() {
   else
     printf '%s\n' "BORG_REPO=${repo}" >> "${ENV_FILE}"
   fi
-  borg_repo_changed=true
 }
 
 if [ -n "${borg_repo}" ]; then
@@ -349,6 +342,12 @@ if [ "${cert_issued}" = true ] && [ "${nginx_was_active}" = true ]; then
   systemctl reload nginx
 fi
 
-if [ "${openrouter_changed}" = true ]; then
-  systemctl enable --now learning-app-run.service
+# `enable --now` above starts a stopped app but leaves a running one alone, and
+# a running app keeps the credentials it loaded at start. The backup service is
+# oneshot and loads its credential on every run, so it needs no restart.
+if [ "${app_was_active}" = true ] \
+   && { [ "${openrouter_changed}" = true ] || [ "${couchdb_changed}" = true ] \
+        || [ "${db_auth_secret_changed}" = true ]; }; then
+  systemctl restart learning-app-run.service
+  info "Restarted learning-app-run.service to load rotated credentials"
 fi

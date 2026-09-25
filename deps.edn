@@ -20,7 +20,11 @@
                    :extra-deps  {philoskim/debux {:mvn/version "0.9.1"}}
                    :extra-paths ["dev" "classes"]}
 
-           :test  {:extra-paths ["test"]}
+           ;; Every namespace under test/backend ending in -test; exits
+           ;; non-zero when one fails.
+           :test  {:extra-paths ["test"]
+                   :extra-deps  {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+                   :main-opts   ["-m" "cognitect.test-runner" "-d" "test/backend"]}
 
            :build {:deps       {org.clojure/clojure           {:mvn/version "1.12.5"}
                                 io.github.clojure/tools.build {:git/tag "v0.10.14" :git/sha "1176afd"}}

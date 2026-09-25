@@ -69,11 +69,28 @@
           (some-> change .-docs)))
 
 
+(defn- written-revisions
+  "The `[id rev]` pairs one batch wrote."
+  [^js change]
+  (into #{}
+        (map (fn [^js doc] [(.-_id doc) (.-_rev doc)]))
+        (some-> change .-docs)))
+
+
+(defn change-revision
+  "The `[id rev]` pair one change-feed event reports, comparable with a pass's
+   `:pulled-revs`."
+  [^js change]
+  [(.-id change) (some-> change .-changes (aget 0) .-rev)])
+
+
 (defn sync-once!
   "Runs one bidirectional replication pass of db-key against the account's copy
    on the server. Resolves with what the pass did — `{:pulled n :pushed n
-   :pulled-ids {type #{id}}}`, documents written on each side and the ids the
-   pull wrote here, grouped by the type their documents carry — and never
+   :pulled-ids {type #{id}} :pulled-revs #{[id rev]}}`, documents written on
+   each side, the ids the pull wrote here, grouped by the type their documents
+   carry, and the exact revisions it wrote, which is how the change feed tells
+   the pull's own writes from local ones — and never
    rejects: a failed pass resolves nil, so a caller can fire it on a trigger
    without guarding every one.
 
@@ -87,10 +104,11 @@
    a sequence number across passes and would answer with this device's own
    writes as well."
   [dbs db-key account-id]
-  (let [pulled-ids (atom {})
-        remote     (str (.. js/globalThis -location -origin)
-                        "/db/"
-                        ((db->remote-name db-key) account-id))]
+  (let [pulled-ids  (atom {})
+        pulled-revs (atom #{})
+        remote      (str (.. js/globalThis -location -origin)
+                         "/db/"
+                         ((db->remote-name db-key) account-id))]
     (js/Promise.
      (fn [resolve _reject]
        (doto (db/sync (db-key dbs) {:filter user-doc? :live false :remote-url remote})
@@ -98,12 +116,14 @@
               (fn [^js info]
                 (when (= "pull" (.-direction info))
                   (swap! pulled-ids
-                         #(merge-with into % (written-ids-by-type (.-change info)))))))
+                    #(merge-with into % (written-ids-by-type (.-change info))))
+                  (swap! pulled-revs into (written-revisions (.-change info))))))
          (.on "complete"
               (fn [^js info]
-                (resolve {:pulled     (docs-written (some-> info .-pull))
-                          :pulled-ids @pulled-ids
-                          :pushed     (docs-written (some-> info .-push))})))
+                (resolve {:pulled      (docs-written (some-> info .-pull))
+                          :pulled-ids  @pulled-ids
+                          :pulled-revs @pulled-revs
+                          :pushed      (docs-written (some-> info .-push))})))
          (.on "error"
               (fn [err]
                 (log/warn :db/sync-failed {:db db-key :error (str err)})
