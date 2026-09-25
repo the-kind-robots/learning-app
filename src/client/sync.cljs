@@ -195,19 +195,34 @@
         (identity/use-identity! identity)
         (let [last-pass (atom nil)
               dirty     (atom false)
+              in-flight (atom nil)
               pass!     (fn ^:async pass!
                           []
+                          ;; Cleared before the pass, not after: a write made
+                          ;; while it runs may miss it, and has to leave the
+                          ;; database dirty for the next pull.
+                          (reset! dirty false)
                           (let [result (await (sync-once! dbs id))]
                             (reset! last-pass (utils/now-ms))
-                            (reset! dirty false)
                             result))
+              ;; One pass at a time (#319). Route entry, the `online` event,
+              ;; the poke socket and the write throttle all land here; a call
+              ;; while a pass runs gets that pass's promise instead of a
+              ;; second replication racing it.
               pull!     (fn [& [reason]]
                           (when (.-onLine js/navigator)
-                            (if (pull-due? {:reason       reason
-                                            :dirty?       @dirty
-                                            :last-pass-ms @last-pass
-                                            :now-ms       (utils/now-ms)})
-                              (pass!)
+                            (cond
+                              @in-flight
+                              @in-flight
+
+                              (pull-due? {:reason       reason
+                                          :dirty?       @dirty
+                                          :last-pass-ms @last-pass
+                                          :now-ms       (utils/now-ms)})
+                              (reset! in-flight
+                                (.finally (pass!) #(reset! in-flight nil)))
+
+                              :else
                               (do (when ^boolean goog/DEBUG
                                     (instrumentation/trace! "pull-skipped"
                                                             #js {:sinceMs (- (utils/now-ms) (or @last-pass 0))}))

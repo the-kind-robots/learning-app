@@ -24,23 +24,37 @@
    Measured, since a channel per keystroke sounds expensive: 0.137 ms per
    round trip against 0.103 ms for id matching, over 20k trips. The 34 µs
    difference sits behind a 100 ms debounce and in front of a query that
-   costs 20-27 ms (#179)."
+   costs 20-27 ms (#179).
+
+   The queries still unanswered are kept, each by its port, so `abandon` can
+   fail them all: a query the worker threw on is never answered, and without
+   this its caller waits forever (#320)."
   [worker]
-  #js {:exec
-       (fn [^js opts]
-         (js/Promise.
-          (fn [resolve reject]
-            (let [channel (js/MessageChannel.)
-                  port    (.-port1 channel)]
-              ;; Assigning `onmessage` starts the port; `addEventListener`
-              ;; would leave it closed until an explicit `.start`.
-              (set! (.-onmessage port)
-                    (fn [^js e]
-                      (.close port)
-                      (if (.. e -data -error)
-                        (reject (js/Error. (.. e -data -error)))
-                        (resolve (.. e -data -result)))))
-              (.postMessage worker opts #js [(.-port2 channel)])))))})
+  (let [pending (atom {})]
+    #js {:abandon
+         (fn [^js err]
+           (let [abandoned @pending]
+             (reset! pending {})
+             (doseq [[port reject] abandoned]
+               (.close ^js port)
+               (reject err))))
+         :exec
+         (fn [^js opts]
+           (js/Promise.
+            (fn [resolve reject]
+              (let [channel (js/MessageChannel.)
+                    port    (.-port1 channel)]
+                (swap! pending assoc port reject)
+                ;; Assigning `onmessage` starts the port; `addEventListener`
+                ;; would leave it closed until an explicit `.start`.
+                (set! (.-onmessage port)
+                      (fn [^js e]
+                        (swap! pending dissoc port)
+                        (.close port)
+                        (if (.. e -data -error)
+                          (reject (js/Error. (.. e -data -error)))
+                          (resolve (.. e -data -result)))))
+                (.postMessage worker opts #js [(.-port2 channel)])))))}))
 
 
 (defn exec
@@ -109,14 +123,21 @@
                            (when-some [holding (holding-state data)]
                              (reset! holding? holding))
                            (observe-worker-message! data))))
-    (.addEventListener worker
-                       "error"
-                       (fn [^js e]
-                         (reset! holding? false)
-                         (log/error :dbs/sqlite3-worker-crashed {:error (str e)})))
-    {:holding? holding?
-     :proxy    (make-exec-proxy worker)
-     :worker   worker}))
+    (let [proxy (make-exec-proxy worker)]
+      ;; An uncaught throw in the worker, the one a query dies of among them,
+      ;; arrives here and not on the query's port. Which query it was is not
+      ;; said, so every one still waiting is failed.
+      (.addEventListener worker
+                         "error"
+                         (fn [^js e]
+                           (reset! holding? false)
+                           (log/error :dbs/sqlite3-worker-crashed {:error (str e)})
+                           (.abandon proxy
+                                     (js/Error. (str "Dictionary worker failed: "
+                                                     (or (.-message e) "no message"))))))
+      {:holding? holding?
+       :proxy    proxy
+       :worker   worker})))
 
 
 (defn- foreground?
