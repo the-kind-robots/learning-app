@@ -107,8 +107,7 @@
             {:error :lesson-save-failed :lesson-state lesson-state}))))))
 
 
-(defn ^:async advance!
-  "Select the next trial. Returns {:lesson-state ...} or {:error ...}."
+(defn- ^:async advance-once!
   [{:keys [lessons]}]
   (let [lesson-state (await (state lessons))]
     (if-not lesson-state
@@ -122,6 +121,24 @@
           (catch js/Error err
             (log/error :advance-lesson/save-failed {:error (ex-message err)})
             {:error :lesson-save-failed}))))))
+
+
+;; The advance in flight, if any. Two activations of the continue button
+;; faster than a save — a double click — both read the same revision, and the
+;; second save failed with a document update conflict (#277).
+(defonce ^:private advancing
+  (atom nil))
+
+
+(defn advance!
+  "Select the next trial. Returns {:lesson-state ...} or {:error ...}.
+   A call made while an advance is in flight joins it instead of advancing
+   a second time."
+  [capabilities]
+  (or @advancing
+      (reset! advancing
+        (.finally (advance-once! capabilities)
+                  #(reset! advancing nil)))))
 
 
 (defn- token-state
