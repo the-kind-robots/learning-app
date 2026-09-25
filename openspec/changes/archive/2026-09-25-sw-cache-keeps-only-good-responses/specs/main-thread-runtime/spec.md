@@ -13,10 +13,10 @@ The Service Worker SHALL write a network response to its cache only when the res
 - **THEN** the page receives the error
 - **AND** the cached manifest stays as it was
 
-### Requirement: A cached asset is served under the URL it was requested by
-The Service Worker SHALL key cached static assets by path, so a query string neither misses the cached entry nor adds another. The page SHALL see every response served from that cache under the request's URL, query included.
+### Requirement: The dictionary worker takes no configuration from its script URL
+The Service Worker SHALL key cached static assets by path, so a query string neither misses the cached entry nor adds another. The dictionary worker SHALL NOT depend on its script URL for configuration: it SHALL load the SQLite engine from beside its own script, and a development build SHALL turn on its phase timings by message.
 
 #### Scenario: The dictionary worker after a controlled reload
-- **WHEN** a page under a controlling Service Worker, online or offline, starts the dictionary worker with `?sqlite3.dir=/js&telemetry=1`
-- **THEN** the worker's own location carries both parameters
-- **AND** a development build reports the worker's phase timings
+- **WHEN** a page under a controlling Service Worker, online or offline, starts the dictionary worker from the cache
+- **THEN** the dictionary answers queries
+- **AND** a development build reports the worker's phase timings, `cache-hit` included

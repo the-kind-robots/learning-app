@@ -143,11 +143,15 @@
   [_deps]
   (when ^boolean goog/DEBUG
     (instrumentation/dictionary-start!))
-  (let [worker (js/Worker. (str "/js/sqlite3-worker.js?sqlite3.dir=/js"
-                                (when ^boolean goog/DEBUG "&telemetry=1")))
+  (let [worker (js/Worker. "/js/sqlite3-worker.js")
         report #(publish-foreground! worker)]
-    ;; Posted before the worker's script has run — the message waits for it —
-    ;; so the first thing it hears is whether it may take the database at all.
+    ;; Posted before the worker's script has run — the messages wait for it,
+    ;; in order. A development build first asks for phase timings, by message
+    ;; and not in the script URL: the service worker serves the script from
+    ;; its cache, and the URL a worker sees is not the one asked for (#299).
+    ;; Then the worker hears whether it may take the database at all.
+    (when ^boolean goog/DEBUG
+      (.postMessage worker #js {:type "report-phases"}))
     (report)
     ;; Three events for two conditions, and they overlap: leaving for another
     ;; application fires `blur` and `visibilitychange` both. The worker

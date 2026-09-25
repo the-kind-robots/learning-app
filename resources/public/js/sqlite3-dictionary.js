@@ -46,8 +46,10 @@
 
 const SAH_POOL_LOCK = "sqlite-opfs-sahpool";
 
-const workerParams = new URL(self.location.href).searchParams;
-const telemetry = workerParams.has("telemetry");
+// Whether to report phase timings. The page turns it on with a message,
+// never through the script URL: a service worker serves this script from its
+// cache, and what it serves need not carry the URL it was asked for (#299).
+let telemetry = false;
 
 // The engine, loaded once for the worker's life. The pool and the open
 // database come and go with the lock; this does not.
@@ -111,9 +113,12 @@ async function measure(phase, fn, extras) {
 function loadEngine() {
   if (engine) return engine;
   engine = (async () => {
-    const dir = workerParams.get("sqlite3.dir");
-    importScripts(dir ? `${dir}/sqlite3.js` : "sqlite3.js");
-    sqlite3 = await measure("wasm-init", () => sqlite3InitModule());
+    // The engine sits beside this worker's script, wherever that is: both
+    // files resolve against the worker's own location, never its query.
+    const besideWorker = (file) => new URL(file, self.location.href).href;
+    importScripts(besideWorker("sqlite3.js"));
+    sqlite3 = await measure("wasm-init", () =>
+      sqlite3InitModule({ locateFile: besideWorker }));
   })();
   return engine;
 }
@@ -301,4 +306,11 @@ function start(notify) {
 }
 
 
-self.dictionary = { pageIsForeground, request, start };
+// Sent by a development build before anything else, so the first phase is
+// already reported.
+function reportPhases() {
+  telemetry = true;
+}
+
+
+self.dictionary = { pageIsForeground, reportPhases, request, start };

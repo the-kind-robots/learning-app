@@ -100,20 +100,12 @@ async function keep(key, response) {
   await cache.put(key, copy);
 }
 
-// A cached response carries the URL it was stored under. Re-wrapped, it has
-// none, and the browser gives it the request's — query included. A worker
-// takes its response's URL as its own location, so without this
-// `/js/sqlite3-worker.js?sqlite3.dir=/js&telemetry=1` lost its parameters
-// under a controlled page (#299).
-function underRequestUrl(cached) {
-  return new Response(cached.body, cached);
-}
-
 // Keyed by path: a query string neither misses the precached entry nor adds
-// one of its own.
+// one of its own. A hit carries the path it was stored under as its URL, not
+// the request's, so nothing served from here may read its own query (#299).
 async function cacheFirst(request, path) {
   const cached = await caches.match(path);
-  if (cached) return underRequestUrl(cached);
+  if (cached) return cached;
 
   const response = await fetch(request);
   keep(path, response);

@@ -53,7 +53,15 @@ test('a failed manifest leaves the cached one in place', async ({ context, page 
 const phasesSeen = async (page) =>
   ((await readMetrics(page)).dictionary.phases || []).map((p) => p.phase);
 
-test('the dictionary worker keeps its query string under a controlled page', async ({ context, page }) => {
+// The dictionary answers: "fenster" matches exactly two lemmas of the fixture.
+async function expectDictionaryAnswers(page) {
+  const field = page.getByLabel('Слово (немецкий)');
+  await field.fill('fenster');
+  await expect(page.getByRole('option').filter({ hasText: 'Fenster' })).toHaveCount(2);
+  await field.fill('');
+}
+
+test('the dictionary worker reports its phases and answers under a controlled page', async ({ context, page }) => {
   await openControlled(page);
   // The first load imports the dictionary into OPFS; the reload finds it.
   await dictionaryReady(page);
@@ -62,16 +70,17 @@ test('the dictionary worker keeps its query string under a controlled page', asy
   await page.reload();
   expect(await page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
 
-  // `telemetry=1` rides in the query string, and without it the worker emits
-  // no phases. `cache-hit` is the phase of a start that finds the file in
-  // OPFS already.
+  // A development build asks the worker for phase timings; `cache-hit` is
+  // the phase of a start that finds the file in OPFS already.
   await dictionaryReady(page);
   expect(await phasesSeen(page)).toContain('cache-hit');
+  await expectDictionaryAnswers(page);
 
   // Offline, everything the worker needs comes from the cache: the shell,
-  // the worker script, the last manifest.
+  // the worker script, sqlite3.js and its wasm, the last manifest.
   await context.setOffline(true);
   await page.reload();
   await dictionaryReady(page);
   expect(await phasesSeen(page)).toContain('cache-hit');
+  await expectDictionaryAnswers(page);
 });
