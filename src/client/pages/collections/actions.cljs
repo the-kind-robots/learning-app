@@ -24,8 +24,7 @@
     [[:effect/save
       {:page/current (:page/current shown)
        :page/load    (:page/load shown)
-       :collections/loading? true
-       :collections/deleted-name nil}]]))
+       :collections/loading? true}]]))
 
 
 (defn- unchanged-or
@@ -51,13 +50,20 @@
     [[:effect/save (collections-shown state summary)]]))
 
 
+(defn deleted-message
+  "What the status line says once a collection is deleted, by the name its
+   target showed."
+  [name]
+  (str "Набор «" name "» удалён"))
+
+
 (nxr/register-action! :action/show-deleted
-  ;; The screen without the deleted collection, the status line naming it,
-  ;; and focus on the neighbour picked before the delete.
+  ;; The screen without the deleted collection, focus on the neighbour
+  ;; picked before the delete, and the status line naming it.
   (fn show-deleted [state summary {:keys [name focus-id]}]
-    [[:effect/save (assoc (collections-shown state summary)
-                          :collections/deleted-name name)]
-     [:effect/focus-collection focus-id]]))
+    [[:effect/save (collections-shown state summary)]
+     [:effect/focus-collection focus-id]
+     [:effect/announce (deleted-message name)]]))
 
 
 (nxr/register-action! :action/handle-tab-click
