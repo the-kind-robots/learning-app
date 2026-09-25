@@ -38,8 +38,14 @@ src/backend/
 
 ```bash
 clj -M:dev -m core          # start the server with the dev alias
-clj -M:test                 # run backend tests
+clojure -M:test             # run backend tests
 ```
+
+`-M:test` runs every `*-test` namespace under `test/backend/` through
+cognitect test-runner and exits non-zero on any failure; CI's Backend Tests
+job runs the same command. A single namespace: `clojure -M:test -n
+backend.push-test`. Tests open temp SQLite files and stub CouchDB, so no
+database or running stand is needed.
 
 Neither starts an nREPL. The one on the stand is shadow-cljs's, on the port
 `shadow-cljs.edn` pins.
