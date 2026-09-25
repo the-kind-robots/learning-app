@@ -65,8 +65,8 @@
 
 
 (deftest status-messages-do-not-disturb-a-query
-  (async-testing "loading, phases, ready, error and a crash all pass through, and the answer still lands"
-    (let [{:keys [crash! deliver! reply! target]} (stub-worker)
+  (async-testing "loading, phases, ready and error all pass through, and the answer still lands"
+    (let [{:keys [deliver! reply! target]} (stub-worker)
           db     (sut/attach target)
           answer (sut/exec db #js {:sql "SELECT 1"})]
       ;; Status arrives on the worker's own port and the reply on the
@@ -76,7 +76,6 @@
       (deliver! {:durationMs 12 :phase "db-open" :status "ok" :type "phase"})
       (deliver! {:type "ready"})
       (deliver! {:message "Missing required OPFS APIs." :type "error"})
-      (crash!)
       (reply! {:result [{:lemma "Hund"}]})
       (is (= [{:lemma "Hund"}] (js->clj (await answer) :keywordize-keys true))))))
 
@@ -107,6 +106,28 @@
         (is false "should have rejected")
         (catch :default err
           (is (= "Missing required OPFS APIs." (ex-message err))))))))
+
+
+(deftest a-crashed-worker-fails-the-queries-waiting-on-it
+  (async-testing "GH-320: a worker error rejects every pending query instead of leaving it hanging"
+    (let [{:keys [crash! reply! target]} (stub-worker)
+          db       (sut/attach target)
+          answered (sut/exec db #js {:sql "SELECT 1"})
+          _ (reply! 0 {:result [{:lemma "Hund"}]})
+          _ (await answered)
+          hund     (sut/exec db #js {:sql "SELECT 2"})
+          katze    (sut/exec db #js {:sql "SELECT 3"})]
+      (crash!)
+      (doseq [pending [hund katze]]
+        (try
+          (await pending)
+          (is false "should have rejected")
+          (catch :default err
+            (is (re-find #"Dictionary worker failed" (ex-message err))))))
+      (let [after (sut/exec db #js {:sql "SELECT 4"})]
+        (reply! 3 {:result [{:lemma "Maus"}]})
+        (is (= [{:lemma "Maus"}] (js->clj (await after) :keywordize-keys true))
+            "a query sent after the crash is not failed by it")))))
 
 
 (deftest completions-are-queried-with-no-readiness-message
