@@ -81,8 +81,8 @@ jobs:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
           key: ${{ secrets.KEY }}
-          strip_components: 2
-          source: 'tools/dictionary/import.sh'
+          strip_components: 5
+          source: 'infra/production/opt/learning-app/dictionary/import.sh'
           target: '/opt/learning-app/dictionary/'
           overwrite: true
 

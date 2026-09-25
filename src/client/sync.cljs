@@ -7,10 +7,8 @@
    [db.pouch :as pouch]
    [domain.vocabulary :as domain]
    [goog.functions :as gfn]
-   [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
-   [tasks :as tasks]
-   [utils :as utils]))
+   [tasks :as tasks]))
 
 
 (defn- lww-winner
@@ -134,30 +132,25 @@
 
 
 (def ^:private push-interval-ms
-  "Throttle window for write-driven pushes, so a burst of writes (a lesson's
-   reviews) coalesces into periodic passes. Placeholder; tune via battery todo."
+  "Throttle window for write-driven requests, so a burst of writes (a lesson's
+   reviews) goes out in a few passes rather than one per write. Placeholder;
+   tune via battery todo."
   3000)
 
 
-(def pass-interval-ms
-  "A navigation within this of the last completed pass, with nothing written
-   locally since, runs no pass: on the phone every screen entry cost a
-   1-2 s pull that brought nothing. A poke always passes — it means the
-   server has something."
-  30000)
-
-
-(defn pull-due?
-  "Whether a pull runs now. `reason` :poke bypasses the throttle; otherwise
-   a pass runs when something was written locally since the last one or the
-   last one is older than `pass-interval-ms`. The change feed that sets
-   `dirty?` also sees the pull's own writes, so it may be true right after a
-   pass that pulled something — accepted: one extra pass at worst."
-  [{:keys [reason dirty? last-pass-ms now-ms]}]
-  (or (= :poke reason)
-      dirty?
-      (nil? last-pass-ms)
-      (>= (- now-ms last-pass-ms) pass-interval-ms)))
+(defn- merged-passes
+  "What a run of passes did, told as one pass: counts summed, ids and
+   revisions united. A caller asks whether anything was pulled, and a run whose
+   first pass pulled and whose follow-up did not has pulled. Failed passes
+   (nil) add nothing; a run with none that succeeded is nil."
+  [a b]
+  (cond
+    (nil? a) b
+    (nil? b) a
+    :else    {:pulled      (+ (:pulled a) (:pulled b))
+              :pulled-ids  (merge-with into (:pulled-ids a) (:pulled-ids b))
+              :pulled-revs (into (:pulled-revs a) (:pulled-revs b))
+              :pushed      (+ (:pushed a) (:pushed b))}))
 
 
 (defn- ^:async pairing-confirmed!
@@ -181,10 +174,21 @@
 
 
 (defn ^:async start!
-  "Drives replication by triggers when the device has an account: a throttled
-   push on every local user-db change, plus a pull returned as :sync/pull!
-   for the UI to call on data-page entry. Without a stored identity the device
-   is local-only — no network call, inert pull (ADR-0006).
+  "Drives replication by requests when the device has an account, returned as
+   :sync/pull! for route entry, pokes and `online`; local user-db writes request
+   one too, throttled. Without a stored identity the device is local-only — no
+   network call, inert pull (ADR-0006).
+
+   One pass at a time (#319). A request while none runs starts one; requests
+   during a pass ask for one more after it, however many arrive, so none is
+   lost and none overlaps. Every requester gets the same promise, which
+   resolves when the passes stop, with what they did together.
+
+   A change the pass itself pulled is not a local write. The change feed
+   records every revision it sees; after each pass, and when the throttle
+   fires with no pass running, those the passes pulled are struck off, and
+   only what remains asks for a pass. A conflict resolution writes new
+   revisions, so it does ask — that pass is what pushes it.
 
    `:sync/on-pass` is where a listener registers to hear what each completed
    pass brought; see `sync-once!`."
@@ -193,39 +197,59 @@
     (if-let [{:keys [id] :as identity} (await (identity/load-identity!))]
       (do
         (identity/use-identity! identity)
-        (let [last-pass (atom nil)
-              dirty     (atom false)
-              pass!     (fn ^:async pass!
-                          []
-                          (let [result (await (sync-once! dbs id))]
-                            (reset! last-pass (utils/now-ms))
-                            (reset! dirty false)
-                            result))
-              pull!     (fn [& [reason]]
-                          (when (.-onLine js/navigator)
-                            (if (pull-due? {:reason       reason
-                                            :dirty?       @dirty
-                                            :last-pass-ms @last-pass
-                                            :now-ms       (utils/now-ms)})
-                              (pass!)
-                              (do (when ^boolean goog/DEBUG
-                                    (instrumentation/trace! "pull-skipped"
-                                                            #js {:sinceMs (- (utils/now-ms) (or @last-pass 0))}))
-                                  (js/Promise.resolve nil)))))
-              ;; The same change feed that drives the throttled push marks
-              ;; the database dirty, so a navigation after a local write
-              ;; still passes within the interval.
-              push!     (gfn/throttle pull! push-interval-ms)
-              unwatch   (pouch/on-change dbs
-                                         :user/db
-                                         (fn [_]
-                                           (reset! dirty true)
-                                           (push!)))]
+        (let [wanted (atom false)
+              running (atom nil)
+              ;; `[id rev]` the passes pulled / the change feed reported.
+              pulled (atom #{})
+              written (atom #{})
+              local-writes?
+              (fn []
+                (let [[seen _] (reset-vals! written #{})
+                      theirs   (filter @pulled seen)]
+                  (swap! pulled #(reduce disj % theirs))
+                  (< (count theirs) (count seen))))
+              run!
+              (fn run!
+                [done]
+                (if-not @wanted
+                  (do (reset! running nil)
+                      (js/Promise.resolve done))
+                  ;; `wanted` is cleared a microtask later, as the pass
+                  ;; starts, so requests made in the same turn as the one
+                  ;; that started the run are in this pass, not after it.
+                  (-> (js/Promise.resolve)
+                      (.then (fn []
+                               (reset! wanted false)
+                               (sync-once! dbs id)))
+                      (.catch (fn [err]
+                                (log/warn :sync/pass-failed {:error (ex-message err)})
+                                nil))
+                      (.then (fn [result]
+                               (swap! pulled into (:pulled-revs result))
+                               (when (local-writes?)
+                                 (reset! wanted true))
+                               (run! (merged-passes done result)))))))
+              request!
+              (fn [& _]
+                (when (.-onLine js/navigator)
+                  (reset! wanted true)
+                  (or @running
+                      (reset! running (run! nil)))))
+              ;; While a pass runs, its end judges the feed: it knows then
+              ;; what it pulled.
+              push! (gfn/throttle #(when (and (nil? @running) (local-writes?))
+                                     (request!))
+                                  push-interval-ms)
+              unwatch (pouch/on-change dbs
+                                       :user/db
+                                       (fn [change]
+                                         (swap! written conj (pouch/change-revision change))
+                                         (push!)))]
           (log/info :sync/ready {:user-id id})
           {:sync/account-id id
            :sync/on-pass    on-pass!
            :sync/pairing-confirmed! #(pairing-confirmed! dbs %)
-           :sync/pull!      pull!
+           :sync/pull!      request!
            :sync/unwatch    unwatch}))
       (do
         (log/info :sync/local-only {})

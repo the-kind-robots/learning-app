@@ -168,11 +168,6 @@
     (some-> dispatch-data :replicant/dom-event .-target .-form .requestSubmit)))
 
 
-(nxr/register-effect! :effect/click-target
-  (fn click-target [{:keys [dispatch-data]} _]
-    (some-> dispatch-data :replicant/dom-event .-target .click)))
-
-
 (nxr/register-effect! :effect/scroll-nearest
   (fn scroll-nearest [_ _ selector]
     (some-> (js/document.querySelector selector)
@@ -182,12 +177,6 @@
 ;;
 ;; Actions
 ;;
-
-
-(nxr/register-action! :action/click-if-enter
-  (fn click-if-enter [_ key]
-    (when (= "Enter" key)
-      [[:effect/click-target]])))
 
 
 (nxr/register-action! :action/open-dialog

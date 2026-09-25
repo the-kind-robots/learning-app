@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { setUpLesson, token, expectHintedAnswerAsWideAsPlainText } = require('./lesson-answer.shared');
 
 // Answer-hint popover in the lesson (GH-273). Scenarios:
 //
@@ -11,64 +12,9 @@ const { test, expect } = require('@playwright/test');
 // 4. The popover appears on token click, hides instantly on a click
 //    outside, and hides after a timeout once the pointer leaves it.
 //
-// The examples backend needs an external API, so the example document is
-// seeded straight into the app's device-db through the dev-build globals —
-// the same layer the app itself uses (see test/browser/README.md).
-
-async function addWord(page, value, translation) {
-  await page.getByLabel('Слово (немецкий)').fill(value);
-  await page.getByLabel('Перевод (русский)').fill(translation);
-  await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
-  await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
-}
-
-// Seeds at the engine level (`db`, the PouchDB wrapper): a raw document into
-// the database that holds examples. The app's own layers (`db.pouch` and the
-// adapters) need the `dbs` map that only `init!` in `main` builds, so a spec
-// does not reach for them — see test/browser/README.md.
-async function seedExample(page) {
-  await page.evaluate(async () => {
-    const kw = cljs.core.keyword;
-    const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
-    const found = await db.find(db.use('user-db'), toClj({ selector: { type: 'vocab' } }));
-    const wordId = cljs.core.get(cljs.core.first(cljs.core.get(found, kw('docs'))), kw('_id'));
-    await db.insert(db.use('device-db'), toClj({
-      'type': 'example',
-      'word-id': wordId,
-      'word': 'der Hund',
-      'value': 'Der Hund schläft im Garten.',
-      'translation': 'Пёс спит в саду.',
-      'created-at': new Date().toISOString(),
-      'structure': [
-        { usedForm: 'Hund', dictionaryForm: 'der Hund', translation: 'пёс', wordIndex: 1 },
-        { usedForm: 'Garten', dictionaryForm: 'der Garten', translation: 'сад', wordIndex: 4 },
-      ],
-    }));
-  });
-}
-
-// Answers the word trial, advances, and answers the example trial with
-// `exampleAnswer`. Returns with the revealed answer on screen.
-async function playToExampleReveal(page, exampleAnswer) {
-  await page.goto('/lesson');
-  await expect(page.locator('.lesson__prompt')).toBeVisible();
-  await page.locator('#lesson-answer').fill('der Hund');
-  await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
-  await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await expect(page.locator('.lesson__instruction')).toContainText('предложение');
-  await page.locator('#lesson-answer').fill(exampleAnswer);
-  await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
-}
-
-async function setUpLesson(page, exampleAnswer) {
-  await page.goto('/home');
-  await addWord(page, 'der Hund', 'пёс');
-  await seedExample(page);
-  await playToExampleReveal(page, exampleAnswer);
-}
+// Lesson setup lives in lesson-answer.shared.js, shared with the phone spec.
 
 const popover = (page) => page.locator('#popover');
-const token = (page, index) => page.locator(`.lesson__answer-token[data-word-index="${index}"]`);
 
 test('correct example answer reveals clickable annotated words', async ({ page }) => {
   await setUpLesson(page, 'Der Hund schläft im Garten.');
@@ -120,6 +66,11 @@ test('revealed answer selects as continuous text across hinted words', async ({ 
   await page.mouse.up();
   const selected = await page.evaluate(() => window.getSelection().toString());
   expect(selected.replace(/\s+/g, ' ').trim()).toContain('Der Hund schläft im Garten.');
+});
+
+test('hinted words take the width of plain text', async ({ page }) => {
+  await setUpLesson(page, 'Der Hund schläft im Garten.');
+  await expectHintedAnswerAsWideAsPlainText(page);
 });
 
 test('popover light-dismisses instantly and auto-closes after pointer leaves', async ({ page }) => {

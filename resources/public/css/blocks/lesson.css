@@ -193,7 +193,10 @@
   font: inherit;
   line-height: inherit;
   margin: 0;
-  padding: 0 1px;
+  /* No padding: a hinted word takes exactly the width of plain text, so the
+     sentence lays out as it would without hints (#409). The highlight below
+     grows outward through box-shadow, which takes no layout space. */
+  padding: 0;
   /* Buttons default to user-select:none; the answer must select as one
      continuous text run across hinted words (#283). */
   user-select: text;
@@ -207,15 +210,18 @@
 .lesson__answer-token:hover,
 .lesson__answer-token:focus-visible {
   background: color-mix(in srgb, currentColor 12%, transparent);
-  border-radius: 6px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 12%, transparent);
   outline: none;
   text-decoration-style: solid;
 }
 
 .lesson__answer-token[aria-expanded="true"] {
   background: color-mix(in srgb, currentColor 14%, transparent);
-  border-radius: 6px;
-  box-shadow: inset 0 -2px 0 currentColor;
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, currentColor 14%, transparent),
+    inset 0 -2px 0 currentColor;
   text-decoration-color: transparent;
 }
 

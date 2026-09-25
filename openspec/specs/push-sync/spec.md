@@ -66,17 +66,6 @@ A sync pass SHALL report how many documents it pulled and pushed. The current sc
 - **WHEN** a pull writes at least one document
 - **THEN** the current screen reloads its data and reflects them
 
-### Requirement: Route entry does not pull again within 30 s of the last completed pass
-A navigation SHALL run no sync pass when a pass completed less than 30 s earlier and nothing was written locally since. A poke from the push socket SHALL always run a pass.
-
-#### Scenario: Navigation soon after a pass
-- **WHEN** the user opens another screen within 30 s of a completed pass and has written nothing locally since
-- **THEN** no pass runs
-
-#### Scenario: Poke within the interval
-- **WHEN** a poke arrives within 30 s of a completed pass
-- **THEN** a pass runs
-
 ### Requirement: The device-sync control is on the home page only
 The system SHALL offer the device-sync control, named «Синхронизация», in the header of the home page only, and only once the device has an account. The control SHALL draw a laptop beside a phone. Every other page SHALL render no such control.
 
@@ -91,3 +80,29 @@ The system SHALL offer the device-sync control, named «Синхронизаци
 #### Scenario: No account
 - **WHEN** a device without an account opens the home page
 - **THEN** the header shows no «Синхронизация» control
+
+### Requirement: Sync passes run one at a time
+The client SHALL run at most one sync pass at a time. A request for a pass while none runs SHALL start one. Requests that arrive while a pass runs SHALL cause exactly one more pass after it, however many arrive. Every requester SHALL be answered when the passes finish, not before. A failed pass SHALL NOT stop the next request from running one. Route entry, a poke, the `online` event and a local write SHALL all request a pass this way.
+
+#### Scenario: Triggers at once
+- **WHEN** route entry, a poke, the `online` event and a local write all ask for a pass while none runs
+- **THEN** one pass runs
+
+#### Scenario: Request during a pass
+- **WHEN** one or more requests arrive while a pass runs
+- **THEN** exactly one more pass runs after it
+
+#### Scenario: Route entry soon after a pass
+- **WHEN** the user opens another screen after a pass has completed
+- **THEN** a pass runs
+
+### Requirement: Local writes are batched and pulled documents request nothing
+Local writes SHALL request a pass at most once every 3 s, so a burst of writes goes out in few passes. A document revision the pass itself pulled SHALL NOT count as a local write and SHALL NOT request a pass.
+
+#### Scenario: A pull writes documents
+- **WHEN** a pass pulls documents from the server and nothing else is written locally
+- **THEN** no further pass follows it
+
+#### Scenario: A lesson's reviews
+- **WHEN** a learner answers several trials within 3 s and no pass is running
+- **THEN** their writes go out in at most two passes

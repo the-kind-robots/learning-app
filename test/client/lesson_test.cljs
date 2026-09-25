@@ -322,6 +322,28 @@
           (is (not= first-trial next-trial))))))))
 
 
+(deftest concurrent-advances-advance-once
+  (async-testing "`advance!` called twice at once advances one trial, no conflict"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (await (db-seed/seed-vocabulary! (:user/db dbs)
+                                       [{:_id "word-1" :value "der Hund" :translation "пёс"}
+                                        {:_id "word-2" :value "die Katze" :translation "cat"}
+                                        {:_id "word-3" :value "das Haus" :translation "дом"}]))
+      (let [start-result (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
+            first-trial  (domain/current-trial (:lesson-state start-result))]
+        (await (sut/check-answer! (test-capabilities dbs) (:answer first-trial)))
+        (let [[one two] (await (js/Promise.all
+                                #js [(sut/advance! (test-capabilities dbs))
+                                     (sut/advance! (test-capabilities dbs))]))
+              stored    (await (db-queries/fetch-by-type (:device/db dbs) "lesson"))]
+          (is (nil? (:error one)))
+          (is (nil? (:error two)))
+          (is (= (:lesson-state one) (:lesson-state two)))
+          (is (= 1 (count stored)))))))))
+
+
 (deftest advance-returns-nil-when-finished
   (async-testing "`advance!` returns nil when finished"
     (with-test-dbs
