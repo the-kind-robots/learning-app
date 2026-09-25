@@ -3,6 +3,9 @@ Description=Learning App Backup DB Timer
 
 [Timer]
 OnCalendar=daily
+# A run missed while the machine was off runs at next boot.
+Persistent=true
+RandomizedDelaySec=30min
 
 [Install]
 WantedBy=multi-user.target
