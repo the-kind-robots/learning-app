@@ -199,6 +199,15 @@
   border-color: rgb(var(--color-fire-ant));
 }
 
+/* Sits closer to the fields it is about than to the button below. */
+.home__add-error {
+  color: rgb(var(--color-fire-ant));
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: -6px 0 0;
+}
+
 .home__add-form-textarea {
   field-sizing: content;
   height: auto;

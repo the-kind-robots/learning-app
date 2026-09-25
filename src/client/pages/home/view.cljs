@@ -23,7 +23,7 @@
 
 
 (defn- add-form
-  [{:keys [add-error copy suggestions translation word]}]
+  [{:keys [error-text legend placeholder suggestions translation translation-invalid? value-label word]}]
   (let [{:keys [items]} suggestions]
     [:form.home__add-form
      {:id "home-add-form"
@@ -35,11 +35,11 @@
                       :translation [:event.form.field/value "translation"]
                       :focus-id    "new-word-value"}]]}}
      [:fieldset.home__add-fieldset
-      [:legend.home__add-legend.visually-hidden (:legend copy)]
+      [:legend.home__add-legend.visually-hidden legend]
       [:div.home__add-form-row
        [:div.autocomplete
         [:div.home__add-label-row
-         [:label.home__add-form-label.visually-hidden {:for "new-word-value"} (:value-label copy)]]
+         [:label.home__add-form-label.visually-hidden {:for "new-word-value"} value-label]]
         [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-value"
           :name         "value"
@@ -53,7 +53,7 @@
           :maxlength    200
           :lang         "de"
           :value        word
-          :placeholder  (:placeholder copy)
+          :placeholder  placeholder
           :on           {:blur    [[:action/dismiss-suggestions]]
                          :focus   [[:effect/autogrow-target]]
                          :input   [[:action/update-word [:event.target/value]]
@@ -82,7 +82,7 @@
           :value        translation
           :placeholder  "Перевод"
           :required     true
-          :class        (when (= :empty-translations add-error)
+          :class        (when translation-invalid?
                           "home__add-form-input--error")
           :on           {:focus   [[:effect/autogrow-target]]
                          :input   [[:action/update-translation [:event.target/value]]
@@ -94,6 +94,8 @@
                                     {:key   [:event.keyboard/key]
                                      :ctrl? [:event.keyboard/ctrl?]
                                      :meta? [:event.keyboard/meta?]}]]}}]]]
+      (when error-text
+        [:p.home__add-error {:role "alert"} error-text])
       [:button.home__add-form-submit.big-button.big-button--request-stable
        {:type "submit"} "ДОБАВИТЬ"]]]))
 
@@ -133,7 +135,7 @@
       [:section#home-add-panel.home__add
        {:replicant/on-mount [[:action/focus-word-input "new-word-value"]]}
        [:header.home__add-header
-        [:h2.home__panel-title (get-in form [:copy :legend])]
+        [:h2.home__panel-title (:legend form)]
         [:button#home-words-button.home__words-button
          {:type        "button"
           :class       (when empty-vocab? "home__words-button--hidden")
