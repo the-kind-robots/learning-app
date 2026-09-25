@@ -1,8 +1,12 @@
 (ns client.pages.words-actions-test
   (:require
    [cljs.test :refer-macros [deftest is testing]]
-   [pages.words.actions :as sut]
-   [pages.words.presenter :as presenter]))
+   [pages.words.actions :as sut]))
+
+
+(def ^:private page-size
+  "One page of the word list, as `pages.words.actions` asks for it."
+  50)
 
 
 (defn- word-rows
@@ -31,11 +35,11 @@
           "the reload asks for the 150 rows on screen, not the first page")
       (is (= 150 (:words/limit state)))))
   (testing "the first page is still the first page"
-    (let [state (sut/words-shown {:limit   presenter/page-size
+    (let [state (sut/words-shown {:limit   page-size
                                   :matches 400
                                   :search  ""
                                   :total   400
-                                  :words   (word-rows presenter/page-size)})]
+                                  :words   (word-rows page-size)})]
       (is (= [:action/load-words {:limit 50 :search ""}] (reload-effect state))))))
 
 

@@ -9,8 +9,12 @@
    [nexus.registry :as nxr]
    [pages.words.actions]
    [pages.words.effects]
-   [pages.words.presenter :as presenter]
    [use-cases.vocabulary :as vocabulary]))
+
+
+(def ^:private page-size
+  "One page of the word list, as `pages.words.actions` asks for it."
+  50)
 
 
 ;; Minimal nexus bootstrap, as in `client.pages.home-test`: the production
@@ -104,16 +108,16 @@
         (nxr/dispatch system {} [[:action/load-words {:limit 100 :search ""}]])
         (nxr/dispatch system {} [[:action/search-words "wort1"]])
         (await (debounce-elapsed))
-        (answer! ["wort1" presenter/page-size] 11 11)
+        (answer! ["wort1" page-size] 11 11)
         (await (settled))
         (is (= "wort1" (:words/search @store)))
-        (is (= 11 (count (:words/items @store))))
+        (is (= 11 (count (:words/rows @store))))
 
         (answer! ["" 100] 100 130)
         (await (settled))
         (is (= "wort1" (:words/search @store))
             "the late page left the query the reader typed alone")
-        (is (= 11 (count (:words/items @store)))
+        (is (= 11 (count (:words/rows @store)))
             "and left the rows it matched alone")))))
 
 
@@ -128,7 +132,7 @@
         (is (nil? (get @unanswered ["" 100]))
             "no page of the query that is being replaced")
         (await (debounce-elapsed))
-        (answer! ["wort1" presenter/page-size] 11 11)
+        (answer! ["wort1" page-size] 11 11)
         (await (settled))))))
 
 
@@ -144,7 +148,7 @@
         (await (settled))
         (is (= "word-3" (:id (:words/editing @store)))
             "the word the reader opened is still open")
-        (is (= 100 (count (:words/items @store)))
+        (is (= 100 (count (:words/rows @store)))
             "and the rows did arrive")))))
 
 
@@ -170,9 +174,9 @@
       (let [{:keys [store] :as system} (test-system)]
         (nxr/dispatch system {} [[:action/load-words]])
         (await (settled))
-        (answer! [nil presenter/page-size] presenter/page-size 130)
+        (answer! [nil page-size] page-size 130)
         (await (settled))
-        (is (= presenter/page-size (count (:words/items @store))))
+        (is (= page-size (count (:words/rows @store))))
         (is (= 1 (:words/read-token @store)) "the entry read is numbered")))))
 
 
@@ -192,7 +196,7 @@
         (await (settled))
         (answer! ["wort1" 100] 9 9)
         (await (settled))
-        (is (= 9 (count (:words/items @store)))
+        (is (= 9 (count (:words/rows @store)))
             "the pull's rows replaced the ones on screen")))))
 
 
@@ -211,7 +215,7 @@
         (nxr/dispatch system {} [[:action/search-words "wort1"]])
         (is (zero? @scrolls) "not on the keystroke — these rows are 400 ms away")
         (await (debounce-elapsed))
-        (answer! ["wort1" presenter/page-size] 11 11)
+        (answer! ["wort1" page-size] 11 11)
         (await (settled))
         (is (= 1 @scrolls) "on the rows the query brought")
 

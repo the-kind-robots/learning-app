@@ -1,7 +1,13 @@
 (ns pages.words.actions
   (:require
-   [nexus.registry :as nxr]
-   [pages.words.presenter :as presenter]))
+   [nexus.registry :as nxr]))
+
+
+(def ^:private page-size
+  "Rows the list grows by. The first read asks for one page; reaching the
+   bottom asks for one more. Decided here, and handed to the effects as an
+   argument: the route's first read has no view to pass it."
+  50)
 
 
 (defn- next-read-token
@@ -51,23 +57,34 @@
    vector stored here would hand a pull the number of the read that produced
    these rows.
 
+   `limit` is the row count these rows were asked for, kept so a reload after
+   an edit lands on the same rows. `:words/more?` compares the rows against
+   `matches`, the count the search left — `total` counts before the filter
+   and cannot answer this.
+
    `:words/editing` is left alone. Rows arrive on their own now — the sentinel
    observer asks for them — and clearing it here shut an open dialog under the
    reader, one being typed into included (#439)."
-  [{:keys [limit search] :as words}]
-  (merge {:page/current :page/words
-          :page/load    [:action/load-words {:limit limit :search search}]}
-         (presenter/page-state words)))
+  [{:keys [limit matches search total words]}]
+  {:page/current :page/words
+   :page/load    [:action/load-words {:limit limit :search search}]
+   :words/limit  limit
+   :words/more?  (< (count words) (or matches 0))
+   :words/rows   words
+   :words/search (or search "")
+   :words/total  total})
 
 
 (nxr/register-action! :action/load-words
   ;; Every read of the list is numbered, and the number comes from the state,
   ;; so every caller reaches the effect through an action that stamps it. This
   ;; one is the screen's own: route entry, and the reload a pull re-dispatches.
+  ;; Route entry passes no limit and starts at the first page; the reload
+  ;; carries the limit of the rows on screen.
   (fn load-words [state opts]
     (let [token (next-read-token state)]
       [[:effect/save {:words/read-token token}]
-       [:effect/load-words opts token]])))
+       [:effect/load-words (merge {:limit page-size} opts) token]])))
 
 
 (nxr/register-action! :action/show-words
@@ -105,7 +122,7 @@
   (fn search-words [state search]
     (let [token (next-read-token state)]
       [[:effect/save {:words/pending-search token :words/read-token token}]
-       [:effect/set-words-search {:limit presenter/page-size :search search} token]])))
+       [:effect/set-words-search {:limit page-size :search search} token]])))
 
 
 (nxr/register-action! :action/words-search-settled
@@ -122,7 +139,7 @@
       (let [token (next-read-token state)]
         [[:effect/save {:words/read-token token}]
          [:effect/load-more-words
-          {:limit  (presenter/next-limit (:words/limit state))
+          {:limit  (+ (:words/limit state) page-size)
            :search (:words/search state)}
           token]]))))
 

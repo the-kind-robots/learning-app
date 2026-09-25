@@ -1,5 +1,6 @@
 (ns pages.words.view
   (:require
+   [pages.words.presenter :as presenter]
    [utils :as utils]))
 
 
@@ -104,7 +105,8 @@
 
 (defn page
   [state]
-  (let [{:words/keys [items search editing more? vocabulary?] placeholder :words/empty-state} state]
+  (let [{:keys [editing items more? search vocabulary?] placeholder :empty-state}
+        (presenter/page-props state)]
     ;; `data-vk-overlay`, as on home: the keyboard is laid over the page, so
     ;; it covers the lesson button fixed at the bottom while the search bar,
     ;; which closes the column, stands on the keyboard's inset.
