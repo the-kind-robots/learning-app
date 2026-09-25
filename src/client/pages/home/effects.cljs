@@ -125,5 +125,8 @@
                                  :active-name active-name
                                  :total       (or word-count total)}]]
                         focus-id (conj [:effect/focus focus-id]))))))
+      ;; A write that threw is said on the form, which keeps what was typed
+      ;; (#313). Nothing the user does fixes it, so no cause is told apart.
       (catch js/Error err
-        (log/error :effect/add-word {:error (str err)})))))
+        (log/error :effect/add-word {:error (str err)})
+        (dispatch [[:action/show-word-error :save-failed]])))))

@@ -91,7 +91,7 @@
 (defn- form-legend
   "What the form says it is about to save — the only place the mode shows."
   [store]
-  (get-in (presenter/page-props @store) [:form :copy :legend]))
+  (get-in (presenter/page-props @store) [:form :legend]))
 
 
 (defn- debounce-elapsed
@@ -142,6 +142,44 @@
         (is (nil? (:home/suggestions @store)))
         (is (= "" (:home/word @store)))
         (is (= "" (:home/translation @store)))))))
+
+
+(defn- ^:async error-after-failed-add
+  "The store after an add whose save rejected with `err`."
+  [err]
+  (with-redefs [vocabulary/add! (fn [_ _ _ _] (js/Promise.reject err))]
+    (let [{:keys [store] :as system} (test-system {})]
+      (nxr/dispatch system {} [[:action/update-word "Hund"]])
+      (nxr/dispatch system {} [[:action/update-translation "пёс"]])
+      (nxr/dispatch system {} [[:action/add-word {:value "Hund" :translation "пёс"}]])
+      (await (debounce-elapsed))
+      @store)))
+
+
+(deftest a-failed-save-says-so-and-keeps-the-input
+  (async-testing "GH-313: a save that threw is said on the form; the input stays"
+    (let [state (await (error-after-failed-add (js/Error. "database failed to open")))
+          form  (:form (presenter/page-props state))]
+      (is (= :save-failed (:home/add-error state)))
+      (is (= "Hund" (:home/word state)))
+      (is (= "пёс" (:home/translation state)))
+      (is (= "Слово не сохранилось: в приложении сбой, и это не ваша ошибка." (:error-text form)))
+      (is (false? (:translation-invalid? form))))))
+
+
+(deftest every-add-error-has-text
+  (testing "an empty translation marks the field and says what is missing"
+    (let [form (:form (presenter/page-props {:home/add-error :empty-translations}))]
+      (is (= "Добавьте перевод." (:error-text form)))
+      (is (true? (:translation-invalid? form)))))
+  (testing "a phrase that failed to save is named as a phrase"
+    (let [state {:home/add-error     :save-failed
+                 :home/mode-override {:mode :phrase :value "ab und zu"}
+                 :home/word          "ab und zu"}]
+      (is (= "Фраза не сохранилась: в приложении сбой, и это не ваша ошибка."
+             (get-in (presenter/page-props state) [:form :error-text])))))
+  (testing "no error, no text"
+    (is (nil? (get-in (presenter/page-props {}) [:form :error-text])))))
 
 
 (deftest picking-a-kept-suggestion-uses-its-own-data
