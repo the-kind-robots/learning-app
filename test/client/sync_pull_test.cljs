@@ -25,17 +25,25 @@
 
 (defn- ^:async with-sync!
   "Starts sync for a stored account, online, with the replication answered by
-   `sync-once!` and the change feed inert, and hands `f` the handle."
+   `sync-once!` and the change feed inert, and hands `f` the handle.
+
+   The navigator is the test's own, not whatever the runtime has: Node grew a
+   global one only in 21, and none of its versions says `onLine`."
   [sync-once! f]
-  (js/Object.defineProperty js/navigator "onLine" #js {:configurable true :value true})
-  (try
-    (with-redefs [identity/load-identity! (fn [] (js/Promise.resolve {:id "account" :token "t"}))
-                  identity/use-identity!  (fn [_] nil)
-                  pouch/on-change         (fn [_ _ _] (fn [] nil))
-                  pouch/sync-once!        sync-once!]
-      (await (f (await (sut/start! {:db {}})))))
-    (finally
-     (js/Reflect.deleteProperty js/navigator "onLine"))))
+  (let [runtime-navigator (js/Object.getOwnPropertyDescriptor js/globalThis "navigator")]
+    (js/Object.defineProperty js/globalThis
+                              "navigator"
+                              #js {:configurable true :value #js {:onLine true}})
+    (try
+      (with-redefs [identity/load-identity! (fn [] (js/Promise.resolve {:id "account" :token "t"}))
+                    identity/use-identity!  (fn [_] nil)
+                    pouch/on-change         (fn [_ _ _] (fn [] nil))
+                    pouch/sync-once!        sync-once!]
+        (await (f (await (sut/start! {:db {}})))))
+      (finally
+       (if runtime-navigator
+         (js/Object.defineProperty js/globalThis "navigator" runtime-navigator)
+         (js/Reflect.deleteProperty js/globalThis "navigator"))))))
 
 
 (deftest pulls-during-a-pass-join-it
