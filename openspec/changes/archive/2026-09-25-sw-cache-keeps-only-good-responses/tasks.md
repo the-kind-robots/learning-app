@@ -7,4 +7,4 @@
 ## 2. Keep the request's URL (#299)
 
 - [x] 2.1 Browser spec: after a controlled reload, online and offline, the dictionary worker reports its `cache-hit` phase
-- [x] 2.2 `cacheFirst` re-wraps a bare-path hit in a new `Response`, which takes the request's URL
+- [x] 2.2 `cacheFirst` looks up and stores by path only, and re-wraps every hit in a new `Response`, which takes the request's URL

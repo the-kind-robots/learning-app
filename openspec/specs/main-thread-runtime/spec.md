@@ -144,7 +144,7 @@ The Service Worker SHALL write a network response to its cache only when the res
 - **AND** the cached manifest stays as it was
 
 ### Requirement: A cached asset is served under the URL it was requested by
-When the Service Worker answers a request with query parameters from the entry precached under its bare path, the page SHALL see the response under the request's URL, query included.
+The Service Worker SHALL key cached static assets by path, so a query string neither misses the cached entry nor adds another. The page SHALL see every response served from that cache under the request's URL, query included.
 
 #### Scenario: The dictionary worker after a controlled reload
 - **WHEN** a page under a controlling Service Worker, online or offline, starts the dictionary worker with `?sqlite3.dir=/js&telemetry=1`

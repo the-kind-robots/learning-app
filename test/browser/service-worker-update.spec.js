@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const shared = require('./service-worker.shared');
 
 // The worker's update path (ADR-0014). The backend prepends SW_VERSION to
 // sw.js from a hash of resources/public, and a build "changes" here by
@@ -17,13 +18,10 @@ async function registerWorkerVersion(context, version) {
   });
 }
 
-// The first load of a fresh context: the worker installs, activates and
-// claims the page. Resolves once the page is controlled.
-async function openControlled(page) {
-  await page.goto('/');
-  await page.evaluate(() => { window.__firstLoad = true; });
-  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30000 });
-}
+// The first load, marked before the worker claims it: the mark survives only
+// if that claim did not reload the page.
+const openControlled = (page) =>
+  shared.openControlled(page, (p) => p.evaluate(() => { window.__firstLoad = true; }));
 
 // The worker's states as the page saw them, kept in localStorage because the
 // page that records them is about to reload.

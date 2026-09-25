@@ -5,7 +5,7 @@ The service worker stores whatever the network answers for a static asset or the
 ## What Changes
 
 - Only a successful same-origin response is written to the cache.
-- A response found by bare path is served under the URL it was requested by.
+- Static assets are cached by path and served under the URL they were requested by.
 
 ## Capabilities
 

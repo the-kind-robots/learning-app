@@ -1,9 +1,6 @@
 const { test, expect } = require('@playwright/test');
+const { readMetrics, dictionaryReady } = require('./service-worker.shared');
 
-// `clj->js` keeps ClojureScript keyword names as written, so these arrive as
-// kebab-case. Reading them as camelCase silently yields undefined, which has
-// already cost one debugging round.
-const readMetrics = (page) => page.evaluate(() => window.__metrics());
 const readStorage = (page) => page.evaluate(() => window.__storage());
 
 // The instrumentation installs with the render component, which the runtime
@@ -75,11 +72,7 @@ test('dictionary readiness and its phases are measured', async ({ page }) => {
   await waitForApp(page);
 
   // Readiness is reported by the worker, which starts alongside the app.
-  await page.waitForFunction(
-    () => window.__metrics().dictionary['ready-ms'] !== undefined,
-    null,
-    { timeout: 60000 }
-  );
+  await dictionaryReady(page);
 
   const dictionary = (await readMetrics(page)).dictionary;
   expect(dictionary['ready-ms']).toBeGreaterThan(0);
@@ -99,23 +92,14 @@ test('dictionary readiness and its phases are measured', async ({ page }) => {
 
 test('a warm start is distinguishable from a cold one', async ({ page }) => {
   await waitForApp(page);
-  await page.waitForFunction(
-    () => window.__metrics().dictionary['ready-ms'] !== undefined,
-    null,
-    { timeout: 60000 }
-  );
+  await dictionaryReady(page);
   const cold = (await readMetrics(page)).dictionary;
   expect(cold.phases.map((p) => p.phase)).toContain('download');
 
   // The same context keeps OPFS, so the reload finds the file already there.
   await page.reload();
   await expect(page.getByLabel('Слово (немецкий)')).toBeVisible();
-  await page.waitForFunction(
-    () => typeof window.__metrics === 'function' &&
-          window.__metrics().dictionary['ready-ms'] !== undefined,
-    null,
-    { timeout: 60000 }
-  );
+  await dictionaryReady(page);
   const warm = (await readMetrics(page)).dictionary;
 
   // Only the duration is asserted, which is the point here. The worker's

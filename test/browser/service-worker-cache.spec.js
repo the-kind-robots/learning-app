@@ -1,14 +1,20 @@
 const { test, expect } = require('@playwright/test');
+const { openControlled, readMetrics, dictionaryReady } = require('./service-worker.shared');
 
-// What the worker's cache keeps and what it hands back (#315, #299). Both
-// tests need the page under a controller first: before that nothing passes
-// through the worker's fetch handler at all.
-async function openControlled(page) {
-  await page.goto('/');
-  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30000 });
-}
+// What the worker's cache keeps and what it hands back (#315, #299). Every
+// test here starts with the page under a controller.
 
 const ASSET = '/css/styles.css';
+const MANIFEST = '/dictionary/manifest';
+
+// A fetch from the page, so it passes through the worker.
+const statusOf = (page, path) => page.evaluate(async (p) => (await fetch(p)).status, path);
+
+// What the bucket holds for a path, read straight from the cache.
+const cachedEntry = (page, path) => page.evaluate(async (p) => {
+  const response = await caches.match(p);
+  return response && { status: response.status, body: await response.text() };
+}, path);
 
 test('an asset that failed once is fetched again, not served from cache', async ({ context, page }) => {
   await openControlled(page);
@@ -23,59 +29,36 @@ test('an asset that failed once is fetched again, not served from cache', async 
   // The worker's own fetch passes through context routing (the registration
   // fetch in service-worker-update.spec.js does too). One failure, then the
   // real file.
-  let failed = false;
-  await context.route(`**${ASSET}`, async (route) => {
-    if (failed) return route.fallback();
-    failed = true;
-    await route.fulfill({ status: 500, body: 'boom' });
-  });
+  await context.route(`**${ASSET}`, (route) => route.fulfill({ status: 500, body: 'boom' }), { times: 1 });
 
-  const statusOf = (path) => page.evaluate(async (p) => (await fetch(p)).status, path);
-  expect(await statusOf(ASSET)).toBe(500);
-  expect(failed).toBe(true);
-
+  expect(await statusOf(page, ASSET)).toBe(500);
   // Had the 500 been kept, it would answer this one too.
-  expect(await statusOf(ASSET)).toBe(200);
-  const cached = await page.evaluate(async (path) => {
-    const response = await caches.match(path);
-    return response && response.status;
-  }, ASSET);
-  expect(cached).toBe(200);
+  expect(await statusOf(page, ASSET)).toBe(200);
+  // The worker stores without holding the page's answer back.
+  await expect.poll(async () => (await cachedEntry(page, ASSET))?.status).toBe(200);
 });
 
 test('a failed manifest leaves the cached one in place', async ({ context, page }) => {
   await openControlled(page);
-  const manifest = '/dictionary/manifest';
   // Put a known copy in the bucket through the worker itself.
-  expect(await page.evaluate(async (p) => (await fetch(p)).status, manifest)).toBe(200);
-  const cachedBody = (p) => page.evaluate(async (path) => {
-    const response = await caches.match(path);
-    return response && response.text();
-  }, p);
-  const before = await cachedBody(manifest);
-  expect(before).toContain('hash');
+  expect(await statusOf(page, MANIFEST)).toBe(200);
+  await expect.poll(async () => (await cachedEntry(page, MANIFEST))?.body).toContain('hash');
+  const before = await cachedEntry(page, MANIFEST);
 
-  await context.route(`**${manifest}`, (route) => route.fulfill({ status: 500, body: 'boom' }));
-  expect(await page.evaluate(async (p) => (await fetch(p)).status, manifest)).toBe(500);
-  expect(await cachedBody(manifest)).toBe(before);
+  await context.route(`**${MANIFEST}`, (route) => route.fulfill({ status: 500, body: 'boom' }));
+  expect(await statusOf(page, MANIFEST)).toBe(500);
+  expect(await cachedEntry(page, MANIFEST)).toEqual(before);
 });
 
-const dictionaryReady =(page) => page.waitForFunction(
-  () => typeof window.__metrics === 'function' &&
-        window.__metrics().dictionary['ready-ms'] !== undefined,
-  null,
-  { timeout: 60000 }
-);
-
-const phasesSeen = (page) => page.evaluate(() =>
-  (window.__metrics().dictionary.phases || []).map((p) => p.phase));
+const phasesSeen = async (page) =>
+  ((await readMetrics(page)).dictionary.phases || []).map((p) => p.phase);
 
 test('the dictionary worker keeps its query string under a controlled page', async ({ context, page }) => {
   await openControlled(page);
   // The first load imports the dictionary into OPFS; the reload finds it.
   await dictionaryReady(page);
   // The first load's worker was fetched before any controller existed; the
-  // reload's comes through the worker's cache, found by bare path.
+  // reload's comes out of the worker's cache.
   await page.reload();
   expect(await page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
 
