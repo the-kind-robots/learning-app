@@ -35,53 +35,9 @@
    100))
 
 
-(defn- ^:async resolve-active
-  "Returns {:active-id … :active-name … :word-count …}. If the stored id no
-  longer matches a collection, clears localStorage and falls back to the
-  implicit main view. :word-count is the size of the active collection's
-  scope — its own words and its children's (ADR-0013); nil for main, and
-  the caller falls back to the global vocab count."
-  [{:keys [collections]}]
-  (let [stored-id ((:collections/active-id collections))
-        all-collections (when stored-id (await ((:collections/list collections))))
-        coll      (some #(when (= stored-id (:id %)) %) all-collections)]
-    (cond
-      (nil? stored-id) {:active-id nil :active-name nil :word-count nil}
-      coll {:active-id   stored-id
-            :active-name (:name coll)
-            :word-count  (count (collections/scope-word-ids all-collections stored-id))}
-      :else (do ((:collections/set-active! collections) nil)
-                {:active-id nil :active-name nil :word-count nil}))))
-
-
-(defn- ^:async home-data
-  [capabilities]
-  (let [total (await (vocabulary/count capabilities))
-        {:keys [active-id active-name word-count]} (await (resolve-active capabilities))]
-    {:active-id   active-id
-     :active-name active-name
-     :total       (or word-count total)}))
-
-
-(nxr/register-effect! :effect/load-home
-  (fn ^:async load-home
-    [{:keys [capabilities dispatch]} _]
-    (try
-      (dispatch [[:action/show-home (await (home-data capabilities))]])
-      (catch js/Error err
-        (log/error :effect/load-home {:error (str err)})))))
-
-
-(nxr/register-effect! :effect/refresh-home
-  ;; The post-pull reload (#255): recomputes what synced data decides —
-  ;; lesson availability, the active collection — without :action/show-home's
-  ;; reset of the add form the user may be typing into.
-  (fn ^:async refresh-home
-    [{:keys [capabilities dispatch]} _]
-    (try
-      (dispatch [[:action/refresh-home (await (home-data capabilities))]])
-      (catch js/Error err
-        (log/error :effect/refresh-home {:error (str err)})))))
+(nxr/register-effect! :effect/forget-active-collection
+  (fn forget-active-collection [{:keys [capabilities]} _]
+    ((get-in capabilities [:collections :collections/set-active!]) nil)))
 
 
 (nxr/register-effect! :effect/suggest-completions
@@ -100,13 +56,11 @@
       ;; already uses.
       ;;
       ;; The write lands after the blur that started it, and the tap that
-      ;; blurred the heading may have opened another screen, which has read
-      ;; its data by then (#460). So a write reloads whichever screen is on
-      ;; display, as a pull that brought documents does: home re-reads its
-      ;; heading, the themes screen its tiles.
-      (when-let [{:keys [name renamed?]} (await (collections/rename-active! capabilities new-name))]
-        (dispatch (cond-> [[:effect/set-target-text name]]
-                    renamed? (conj [:action/reload-page]))))
+      ;; blurred the heading may have opened another screen by then (#460).
+      ;; Memory takes the renamed collection when PouchDB does, and whichever
+      ;; screen is on display follows it.
+      (when-let [{:keys [name]} (await (collections/rename-active! capabilities new-name))]
+        (dispatch [[:effect/set-target-text name]]))
       (catch js/Error err
         (log/error :effect/rename-active-collection {:error (str err)})))))
 
@@ -118,13 +72,8 @@
       (let [result (await (vocabulary/add! capabilities value translation (or mode :word)))]
         (if (:error result)
           (dispatch [[:action/show-word-error (:error result)]])
-          (let [total (await (vocabulary/count capabilities))
-                {:keys [active-id active-name word-count]} (await (resolve-active capabilities))]
-            (dispatch (cond-> [[:action/show-home
-                                {:active-id   active-id
-                                 :active-name active-name
-                                 :total       (or word-count total)}]]
-                        focus-id (conj [:effect/focus focus-id]))))))
+          (dispatch (cond-> [[:action/word-added]]
+                      focus-id (conj [:effect/focus focus-id])))))
       ;; A write that threw is said on the form, which keeps what was typed
       ;; (#313). Nothing the user does fixes it, so no cause is told apart.
       (catch js/Error err

@@ -11,7 +11,7 @@
    :db   :user/db})
 
 
-(defn- doc->collection
+(defn doc->collection
   [doc]
   (update (repository/entity doc) :word-ids #(or % [])))
 

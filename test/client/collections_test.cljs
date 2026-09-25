@@ -48,11 +48,23 @@
                                            (js/Promise.resolve nil))}}))
 
 
-(deftest the-active-scope-reads-the-list-once
-  (async-testing "the active collection's scope, or nil for main"
-    (is (= ["a" "b" "c" "d" "e"] (await (sut/active-word-ids (port "c:kurs")))))
-    (is (nil? (await (sut/active-word-ids (port nil)))))
-    (is (nil? (await (sut/active-word-ids (port "c:gone")))))))
+(deftest the-active-scope-comes-from-memory
+  (let [memory {:collections (into {} (map (juxt :id identity)) items)
+                :words       {}}]
+    (is (= ["a" "b" "c" "d" "e"] (sut/active-scope memory "c:kurs")))
+    (is (nil? (sut/active-scope memory nil)))
+    (is (nil? (sut/active-scope memory "c:gone")))))
+
+
+(deftest the-summary-lists-collections-oldest-first
+  (let [memory {:collections {"c:b" {:id "c:b" :created-at "2026-02" :name "B" :word-ids []}
+                              "c:a" {:id "c:a" :created-at "2026-01" :name "A" :word-ids []}}
+                :words       {"w" {:id "w"}}}]
+    (is (= {:active-id   "c:a"
+            :items       [{:id "c:a" :created-at "2026-01" :name "A" :word-ids []}
+                          {:id "c:b" :created-at "2026-02" :name "B" :word-ids []}]
+            :total-words 1}
+           (sut/summary memory "c:a")))))
 
 
 (deftest rename-refuses-a-name-another-collection-carries

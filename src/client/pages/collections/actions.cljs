@@ -1,53 +1,37 @@
 (ns pages.collections.actions
   (:require
-   [nexus.registry :as nxr]))
-
-
-(def ^:private shown
-  "What every save of the loaded page carries, as one value: the render
-   watch skips a save whose every value is identical to the current one,
-   and a literal built per call — a fresh vector, a fresh keyword object in
-   a development build — would defeat that on every reload."
-  {:page/current :page/collections
-   :page/load [:effect/load-collections]
-   :collections/editing-id nil
-   :collections/loading? false})
-
-
-(nxr/register-action! :action/open-collections
-  (fn open-collections [_]
-    ;; The screen switches before its data is read, so the page answers the
-    ;; tap at once with a loading state. The items are left as they are: the
-    ;; flag alone says the screen is loading, and only this action sets it,
-    ;; so a reload of the same screen (after a sync pull) keeps the current
-    ;; cards on screen until the new ones arrive.
-    [[:effect/save
-      {:page/current (:page/current shown)
-       :page/load    (:page/load shown)
-       :collections/loading? true}]]))
+   [nexus.registry :as nxr]
+   [use-cases.collections :as collections]))
 
 
 (defn- unchanged-or
-  "The current value when the new one equals it, so a reload that brought
-   the same data saves nothing new and the screen does not render again."
+  "The current value when the new one equals it, so a change to memory that
+   left the collections as they were saves nothing new and the screen does
+   not render again."
   [current value]
   (if (= current value) current value))
 
 
-(defn collections-shown
-  "The state to save once the collections are read. A reload that brought
-   the same data leaves every value identical to `state`'s, so the merge
-   returns the same map and nothing renders."
-  [state {:keys [active-id items total-words]}]
-  (assoc shown
-         :collections/active-id   active-id
-         :collections/items       (unchanged-or (:collections/items state) items)
-         :collections/total-words total-words))
+(defn content
+  "What the themes screen shows of the learner's data in `state`. Until
+   memory is ready it is loading; the tiles already on screen stay."
+  [state {:keys [active-id]}]
+  (if-not (:learner/ready? state)
+    {:collections/loading? true}
+    (let [{:keys [items total-words]} (collections/summary (:learner/memory state) active-id)]
+      {:collections/active-id   active-id
+       :collections/items       (unchanged-or (:collections/items state) items)
+       :collections/loading?    false
+       :collections/total-words total-words})))
 
 
-(nxr/register-action! :action/show-collections
-  (fn show-collections [state summary]
-    [[:effect/save (collections-shown state summary)]]))
+(nxr/register-action! :action/open-collections
+  ;; The screen and its tiles in one write, in the task of the tap.
+  (fn open-collections [state context]
+    [[:effect/save
+      (merge {:page/current :page/collections
+              :collections/editing-id nil}
+             (content state context))]]))
 
 
 (defn deleted-message
@@ -58,10 +42,12 @@
 
 
 (nxr/register-action! :action/show-deleted
-  ;; The screen without the deleted collection, focus on the neighbour
-  ;; picked before the delete, and the status line naming it.
-  (fn show-deleted [state summary {:keys [name focus-id]}]
-    [[:effect/save (collections-shown state summary)]
+  ;; The tiles follow memory, which took the deletion when PouchDB did; this
+  ;; focuses the neighbour picked before it and names it on the status line.
+  ;; Recomputed with the stored pointer as it is now: deleting the active
+  ;; collection cleared it after memory had taken the deletion.
+  (fn show-deleted [state context {:keys [name focus-id]}]
+    [[:effect/save (assoc (content state context) :collections/editing-id nil)]
      [:effect/focus-collection focus-id]
      [:effect/announce (deleted-message name)]]))
 

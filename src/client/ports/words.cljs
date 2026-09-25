@@ -5,10 +5,7 @@
 
 (defn start!
   [{:keys [clock db]}]
-  {:words/count         (fn count
-                          []
-                          (words/count-words db))
-   :words/delete!       (fn delete!
+  {:words/delete!       (fn delete!
                           [word-id companion-docs]
                           (words/delete-word! db word-id companion-docs))
    :words/find-by-value (fn find-by-value
@@ -20,9 +17,6 @@
    :words/previews      (fn previews
                           [word-ids]
                           (words/previews db word-ids))
-   :words/previews-page (fn previews-page
-                          [page]
-                          (words/previews-page db page))
    :words/save!         (fn save!
                           [word]
                           (words/save-word! db clock word))})

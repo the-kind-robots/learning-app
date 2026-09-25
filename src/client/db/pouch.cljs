@@ -45,12 +45,61 @@
     #(.cancel ^js feed)))
 
 
+(defn- design-doc?
+  [^js doc]
+  (str/starts-with? (.-_id doc) "_design/"))
+
+
+(defn ^:async follow!
+  "Hands `on-docs` every document of `db-key` once, then every document the
+   database's change feed brings from then on, in batches: one call per
+   batch of changes that arrive together. Design documents are left out. A
+   deleted document arrives as `{:_id .. :_rev .. :_deleted true}`.
+
+   The update sequence is recorded before the documents are read and the feed
+   starts from it, so a write landing during the read is handed over again
+   from the feed rather than missed; a reader applies a revision it already
+   holds as nothing. Resolves once the documents were handed over, with a
+   function that stops the feed."
+  [dbs db-key on-docs]
+  (let [^js db   (db-key dbs)
+        ^js info (await (.info db))
+        since    (.-update_seq info)
+        ^js all  (await (.allDocs db #js {:include_docs true}))
+        rows     (.-rows all)
+        pending  (volatile! [])
+        flush!   (fn []
+                   (let [docs @pending]
+                     (vreset! pending [])
+                     (on-docs docs)))]
+    (on-docs (into []
+                   (comp (map #(.-doc ^js %))
+                         (clojure.core/remove design-doc?)
+                         (map db/couch->clj))
+                   rows))
+    (let [feed (.changes db #js {:include_docs true :live true :since since})]
+      (.on feed
+           "change"
+           (fn [^js change]
+             (let [doc (.-doc change)]
+               (when-not (design-doc? doc)
+                 ;; A batch is what arrives before the next task: PouchDB
+                 ;; emits the changes of one write — a replicated batch, a
+                 ;; bulk write — one after another, and one store update
+                 ;; for all of them renders once.
+                 (when (empty? @pending)
+                   (js/setTimeout flush! 0))
+                 (vswap! pending conj (db/couch->clj doc))))))
+      (.on feed "error" (fn [err] (log/error :db/follow-failed {:db db-key :error (str err)})))
+      #(.cancel feed))))
+
+
 (defn user-doc?
   "Replication filter: design documents stay on the device. CouchDB builds
    an index for every design document it receives, and the server never
    queries user-db through one."
   [doc]
-  (not (str/starts-with? (.-_id ^js doc) "_design/")))
+  (not (design-doc? doc)))
 
 
 (defn- docs-written
@@ -135,10 +184,34 @@
   ((:db schema) dbs))
 
 
+(defn on-written!
+  "Calls `f` with `db-key` and the documents every write through this
+   namespace wrote, each at the revision PouchDB gave it, once PouchDB has
+   accepted the write and before the writer's promise resolves. A refused
+   write reports nothing. One listener per `dbs`; nil stops listening."
+  [dbs f]
+  (some-> (:dbs/on-written dbs) (reset! f)))
+
+
+(defn- written!
+  "Hands `docs` to the listener and passes `result` on."
+  [dbs db-key docs result]
+  (when-let [f (some-> (:dbs/on-written dbs) deref)]
+    (when (seq docs)
+      (try
+        (f db-key docs)
+        (catch :default err
+          (log/error :db/written-listener-failed {:db db-key :error (str err)})))))
+  result)
+
+
 (defn insert
   "Writes doc as one of `schema`'s type into the database that holds it."
   [dbs schema doc]
-  (db/insert (database dbs schema) (assoc doc :type (:type schema))))
+  (let [doc (assoc doc :type (:type schema))]
+    (.then (db/insert (database dbs schema) doc)
+           (fn [{:keys [id rev] :as result}]
+             (written! dbs (:db schema) [(assoc doc :_id id :_rev rev)] result)))))
 
 
 (defn bulk-docs
@@ -146,7 +219,15 @@
    :type: a bulk write moves documents that were read, tombstoned or updated,
    and those may belong to several types of the same database."
   [dbs schema docs]
-  (db/bulk-docs (database dbs schema) docs))
+  (.then (db/bulk-docs (database dbs schema) docs)
+         (fn [results]
+           (written! dbs
+                     (:db schema)
+                     (into []
+                           (keep (fn [[doc {:keys [ok id rev]}]]
+                                   (when ok (assoc doc :_id id :_rev rev))))
+                           (map vector docs results))
+                     results))))
 
 
 (defn get
@@ -157,7 +238,9 @@
 
 (defn remove
   [dbs schema doc]
-  (db/remove (database dbs schema) doc))
+  (.then (db/remove (database dbs schema) doc)
+         (fn [{:keys [id rev] :as result}]
+           (written! dbs (:db schema) [{:_deleted true :_id id :_rev rev}] result))))
 
 
 (defn- typed
@@ -275,4 +358,4 @@
                          [(ensure-indexes! db (indexes-of own))
                           (ensure-views! db (mapcat :views own))]))
               dbs))))
-    dbs))
+    (assoc dbs :dbs/on-written (atom nil))))

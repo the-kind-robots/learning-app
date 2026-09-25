@@ -72,6 +72,9 @@
 
 (defn page-props
   [state]
+  ;; `:home/empty-vocab?` is nil until memory is ready: then neither the
+  ;; invitation of an empty vocabulary nor the ways into it are shown.
   {:active-collection (active-collection-props state)
-   :empty-vocab? (boolean (:home/empty-vocab? state))
-   :form (form-props state)})
+   :actions-hidden?   (not (false? (:home/empty-vocab? state)))
+   :empty-vocab?      (true? (:home/empty-vocab? state))
+   :form              (form-props state)})

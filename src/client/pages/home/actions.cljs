@@ -2,7 +2,9 @@
   (:require
    [clojure.string :as str]
    [domain.phrase :as phrase]
-   [nexus.registry :as nxr]))
+   [nexus.registry :as nxr]
+   [use-cases.collections :as collections]
+   [use-cases.vocabulary :as vocabulary]))
 
 
 (def ^:private empty-suggestions nil)
@@ -36,42 +38,70 @@
 ;; keystroke offers no more than the screen does.
 (nxr/register-action! :action/start-lesson-if-alt-enter
   (fn start-lesson-if-alt-enter [state {:keys [alt? key]}]
-    (when (and alt? (= "Enter" key) (not (:home/empty-vocab? state)))
+    (when (and alt? (= "Enter" key) (false? (:home/empty-vocab? state)))
       [[:effect/prevent-default]
        [:action/go-to-lesson]])))
 
 
-(nxr/register-action! :action/show-home
-  (fn show-home [_ {:keys [active-id active-name total]}]
-    [[:effect/save
-      {:page/current          :page/home
-       ;; Reloaded after every replication pass (#255): lesson availability
-       ;; is derived from synced data, so a pull landing while the user sits
-       ;; here — a poke, a pairing adoption — must recompute it. The refresh
-       ;; variant leaves the add form alone.
-       :page/load             [:effect/refresh-home]
-       :home/active-coll-id   active-id
-       :home/active-coll-name active-name
-       :home/add-error        nil
-       :home/empty-vocab?     (zero? total)
-       :home/mode-override    nil
-       :home/suggestions      empty-suggestions
-       :home/translation      ""
-       :home/translation-typed? false
-       :home/word             ""}]
-     ;; Only Safari ever measures a height here, and only it needs the reset:
-     ;; where `field-sizing` works the browser has already forgotten the
-     ;; content the old height was measured for.
+(defn content
+  "What home shows of the learner's data in `state`: the active collection's
+   heading and whether there is anything to study. `active-id` is the stored
+   pointer; a pointer to a collection memory does not hold counts as none.
+   Before memory is ready it says nothing — `:home/empty-vocab?` nil — rather
+   than that the vocabulary is empty."
+  [state {:keys [active-id]}]
+  (let [memory     (:learner/memory state)
+        collection (get-in memory [:collections active-id])]
+    (if-not (:learner/ready? state)
+      {:home/active-coll-id   nil
+       :home/active-coll-name nil
+       :home/empty-vocab?     nil}
+      {:home/active-coll-id   (:id collection)
+       :home/active-coll-name (:name collection)
+       :home/empty-vocab?     (zero? (if collection
+                                       (count (collections/active-scope memory active-id))
+                                       (vocabulary/word-count memory)))})))
+
+
+(def ^:private fresh-form
+  {:home/add-error     nil
+   :home/mode-override nil
+   :home/suggestions   empty-suggestions
+   :home/translation   ""
+   :home/translation-typed? false
+   :home/word          ""})
+
+
+(nxr/register-action! :action/open-home
+  ;; Home is computed from memory and saved in one write, in the task of the
+  ;; tap. Entering home again while it is on display — the `popstate` of the
+  ;; step back a close already rendered home for — leaves the form alone.
+  (fn open-home [state {:keys [active-id] :as context}]
+    (let [shown? (= :page/home (:page/current state))
+          stale? (and active-id
+                      (:learner/ready? state)
+                      (nil? (get-in state [:learner/memory :collections active-id])))]
+      (cond-> [[:effect/save
+                (merge (when-not shown? fresh-form)
+                       {:page/current :page/home}
+                       (content state context))]]
+        ;; The stored pointer names a collection that is gone: the implicit
+        ;; main card is active from now on.
+        stale?       (conj [:effect/forget-active-collection])
+        ;; Only Safari ever measures a height here, and only it needs the
+        ;; reset: where `field-sizing` works the browser has already forgotten
+        ;; the content the old height was measured for.
+        (not shown?) (conj [:effect/clear-autogrow "new-word-value"]
+                           [:effect/clear-autogrow "new-word-translation"])))))
+
+
+(nxr/register-action! :action/word-added
+  ;; The form empties once the word is stored; what home shows of the
+  ;; vocabulary follows memory, which took the word when PouchDB did.
+  (fn word-added [_]
+    [[:effect/save fresh-form]
      [:effect/clear-autogrow "new-word-value"]
      [:effect/clear-autogrow "new-word-translation"]]))
-
-
-(nxr/register-action! :action/refresh-home
-  (fn refresh-home [_ {:keys [active-id active-name total]}]
-    [[:effect/save
-      {:home/active-coll-id   active-id
-       :home/active-coll-name active-name
-       :home/empty-vocab?     (zero? total)}]]))
 
 
 (nxr/register-action! :action/handle-collection-rename-keydown

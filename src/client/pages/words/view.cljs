@@ -105,7 +105,7 @@
 
 (defn page
   [state]
-  (let [{:keys [editing items more? search vocabulary?] placeholder :empty-state}
+  (let [{:keys [editing items known? more? search vocabulary?] placeholder :empty-state}
         (presenter/page-props state)]
     ;; `data-vk-overlay`, as on home: the keyboard is laid over the page, so
     ;; it covers the lesson button fixed at the bottom while the search bar,
@@ -113,12 +113,18 @@
     [:div.vocabulary
      {:data-vk-overlay true}
      (when editing (edit-dialog editing))
-     (if-not vocabulary?
+     (cond
+       (not known?)
+       nil
+
+       (not vocabulary?)
        [:div.vocabulary__list
         [:ul.word-list
          {:id "word-list"}
          [:li.word-list__empty.word-list__empty--no-words
           (empty-state placeholder)]]]
+
+       :else
        (list
         ;; The screen is left by the shell's corner ✕; the heading stays for
         ;; assistive technology only.

@@ -115,7 +115,7 @@
 
 (defn page
   [state]
-  (let [{:keys [active-collection empty-vocab? form]} (presenter/page-props state)]
+  (let [{:keys [actions-hidden? active-collection empty-vocab? form]} (presenter/page-props state)]
     [:div.home
      {:data-vk-overlay true
       :on {:keydown [[:action/start-lesson-if-alt-enter
@@ -138,16 +138,16 @@
         [:h2.home__panel-title (:legend form)]
         [:button#home-words-button.home__words-button
          {:type        "button"
-          :class       (when empty-vocab? "home__words-button--hidden")
-          :aria-hidden (when empty-vocab? "true")
-          :tabindex    (when empty-vocab? "-1")
+          :class       (when actions-hidden? "home__words-button--hidden")
+          :aria-hidden (when actions-hidden? "true")
+          :tabindex    (when actions-hidden? "-1")
           :on          {:click [[:action/go-to-words]]}}
          "Список слов"]]
 
        (add-form form)]]
 
      [:footer#home-lesson-footer.home__footer.page-footer
-      {:hidden empty-vocab?}
+      {:hidden actions-hidden?}
       [:h2.home__lesson-title.visually-hidden "Урок"]
       [:div.page-footer__action
        [:button.home__lesson-button.big-button.green-button

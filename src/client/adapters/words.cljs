@@ -67,26 +67,6 @@
     (mapv preview rows)))
 
 
-(defn ^:async previews-page
-  "One page of words in alphabetical order, `limit` rows from `skip`. The view
-   is keyed by what the word is filed under, so the view is already in that
-   order and a page costs its own rows — not the vocabulary's."
-  [dbs {:keys [limit skip]}]
-  (let [{rows :rows} (await (dbs/query dbs
-                                       preview-view
-                                       (cond-> {}
-                                         limit (assoc :limit limit)
-                                         skip  (assoc :skip skip))))]
-    (mapv preview rows)))
-
-
-(defn ^:async count-words
-  "How many words the vocabulary holds. `:limit 0` asks the view for no rows
-   at all: the count rides on every view query, so this reads none of them."
-  [dbs]
-  (:total-rows (await (dbs/query dbs preview-view {:limit 0}))))
-
-
 (defn ^:async get-word
   [dbs word-id]
   (some-> (await (dbs/get dbs schema word-id)) repository/entity))

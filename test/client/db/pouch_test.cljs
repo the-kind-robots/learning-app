@@ -190,8 +190,8 @@
   ["der Hund" "die Katze" "das Auto" "der Zug" "die Bank" "aufstehen"])
 
 
-(deftest the-preview-view-files-a-noun-under-its-word-not-its-article
-  (async-testing "a page off the view comes back with the article ignored, and the next page continues it (#438)"
+(deftest the-preview-view-finds-a-word-by-the-id-it-is-stored-under
+  (async-testing "the view is keyed by what a word is filed under, and a keyed read still finds it (#438)"
     (db-fixtures/with-test-db
       local-name
       (^:async fn
@@ -201,12 +201,6 @@
                  (into-array
                   (for [value nouns-and-a-verb]
                     (sut/insert dbs words/schema {:_id (vocabulary/vocab-id value) :value value})))))
-         (let [first-page  (await (words/previews-page dbs {:limit 3 :skip 0}))
-               second-page (await (words/previews-page dbs {:limit 3 :skip 3}))]
-           (is (= ["aufstehen" "das Auto" "die Bank"] (mapv :value first-page))
-               "the article is ignored while ordering and still shown in full")
-           (is (= ["der Hund" "die Katze" "der Zug"] (mapv :value second-page))
-               "a page past the first continues the same order"))
          (is (= ["der Zug"]
                 (mapv :value (await (words/previews dbs [(vocabulary/vocab-id "der Zug")]))))
              "a row is still found by the id the word is stored under")
