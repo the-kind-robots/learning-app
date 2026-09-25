@@ -19,11 +19,11 @@ Needed freshness is narrow: remote data matters only when a screen shows synced 
 Replace permanent live replication with trigger-driven one-shot passes. Each pass is `db.sync(remote, {live: false})` — completes and closes (a `_changes`+bulk burst, no held network feed; PouchDB's `retry` applies only to live mode, so a failed pass just ends). Two sides:
 
 - **Push** (local writes → server): driven by the **local** PouchDB `.changes` feed on `user-db` — an IndexedDB event stream, not a network feed — throttled, owned by the sync component. Any local write to a synced doc schedules a throttled push. The db's own change events are the single chokepoint (not a hand-listed set of Nexus write effects).
-- **Pull** (freshness for this device): a one-shot pass on entering a data page (words / collections) and on the `online` event. After the pass, the current page reloads its store slice via a `:page/load` action, so fresh data shows.
+- **Pull** (freshness for this device): a one-shot pass on entering a data page (words / collections) and on the `online` event. After the pass, the page on display re-runs its read, looked up by its route (`:action/reload-page`), so fresh data shows.
 
 Offline-first: entering a data page renders local data immediately and pulls in the background, re-rendering on arrival; render never blocks on the network. `navigator.onLine` is a cheap gate — it only reliably says "offline"; a never-rejecting pass plus the next trigger cover its false "online".
 
-Every data screen pulls on entry — words, collections, and lesson. Lesson is safe to include because the pass never touches a running lesson: `:page/load` is nil there, so the post-pass reload is a no-op. The pass still lands remote changes in the local database for whatever comes next, while the lesson stays exactly as it started.
+Every data screen pulls on entry — words, collections, and lesson. Lesson is safe to include because the pass never touches a running lesson: the lesson route has no read to re-run, so the post-pass reload is a no-op. The pass still lands remote changes in the local database for whatever comes next, while the lesson stays exactly as it started.
 
 ## Consequences
 

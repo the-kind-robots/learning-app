@@ -170,14 +170,48 @@
       (let [{:keys [store] :as system} (test-system)]
         (nxr/dispatch system {} [[:action/load-words]])
         (await (settled))
+        (is (some? (:words/current-read @store)) "the entry read is running")
         (answer! [nil presenter/page-size] presenter/page-size 130)
         (await (settled))
         (is (= presenter/page-size (count (:words/items @store))))
-        (is (= 1 (:words/read-token @store)) "the entry read is numbered")))))
+        (is (nil? (:words/current-read @store)) "and has answered")))))
+
+
+(deftest no-page-read-while-a-read-is-running
+  (async-testing "the observer firing twice before the page lands asks once"
+    (with-redefs [vocabulary/list-active list-stub]
+      (reset! unanswered {})
+      (let [{:keys [store] :as system}
+            (test-system {:words/more? true :words/limit 50 :words/search ""})]
+        (nxr/dispatch system {} [[:action/show-more-words]])
+        (let [read (:words/current-read @store)]
+          (nxr/dispatch system {} [[:action/show-more-words]])
+          (is (= read (:words/current-read @store)) "the second fire started nothing"))
+        (await (settled))
+        (answer! ["" 100] 100 130)
+        (await (settled))
+        (is (= 100 (count (:words/items @store))))
+        (is (nil? (:words/current-read @store)))))))
+
+
+(deftest a-failed-read-is-no-longer-running
+  (async-testing "an error ends the read, so the next page can be asked for"
+    (with-redefs [vocabulary/list-active (fn [& _] (js/Promise.reject (js/Error. "boom")))]
+      (let [{:keys [store] :as system}
+            (test-system {:words/more? true :words/limit 50 :words/search ""})]
+        (nxr/dispatch system {} [[:action/show-more-words]])
+        (await (settled))
+        (is (nil? (:words/current-read @store)))))))
+
+
+(deftest a-cancelled-read-failing-leaves-the-current-one-running
+  (let [store (atom {:words/current-read "newer"})]
+    (nxr/dispatch {:store store} {} [[:action/words-read-ended "older"]])
+    (is (= "newer" (:words/current-read @store)))))
 
 
 (deftest the-reload-a-pull-triggers-is-numbered-when-it-happens
-  (async-testing "the stored :page/load re-read lands, rather than carrying a spent number"
+  (async-testing "the reload built from the rows on screen lands, rather than carrying a spent number"
     (with-redefs [vocabulary/list-active list-stub]
       (reset! unanswered {})
       (let [{:keys [store] :as system} (test-system)]
@@ -185,10 +219,8 @@
         (await (settled))
         (answer! ["wort1" 100] 11 11)
         (await (settled))
-        (is (= [:action/load-words {:limit 100 :search "wort1"}] (:page/load @store)))
-
-        ;; What `:action/reload-page` does with it.
-        (nxr/dispatch system {} [(:page/load @store)])
+        ;; What `:action/reload-page` runs on this screen.
+        (nxr/dispatch system {} [[:action/reload-words]])
         (await (settled))
         (answer! ["wort1" 100] 9 9)
         (await (settled))

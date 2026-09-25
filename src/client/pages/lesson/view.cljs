@@ -170,8 +170,15 @@
 
 (defn page
   [state]
-  (if (:lesson/empty? state)
+  (cond
+    ;; Until the lesson is read the screen is empty under the shell bar.
+    (:lesson/loading? state)
+    [:div.lesson]
+
+    (:lesson/empty? state)
     (empty-state)
+
+    :else
     (let [lesson-state (:lesson/state state)
           answer-hint  (presenter/answer-hint-props state)]
       [:div.lesson

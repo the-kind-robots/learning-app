@@ -63,19 +63,9 @@
      :total       (or word-count total)}))
 
 
-(nxr/register-effect! :effect/load-home
-  (fn ^:async load-home
-    [{:keys [capabilities dispatch]} _]
-    (try
-      (dispatch [[:action/show-home (await (home-data capabilities))]])
-      (catch js/Error err
-        (log/error :effect/load-home {:error (str err)})))))
-
-
 (nxr/register-effect! :effect/refresh-home
-  ;; The post-pull reload (#255): recomputes what synced data decides —
-  ;; lesson availability, the active collection — without :action/show-home's
-  ;; reset of the add form the user may be typing into.
+  ;; Home's read, on entry and after a pull (#255): what synced data decides —
+  ;; lesson availability, the active collection. The form is not its business.
   (fn ^:async refresh-home
     [{:keys [capabilities dispatch]} _]
     (try

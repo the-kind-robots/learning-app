@@ -231,7 +231,13 @@
                                            router
                                            (fn [match _history]
                                              (if match
-                                               (reset! controllers (rfc/apply-controllers @controllers match))
+                                               ;; The route alone picks the screen (#486); a
+                                               ;; read only fills it. The controllers go first
+                                               ;; so the screen's first render has its entry
+                                               ;; state rather than the last visit's.
+                                               (do
+                                                 (reset! controllers (rfc/apply-controllers @controllers match))
+                                                 (dispatch [[:effect/save {:page/current (-> match :data :name)}]]))
                                                ;; A path with no route is a redirect, not a visit: replace the
                                                ;; entry rather than pushing one. That also drops the fragment,
                                                ;; taking an incoming credential out of the address bar.

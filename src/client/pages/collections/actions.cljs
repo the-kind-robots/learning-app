@@ -8,23 +8,19 @@
    watch skips a save whose every value is identical to the current one,
    and a literal built per call — a fresh vector, a fresh keyword object in
    a development build — would defeat that on every reload."
-  {:page/current :page/collections
-   :page/load [:effect/load-collections]
-   :collections/editing-id nil
-   :collections/loading? false})
+  {:collections/editing-id nil
+   :collections/loading?   false})
 
 
 (nxr/register-action! :action/open-collections
   (fn open-collections [_]
-    ;; The screen switches before its data is read, so the page answers the
-    ;; tap at once with a loading state. The items are left as they are: the
-    ;; flag alone says the screen is loading, and only this action sets it,
-    ;; so a reload of the same screen (after a sync pull) keeps the current
-    ;; cards on screen until the new ones arrive.
+    ;; The router switches the screen before its data is read, so the page
+    ;; answers the tap at once with a loading state. The items are left as
+    ;; they are: the flag alone says the screen is loading, and only this
+    ;; action sets it, so a reload of the same screen (after a sync pull)
+    ;; keeps the current cards on screen until the new ones arrive.
     [[:effect/save
-      {:page/current (:page/current shown)
-       :page/load    (:page/load shown)
-       :collections/loading? true
+      {:collections/loading?     true
        :collections/deleted-name nil}]]))
 
 
@@ -55,8 +51,10 @@
   ;; The screen without the deleted collection, the status line naming it,
   ;; and focus on the neighbour picked before the delete.
   (fn show-deleted [state summary {:keys [name focus-id]}]
-    [[:effect/save (assoc (collections-shown state summary)
-                          :collections/deleted-name name)]
+    [[:effect/save
+      (assoc (collections-shown state summary)
+             :collections/deleted-name
+             name)]
      [:effect/focus-collection focus-id]]))
 
 

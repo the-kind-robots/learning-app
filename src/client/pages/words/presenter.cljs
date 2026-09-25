@@ -56,6 +56,15 @@
       first-run-state)))
 
 
+(defn loading?
+  "Whether the screen is still waiting for its first rows: a read is running
+   and none has answered since the route entered (`:words/items` is nil until
+   then, and a vector — empty or not — after)."
+  [state]
+  (boolean (and (:words/current-read state)
+                (nil? (:words/items state)))))
+
+
 (defn page-state
   "State for the word list: the rows, the placeholder that replaces them, and
    whether the page chrome — header, search box, lesson button — applies. An
@@ -69,8 +78,9 @@
    answer this."
   [{:keys [limit matches search total words]}]
   {:words/empty-state (empty-state words total)
+   ;; At least one word in the active scope, before the search filter.
+   :words/has-words?  (pos? total)
    :words/items       (word-list-props words)
    :words/limit       (or limit page-size)
    :words/more?       (< (count words) (or matches 0))
-   :words/search      (or search "")
-   :words/vocabulary? (pos? total)})
+   :words/search      (or search "")})

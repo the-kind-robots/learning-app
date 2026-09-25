@@ -41,37 +41,57 @@
        [:action/go-to-lesson]])))
 
 
+(def ^:private blank-form
+  {:home/add-error     nil
+   :home/mode-override nil
+   :home/suggestions   empty-suggestions
+   :home/translation   ""
+   :home/translation-typed? false
+   :home/word          ""})
+
+
+(defn- read-data
+  "What home shows from storage: the active collection and whether there is
+   anything to study."
+  [{:keys [active-id active-name total]}]
+  {:home/active-coll-id   active-id
+   :home/active-coll-name active-name
+   :home/empty-vocab?     (zero? total)})
+
+
+(defn- with-blank-form
+  "Saves `data` with the add form emptied. Only Safari ever measures a height
+   here, and only it needs the autogrow reset: where `field-sizing` works the
+   browser has already forgotten the content the old height was measured for."
+  [data]
+  [[:effect/save (merge blank-form data)]
+   [:effect/clear-autogrow "new-word-value"]
+   [:effect/clear-autogrow "new-word-translation"]])
+
+
+(nxr/register-action! :action/open-home
+  ;; Entering the route: an empty form, and nothing of what the last visit
+  ;; read — the collection heading and the lesson button wait for the read.
+  ;; Until it lands there is nothing known to study, so the lesson is not
+  ;; offered: not the button, not Alt+Enter.
+  (fn open-home [_]
+    (with-blank-form {:home/active-coll-id   nil
+                      :home/active-coll-name nil
+                      :home/empty-vocab?     true})))
+
+
 (nxr/register-action! :action/show-home
-  (fn show-home [_ {:keys [active-id active-name total]}]
-    [[:effect/save
-      {:page/current          :page/home
-       ;; Reloaded after every replication pass (#255): lesson availability
-       ;; is derived from synced data, so a pull landing while the user sits
-       ;; here — a poke, a pairing adoption — must recompute it. The refresh
-       ;; variant leaves the add form alone.
-       :page/load             [:effect/refresh-home]
-       :home/active-coll-id   active-id
-       :home/active-coll-name active-name
-       :home/add-error        nil
-       :home/empty-vocab?     (zero? total)
-       :home/mode-override    nil
-       :home/suggestions      empty-suggestions
-       :home/translation      ""
-       :home/translation-typed? false
-       :home/word             ""}]
-     ;; Only Safari ever measures a height here, and only it needs the reset:
-     ;; where `field-sizing` works the browser has already forgotten the
-     ;; content the old height was measured for.
-     [:effect/clear-autogrow "new-word-value"]
-     [:effect/clear-autogrow "new-word-translation"]]))
+  ;; After a word is added: the form empties and the counts are new.
+  (fn show-home [_ data]
+    (with-blank-form (read-data data))))
 
 
 (nxr/register-action! :action/refresh-home
-  (fn refresh-home [_ {:keys [active-id active-name total]}]
-    [[:effect/save
-      {:home/active-coll-id   active-id
-       :home/active-coll-name active-name
-       :home/empty-vocab?     (zero? total)}]]))
+  ;; The read on entry, and again after every replication pass (#255):
+  ;; lesson availability is derived from synced data. The add form is left
+  ;; alone — the user may be typing into it.
+  (fn refresh-home [_ data]
+    [[:effect/save (read-data data)]]))
 
 
 (nxr/register-action! :action/handle-collection-rename-keydown

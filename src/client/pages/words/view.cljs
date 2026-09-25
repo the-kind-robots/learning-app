@@ -1,5 +1,6 @@
 (ns pages.words.view
   (:require
+   [pages.words.presenter :as presenter]
    [utils :as utils]))
 
 
@@ -104,19 +105,27 @@
 
 (defn page
   [state]
-  (let [{:words/keys [items search editing more? vocabulary?] placeholder :words/empty-state} state]
+  (let [{:words/keys [items search editing more? has-words?] placeholder :words/empty-state} state
+        loading? (presenter/loading? state)]
     ;; `data-vk-overlay`, as on home: the keyboard is laid over the page, so
     ;; it covers the lesson button fixed at the bottom while the search bar,
     ;; which closes the column, stands on the keyboard's inset.
     [:div.vocabulary
      {:data-vk-overlay true}
      (when editing (edit-dialog editing))
-     (if-not vocabulary?
+     (cond
+       ;; Until the first read lands the screen is empty under the shell bar.
+       loading?
+       nil
+
+       (not has-words?)
        [:div.vocabulary__list
         [:ul.word-list
          {:id "word-list"}
          [:li.word-list__empty.word-list__empty--no-words
           (empty-state placeholder)]]]
+
+       :else
        (list
         ;; The screen is left by the shell's corner ✕; the heading stays for
         ;; assistive technology only.

@@ -8,13 +8,13 @@
 
 
 (defn- ^:async show!
-  "Reads one page of the active scope and hands it to the view, stamped with
-   the number of the read that asked for it — `:action/show-words` drops rows
-   whose read a later one has overtaken. The page is the first `limit` rows,
+  "Reads one page of the active scope and hands it to the view with the read
+   it answers — `:action/show-words` ignores it if that read was cancelled. A
+   failed read reports that it ended. The page is the first `limit` rows,
    not a window at an offset: the loaded row count stays one number that
    survives a reload, and the rows it re-reads are the ones already on screen
    rather than the vocabulary."
-  [dispatch capabilities {:keys [limit search]} token]
+  [dispatch capabilities {:keys [limit search]} read]
   (try
     (let [limit (or limit presenter/page-size)
           {:keys [matches total words]}
@@ -24,19 +24,16 @@
                   {:limit   limit
                    :matches matches
                    :search  search
-                   :token   token
+                   :read    read
                    :total   total
                    :words   words}]]))
     (catch js/Error err
-      (log/error :effect/load-words {:error (str err)}))))
+      (log/error :effect/load-words {:error (str err)})
+      (dispatch [[:action/words-read-ended read]]))))
 
 
 (def ^:private search!
-  (gfn/debounce
-   (fn search! [dispatch capabilities opts token]
-     (.finally (show! dispatch capabilities opts token)
-               (fn [] (dispatch [[:action/words-search-settled token]]))))
-   400))
+  (gfn/debounce show! 400))
 
 
 ;; The sentinel observer and the node it watches, kept together. Replicant
@@ -47,9 +44,6 @@
 ;; rest of the visit (#439). The `:replicant/key` on the sentinel is what keeps
 ;; this rare; it is not what makes it safe.
 (defonce ^:private sentinel-watch (atom nil))
-
-
-(defonce ^:private loading-more? (atom false))
 
 
 (defn- disconnect-sentinel!
@@ -69,34 +63,20 @@
 
 (nxr/register-effect! :effect/load-words
   (fn load-words
-    [{:keys [capabilities dispatch]} _ opts token]
-    (show! dispatch capabilities opts token)))
+    [{:keys [capabilities dispatch]} _ opts read]
+    (show! dispatch capabilities opts read)))
 
 
 (nxr/register-effect! :effect/set-words-search
   (fn set-words-search
-    [{:keys [capabilities dispatch]} _ opts token]
-    (search! dispatch capabilities opts token)))
+    [{:keys [capabilities dispatch]} _ opts read]
+    (search! dispatch capabilities opts read)))
 
 
 (nxr/register-effect! :effect/scroll-words-to-top
   (fn scroll-words-to-top [_ _]
     (when-let [node (js/document.querySelector ".vocabulary__list")]
       (set! (.-scrollTop node) 0))))
-
-
-(nxr/register-effect! :effect/load-more-words
-  ;; The observer can fire again before the page it asked for has arrived —
-  ;; a re-render that replaces the sentinel node is enough. The flag makes
-  ;; the second call a no-op instead of a second query.
-  (fn ^:async load-more-words
-    [{:keys [capabilities dispatch]} _ opts token]
-    (when-not @loading-more?
-      (reset! loading-more? true)
-      (try
-        (await (show! dispatch capabilities opts token))
-        (finally
-         (reset! loading-more? false))))))
 
 
 (nxr/register-effect! :effect/observe-words-sentinel
@@ -127,28 +107,32 @@
 
 (nxr/register-effect! :effect/update-word
   (fn ^:async update-word
-    [{:keys [capabilities dispatch]} _ {:keys [id translation] :as opts} token]
+    [{:keys [capabilities dispatch]} _ {:keys [id translation] :as opts} read]
     (try
       (await (vocabulary/update! capabilities id translation))
-      (await (show! dispatch capabilities opts token))
+      (await (show! dispatch capabilities opts read))
       (catch js/Error err
-        (log/error :effect/update-word {:error (str err)})))))
+        (log/error :effect/update-word {:error (str err)})
+        (dispatch [[:action/words-read-ended read]])))))
 
 
 (nxr/register-effect! :effect/delete-word
   (fn ^:async delete-word
-    [{:keys [capabilities dispatch]} _ {:keys [id value] :as opts} token]
+    [{:keys [capabilities dispatch]} _ {:keys [id value] :as opts} read]
     (let [collection-id ((:collections/active-id (:collections capabilities)))
           prompt        (if collection-id
                           (str "Убрать «" value "» из набора?")
                           (str "Удалить «" value "» окончательно?"))]
-      (when (js/confirm prompt)
-        ;; The dialog closes here rather than on the rows that follow: rows
-        ;; arrive for reasons of their own now, and declining the prompt above
-        ;; leaves the reader where they were (#439).
-        (dispatch [[:action/close-word-edit]])
-        (try
-          (await (vocabulary/remove-from-active! capabilities id))
-          (await (show! dispatch capabilities opts token))
-          (catch js/Error err
-            (log/error :effect/delete-word {:error (str err)})))))))
+      (if (js/confirm prompt)
+        (do
+          ;; The dialog closes here rather than on the rows that follow: rows
+          ;; arrive for reasons of their own now, and declining the prompt
+          ;; above leaves the reader where they were (#439).
+          (dispatch [[:action/close-word-edit]])
+          (try
+            (await (vocabulary/remove-from-active! capabilities id))
+            (await (show! dispatch capabilities opts read))
+            (catch js/Error err
+              (log/error :effect/delete-word {:error (str err)})
+              (dispatch [[:action/words-read-ended read]]))))
+        (dispatch [[:action/words-read-ended read]])))))

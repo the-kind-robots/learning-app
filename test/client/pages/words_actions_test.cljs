@@ -12,12 +12,12 @@
 
 
 (defn- reload-effect
-  "What `:action/reload-page` re-dispatches after a sync pull: what the page
-   stored under `:page/load`. An action rather than the effect, so the pull's
-   read is numbered when it happens rather than carrying the number of the
-   read that produced these rows (GH-439)."
+  "What `:action/reload-words` re-dispatches after a sync pull, rebuilt from
+   the rows on screen. An action rather than the effect, so the pull's read is
+   numbered when it happens rather than carrying the number of the read that
+   produced these rows (GH-439)."
   [state]
-  (:page/load state))
+  (sut/reload state))
 
 
 (deftest a-background-reload-asks-for-the-page-the-reader-has

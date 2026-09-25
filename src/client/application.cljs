@@ -54,10 +54,25 @@
                          (dispatch [[:action/reload-page] [:action/confirm-pairing]]))))))))
 
 
+(def ^:private page-reloads
+  "What each screen re-reads when synced data changed under it. The lesson
+   re-reads nothing: a pull does not restart a lesson in progress."
+  {:page/collections [:effect/load-collections]
+   :page/home        [:effect/refresh-home]
+   :page/words       [:action/reload-words]})
+
+
+(defn page-reload
+  "The read to re-run for the screen on display, by its route — never by
+   what a read wrote, which may be a read for a screen already left (#486)."
+  [state]
+  (page-reloads (:page/current state)))
+
+
 (nxr/register-action! :action/reload-page
   (fn reload-page [state]
-    (when-let [load-effect (:page/load state)]
-      [load-effect])))
+    (when-let [reload (page-reload state)]
+      [reload])))
 
 
 (nxr/register-effect! :effect/load-account
@@ -599,20 +614,21 @@
   [dispatch]
   [["/home"
     {:name        :page/home
-     :controllers [{:start #(dispatch [[:effect/load-home] [:effect/sync-pull]])}]}]
+     :controllers [{:start #(dispatch [[:action/open-home]
+                                       [:effect/refresh-home]
+                                       [:effect/sync-pull]])}]}]
    ["/words"
     {:name        :page/words
-     ;; Entering the screen opens no dialog. The rows no longer clear
-     ;; `:words/editing` on their way in (#439), so leaving the screen with a
-     ;; word open would otherwise bring it back on the return.
-     :controllers [{:start #(dispatch [[:action/close-word-edit]
+     :controllers [{:start #(dispatch [[:action/open-words]
                                        [:action/load-words]
                                        [:effect/sync-pull]])}]}]
    ["/lesson"
     {:name        :page/lesson
      ;; Leaving the route ends the lesson, whatever did the leaving: Back,
      ;; the corner ✕, the finish button (#484).
-     :controllers [{:start #(dispatch [[:effect/load-lesson] [:effect/sync-pull]])
+     :controllers [{:start #(dispatch [[:action/open-lesson]
+                                       [:effect/load-lesson]
+                                       [:effect/sync-pull]])
                     :stop  #(dispatch [[:effect/end-lesson]])}]}]
    ["/collections"
     {:name        :page/collections

@@ -4,31 +4,28 @@
    [pages.words.presenter :as presenter]))
 
 
-(defn- next-read-token
-  "The number for the next read of the list. Reads are numbered because five
-   callers write `:words/*` — the first render, the search, the next page, and
-   the reloads after an edit and after a synchronisation pull — and the
-   storage they go through answers in its own order."
-  [state]
-  (inc (or (:words/read-token state) 0)))
+(defn- start-read
+  "Starting a read cancels the one before it. A read cannot be stopped, so
+   cancelling means its result is ignored when it arrives.
+
+   Returns the new read and the state that makes it `:words/current-read`."
+  []
+  (let [read (random-uuid)]
+    [read {:words/current-read read}]))
 
 
 (defn- current-read?
-  "Whether these rows answer the read the list is still waiting for. A read
-   that a later one overtook is dropped, so a page asked for before a search
-   cannot land after it and put the unfiltered rows back under a search box
-   that still holds the query."
-  [state {:keys [token]}]
-  (= token (:words/read-token state)))
+  "Whether `read` is the one running, not one cancelled since."
+  [state read]
+  (= read (:words/current-read state)))
 
 
 (defn- more-to-read?
-  "Whether reaching the end should ask for another page. A search that has not
-   answered yet says no: its rows replace the ones that page would extend, and
-   the query the page would carry is already the one being replaced."
+  "Whether reaching the end asks for another page: there are more rows, and no
+   page read while a read is running."
   [state]
   (boolean (and (:words/more? state)
-                (nil? (:words/pending-search state)))))
+                (nil? (:words/current-read state)))))
 
 
 (defn- new-query?
@@ -42,42 +39,76 @@
 
 
 (defn words-shown
-  "State for a page of words that has just been read. `:page/load` carries the
-   query these rows came from, so the reload a sync pull triggers
-   (`:action/reload-page`) asks for the page the reader has rather than the
-   first one — otherwise a reader 500 rows down loses 450 of them to a pull
-   that happened to bring a document. It names the action rather than the
-   effect: the effect takes the number of the read it is answering, and a
-   vector stored here would hand a pull the number of the read that produced
-   these rows.
+  "State for a page of words that has just been read: its rows, and no read
+   running any more.
 
    `:words/editing` is left alone. Rows arrive on their own now — the sentinel
    observer asks for them — and clearing it here shut an open dialog under the
    reader, one being typed into included (#439)."
-  [{:keys [limit search] :as words}]
-  (merge {:page/current :page/words
-          :page/load    [:action/load-words {:limit limit :search search}]}
-         (presenter/page-state words)))
+  [words]
+  (assoc (presenter/page-state words) :words/current-read nil))
+
+
+(def ^:private opened
+  "The screen as the route enters it: no rows, no query, no dialog — nothing
+   of the last visit — until the first read lands. `:words/items` is nil, not
+   empty: no read has answered yet. The dialog matters on its own: rows no
+   longer close it (#439), so a word left open would come back."
+  {:words/current-read nil
+   :words/editing      nil
+   :words/empty-state  nil
+   :words/has-words?   false
+   :words/items        nil
+   :words/limit        presenter/page-size
+   :words/more?        false
+   :words/search       ""})
+
+
+(defn reload
+  "The read a sync pull re-runs: the rows the reader has, under the query they
+   were read for — otherwise a reader 500 rows down loses 450 of them to a
+   pull that happened to bring a document. The action rather than the effect:
+   the pull's read starts when it happens."
+  [state]
+  [:action/load-words {:limit (:words/limit state) :search (:words/search state)}])
+
+
+(nxr/register-action! :action/open-words
+  (fn open-words [_]
+    [[:effect/save opened]]))
+
+
+(nxr/register-action! :action/reload-words
+  (fn reload-words [state]
+    [(reload state)]))
 
 
 (nxr/register-action! :action/load-words
-  ;; Every read of the list is numbered, and the number comes from the state,
-  ;; so every caller reaches the effect through an action that stamps it. This
-  ;; one is the screen's own: route entry, and the reload a pull re-dispatches.
-  (fn load-words [state opts]
-    (let [token (next-read-token state)]
-      [[:effect/save {:words/read-token token}]
-       [:effect/load-words opts token]])))
+  ;; Every read of the list starts in an action, so every caller reaches the
+  ;; effect with one. This is the screen's own read: route entry, and the
+  ;; reload a pull re-dispatches.
+  (fn load-words [_ opts]
+    (let [[read started] (start-read)]
+      [[:effect/save started]
+       [:effect/load-words opts read]])))
 
 
 (nxr/register-action! :action/show-words
   ;; Rows read under a different query replace the ones the reader was
   ;; reading, and that is the moment the list goes back to its first row.
-  (fn show-words [state words]
-    (when (current-read? state words)
+  (fn show-words [state {:keys [read] :as words}]
+    (when (current-read? state read)
       (cond-> [[:effect/save (words-shown words)]]
         (new-query? state words)
         (conj [:effect/scroll-words-to-top])))))
+
+
+(nxr/register-action! :action/words-read-ended
+  ;; A read that brought no rows: it failed, or the reader declined the
+  ;; removal it was for. If it is still the current read, none is running now.
+  (fn words-read-ended [state read]
+    (when (current-read? state read)
+      [[:effect/save {:words/current-read nil}]])))
 
 
 (nxr/register-action! :action/open-word-edit
@@ -98,33 +129,24 @@
   ;; then left them free to scroll back down onto the sentinel before the
   ;; shorter list arrived (#439).
   ;;
-  ;; The read is numbered on the keystroke, not when the debounce runs out:
-  ;; from here on this query is what the list is going to hold. The number is
-  ;; kept under `:words/pending-search` as well, which is how reaching the end
-  ;; in the meantime knows to stand down.
-  (fn search-words [state search]
-    (let [token (next-read-token state)]
-      [[:effect/save {:words/pending-search token :words/read-token token}]
-       [:effect/set-words-search {:limit presenter/page-size :search search} token]])))
-
-
-(nxr/register-action! :action/words-search-settled
-  ;; The search has answered, or failed. It stops holding the next page back,
-  ;; unless a newer keystroke has already taken its place.
-  (fn words-search-settled [state token]
-    (when (= token (:words/pending-search state))
-      [[:effect/save {:words/pending-search nil}]])))
+  ;; The read starts on the keystroke, not when the debounce runs out: from
+  ;; here on this query is what the list is going to hold. `:words/search`
+  ;; changes only when its rows arrive.
+  (fn search-words [_ search]
+    (let [[read started] (start-read)]
+      [[:effect/save started]
+       [:effect/set-words-search {:limit presenter/page-size :search search} read]])))
 
 
 (nxr/register-action! :action/show-more-words
   (fn show-more-words [state]
     (when (more-to-read? state)
-      (let [token (next-read-token state)]
-        [[:effect/save {:words/read-token token}]
-         [:effect/load-more-words
+      (let [[read started] (start-read)]
+        [[:effect/save started]
+         [:effect/load-words
           {:limit  (presenter/next-limit (:words/limit state))
            :search (:words/search state)}
-          token]]))))
+          read]]))))
 
 
 ;; A mutation reloads the list at the row count already on screen, so saving or
@@ -133,23 +155,23 @@
   (fn save-word [state {:keys [id translation]}]
     ;; Saving closes the dialog. It used to close on the rows the save brought
     ;; back, which also shut it on rows nobody asked for (#439).
-    (let [token (next-read-token state)]
-      [[:effect/save {:words/editing nil :words/read-token token}]
+    (let [[read started] (start-read)]
+      [[:effect/save (assoc started :words/editing nil)]
        [:effect/update-word
         {:id          id
          :translation translation
          :limit       (:words/limit state)
          :search      (:words/search state)}
-        token]])))
+        read]])))
 
 
 (nxr/register-action! :action/remove-word
   (fn remove-word [state {:keys [id value]}]
-    (let [token (next-read-token state)]
-      [[:effect/save {:words/read-token token}]
+    (let [[read started] (start-read)]
+      [[:effect/save started]
        [:effect/delete-word
         {:id     id
          :value  value
          :limit  (:words/limit state)
          :search (:words/search state)}
-        token]])))
+        read]])))

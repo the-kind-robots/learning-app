@@ -312,8 +312,8 @@
 
 
 ;; The rename in the heading (#460), through `application`'s own
-;; `:action/reload-page`: it runs whatever the page on display stored as
-;; `:page/load`, which here only counts.
+;; `:action/reload-page`: it runs the read of the screen on display, which
+;; here only counts.
 
 
 (def ^:private reloads (atom 0))
@@ -326,7 +326,7 @@
 
 (defn- rename-system
   [writes]
-  {:store        (atom {:page/load [:effect/count-reload]})
+  {:store        (atom {:page/current :page/home})
    :capabilities {:collections
                   {:collections/active-id (fn [] "c:kurs")
                    :collections/get       (fn [_] (js/Promise.resolve {:id "c:kurs" :name "Kurs"}))
@@ -346,15 +346,16 @@
 
 (deftest a-rename-that-writes-reloads-the-screen-on-display
   (async-testing "GH-460: the screen on display reads again after the write"
-    (let [writes (atom [])
-          system (rename-system writes)]
-      (reset! reloads 0)
-      (nxr/dispatch system {} [[:effect/rename-active-collection " Neu "]])
-      (await (settled))
-      (is (= [["c:kurs" "Neu"]] @writes))
-      (is (= 1 @reloads))
-      (testing "a refused name writes nothing and asks no screen to read"
-        (nxr/dispatch system {} [[:effect/rename-active-collection "grammatik"]])
+    (with-redefs [application/page-reload (constantly [:effect/count-reload])]
+      (let [writes (atom [])
+            system (rename-system writes)]
+        (reset! reloads 0)
+        (nxr/dispatch system {} [[:effect/rename-active-collection " Neu "]])
         (await (settled))
         (is (= [["c:kurs" "Neu"]] @writes))
-        (is (= 1 @reloads))))))
+        (is (= 1 @reloads))
+        (testing "a refused name writes nothing and asks no screen to read"
+          (nxr/dispatch system {} [[:effect/rename-active-collection "grammatik"]])
+          (await (settled))
+          (is (= [["c:kurs" "Neu"]] @writes))
+          (is (= 1 @reloads)))))))

@@ -53,7 +53,7 @@
       (is (= "Слов пока нет" (:text (:words/empty-state props))))
       (is (= "Добавить слово" (:cta (:words/empty-state props)))
           "the first-run state keeps its call to action")
-      (is (false? (:words/vocabulary? props))
+      (is (false? (:words/has-words? props))
           "the page chrome is dropped — nothing to search or study"))))
 
 
@@ -64,7 +64,7 @@
       (is (= "Попробуйте другой запрос" (:hint (:words/empty-state props))))
       (is (nil? (:cta (:words/empty-state props)))
           "no invitation to add a first word")
-      (is (true? (:words/vocabulary? props))
+      (is (true? (:words/has-words? props))
           "the search box stays, so the query can be edited or cleared")
       (is (= "zzz" (:words/search props))))))
 
@@ -74,7 +74,7 @@
     (let [props (sut/page-state {:search "Hund" :total 1 :words rows})]
       (is (nil? (:words/empty-state props)))
       (is (= ["word-1"] (mapv :id (:words/items props))))
-      (is (true? (:words/vocabulary? props))))))
+      (is (true? (:words/has-words? props))))))
 
 
 (defn- word-rows

@@ -13,9 +13,9 @@ async function addWord(page) {
   await expect(page.getByRole('button', { name: 'Список слов' })).toBeVisible();
 }
 
-// Waits for the rows, not only the address: a words read still in flight
-// when the test leaves would land after home's and put the words screen back
-// on display at /home — a race in the page loads, not in the history.
+// Waits for the rows, not only the address: these tests are about leaving a
+// screen with its rows on display. Leaving one whose read is still out has
+// tests of its own below (#486).
 async function openWords(page) {
   await page.getByRole('button', { name: 'Список слов' }).click();
   await expect(page).toHaveURL(/\/words$/);
@@ -112,6 +112,92 @@ test('a screen opened from a screen takes its place', async ({ page }) => {
   await page.goBack();
   await expect(page).toHaveURL(/\/home$/);
   await expect(homeHeading(page)).toBeVisible();
+});
+
+// Holds every words read until `__releaseWords()`, marks `__wordsAsked` when
+// one starts and `__wordsRead` once a held read has answered. The development
+// build calls through the namespace object, so replacing the function there
+// reaches the screen's effect. The mark is set inside the promise the effect
+// awaits, before the effect resumes, so the render it triggers runs before
+// the next poll.
+async function holdWordsReads(page) {
+  await page.evaluate(() => {
+    const ns = use_cases.vocabulary;
+    const read = ns.list_active;
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    window.__releaseWords = release;
+    ns.list_active = (...args) => {
+      window.__wordsAsked = true;
+      return gate.then(() => read(...args)).then((rows) => {
+        window.__wordsRead = true;
+        return rows;
+      });
+    };
+  });
+}
+
+async function releaseWordsAndExpectHome(page) {
+  await page.evaluate(() => window.__releaseWords());
+  await page.waitForFunction(() => window.__wordsRead === true);
+
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(homeHeading(page)).toBeVisible();
+  await expect(page.getByPlaceholder('Поиск')).toHaveCount(0);
+}
+
+// #486. The screen is on display, empty, while its first read is held.
+test('Back before the words list is read leaves home on display', async ({ page }) => {
+  await openAppAfterAnotherPage(page);
+  await addWord(page);
+  await holdWordsReads(page);
+
+  await page.getByRole('button', { name: 'Список слов' }).click();
+  await expect(page).toHaveURL(/\/words$/);
+  await expect(close(page)).toHaveCount(1);
+  await expect(homeHeading(page)).toHaveCount(0);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/home$/);
+
+  await releaseWordsAndExpectHome(page);
+});
+
+test('closing the words screen during a search read leaves home on display', async ({ page }) => {
+  await page.goto('/home');
+  await addWord(page);
+  await openWords(page);
+  await holdWordsReads(page);
+
+  await page.getByPlaceholder('Поиск').fill('Ha');
+  // The search read starts once the debounce runs out.
+  await page.waitForFunction(() => window.__wordsAsked === true);
+  await close(page).click();
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(homeHeading(page)).toBeVisible();
+
+  await releaseWordsAndExpectHome(page);
+});
+
+test('the words screen comes back with nothing of the last visit before its read lands', async ({ page }) => {
+  await page.goto('/home');
+  await addWord(page);
+  await openWords(page);
+  await page.getByPlaceholder('Поиск').fill('zzz');
+  await expect(page.getByText('Ничего не найдено')).toBeVisible();
+  await close(page).click();
+  await expect(homeHeading(page)).toBeVisible();
+
+  await holdWordsReads(page);
+  await page.getByRole('button', { name: 'Список слов' }).click();
+  await page.waitForFunction(() => window.__wordsAsked === true);
+  await expect(close(page)).toHaveCount(1);
+  await expect(page.getByText('Ничего не найдено')).toHaveCount(0);
+  await expect(page.getByPlaceholder('Поиск')).toHaveCount(0);
+  await expect(page.getByRole('listitem')).toHaveCount(0);
+
+  await page.evaluate(() => window.__releaseWords());
+  await expect(page.getByRole('listitem').filter({ hasText: 'Haus' })).toBeVisible();
+  await expect(page.getByPlaceholder('Поиск')).toHaveValue('');
 });
 
 test('a screen opened directly has home beneath it, reload included', async ({ page }) => {

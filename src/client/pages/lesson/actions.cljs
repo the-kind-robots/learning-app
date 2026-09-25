@@ -3,13 +3,23 @@
    [nexus.registry :as nxr]))
 
 
+(nxr/register-action! :action/open-lesson
+  ;; Entering the route: nothing of the last lesson until this one is read.
+  (fn open-lesson [_]
+    [[:effect/save
+      {:lesson/answer-hints    nil
+       :lesson/empty?          false
+       :lesson/loading?        true
+       :lesson/open-hint-index nil
+       :lesson/state           nil}]]))
+
+
 (nxr/register-action! :action/show-lesson
   (fn show-lesson [_ {:keys [lesson-state error]}]
     [[:effect/save
-      {:page/current  :page/lesson
-       :page/load     nil
-       :lesson/empty? (boolean error)
-       :lesson/state  (when-not error lesson-state)}]]))
+      {:lesson/empty?   (boolean error)
+       :lesson/loading? false
+       :lesson/state    (when-not error lesson-state)}]]))
 
 
 (nxr/register-action! :action/update-lesson
