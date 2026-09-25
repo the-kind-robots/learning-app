@@ -3,7 +3,6 @@
    [goog.functions :as gfn]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
-   [pages.words.presenter :as presenter]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -16,8 +15,7 @@
    rather than the vocabulary."
   [dispatch capabilities {:keys [limit search]} token]
   (try
-    (let [limit (or limit presenter/page-size)
-          {:keys [matches total words]}
+    (let [{:keys [matches total words]}
           (await (vocabulary/list-active capabilities
                                          {:order :alphabetical :search search :limit limit}))]
       (dispatch [[:action/show-words

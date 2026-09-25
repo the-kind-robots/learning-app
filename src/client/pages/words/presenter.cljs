@@ -3,18 +3,6 @@
    [clojure.string :as str]))
 
 
-(def page-size
-  "Rows the list grows by. The first render asks for one page; reaching the
-   bottom asks for one more."
-  50)
-
-
-(defn next-limit
-  "The row count to ask for after the reader reached the bottom."
-  [limit]
-  (+ (or limit 0) page-size))
-
-
 (def ^:private first-run-state
   {:cta  "Добавить слово"
    :hint "Добавьте первое слово на главной странице"
@@ -56,21 +44,15 @@
       first-run-state)))
 
 
-(defn page-state
-  "State for the word list: the rows, the placeholder that replaces them, and
-   whether the page chrome — header, search box, lesson button — applies. An
-   empty vocabulary drops the chrome; an empty filter keeps it so the query
-   stays editable.
-
-   `limit` is the row count these rows were asked for, kept so a reload after
-   an edit lands on the same rows. `more?` compares the rows against
-   `matches`, the count the search left, so the view only has to know whether
-   to render the sentinel — `total` counts before the filter and cannot
-   answer this."
-  [{:keys [limit matches search total words]}]
-  {:words/empty-state (empty-state words total)
-   :words/items       (word-list-props words)
-   :words/limit       (or limit page-size)
-   :words/more?       (< (count words) (or matches 0))
-   :words/search      (or search "")
-   :words/vocabulary? (pos? total)})
+(defn page-props
+  "What the word list renders: the rows, the placeholder that replaces them,
+   and whether the page chrome — header, search box, lesson button — applies.
+   An empty vocabulary drops the chrome; an empty filter keeps it so the query
+   stays editable."
+  [{:words/keys [editing more? rows search total]}]
+  {:editing     editing
+   :empty-state (empty-state rows total)
+   :items       (word-list-props rows)
+   :more?       more?
+   :search      search
+   :vocabulary? (pos? total)})

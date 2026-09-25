@@ -74,7 +74,7 @@ Shared code the client also compiles: `lib/db/src/db.cljc` (the PouchDB/CouchDB 
 
 **System** — `main.cljs` declares components (`:db/pouch`, `:db/sqlite`, `:sync/identity`, `:port/*`, …) and `runtime/system.cljs` starts them in dependency order. Ports are the capabilities; use-cases and pages reach storage only through them.
 
-**Layering** — the engine (`db`, `db.pouch`, `db.sqlite`, `db-migrations`, `sync`, `tasks`) knows documents, databases and replication. Adapters own their document type and speak domain outward. Use-cases, pages and domain never see a storage name. `test/client/layering_test.cljs` checks this against the source tree.
+**Layering** — the engine (`db`, `db.pouch`, `db.sqlite`, `db-migrations`, `sync`, `tasks`) knows documents, databases and replication. Adapters own their document type and speak domain outward. Use-cases, pages and domain never see a storage name. A page's presenter maps state to what its view renders, and nothing else: the view consumes presenter output, while actions, effects and use cases never require a presenter — a function or constant they need lives with them, or in `domain/`. `test/client/layering_test.cljs` checks both against the source tree.
 
 **Dictionary worker** — SQLite WASM runs in a dedicated Web Worker (`resources/public/js/sqlite3-worker.js` + `sqlite3-dictionary.js`). The worker fetches `/dictionary/manifest` and the hashed `dict.*.sqlite` file into the OPFS pool. `ports/dictionary.cljs` exposes the app-facing capability; `adapters/dictionary.cljs` executes SQL through the worker proxy. Never query the dictionary from the main thread directly.
 

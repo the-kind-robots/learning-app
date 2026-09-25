@@ -5,7 +5,10 @@
    `sync`, `tasks`), knows documents, databases, indexes, views and
    replication. Layer 2, the repositories (`adapters.*`), own their document
    type, shape, indexes and views, and speak domain outward. Everything
-   above them — use-cases, pages, domain — never sees a storage name."
+   above them — use-cases, pages, domain — never sees a storage name.
+
+   Presenters sit beside the views: actions, effects and use cases never
+   require one."
   (:require
    [cljs.reader :as reader]
    [cljs.test :refer-macros [deftest is]]
@@ -133,9 +136,34 @@
     (is false (str file " contains " token "; storage names stop at the adapters"))))
 
 
+(defn- presenter?
+  [ns-name]
+  (str/ends-with? (str ns-name) ".presenter"))
+
+
+(defn- must-not-require-presenter?
+  "Who does not require a presenter: actions, effects and use cases. A
+   presenter maps state to what the view renders; a function or constant these
+   need lives with them. `application` is left out: it is the shell, and its
+   render sits in the same namespace as its actions and effects."
+  [ns-name]
+  (let [n (str ns-name)]
+    (or (str/starts-with? n "use-cases.")
+        (str/ends-with? n ".actions")
+        (str/ends-with? n ".effects"))))
+
+
+(deftest only-views-require-presenters
+  (doseq [{:keys [file ns requires]} (sources)
+          required requires
+          :when    (and (presenter? required) (must-not-require-presenter? ns))]
+    (is false (str file " requires " required "; a presenter is for the view only"))))
+
+
 (deftest the-barrier-test-sees-the-tree
   (let [names (set (map :ns (sources)))]
     (is (contains? names 'db.pouch))
     (is (contains? names 'adapters.words))
     (is (contains? names 'use-cases.vocabulary))
+    (is (contains? names 'pages.words.actions))
     (is (< 40 (count names)))))
