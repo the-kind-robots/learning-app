@@ -155,6 +155,37 @@ test('the ✕ shows for keyboard focus, deletes on Enter and hands focus to the 
   await expect(page.getByRole('status')).toHaveText('Набор «Kurs» удалён');
 });
 
+test('the same name deleted twice in a row is announced twice', async ({ page }) => {
+  await page.goto('/');
+  await seedCollections(page, course.concat([['solo', 'Solo', ['vocab:a']]]));
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
+  await expect(page.getByRole('button', { name: 'Solo 1', exact: true })).toBeVisible();
+
+  // A live region speaks on a change of text: every text it shows is kept.
+  await page.getByRole('status').evaluate((region) => {
+    window.statusTexts = [];
+    new MutationObserver(() => window.statusTexts.push(region.textContent))
+      .observe(region, { childList: true, characterData: true, subtree: true });
+  });
+  const message = 'Набор «Solo» удалён';
+  const deleteSolo = async (tileName) => {
+    await page.getByRole('button', { name: 'Удалить набор «Solo»' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: tileName, exact: true })).toHaveCount(0);
+  };
+
+  await deleteSolo('Solo 1');
+  await expect(page.getByRole('status')).toHaveText(message);
+  page.once('dialog', (dialog) => dialog.accept('Solo'));
+  await page.getByRole('button', { name: 'Новый набор' }).click();
+  await expect(page.getByRole('button', { name: 'Solo 0', exact: true })).toBeVisible();
+  await deleteSolo('Solo 0');
+
+  // Emptied first, then the same message again.
+  await expect.poll(() => page.evaluate(() => window.statusTexts)).toEqual([message, '', message]);
+  await expect(page.getByRole('status')).toHaveText(message);
+});
+
 test('a folder header with no document is a label; creating the parent through «+» makes it the tile', async ({ page }) => {
   await page.goto('/');
   await seedCollections(page, course);
