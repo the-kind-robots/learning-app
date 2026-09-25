@@ -88,21 +88,27 @@ self.addEventListener("activate", event => {
 });
 
 
-async function cacheFirst(request, cacheKey) {
-  const cached = await caches.match(request);
+// Only a same-origin success is worth keeping (#315): the bucket lives until
+// the next deploy, so one cached 404 or 500 would be served on every later
+// load. An opaque or error response goes to the page and nowhere else.
+async function keep(key, response) {
+  if (!(response.ok && response.type === "basic")) return;
+  // Clone now, before the first await: a body is read once, and the original
+  // goes to the page, which may start reading it while the cache opens.
+  const copy = response.clone();
+  const cache = await caches.open(SW_VERSION);
+  await cache.put(key, copy);
+}
+
+// Keyed by path: a query string neither misses the precached entry nor adds
+// one of its own. A hit carries the path it was stored under as its URL, not
+// the request's, so nothing served from here may read its own query (#299).
+async function cacheFirst(request, path) {
+  const cached = await caches.match(path);
   if (cached) return cached;
 
-  // Fallback to bare path lookup: handles cases where the request URL has query
-  // params or Vary headers that prevent an exact match against the precached entry.
-  if (cacheKey) {
-    const cachedByPath = await caches.match(cacheKey);
-    if (cachedByPath) return cachedByPath;
-  }
-
   const response = await fetch(request);
-  const cache = await caches.open(SW_VERSION);
-  // Clone before caching: Response body is a one-time-read stream; the original goes to the browser.
-  cache.put(request, response.clone());
+  keep(path, response);
   return response;
 }
 
@@ -125,12 +131,12 @@ async function navigationNetworkFirst(request) {
 async function networkFirstCached(request, cacheKey) {
   try {
     const response = await fetch(request);
-    const cache = await caches.open(SW_VERSION);
-    // Refresh the cache on every successful fetch so the offline copy stays warm.
-    cache.put(cacheKey || request, response.clone());
+    // Refresh the offline copy on every successful fetch — and only then: a
+    // failed answer must not replace the good copy.
+    keep(cacheKey, response);
     return response;
   } catch (error) {
-    const cached = await caches.match(cacheKey || request);
+    const cached = await caches.match(cacheKey);
     if (cached) return cached;
     throw error;
   }
@@ -147,7 +153,6 @@ self.addEventListener("fetch", event => {
   } else if (dictionaryManifestRequest(request, url)) {
     event.respondWith(networkFirstCached(request, DICTIONARY_MANIFEST_URL));
   } else if (request.method === "GET" && sameOrigin(url) && PRECACHE_SET.has(path)) {
-    // Pass path as cacheKey so cacheFirst can match even if request URL differs.
     event.respondWith(cacheFirst(request, path));
   }
 });

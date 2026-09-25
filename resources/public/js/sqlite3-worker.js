@@ -31,12 +31,17 @@
 // front. Only that tab may hold the database — a backgrounded one is frozen
 // with it, and a merely visible one is not necessarily the one being typed
 // into. How the page decides is the page's business; here it is one boolean.
+// A development build also asks, first, for phase timings (`report-phases`).
 
 importScripts("sqlite3-dictionary.js");
 
 dictionary.start((msg) => self.postMessage(msg));
 
 self.addEventListener("message", (e) => {
+  if (e.data.type === "report-phases") {
+    dictionary.reportPhases();
+    return;
+  }
   if (e.data.type === "foreground") {
     dictionary.pageIsForeground(e.data.foreground);
     return;
