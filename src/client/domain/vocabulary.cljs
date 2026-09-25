@@ -72,6 +72,28 @@
   [(str/replace (without-prefix id) article "") id])
 
 
+(defn search-text
+  "What the words filter matches a query against, normalised once: the value
+   and every translation, one per line. A normalised query holds no line
+   break, so it never matches across two of them."
+  [{:keys [value translation]}]
+  (str/join "\n" (map utils/normalize-german (cons value (map :value translation)))))
+
+
+(defn query
+  "What the words filter looks for, normalised as `search-text` is: once per
+   query, not once per word."
+  [text]
+  (utils/normalize-german text))
+
+
+(defn matches?
+  "Whether a word, by its `search-text`, holds the normalised `query` in its
+   value or in one of its translations."
+  [search-text query]
+  (str/includes? search-text query))
+
+
 (defn new-word
   [value translations]
   {:id          (vocab-id value)

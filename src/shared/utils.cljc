@@ -71,13 +71,6 @@
       (normalize-german)))
 
 
-(defn includes?
-  [word pattern]
-  (let [word    (normalize-german word)
-        pattern (normalize-german pattern)]
-    (str/includes? word pattern)))
-
-
 (defn parse-int
   ([s] (parse-int s nil))
   ([s default]

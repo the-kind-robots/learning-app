@@ -2,8 +2,10 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [adapters.active-collection :as active-collection]
    [cljs.test :refer-macros [deftest is testing]]
    [domain.collections :as collections]
+   [ports.collections :as port]
    [use-cases.collections :as sut]))
 
 
@@ -48,11 +50,14 @@
                                            (js/Promise.resolve nil))}}))
 
 
-(deftest the-active-scope-reads-the-list-once
-  (async-testing "the active collection's scope, or nil for main"
-    (is (= ["a" "b" "c" "d" "e"] (await (sut/active-word-ids (port "c:kurs")))))
-    (is (nil? (await (sut/active-word-ids (port nil)))))
-    (is (nil? (await (sut/active-word-ids (port "c:gone")))))))
+(deftest the-summary-lists-collections-oldest-first
+  (let [memory {:collections {"c:b" {:id "c:b" :created-at "2026-02" :name "B" :word-ids []}
+                              "c:a" {:id "c:a" :created-at "2026-01" :name "A" :word-ids []}}
+                :words       {"w" {:id "w"}}}]
+    (is (= {:items       [{:id "c:a" :created-at "2026-01" :name "A" :word-ids []}
+                          {:id "c:b" :created-at "2026-02" :name "B" :word-ids []}]
+            :total-words 1}
+           (sut/summary memory)))))
 
 
 (deftest rename-refuses-a-name-another-collection-carries
@@ -86,3 +91,17 @@
       (is (= {:ok :created :id "c:Neu"} (await (sut/create! (port nil) " Neu ")))))
     (testing "a blank name"
       (is (= {:error :invalid-name} (await (sut/create! (port nil) "   ")))))))
+
+
+(deftest the-active-collection-is-the-one-memory-holds
+  (let [store     (atom {:learner/memory {:collections {"c:kurs" {:id "c:kurs" :name "Kurs"}}}})
+        active-id (:collections/active-id (port/start! {:store store}))]
+    (testing "the remembered id names a collection memory holds"
+      (with-redefs [active-collection/active-collection-id (constantly "c:kurs")]
+        (is (= "c:kurs" (active-id)))))
+    (testing "a remembered id memory holds nothing under — deleted here or on another device — is none"
+      (with-redefs [active-collection/active-collection-id (constantly "c:gone")]
+        (is (nil? (active-id)))))
+    (testing "nothing remembered is none"
+      (with-redefs [active-collection/active-collection-id (constantly nil)]
+        (is (nil? (active-id)))))))

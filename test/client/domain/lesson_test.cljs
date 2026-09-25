@@ -497,13 +497,13 @@
    selection varied and pass on the very bug these tests are for."
   [rows pool-size count n]
   (into #{}
-        (map (fn [_] (set (map :id (sut/pick-vocab rows pool-size count)))))
+        (map (fn [_] (set (map :id (sut/pick-vocab rows :urgency pool-size count)))))
         (range n)))
 
 
 (deftest pick-vocab-draws-from-the-pool
   (testing "the asked-for count, all of it from the pool, nothing twice"
-    (let [picked (sut/pick-vocab pool 20 3)]
+    (let [picked (sut/pick-vocab pool :urgency 20 3)]
       (is (= 3 (count picked)))
       (is (every? (set pool) picked))
       (is (= 3 (count (distinct picked)))))))
@@ -511,11 +511,11 @@
 
 (deftest pick-vocab-takes-a-short-pool-whole
   (testing "a pool smaller than the lesson gives what it has"
-    (let [picked (sut/pick-vocab (rows [2 1]) 20 3)]
+    (let [picked (sut/pick-vocab (rows [2 1]) :urgency 20 3)]
       (is (= 2 (count picked)))
       (is (= #{"vocab:wort-a" "vocab:wort-b"} (set (map :id picked))))))
   (testing "an empty pool gives nothing"
-    (is (= [] (sut/pick-vocab [] 20 3)))))
+    (is (= [] (sut/pick-vocab [] :urgency 20 3)))))
 
 
 (deftest pick-vocab-does-not-answer-the-same-pool-the-same-way
@@ -541,3 +541,14 @@
   (testing "one strictly more due item is always in the pool of a tied field"
     (let [ranked (rows (cons ##Inf (repeat 9 1.0)))]
       (is (every? #(contains? % "vocab:wort-a") (draws ranked 3 3 50))))))
+
+
+(deftest pick-vocab-with-no-pool-picks-nothing
+  (is (= [] (sut/pick-vocab (rows [3 2 1]) :urgency 0 3)))
+  (is (= [] (sut/pick-vocab (rows [3 2 1]) :urgency nil 3))))
+
+
+(deftest a-row-without-a-number-for-urgency-cannot-hold-the-pool
+  (testing "NaN ranks last, so it never blocks a real urgency out of a full pool"
+    (let [nan-first (cons {:id "vocab:nan" :urgency ##NaN} (rows [1 2 3 4]))]
+      (is (every? #(not (contains? % "vocab:nan")) (draws nan-first 2 2 30))))))

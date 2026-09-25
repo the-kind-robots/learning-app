@@ -27,8 +27,15 @@
 
 
 (deftest shell-props-puts-the-grid-on-home-and-the-close-mark-elsewhere
-  (is (= :collections (:corner (sut/shell-props {:page/current :page/home}))))
+  (is (= :collections (:corner (sut/shell-props {:learner/readiness :basic :page/current :page/home}))))
   (doseq [page [:page/words :page/lesson :page/collections]]
-    (is (= :close (:corner (sut/shell-props {:page/current page}))) (str page)))
+    (is (= :close (:corner (sut/shell-props {:learner/readiness :basic :page/current page}))) (str page)))
   (testing "no page on display yet, no corner control"
-    (is (nil? (:corner (sut/shell-props {:page/current :page/loading}))))))
+    (is (nil? (:corner (sut/shell-props {:learner/readiness :basic :page/current :page/loading}))))))
+
+
+(deftest the-splash-stands-until-the-words-and-collections-are-read
+  (let [props (sut/shell-props {:page/current :page/home})]
+    (is (nil? (:page props)) "no screen yet: the splash")
+    (is (nil? (:corner props))))
+  (is (= :page/home (:page (sut/shell-props {:learner/readiness :basic :page/current :page/home})))))

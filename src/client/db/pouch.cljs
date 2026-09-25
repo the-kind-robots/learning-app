@@ -45,12 +45,89 @@
     #(.cancel ^js feed)))
 
 
+(defn- design-doc?
+  [^js doc]
+  (str/starts-with? (.-_id doc) "_design/"))
+
+
+(def ^:private page-size
+  "How many documents one transaction reads. Each page is its own read, so a
+   write that waits for the database can run between two of them."
+  1000)
+
+
+(defn ^:async next-task
+  "Resolves in a task of its own, after whatever is queued now, such as a
+   paint or a keystroke."
+  []
+  (await (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
+
+
+(defn- ^:async pages
+  "Reads every document of `db` with an id from `:start` to `:end`, a page
+   at a time, with a task between pages."
+  [^js db {:keys [end start]}]
+  (loop [docs  []
+         after nil]
+    (let [options  (cond-> #js {:include_docs true :limit page-size}
+                     start (doto (aset "startkey" start))
+                     end   (doto (aset "endkey" end))
+                     after (doto (aset "startkey" after) (aset "skip" 1)))
+          ^js page (await (.allDocs db options))
+          rows     (.-rows page)
+          docs     (into docs (map #(db/couch->clj (.-doc ^js %))) rows)]
+      (if (< (.-length rows) page-size)
+        docs
+        (do (await (next-task))
+            (recur docs (.-id ^js (aget rows (dec (.-length rows))))))))))
+
+
+(defn read-docs
+  "Reads the documents of `db-key` with an id from `:start` to `:end`;
+   either bound may be left out. It reads a page at a time, with a task
+   between pages."
+  [dbs db-key range]
+  (pages (db-key dbs) range))
+
+
+(defn ^:async update-seq
+  "Where the change feed of `db-key` stands now. When this is read before
+   the documents, a feed followed from here misses nothing written in
+   between."
+  [dbs db-key]
+  (let [^js info (await (.info ^js (db-key dbs)))]
+    (.-update_seq info)))
+
+
+(defn follow-changes
+  "Calls `f` with the documents `db-key`'s change feed brings after `since`,
+   one call per batch of changes that arrive together. A deleted document
+   arrives as `{:_id .. :_rev .. :_deleted true}`. Returns a function that
+   stops the feed."
+  [dbs db-key since f]
+  (let [pending (atom [])
+        flush!  #(let [[docs _] (reset-vals! pending [])] (f docs))
+        feed    (.changes ^js (db-key dbs) #js {:include_docs true :live true :since since})]
+    (.on feed
+         "change"
+         (fn [^js change]
+           ;; A batch is what arrives before the next task: PouchDB emits the
+           ;; changes of one write, such as a replicated batch or a bulk
+           ;; write, one after another. The first change of a batch schedules
+           ;; its flush.
+           (swap! pending conj (db/couch->clj (.-doc change)))
+           (when (= 1 (count @pending))
+             (js/setTimeout flush! 0))))
+    (.on feed "error" (fn [err] (log/error :db/follow-failed {:db db-key :error (str err)})))
+    #(.cancel feed)))
+
+
 (defn user-doc?
   "Replication filter: design documents stay on the device. CouchDB builds
    an index for every design document it receives, and the server never
    queries user-db through one."
   [doc]
-  (not (str/starts-with? (.-_id ^js doc) "_design/")))
+  (not (design-doc? doc)))
 
 
 (defn- docs-written
@@ -135,10 +212,35 @@
   ((:db schema) dbs))
 
 
+(defn listen-to-writes!
+  "Registers `f`. After every write through this namespace, once PouchDB
+   has accepted it and before the writer's promise resolves, `f` is called
+   with the documents written, each at the revision PouchDB gave it. A
+   refused write calls nothing. Each `dbs` has one listener; nil stops
+   listening."
+  [dbs f]
+  (some-> (:dbs/write-listener dbs) (reset! f)))
+
+
+(defn- report-written!
+  "Hands `docs` to the listener and passes `result` on."
+  [dbs db-key docs result]
+  (when-let [f (some-> (:dbs/write-listener dbs) deref)]
+    (when (seq docs)
+      (try
+        (f docs)
+        (catch :default err
+          (log/error :db/written-listener-failed {:db db-key :error (str err)})))))
+  result)
+
+
 (defn insert
   "Writes doc as one of `schema`'s type into the database that holds it."
   [dbs schema doc]
-  (db/insert (database dbs schema) (assoc doc :type (:type schema))))
+  (let [doc (assoc doc :type (:type schema))]
+    (.then (db/insert (database dbs schema) doc)
+           (fn [{:keys [id rev] :as result}]
+             (report-written! dbs (:db schema) [(assoc doc :_id id :_rev rev)] result)))))
 
 
 (defn bulk-docs
@@ -146,7 +248,15 @@
    :type: a bulk write moves documents that were read, tombstoned or updated,
    and those may belong to several types of the same database."
   [dbs schema docs]
-  (db/bulk-docs (database dbs schema) docs))
+  (.then (db/bulk-docs (database dbs schema) docs)
+         (fn [results]
+           (report-written! dbs
+                     (:db schema)
+                     (into []
+                           (keep (fn [[doc {:keys [ok id rev]}]]
+                                   (when ok (assoc doc :_id id :_rev rev))))
+                           (map vector docs results))
+                     results))))
 
 
 (defn get
@@ -157,7 +267,9 @@
 
 (defn remove
   [dbs schema doc]
-  (db/remove (database dbs schema) doc))
+  (.then (db/remove (database dbs schema) doc)
+         (fn [{:keys [id rev] :as result}]
+           (report-written! dbs (:db schema) [{:_deleted true :_id id :_rev rev}] result))))
 
 
 (defn- typed
@@ -275,4 +387,4 @@
                          [(ensure-indexes! db (indexes-of own))
                           (ensure-views! db (mapcat :views own))]))
               dbs))))
-    dbs))
+    (assoc dbs :dbs/write-listener (atom nil))))

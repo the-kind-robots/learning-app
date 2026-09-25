@@ -5,10 +5,7 @@
 
 (defn start!
   [{:keys [clock db]}]
-  {:reviews/by-word       (fn by-word
-                            [word-ids]
-                            (reviews/reviews-by-word db word-ids))
-   :reviews/save!         (fn save!
+  {:reviews/save!         (fn save!
                             [word-id retained translation]
                             (reviews/save-review! db clock word-id retained translation))
    :reviews/tombstones-of (fn tombstones-of

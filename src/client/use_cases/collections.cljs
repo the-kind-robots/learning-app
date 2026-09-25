@@ -7,15 +7,21 @@
 (def max-name-length 80)
 
 
-(defn ^:async summary
-  "What the themes screen shows: the active-id pointer, every collection
-   as the repository gives it — `{:id :name :word-ids :created-at}` — and
-   the words count for «Всё подряд». Grouping and counting are the
-   presenter's; no word or review document is read here."
-  [{:keys [collections words]}]
-  {:active-id   ((:collections/active-id collections))
-   :items       (await ((:collections/list collections)))
-   :total-words (await ((:words/count words)))})
+(defn listed
+  "Every collection the learner's data in memory holds, oldest first."
+  [memory]
+  (->> (vals (:collections memory))
+       (sort-by :created-at)
+       vec))
+
+
+(defn summary
+  "What the themes screen shows, out of memory: every collection —
+   `{:id :name :word-ids :created-at}` — and the words count for «Всё
+   подряд». Grouping and counting are the presenter's."
+  [memory]
+  {:items       (listed memory)
+   :total-words (count (:words memory))})
 
 
 (defn scope-word-ids
@@ -31,14 +37,6 @@
          (mapcat :word-ids)
          distinct
          vec)))
-
-
-(defn ^:async active-word-ids
-  "`scope-word-ids` of the active collection, read from the repository;
-   nil when no collection is active or the active one is gone."
-  [{:keys [collections]}]
-  (when-let [coll-id ((:collections/active-id collections))]
-    (scope-word-ids (await ((:collections/list collections))) coll-id)))
 
 
 (defn ^:async create!
@@ -62,14 +60,11 @@
 
 (defn ^:async delete!
   "Deletes a collection, cascading to its examples in device-db so they
-   don't linger as orphans. If the deleted collection was active, the
-   active pointer is cleared (the implicit main card becomes active)."
+   don't linger as orphans. Deleted while active, it is simply gone from
+   memory, and «Всё подряд» is active."
   [{:keys [collections examples]} coll-id]
-  (let [active-id ((:collections/active-id collections))]
-    (await ((:examples/purge-by-collection! examples) coll-id))
-    (await ((:collections/delete! collections) coll-id))
-    (when (= active-id coll-id)
-      ((:collections/set-active! collections) nil))))
+  (await ((:examples/purge-by-collection! examples) coll-id))
+  (await ((:collections/delete! collections) coll-id)))
 
 
 (defn switch-active!

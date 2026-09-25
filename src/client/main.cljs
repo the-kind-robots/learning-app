@@ -2,7 +2,8 @@
   (:require
    [adapters.collections :as collections-adapter]
    [adapters.examples :as examples-adapter]
-   [adapters.lessons :as lessons-adapter]
+   [adapters.memory :as memory]
+   [adapters.memory-loader :as memory-loader]
    [adapters.reviews :as reviews-adapter]
    [adapters.words :as words-adapter]
    [application]
@@ -28,7 +29,6 @@
    [ports.collections :as collections]
    [ports.dictionary :as dictionary]
    [ports.examples :as examples]
-   [ports.lessons :as lessons]
    [ports.navigation :as navigation]
    [ports.reviews :as reviews]
    [ports.task-queue :as task-queue]
@@ -49,7 +49,6 @@
    The engine learns its indexes, views and routing from this list alone."
   [words-adapter/schema
    reviews-adapter/schema
-   lessons-adapter/schema
    collections-adapter/schema
    examples-adapter/schema
    tasks/schema])
@@ -57,11 +56,18 @@
 
 (defn ^:async init
   []
-  (when ^boolean goog/DEBUG
+  ;; The action log re-renders its whole history in dataspex on every
+  ;; dispatch: in a dev build it was 80-90 % of a keystroke's latency (a
+  ;; keystroke measured 16-32 ms without it, 56-240 ms with it). A browser
+  ;; driven by automation has no one to read it, and the browser specs measure
+  ;; the app's latency, not the inspector's.
+  (when (and ^boolean goog/DEBUG (not (.-webdriver js/navigator)))
     (action-log/inspect))
 
   (system/start!
-   {:app/store             {:start (fn [_] (atom {:page/current :page/loading}))}
+   {:app/store             {:start (fn [_]
+                                     (atom {:learner/memory memory/empty-memory
+                                            :page/current   :page/loading}))}
 
     ;; Ask the browser to exempt our storage (device-db, the durable home of the
     ;; account token) from automatic eviction. The auth cookie is rebuilt from
@@ -120,10 +126,6 @@
                                        :clock :port/clock}
                             :start    reviews/start!}
 
-    :port/lessons          {:requires {:db    :db/pouch
-                                       :clock :port/clock}
-                            :start    lessons/start!}
-
     :port/backup           {:requires {:db :db/pouch}
                             :start    backup/start!}
 
@@ -134,7 +136,8 @@
     :port/navigation       {:start navigation/start!}
 
     :port/collections      {:requires {:clock :port/clock
-                                       :db    :db/pouch}
+                                       :db    :db/pouch
+                                       :store :app/store}
                             :start    collections/start!}
 
     :app/capabilities      {:requires {:capabilities/sync :sync/identity
@@ -143,7 +146,6 @@
                                        :collections       :port/collections
                                        :dictionary        :port/dictionary
                                        :examples          :port/examples
-                                       :lessons           :port/lessons
                                        :navigation        :port/navigation
                                        :reviews           :port/reviews
                                        :words             :port/words}
@@ -178,6 +180,7 @@
                                                          (nxr/dispatch system dispatch-data actions))]
                                           (nxr/register-system->state! #(-> % :store deref))
                                           (r/set-dispatch! dispatch)
+                                          (application/guard-double-clicks! store)
                                           (application/install-render!
                                            store
                                            (if ^boolean goog/DEBUG
@@ -187,6 +190,15 @@
                                           (when ^boolean goog/DEBUG
                                             (instrumentation/install!))
                                           {:dispatch #(dispatch {} %)}))}
+
+    ;; The learner's data, held in the store as a projection of the local
+    ;; databases (ADR-0016). Starting returns at once; the load runs on, and
+    ;; the screen on display fills in when it completes.
+    :learner/memory        {:requires {:db     :db/pouch
+                                       :render :app/render}
+                            :start    (fn [{:keys [db render]}]
+                                        (memory-loader/start! db (:dispatch render))
+                                        nil)}
 
     :pwa/init              {:requires {:render :app/render}
                             :start    (fn [{:keys [render]}]

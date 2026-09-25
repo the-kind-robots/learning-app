@@ -1,8 +1,8 @@
 const { test, expect } = require('@playwright/test');
 
 // Watches the document from before the app boots and notes the first moment
-// the themes screen's loading state and its first tile are in the DOM. The
-// loading state may live for milliseconds on a small vocabulary, so a polling
+// the splash, a loading state and the first tile are in the DOM. The
+// splash may live for milliseconds on a small vocabulary, so a polling
 // assertion could miss it; a MutationObserver cannot. Attributes are watched
 // too: the renderer morphs nodes in place, so a block can appear as a class
 // change on an existing element without any node being inserted. The observer
@@ -13,6 +13,9 @@ const watchSwitcher = `
   new MutationObserver(() => {
     if (!window.__seen.loading && document.querySelector('.switcher__loading')) {
       window.__seen.loading = performance.now();
+    }
+    if (!window.__seen.splash && document.querySelector('.app-loading')) {
+      window.__seen.splash = performance.now();
     }
     if (!window.__seen.tile && document.querySelector('.tile')) {
       window.__seen.tile = performance.now();
@@ -29,11 +32,8 @@ async function addWord(page, value, translation) {
   await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
 }
 
-// Enough words and reviews that reading them takes longer than a frame: on a
-// handful the summary resolves before the next render and the loading state
-// is never painted, which is the behaviour the requirement is about too —
-// the loading state is for the seconds a real vocabulary takes. Seeded at
-// the engine level (see README, "Seeding from a spec").
+// Enough words and reviews that loading them into memory takes longer than a
+// frame. Seeded at the engine level (see README, "Seeding from a spec").
 async function seedVocabulary(page, words) {
   await page.evaluate(async (n) => {
     const now = new Date().toISOString();
@@ -48,22 +48,23 @@ async function seedVocabulary(page, words) {
   }, words);
 }
 
-test('opening the themes screen shows a loading state before its tiles', async ({ page }) => {
+// The themes screen has no loading state of its own: the app opens on a
+// splash until the words and collections are read (#494), and the tiles are
+// there when the screen is.
+test('the themes screen opened at start shows the splash, then its tiles, never a loading state', async ({ page }) => {
   await page.addInitScript(watchSwitcher);
   await page.goto('/');
   await addWord(page, 'der Hund', 'пёс');
   await seedVocabulary(page, 200);
 
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
+  await page.goto('/collections');
 
-  // The first read after a seed also builds the words view over every
-  // document for the count; the loading state is on screen for all of it.
   // One tile: «Всё подряд» with the 201 words.
   await expect(page.getByRole('button', { name: 'Всё подряд 201', exact: true })).toBeVisible({ timeout: 30000 });
-  await expect(page.locator('.switcher__loading')).toHaveCount(0);
 
   const seen = await page.evaluate(() => window.__seen);
-  expect(seen.loading, 'the loading state entered the DOM').toBeDefined();
+  expect(seen.splash, 'the splash entered the DOM').toBeDefined();
   expect(seen.tile, 'a tile entered the DOM').toBeDefined();
-  expect(seen.loading).toBeLessThan(seen.tile);
+  expect(seen.splash).toBeLessThan(seen.tile);
+  expect(seen.loading, 'no loading state of its own').toBeUndefined();
 });

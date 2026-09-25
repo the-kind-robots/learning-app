@@ -27,13 +27,41 @@
   (= (rfe/href home) (.. js/window -location -pathname)))
 
 
+;; Moves asked for while a step back is still on its way to `popstate`. The
+;; address bar still shows the screen being left until then, so a move judged
+;; now would be judged from the wrong entry — a push over the screen, which
+;; the step back then takes away.
+(defonce ^:private stepping-back
+  (atom nil))
+
+
+(declare navigate!)
+
+
+(defn- stepped-back!
+  []
+  (let [[queued _] (reset-vals! stepping-back nil)]
+    (doseq [[page show-home] queued]
+      (navigate! page show-home))))
+
+
 (defn navigate!
-  [page]
-  (case (move {:at-home? (at-home?) :to page})
-    nil      nil
-    :push    (rfe/push-state page)
-    :replace (rfe/replace-state page)
-    :back    (.back js/window.history)))
+  "Moves to `page`. A push or a replace reaches the router in this task; a
+   step back reaches it only with `popstate`, a task later, so `show-home` —
+   which puts home on display — is called first, and home is on screen in the
+   task of the tap all the same. A move asked for before that `popstate` waits
+   for it."
+  [page show-home]
+  (if @stepping-back
+    (swap! stepping-back conj [page show-home])
+    (case (move {:at-home? (at-home?) :to page})
+      nil      nil
+      :push    (rfe/push-state page)
+      :replace (rfe/replace-state page)
+      :back    (do (show-home)
+                   (reset! stepping-back [])
+                   (js/window.addEventListener "popstate" stepped-back! #js {:once true})
+                   (.back js/window.history)))))
 
 
 (defn put-home-beneath!

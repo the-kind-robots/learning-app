@@ -144,12 +144,13 @@ test('the next page is asked for before the end of the rows is on screen', async
   await page.screenshot({ path: 'test-results/words-paging/lookahead.png', fullPage: false });
 });
 
-// GH-439. Reaching the end during the 400 ms the search waits used to ask for
-// the next page of the query being replaced. That page was answered after the
-// matching rows and put the whole vocabulary back while the box kept the
-// query — and the scroll to the top, spent on the keystroke against rows that
-// had not changed yet, had already been undone by the scroll back down.
-test('reaching the end while a query is still being read does not undo it', async ({ page }) => {
+// GH-439, then #494. Reaching the end during the 400 ms the search used to
+// wait asked for the next page of the query being replaced, which landed after
+// the matching rows and put the whole vocabulary back while the box kept the
+// query. The filter now reads memory on the keystroke: the matching rows are
+// on screen from their first row before the reader can scroll again, and no
+// page of the old query is left to arrive.
+test('reaching the end right after a query does not undo it', async ({ page }) => {
   await page.goto('/');
   await seedWords(page, SEEDED);
   await openWords(page);
@@ -160,20 +161,21 @@ test('reaching the end while a query is still being read does not undo it', asyn
   // 'wort01' matches wort010..wort019 — ten rows, well under a page, so an
   // unfiltered page arriving afterwards is unmistakable.
   await page.getByPlaceholder('Поиск').fill('wort01');
+  await expect(rows(page)).toHaveCount(10);
+  expect(await listScrollTop(page)).toBe(0);
   await scrollToBottom(page);
 
-  await expect(rows(page)).toHaveCount(10);
   await expect(page.getByPlaceholder('Поиск')).toHaveValue('wort01');
   await expect(sentinel(page)).toHaveCount(0);
-  expect(await listScrollTop(page)).toBe(0);
 
-  // A read asked for before the query can only arrive after it. Auto-waiting
-  // says "wait until true" and there is nothing here to wait for, so the only
-  // way to establish that no such page lands is to let time pass first.
+  // Nothing is left to arrive. Auto-waiting says "wait until true" and there
+  // is nothing here to wait for, so the only way to establish that no page
+  // lands is to let time pass first.
   await page.waitForTimeout(1500);
   await expect(rows(page)).toHaveCount(10);
   await page.screenshot({ path: 'test-results/words-paging/query-survives.png', fullPage: false });
 });
+
 
 // GH-439. Rows used to clear `:words/editing` on their way in, which was
 // invisible while only the reader's own actions brought rows and became a

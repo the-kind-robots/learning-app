@@ -124,17 +124,14 @@
 
 (defn page
   [state]
-  (let [{:keys [loading? tiles]} (presenter/page-props state)]
+  (let [{:keys [tiles]} (presenter/page-props state)]
     [:div.switcher
      {:on {:click [[:effect/exit-editing-on-background]]}}
      [:h1.switcher__title.visually-hidden "Наборы"]
-     (if loading?
-       [:div.switcher__loading {:role "status" :aria-live "polite"}
-        [:p.switcher__loading-text "Загружаем…"]]
-       [:div.masonry
-        {:on {:click [[:effect/exit-editing-on-background]]}}
-        (for [tile tiles]
-          (if (:folder? tile)
-            (folder-tile tile)
-            (plain-tile tile)))])
+     [:div.masonry
+      {:on {:click [[:effect/exit-editing-on-background]]}}
+      (for [tile tiles]
+        (if (:folder? tile)
+          (folder-tile tile)
+          (plain-tile tile)))]
      (add-button)]))

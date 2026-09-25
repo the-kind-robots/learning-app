@@ -170,8 +170,17 @@
 
 (defn page
   [state]
-  (if (:lesson/empty? state)
+  (cond
+    (:lesson/empty? state)
     (empty-state)
+
+    ;; Opened before the learner's data is in memory: the lesson is drawn
+    ;; once it is, and until then there is no trial to show.
+    (nil? (:lesson/state state))
+    [:div.lesson
+     [:h1.lesson__title.visually-hidden "Урок"]]
+
+    :else
     (let [lesson-state (:lesson/state state)
           answer-hint  (presenter/answer-hint-props state)]
       [:div.lesson
