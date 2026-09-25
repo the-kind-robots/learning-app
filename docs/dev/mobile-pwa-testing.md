@@ -174,7 +174,6 @@ Each entry is `{t, kind, data}` with `t` in ms since page start
 | `touchcancel` | `{target}` | the browser cancelled a touch anywhere on the page |
 | `pointercancel` (extra fields) | `{movedPx, scrollDelta}` | how far the finger went and how much the page scrolled since the pointerdown — the tap recovery's inputs |
 | `tap-recovered` | `{movedPx, scrollDelta}` | a cancelled tap that did not move was taken as a tap and its action dispatched |
-| `pull-skipped` | `{sinceMs}` | a navigation asked for a pull within 30 s of the last completed pass with nothing written locally; no pass ran |
 | `render` | `{ms}` | one Replicant render and its duration |
 | `longtask` | `{start, duration}` | the main thread was blocked for ≥ 50 ms |
 | `error` / `unhandledrejection` | `{message, stack, …}` | uncaught script error / rejected promise |

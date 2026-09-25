@@ -152,6 +152,38 @@
             (js/Reflect.deleteProperty js/globalThis "location"))))))))
 
 
+(deftest the-change-feed-names-a-pulled-revision-as-the-pass-does
+  (async-testing "GH-319: what the pull wrote is recognisable on the feed; a local write is not"
+    (db-fixtures/with-test-db
+      local-name
+      (^:async fn
+       [local]
+       (.mkdirSync (js/require "fs") "target/pouch/db" #js {:recursive true})
+       (let [account-db (db/use account-db-name)
+             seen       (atom [])
+             unwatch    (sut/on-change {:user/db local}
+                                       :user/db
+                                       #(swap! seen conj (sut/change-revision %)))
+             settle     #(js/Promise. (fn [resolve] (js/setTimeout resolve 50)))]
+         (await (db/insert account-db {:_id "vocab:katze" :type "vocab" :value "Katze"}))
+         (await (db/insert account-db {:_id "review-1" :type "review" :word-id "vocab:katze"}))
+         (set! (.-location js/globalThis) #js {:origin "target/pouch"})
+         (try
+           (let [{:keys [pulled-revs]} (await (sut/sync-once! {:user/db local} :user/db account-id))]
+             (await (settle))
+             (is (= 2 (count pulled-revs)))
+             (is (= pulled-revs (set @seen))
+                 "every feed event of the pull is a revision the pass reports")
+             (reset! seen [])
+             (await (db/insert local {:_id "vocab:hund" :type "vocab" :value "Hund"}))
+             (await (settle))
+             (is (= 1 (count @seen)))
+             (is (not-any? pulled-revs @seen) "a local write is none of them"))
+           (finally
+            (unwatch)
+            (js/Reflect.deleteProperty js/globalThis "location"))))))))
+
+
 (def ^:private nouns-and-a-verb
   "The issue's own six words. `aufstehen` before `das Auto`: `auf` sorts
    before `aut`, whatever the issue's illustration says."
