@@ -69,11 +69,10 @@ The system SHALL use Nexus as the mechanism for mutating app state; UI events em
 - **AND** the effect handler writes its result into the app-state store when state changes are needed
 
 #### Scenario: Navigation route loads page data
-- **WHEN** the browser route changes to `/home`, `/words`, or `/lesson`
-- **THEN** the `reitit.frontend` controller dispatches the page loader effect through runtime dispatch
-- **AND** the loader reads needed capabilities from context instead of constructing global DB/worker handles
-- **AND** the loader writes the page slice into state
-- **AND** Replicant renders the page view
+- **WHEN** the browser route changes to `/home`, `/words`, `/lesson` or `/collections`
+- **THEN** the `reitit.frontend` controller dispatches the page's entry through runtime dispatch
+- **AND** the entry computes the page slice from the learner's data in app state, synchronously, without a storage read
+- **AND** Replicant renders the page view in the same task
 
 ### Requirement: App state uses namespaced page slices
 The system SHALL maintain app state as namespaced flat page slices keyed by `:app/page`, page-specific keys, and modal keys.

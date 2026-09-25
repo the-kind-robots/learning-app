@@ -3,7 +3,9 @@
 ## Purpose
 What order the word list is in, how many rows it puts on screen, what a page costs to
 read, how the next page is asked for, and what resets or preserves the loaded count.
+
 ## Requirements
+
 ### Requirement: The word list is ordered alphabetically
 
 The word list SHALL show words in alphabetical order, by the normalised form the word is
@@ -43,39 +45,19 @@ form.
 - **THEN** it is the same entry as before, since what a word is filed under does not
   change what it is stored under
 
-### Requirement: The first page does not cost the whole vocabulary
-
-The first page of the word list SHALL be read as a page: the rows it shows and their
-retention levels, not every word in scope and not every review. The time to the first row
-SHALL therefore not grow with the number of words the vocabulary holds.
-
-#### Scenario: A page of a large vocabulary
-
-- **WHEN** the words screen is opened on a vocabulary of thousands of words
-- **THEN** one page of words is read from storage
-- **AND** reviews are read only for the words on that page
-
-#### Scenario: Counting the vocabulary
-
-- **WHEN** the screen needs to know whether the vocabulary is empty
-- **THEN** it reads the count without reading the words
-
-#### Scenario: A search reads what it has to
-
-- **WHEN** a search query is active
-- **THEN** every word in scope is examined, since a substring can sit anywhere in a value
-  or a translation
-- **AND** retention levels are still read only for the rows the page shows
-
 ### Requirement: The word list renders one page of rows
 
 The word list SHALL render at most one page of rows — 50 — however many words the active
-scope holds, and SHALL NOT put the rest of the vocabulary in the document.
+scope holds, and SHALL NOT put the rest of the vocabulary in the document. Opening the
+screen or changing the query SHALL put its first 20 rows in the document in the task of
+the tap or the keystroke — what renders within one frame — and the rest of the page by
+the frame after.
 
 #### Scenario: A vocabulary larger than one page
 
 - **WHEN** the words screen is opened with more than 50 words in the active scope
-- **THEN** 50 word rows are rendered
+- **THEN** 20 word rows are in the document when the first animation frame after the tap runs
+- **AND** 50 word rows are rendered once that frame is painted
 - **AND** the remaining words are absent from the document
 
 #### Scenario: A vocabulary smaller than one page
@@ -133,8 +115,8 @@ and SHALL NOT render it once every row that matches the current query is on scre
 
 Changing the search query SHALL return the list to a single page of matching rows and to
 the top of that page, whatever was loaded and however far down the reader had scrolled.
-The return to the top SHALL happen when the matching rows replace the rows on screen, not
-when the query is typed — until they arrive the reader is still reading the old rows.
+The matching rows SHALL replace the rows on screen on the keystroke that changed the
+query, and the list SHALL return to its top at the same moment.
 
 #### Scenario: Typing after loading several pages
 
@@ -145,15 +127,16 @@ when the query is typed — until they arrive the reader is still reading the ol
 #### Scenario: Typing while scrolled to the bottom
 
 - **WHEN** the reader is at the bottom of the loaded rows and changes the query
-- **THEN** the list is scrolled back to its first row once the matching rows are on screen
+- **THEN** the list shows the matching rows from its first row
 - **AND** the next page is not appended until the reader reaches the bottom again
 
 #### Scenario: Scrolling on while the query is still being read
 
-- **WHEN** the reader changes the query and scrolls back down before the matching rows
-  have arrived
-- **THEN** the list is at its first row once those rows replace the old ones
-- **AND** the reader's position at that moment does not append a second page
+- **WHEN** the reader changes the query and scrolls back down right after
+- **THEN** the matching rows were already on screen from their first row when the
+  scrolling began
+- **AND** the reader's position does not append a second page until they reach the
+  bottom of the matching rows
 
 #### Scenario: Clearing the query
 
@@ -162,9 +145,10 @@ when the query is typed — until they arrive the reader is still reading the ol
 
 ### Requirement: A reload keeps the loaded rows
 
-Reloading the list SHALL keep the number of rows the reader had loaded and the query they
-were read under, so the reader is not returned to the first page — whether the reload
-follows their own edit or arrives on its own after synchronisation brought documents.
+The reader's own edit or removal on the words screen SHALL keep the number of rows the
+reader had loaded and the query they were read under, so the reader is not returned to
+the first page. A change arriving on its own — from another tab, or after
+synchronisation brought documents — SHALL NOT change the list on display.
 
 #### Scenario: Editing a word from a later page
 
@@ -180,9 +164,8 @@ follows their own edit or arrives on its own after synchronisation brought docum
 
 - **WHEN** a synchronisation pass brings documents while the reader has several pages
   loaded
-- **THEN** the reload asks for the rows that were loaded, under the query they were read
-  under
-- **AND** the list is not returned to its first page
+- **THEN** the list on display does not change
+- **AND** the reader is not returned to its first page
 
 ### Requirement: The presenter decides whether another page exists
 
@@ -207,43 +190,17 @@ pre-filter `:total` cannot answer whether another page exists.
 - **THEN** it returns the rows of that page, the pre-filter total, and the number of rows
   the filter matched
 
-### Requirement: The newest read of the list is the one that writes it
-
-The list SHALL take its rows, its query and its loaded count from the read requested most
-recently, and SHALL discard a read that was requested earlier and answered later. Several
-reads can be in flight at once — the next page, a search, the reload that follows an edit
-or a synchronisation pull — and the order they are answered in is not the order they were
-asked in.
-
-#### Scenario: A page answered after a search
-
-- **WHEN** a page of the list is asked for and the reader types a query before it arrives,
-  and that page is answered after the matching rows
-- **THEN** the list holds the matching rows
-- **AND** the query the list holds is the one the reader typed
-
-#### Scenario: The search box and the rows agree
-
-- **WHEN** a read that was overtaken is discarded
-- **THEN** the query in the search box is still the query the rows on screen were read
-  under
-
-#### Scenario: A reload overtaking a page
-
-- **WHEN** a reload of the list is asked for while a page request is still in flight
-- **THEN** the answer to the earlier request does not replace the rows the later one
-  brought
-
 ### Requirement: A page arriving in the background leaves the open word open
 
-Rows arriving for the list SHALL NOT close the open word. The word edit dialog SHALL
+Rows changing for the list — a page appended, a change to the learner's data arriving
+while the screen is open — SHALL NOT close the open word. The word edit dialog SHALL
 close when the reader cancels it, when a change to the word is saved, and when the word
 is removed.
 
 #### Scenario: A page arrives while a word is open
 
-- **WHEN** the reader opens a word while a page of rows is being read
-- **THEN** the dialog is still open when those rows arrive
+- **WHEN** the reader has a word open and the list's rows change
+- **THEN** the dialog is still open
 - **AND** what the reader had typed into it is still there
 
 #### Scenario: Saving a change
@@ -270,4 +227,3 @@ is removed.
 
 - **WHEN** the reader leaves the words screen with a word open and comes back to it
 - **THEN** no word is open
-
