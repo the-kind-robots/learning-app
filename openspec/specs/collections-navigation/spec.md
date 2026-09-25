@@ -62,16 +62,16 @@ The system SHALL let the user rename the active collection by editing the home s
 - **AND** no tile carries the old name
 
 ### Requirement: Opening the themes screen switches to it at once
-The system SHALL switch to the themes screen the moment it is opened and SHALL show a loading state there until its collections are available. A reload of the screen that is already open (after a sync pull) SHALL keep the current collections on screen until the new ones arrive, with no loading state in between.
+The system SHALL switch to the themes screen the moment it is opened. It SHALL show a loading state there only while the learner's data is not yet in memory, and its collections once it is. A change to the collections while the screen is open SHALL replace the tiles in place, with no loading state in between.
 
 #### Scenario: First open shows loading before the collections
-- **WHEN** the user opens the themes screen
-- **THEN** the screen is on display with a loading state before its collections have been read
+- **WHEN** the user opens the themes screen before the learner's data is in memory
+- **THEN** the screen is on display with a loading state
 - **AND** the collections replace the loading state once they are available
 
 #### Scenario: A post-pull reload keeps the current content
-- **WHEN** the themes screen is on display and a sync pull completes
-- **THEN** the current collections stay on screen until the reloaded ones replace them
+- **WHEN** the themes screen is on display and a sync pull brings a collection
+- **THEN** the tiles are replaced in place
 - **AND** no loading state is shown in between
 
 ### Requirement: Collection cards own their touch gestures
@@ -101,14 +101,6 @@ When the browser cancels a touch on a collection card (`pointercancel` with no `
 #### Scenario: Cancelled touch that moved
 - **WHEN** the browser cancels a touch on a card and the finger travels more than 10 px or the page scrolls more than 2 px before it lifts
 - **THEN** nothing is activated
-
-### Requirement: The themes screen reads collection documents only
-Opening the themes screen SHALL read the collection documents and the count of words, and SHALL NOT read vocabulary or review documents.
-
-#### Scenario: No vocabulary or review read on open
-- **WHEN** the user opens the themes screen
-- **THEN** the collection documents and the words count are read
-- **AND** no vocabulary document and no review document is read
 
 ### Requirement: Collections are tiles in a masonry, one alphabetical sequence down the columns
 The system SHALL render every collection as a tile showing its name and its word count, with a colour accent cycled by position over the eight-colour palette, the active one tinted in its accent. The tiles SHALL be one alphabetical sequence — locale-aware and case-insensitive — laid out in two columns under 700 px of viewport width and four from 700 px, read down each column in turn, and no tile SHALL be broken across a column boundary. «Всё подряд» SHALL be a tile pinned first with the total words count.
