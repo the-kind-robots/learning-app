@@ -205,8 +205,8 @@
                             :start    (fn [{:keys [capabilities render]}]
                                         (let [dispatch (:dispatch render)]
                                           (dispatch [[:effect/load-account]])
-                                          ;; A reconnect after offline is not a
-                                          ;; navigation: it passes the throttle.
+                                          ;; A reconnect after offline flushes
+                                          ;; what was written while offline.
                                           (js/window.addEventListener
                                            "online"
                                            #(dispatch [[:effect/sync-pull :poke]]))

@@ -26,19 +26,22 @@
    difference sits behind a 100 ms debounce and in front of a query that
    costs 20-27 ms (#179).
 
-   The queries still unanswered are kept, each by its port, so `abandon` can
-   fail them all: a query the worker threw on is never answered, and without
-   this its caller waits forever (#320)."
+   The queries still unanswered are kept, each by its port. An uncaught throw
+   in the worker, the one a query dies of among them, arrives as the worker's
+   `error` and not on the query's port, and does not say which query it was;
+   so every one still waiting is failed, or its caller waits forever (#320)."
   [worker]
   (let [pending (atom {})]
-    #js {:abandon
-         (fn [^js err]
-           (let [abandoned @pending]
-             (reset! pending {})
-             (doseq [[port reject] abandoned]
-               (.close ^js port)
-               (reject err))))
-         :exec
+    (.addEventListener worker
+                       "error"
+                       (fn [^js e]
+                         (let [[abandoned _] (reset-vals! pending {})
+                               err (js/Error. (str "Dictionary worker failed: "
+                                                   (or (.-message e) "no message")))]
+                           (doseq [[^js port reject] abandoned]
+                             (.close port)
+                             (reject err)))))
+    #js {:exec
          (fn [^js opts]
            (js/Promise.
             (fn [resolve reject]
@@ -123,21 +126,14 @@
                            (when-some [holding (holding-state data)]
                              (reset! holding? holding))
                            (observe-worker-message! data))))
-    (let [proxy (make-exec-proxy worker)]
-      ;; An uncaught throw in the worker, the one a query dies of among them,
-      ;; arrives here and not on the query's port. Which query it was is not
-      ;; said, so every one still waiting is failed.
-      (.addEventListener worker
-                         "error"
-                         (fn [^js e]
-                           (reset! holding? false)
-                           (log/error :dbs/sqlite3-worker-crashed {:error (str e)})
-                           (.abandon proxy
-                                     (js/Error. (str "Dictionary worker failed: "
-                                                     (or (.-message e) "no message"))))))
-      {:holding? holding?
-       :proxy    proxy
-       :worker   worker})))
+    (.addEventListener worker
+                       "error"
+                       (fn [^js e]
+                         (reset! holding? false)
+                         (log/error :dbs/sqlite3-worker-crashed {:error (str e)})))
+    {:holding? holding?
+     :proxy    (make-exec-proxy worker)
+     :worker   worker}))
 
 
 (defn- foreground?
