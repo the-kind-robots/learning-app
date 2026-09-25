@@ -89,6 +89,15 @@ Always use `:reload` when requiring namespaces to pick up changes.
 
 Measured 2026-09-10 on Claude Code 2.1.267; the boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` is the owner's lever over it, not yours — and it appears in neither `.claude/settings.json` nor `.claude/settings.local.json`, so the harness default is what is in force. Re-measure after a CLI update.
 
+# Commits
+
+PRs merge by squash, so this governs the branch history the reviewer reads, not `master`.
+
+- A branch carries as few commits as its changes need. Each is one logical, self-contained change: it builds and passes tests on its own, and its message says what changed.
+- Unrelated changes never share a commit; one change is never split across several.
+- No fixup, typo, WIP or "address review" commits survive to the merge. Fold them into the commit they fix: `git commit --amend`, or `git commit --fixup <sha>` then `GIT_SEQUENCE_EDITOR=: git rebase --autosquash master`.
+- Review fixes are folded the same way, then pushed with `git push --force-with-lease` — only to the branch of your own issue, never `master`. The thread reply names the new hash.
+
 # Browser / PWA Verification
 
 - For browser-runtime behavior, use real browser proof, not only code inspection.
