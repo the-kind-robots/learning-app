@@ -54,6 +54,27 @@
                          (dispatch [[:action/reload-page] [:action/confirm-pairing]]))))))))
 
 
+(nxr/register-effect! :effect/hold-status-region
+  ;; The node sits in the state for `:effect/announce` alone: nothing
+  ;; renders from it.
+  (fn hold-status-region [{:keys [dispatch dispatch-data]} _]
+    (dispatch [[:effect/save {:app/status-region (:replicant/node dispatch-data)}]])))
+
+
+;; Past the frame that renders the emptied region, so the accessibility tree
+;; sees it empty before the message and speaks a repeated one again.
+(def ^:private announce-delay-ms 100)
+
+
+(nxr/register-effect! :effect/announce
+  ;; A live region speaks when its text changes: the message is written into
+  ;; an emptied region, so the same one twice in a row is spoken twice.
+  (fn announce [_ system message]
+    (when-let [region (:app/status-region @(:store system))]
+      (set! (.-textContent region) "")
+      (js/setTimeout #(set! (.-textContent region) message) announce-delay-ms))))
+
+
 (nxr/register-action! :action/reload-page
   (fn reload-page [state]
     (when-let [load-effect (:page/load state)]
@@ -564,7 +585,13 @@
        :page/home        (pages.home.view/page state)
        :page/lesson      (pages.lesson.view/page state)
        :page/words       (pages.words.view/page state)
-       [:div.app-loading "Загружаем..."]))))
+       [:div.app-loading "Загружаем..."])
+     ;; The one status line every screen announces through. Rendered empty
+     ;; and always, so replicant never diffs its text and a message written
+     ;; into it is announced; `:effect/announce` writes it.
+     [:p.visually-hidden
+      {:role "status"
+       :replicant/on-mount [[:effect/hold-status-region]]}])))
 
 
 (defn render!

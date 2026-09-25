@@ -2,6 +2,7 @@
   (:require
    [cljs.reader :as reader]
    [cljs.test :refer-macros [deftest is testing]]
+   [nexus.registry :as nxr]
    [pages.collections.actions :as sut]))
 
 
@@ -29,3 +30,12 @@
         saved (merge state (sut/collections-shown state next))]
     (is (not (identical? state saved)))
     (is (= [] (:collections/items saved)))))
+
+
+(deftest a-delete-announces-itself-and-keeps-no-state-for-it
+  (let [show-deleted (get-in (nxr/get-registry) [:nexus/actions :action/show-deleted])
+        [[_ saved] focus announce] (show-deleted {} summary {:name "Solo" :focus-id "collection:travel"})]
+    (is (= [:effect/focus-collection "collection:travel"] focus))
+    (is (= [:effect/announce "Набор «Solo» удалён"] announce))
+    (is (= (sut/collections-shown {} summary) saved)
+        "the save carries the shown screen and nothing about the delete")))
