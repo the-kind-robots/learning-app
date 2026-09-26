@@ -7,6 +7,9 @@
   [no.cjohansen/dataspex "2026.06.3"]
   [no.cjohansen/nexus "2026.07.1"]
   [no.cjohansen/replicant "2026.07.1"]
+  ;; Tests only: property tests (`client.memory-test`). Nothing the app
+  ;; requires, so no build but node-test compiles it.
+  [org.clojure/test.check "1.1.3"]
 
   [philoskim/debux "0.9.1"]
   [refactor-nrepl/refactor-nrepl "3.14.0"]

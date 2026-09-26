@@ -103,13 +103,6 @@
       (assoc word :retention-level (retention/retention-level (reviews word-id []) (now-ms capabilities))))))
 
 
-(defn- matching?
-  [search]
-  (fn [{:keys [value translation]}]
-    (or (utils/includes? value search)
-        (some #(utils/includes? (:value %) search) translation))))
-
-
 (defn- page-of
   [rows offset limit]
   (cond->> rows
@@ -117,136 +110,107 @@
     limit  (take limit)))
 
 
-(defn- ^:async with-retention
-  "The rows of one page, each with its retention level, read by key. Only
-   these words' reviews are read: alphabetical order needs no key from the
-   words the page left behind (#317)."
-  [{:keys [reviews] :as capabilities} rows]
-  (let [by-word (await ((:reviews/by-word reviews) (mapv :id rows)))
-        now     (now-ms capabilities)]
-    (mapv (fn [word]
-            (assoc word :retention-level (retention/retention-level (by-word (:id word) []) now)))
-          rows)))
+(defn urgency-of
+  "Urgency out of the retention state memory keeps on the word; a word with no
+   review has none and is as due as a word gets."
+  [now word]
+  (retention/state-urgency (:retention word) now))
 
 
-(defn- ^:async alphabetical
-  "A page of the scope in alphabetical order. The word list's order: the view
-   is keyed by what a word is filed under (`domain/filed-under`), so it is
-   already sorted and a page is a slice of it — the read is the page's size,
-   not the vocabulary's. The scoped and searched variants sort on that same
-   key here, so all three arrive in one order.
-
-   A search is the exception: a substring can sit anywhere in a value or a
-   translation, so the filter has to see every word in scope before it can say
-   which ones the page holds."
-  [{:keys [words] :as capabilities} {:keys [limit offset search word-ids]}]
-  (let [total (if word-ids
-                ;; The membership is the scope: a word deleted from the
-                ;; vocabulary leaves its collections in the same bulk write
-                ;; (`docs-without-word`), so an id here has a word.
-                (clojure.core/count word-ids)
-                (await ((:words/count words))))]
-    (if (utils/non-blank search)
-      (let [matched (->> (await ((:words/previews words) word-ids))
-                         (filter (matching? search))
-                         (sort-by (comp domain/filed-under :id)))]
-        {:matches (clojure.core/count matched)
-         :total   total
-         :words   (await (with-retention capabilities (vec (page-of matched offset limit))))})
-      (let [rows (if word-ids
-                   ;; The ids carry the sort key, so the page is cut from them
-                   ;; and only its words are read.
-                   (await ((:words/previews words)
-                           (page-of (sort-by domain/filed-under word-ids) offset limit)))
-                   (await ((:words/previews-page words) {:limit limit :skip offset})))]
-        {:matches total
-         :total   total
-         :words   (await (with-retention capabilities
-                                         (vec (sort-by (comp domain/filed-under :id) rows))))}))))
+(defn- preview
+  "What a row carries of a word: what a list shows and a lesson asks, not the
+   search text or the sort key memory keeps beside it."
+  [word]
+  (select-keys word [:id :kind :translation :value]))
 
 
-(defn- ^:async most-due
-  "A page of the scope with the words most in need of review first — the
-   lesson's order. It ranks by urgency, so every word in scope needs its own
-   key before the first row can be named, and both reads are full (#404,
-   #431)."
-  [{:keys [reviews words] :as capabilities} {:keys [limit offset search word-ids]}]
-  (let [words        (await ((:words/previews words) word-ids))
-        total        (clojure.core/count words)
-        candidates   (cond->> words
-                       (utils/non-blank search) (filter (matching? search)))
-        ;; A narrowed list reads its reviews by key; the whole vocabulary
-        ;; reads every review, which is the cheaper of the two when every
-        ;; word is wanted anyway (#404, 9000 reviews: 800 keys 0.8 s, all
-        ;; rows 1.1 s, 1500 keys 1.5 s).
-        narrowed-ids (when (or (some? word-ids) (utils/non-blank search))
-                       (mapv :id candidates))
-        reviews      (await ((:reviews/by-word reviews) narrowed-ids))
-        now          (now-ms capabilities)
-        ;; Sorted by urgency rather than by the retention level the row
-        ;; carries: retention underflows to a flat 0.0 after 3.8 unreviewed
-        ;; days, and the ties then fall back to the repository's read order,
-        ;; which is the alphabet (#431). Urgency orders the same words the
-        ;; same way without collapsing, and the level is its image, so a
-        ;; word's reviews are still walked once (#404).
-        ;;
-        ;; Urgency still ties — every word with no review at all, and every
-        ;; word added within one second of another, since elapsed time is
-        ;; truncated to seconds — and those ties are still broken by the read
-        ;; order. On this page that is the alphabet among words showing the
-        ;; same percentage, which is predictable and wanted. Only a caller
-        ;; taking a subset off the head needs more, and `domain.lesson` does
-        ;; that for itself out of the `:urgency` each row carries.
-        rows         (->> candidates
-                          (map (fn [word]
-                                 (let [urgency (retention/urgency (reviews (:id word) []) now)]
-                                   (assoc word
-                                          :retention-level (retention/urgency->retention-level urgency)
-                                          :urgency urgency))))
-                          (sort-by :urgency >))
-        matches      (clojure.core/count rows)]
-    {:matches matches
-     :total   total
-     :words   (vec (page-of rows offset limit))}))
+(defn- with-retention-level
+  [memory now word]
+  (assoc (preview word)
+         :retention-level
+         (retention/urgency->retention-level (urgency-of now word))))
 
 
-(defn ^:async list
-  "Vocabulary rows with retention levels, paged by `:offset`/`:limit`.
+(defn- with-urgency
+  "`words`, each with the urgency it is ranked by and the retention level that
+   is its image, so a word's retention state is read once (#404). Urgency
+   rather than retention: retention underflows to a flat 0.0 after 3.8
+   unreviewed days, and the ties would then fall back to the alphabet (#431)."
+  [memory now words]
+  (map (fn [word]
+         (let [urgency (urgency-of now word)]
+           (assoc (preview word)
+                  :retention-level (retention/urgency->retention-level urgency)
+                  :urgency urgency)))
+       words))
+
+
+(defonce ^:private scope-cache
+  (volatile! nil))
+
+
+(defn- in-scope
+  "The words of `in-order` that `word-ids` names, in order; all of them for
+   nil. Kept for the last list and ids asked of: every keystroke in a
+   collection's filter asks again of the same scope."
+  [in-order word-ids]
+  (if-not word-ids
+    in-order
+    (let [[held-order held-ids scope] @scope-cache]
+      (if (and (identical? held-order in-order) (= held-ids word-ids))
+        scope
+        (let [ids   (set word-ids)
+              scope (into [] (filter #(ids (:id %))) in-order)]
+          (vreset! scope-cache [in-order word-ids scope])
+          scope)))))
+
+
+(defn scope
+  "Every word in scope — all of memory, or those `word-ids` names — in the
+   word list's order."
+  [memory word-ids]
+  (in-scope (:words-in-order memory) word-ids))
+
+
+(defn rows
+  "Vocabulary rows out of the learner's data in memory, with retention levels,
+   paged by `:offset`/`:limit`. Pure: memory is the value it is given.
 
    `:order` says what the caller wants the page to hold — `:alphabetical`
    (default), the word list's order, or `:most-due`, the lesson's, whose rows
    also carry the `:urgency` they were ranked by so a caller can break its
-   ties. The two differ in what they cost: alphabetical order is the order the
-   view is already keyed in, so a page reads its own rows; most-due order
-   ranks on a key computed per word, so it reads every word and every review
-   in scope.
+   ties. Alphabetical order computes retention for the page's rows only;
+   most-due ranks every word in scope.
 
    `:word-ids` restricts to those words, `:search` to values or translations
    containing the text. `:total` counts the words in scope before the search
    filter, so an empty vocabulary and a search with no match tell apart;
    `:matches` counts them after it and before the paging, so a caller holding
    a page can tell whether another one follows."
-  [capabilities {:keys [order] :or {order :alphabetical} :as opts}]
-  (if (= order :most-due)
-    (await (most-due capabilities opts))
-    (await (alphabetical capabilities opts))))
+  [memory {:keys [limit offset order search word-ids] :or {order :alphabetical}} now-ms]
+  (let [scope   (in-scope (:words-in-order memory) word-ids)
+        query   (when (utils/non-blank search) (domain/query search))
+        matched (if query
+                  (into [] (filter #(domain/matches? (:search %) query)) scope)
+                  scope)]
+    (if (= order :most-due)
+      ;; Most due first. Urgency still ties — every word with no review,
+      ;; every word added within one second of another — and those ties keep
+      ;; the alphabet; a caller taking a subset off the head breaks them for
+      ;; itself out of the `:urgency` each row carries.
+      (let [rows (sort-by :urgency > (with-urgency memory now-ms matched))]
+        {:matches (clojure.core/count rows)
+         :total   (clojure.core/count scope)
+         :words   (vec (page-of rows offset limit))})
+      {:matches (clojure.core/count matched)
+       :total   (clojure.core/count scope)
+       :words   (mapv #(with-retention-level memory now-ms %) (page-of matched offset limit))})))
 
 
-(defn ^:async list-active
-  "Returns vocabulary rows scoped to the active collection — its own words
-   and its children's by name (ADR-0013). When no collection is active
-   (implicit main card), returns all words like `list`."
-  [capabilities opts]
-  (let [word-ids (await (collections/active-word-ids capabilities))]
-    (await (list capabilities
-                 (cond-> opts
-                   word-ids (assoc :word-ids word-ids))))))
-
-
-(defn ^:async count
-  "Returns the total number of vocabulary words."
-  [{:keys [words]}]
-  (await ((:words/count words))))
+(defn word-count
+  "How many words and phrases the learner's data in memory holds."
+  [memory]
+  (clojure.core/count (:words memory)))
 
 
 (defn ^:async update!

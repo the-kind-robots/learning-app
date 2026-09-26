@@ -56,15 +56,15 @@ The client SHALL hold the poke socket only while the page is visible, SHALL pull
 - **THEN** the socket closes, and becoming visible again reconnects and pulls
 
 ### Requirement: A pull that writes no document leaves the current screen untouched
-A sync pass SHALL report how many documents it pulled and pushed. The current screen SHALL be reloaded — and a waiting pairing dialog checked — only when the pass pulled at least one document; a pass that pulled nothing SHALL change nothing on screen.
+A sync pass SHALL report how many documents it pulled and pushed. The documents a pass pulls SHALL reach the current screen through the learner's data in memory; a waiting pairing dialog SHALL be checked only when the pass pulled at least one document. A pass that pulled nothing SHALL change nothing on screen.
 
 #### Scenario: Idle poke with nothing new
 - **WHEN** the poke socket reconnects or a poke arrives and the pull writes no document
-- **THEN** the current screen is not reloaded and does not re-render
+- **THEN** the current screen does not re-render
 
 #### Scenario: Pull brings new documents
 - **WHEN** a pull writes at least one document
-- **THEN** the current screen reloads its data and reflects them
+- **THEN** the current screen reflects them
 
 ### Requirement: The device-sync control is on the home page only
 The system SHALL offer the device-sync control, named «Синхронизация», in the header of the home page only, and only once the device has an account. The control SHALL draw a laptop beside a phone. Every other page SHALL render no such control.

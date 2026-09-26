@@ -131,10 +131,8 @@
 
 (deftest submit-clears-suggestions
   (async-testing "a successful submit resets the form, suggestions included"
-    (with-redefs [vocabulary/add!  (fn [_ _ _ _]
-                                     (js/Promise.resolve {:word-id "w1" :created? true}))
-                  vocabulary/count (fn [_]
-                                     (js/Promise.resolve 1))]
+    (with-redefs [vocabulary/add! (fn [_ _ _ _]
+                                    (js/Promise.resolve {:word-id "w1" :created? true}))]
       (let [{:keys [store] :as system} (test-system {})]
         (nxr/dispatch system {} [[:action/update-suggestions {:completions [hund] :value nil}]])
         (nxr/dispatch system {} [[:action/add-word {:value "Hund" :translation "пёс"}]])
@@ -261,11 +259,9 @@
 (deftest typing-on-from-a-picked-word-is-saved-as-a-phrase
   (async-testing "GH-358: the submitted document follows the re-evaluated mode"
     (let [saved-as (atom nil)]
-      (with-redefs [vocabulary/add!  (fn [_ _ _ kind]
-                                       (reset! saved-as kind)
-                                       (js/Promise.resolve {:word-id "e1" :created? true}))
-                    vocabulary/count (fn [_]
-                                       (js/Promise.resolve 1))]
+      (with-redefs [vocabulary/add! (fn [_ _ _ kind]
+                                      (reset! saved-as kind)
+                                      (js/Promise.resolve {:word-id "e1" :created? true}))]
         (let [system (test-system {})]
           (nxr/dispatch system {} [[:action/select-suggestion (assoc haus :focus-id nil)]])
           (nxr/dispatch system {} [[:action/update-word "das Haus ist gross"]])
@@ -349,22 +345,14 @@
       (is (= ["Hund"] (active-lemmas store))))))
 
 
-;; The rename in the heading (#460), through `application`'s own
-;; `:action/reload-page`: it runs whatever the page on display stored as
-;; `:page/load`, which here only counts.
-
-
-(def ^:private reloads (atom 0))
-
-
-(nxr/register-effect! :effect/count-reload
-  (fn [_ _]
-    (swap! reloads inc)))
+;; The rename in the heading (#460). What the screen on display shows of it
+;; follows memory, which takes the renamed collection when PouchDB does; the
+;; effect only writes, or refuses to.
 
 
 (defn- rename-system
   [writes]
-  {:store        (atom {:page/load [:effect/count-reload]})
+  {:store        (atom {})
    :capabilities {:collections
                   {:collections/active-id (fn [] "c:kurs")
                    :collections/get       (fn [_] (js/Promise.resolve {:id "c:kurs" :name "Kurs"}))
@@ -382,17 +370,13 @@
   (js/Promise. (fn [resolve _] (js/setTimeout resolve 0))))
 
 
-(deftest a-rename-that-writes-reloads-the-screen-on-display
-  (async-testing "GH-460: the screen on display reads again after the write"
+(deftest a-rename-writes-once-and-a-taken-name-writes-nothing
+  (async-testing "GH-460: the rename is written; a name another collection carries is not"
     (let [writes (atom [])
           system (rename-system writes)]
-      (reset! reloads 0)
       (nxr/dispatch system {} [[:effect/rename-active-collection " Neu "]])
       (await (settled))
       (is (= [["c:kurs" "Neu"]] @writes))
-      (is (= 1 @reloads))
-      (testing "a refused name writes nothing and asks no screen to read"
-        (nxr/dispatch system {} [[:effect/rename-active-collection "grammatik"]])
-        (await (settled))
-        (is (= [["c:kurs" "Neu"]] @writes))
-        (is (= 1 @reloads))))))
+      (nxr/dispatch system {} [[:effect/rename-active-collection "grammatik"]])
+      (await (settled))
+      (is (= [["c:kurs" "Neu"]] @writes)))))

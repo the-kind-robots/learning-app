@@ -3,15 +3,6 @@
    [nexus.registry :as nxr]))
 
 
-(nxr/register-action! :action/show-lesson
-  (fn show-lesson [_ {:keys [lesson-state error]}]
-    [[:effect/save
-      {:page/current  :page/lesson
-       :page/load     nil
-       :lesson/empty? (boolean error)
-       :lesson/state  (when-not error lesson-state)}]]))
-
-
 (nxr/register-action! :action/update-lesson
   (fn update-lesson [_ lesson-state]
     [[:effect/save
@@ -26,13 +17,13 @@
 
 
 (nxr/register-action! :action/check-answer
-  (fn check-answer [_ answer]
-    [[:effect/check-answer answer]]))
+  (fn check-answer [state answer]
+    [[:effect/check-answer (:lesson/state state) answer]]))
 
 
 (nxr/register-action! :action/next-trial
-  (fn next-trial [_]
-    [[:effect/next-trial]]))
+  (fn next-trial [state]
+    [[:effect/next-trial (:lesson/state state)]]))
 
 
 (nxr/register-action! :action/open-answer-hint

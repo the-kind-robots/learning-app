@@ -28,12 +28,17 @@
 
 
 (defn navigate!
-  [page]
+  "Moves to `page`. A push or a replace reaches the router in this task; a
+   step back reaches it only with `popstate`, a task later, so `show-home` —
+   which puts home on display — is called first, and home is on screen in the
+   task of the tap all the same."
+  [page show-home]
   (case (move {:at-home? (at-home?) :to page})
     nil      nil
     :push    (rfe/push-state page)
     :replace (rfe/replace-state page)
-    :back    (.back js/window.history)))
+    :back    (do (show-home)
+                 (.back js/window.history))))
 
 
 (defn put-home-beneath!

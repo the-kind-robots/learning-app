@@ -1,5 +1,6 @@
 (ns client.support.db-seed
   (:require
+   [adapters.memory :as memory]
    [client.support.time :as time]
    [db :as db]
    [domain.vocabulary :as vocabulary]))
@@ -63,3 +64,16 @@
   "Adds example documents to a test db."
   [db examples]
   (await (insert-all! db (map example-doc examples))))
+
+
+(defn ^:async memory-of
+  "The learner's data in memory as the app would hold it after loading
+   `dbs` — each a database handle — as they stand now."
+  [& dbs]
+  (let [answers (await (js/Promise.all
+                        (into-array (map #(db/all-docs % {:include-docs true}) dbs))))]
+    (memory/with-docs memory/empty-memory
+                      (for [{rows :rows} answers
+                            {doc :doc}   rows
+                            :when        doc]
+                        doc))))

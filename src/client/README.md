@@ -47,6 +47,7 @@ src/client/
 │
 ├── adapters/                 # Repositories: own a document type, speak domain outward
 │   ├── repository.cljs       # Shared edge: stored doc ↔ entity keyed by :id
+│   ├── memory.cljs           # The learner's data in memory, a projection of both databases
 │   ├── words.cljs  reviews.cljs  collections.cljs     # user-db
 │   ├── lessons.cljs  examples.cljs                    # device-db
 │   ├── dictionary.cljs       # SQL through the worker proxy
@@ -84,6 +85,8 @@ Every tab has a worker, but the dictionary belongs to the tab being typed into: 
 
 - `user-db` — words, reviews, collections. What follows the learner across devices: replicated to the account's CouchDB database `userdb-N` through `/db/` (ADR-0006). `sync.cljs` pushes on local changes (throttled) and pulls on data-page entry; vocab conflicts resolve last-writer-wins by `:modified-at`. A device without an account is local-only and makes no network call.
 - `device-db` — lessons, examples, tasks, the device identity. Never replicated.
+
+**Learner's data in memory** — screens never read PouchDB on entry. `adapters/memory.cljs` holds the learner's data as a projection of both databases in the app store under `:learner/memory` (ADR-0016): loaded at start (`db.pouch/follow!`: update sequence, every document, then the change feed), taking this app's own writes once PouchDB accepts them (`db.pouch/on-written!`), and everything else — another tab, a sync pull — through the feed. One `ingest` path keeps every index; `application/memory-changer` recomputes the page on display in the same store write. A screen opened before the load completes shows no claim about the data and fills in when `:learner/ready?` turns true.
 
 `db_migrations.cljs` runs before `db.pouch` opens the databases; it once split the old single `local-db` into these two.
 

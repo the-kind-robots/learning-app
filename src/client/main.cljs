@@ -3,6 +3,7 @@
    [adapters.collections :as collections-adapter]
    [adapters.examples :as examples-adapter]
    [adapters.lessons :as lessons-adapter]
+   [adapters.memory :as memory]
    [adapters.reviews :as reviews-adapter]
    [adapters.words :as words-adapter]
    [application]
@@ -61,7 +62,10 @@
     (action-log/inspect))
 
   (system/start!
-   {:app/store             {:start (fn [_] (atom {:page/current :page/loading}))}
+   {:app/store             {:start (fn [_]
+                                     (atom {:learner/memory memory/empty-memory
+                                            :learner/ready? false
+                                            :page/current   :page/loading}))}
 
     ;; Ask the browser to exempt our storage (device-db, the durable home of the
     ;; account token) from automatic eviction. The auth cookie is rebuilt from
@@ -187,6 +191,21 @@
                                           (when ^boolean goog/DEBUG
                                             (instrumentation/install!))
                                           {:dispatch #(dispatch {} %)}))}
+
+    ;; The learner's data, held in the store as a projection of the local
+    ;; databases (ADR-0016). Starting returns at once; the load runs on, and
+    ;; the screen on display fills in when it completes.
+    :learner/memory        {:requires {:capabilities :app/capabilities
+                                       :db           :db/pouch
+                                       :render       :app/render
+                                       :store        :app/store}
+                            :start    (fn [{:keys [capabilities db render store]}]
+                                        (memory/start! db
+                                                       (application/memory-changer
+                                                        store
+                                                        capabilities
+                                                        (:dispatch render))))
+                            :stop     (fn [stop] (stop))}
 
     :pwa/init              {:requires {:render :app/render}
                             :start    (fn [{:keys [render]}]

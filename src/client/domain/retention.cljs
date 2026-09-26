@@ -8,7 +8,10 @@
   0.00231)
 
 
-(defn- reviews->retention-state
+(defn retention-state
+  "What a word's reviews say about its memory, all that urgency needs of
+   them: `{:forgetting-rate :last-review-ms :review-count}`. Computed once per
+   change to the reviews, since urgency is asked of it at every read."
   [reviews]
   (let [reviews (->> reviews
                      (map #(update % :created-at utils/iso->secs))
@@ -31,7 +34,8 @@
      :review-count    review-count}))
 
 
-(defn- retention-state->urgency
+(defn state-urgency
+  "`urgency` of a word from its `retention-state` rather than its reviews."
   [{:keys [forgetting-rate last-review-ms]} now-ms]
   (if (nil? last-review-ms)
     ##Inf
@@ -46,7 +50,7 @@
    separating words past that. A word never reviewed is as due as a word
    gets."
   [reviews now-ms]
-  (-> reviews reviews->retention-state (retention-state->urgency now-ms)))
+  (-> reviews retention-state (state-urgency now-ms)))
 
 
 (defn urgency->retention-level

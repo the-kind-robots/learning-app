@@ -2,13 +2,9 @@
   (:require
    [domain.lesson :as domain]
    [lambdaisland.glogi :as log]
+   [use-cases.collections :as collections]
    [use-cases.examples :as examples]
    [use-cases.vocabulary :as vocabulary]))
-
-
-(defn- state
-  [lessons]
-  ((:lessons/get lessons)))
 
 
 (def max-answer-length
@@ -31,40 +27,49 @@
    :value       value})
 
 
-(defn ^:async start!
-  "Start a new lesson. Returns {:lesson-state ...} or {:error ...}.
+(defn start
+  "A new lesson out of the learner's data in memory. Returns {:lesson-state
+   ...} or {:error :no-words-available}. Pure but for the draw: the words are
+   drawn at random from the most due (`domain/pick-vocab`).
 
    opts:
      :vocab-per-lesson  — how many words and phrases to include (default 3)
      :vocab-pool-size   — how many of the most due to draw them from (default 20)
      :trial-selector    — strategy for picking the next trial (:first or :random, default nil → random)"
-  [{:keys [collections examples lessons] :as capabilities}
+  [memory collection-id
    {:keys [vocab-per-lesson vocab-pool-size trial-selector]
     :or   {vocab-per-lesson domain/default-vocab-per-lesson
-           vocab-pool-size  domain/default-vocab-pool-size}}]
-  (try
-    ;; Asked for without `:limit`: `list-active` computes and sorts every row
-    ;; either way and `:limit` only trims afterwards, so nothing more is read
-    ;; — and cutting the head here would cut it alphabetically wherever
-    ;; urgencies tie. `pick-vocab` owns the whole selection policy.
-    (let [{rows :words} (await (vocabulary/list-active capabilities {:order :most-due}))
-          selected      (domain/pick-vocab rows vocab-pool-size vocab-per-lesson)]
-      (if-not (seq selected)
-        {:error :no-words-available}
-        (let [collection-id   ((:collections/active-id collections))
-              vocab           (mapv lesson-vocab selected)
-              word-ids        (mapv :id vocab)
-              ;; Which examples a read in this collection sees is one rule, and
-              ;; it lives in `use-cases.examples`; the repository hands over
-              ;; what it holds for these entries and this reads by that rule.
-              lesson-examples (-> (await ((:examples/list examples) word-ids))
-                                  (examples/visible-in collection-id))
-              lesson-state    (domain/initial-state vocab lesson-examples trial-selector)]
-          (await ((:lessons/save! lessons) lesson-state))
-          {:lesson-state lesson-state})))
-    (catch js/Error err
-      (log/error :lesson/start-failed {:error (ex-message err)})
-      {:error :lesson-start-failed})))
+           vocab-pool-size  domain/default-vocab-pool-size}}
+   now-ms]
+  ;; Every word in scope, unranked: `pick-vocab` owns the whole selection
+  ;; policy, ties included.
+  (let [words    (vocabulary/scope memory (collections/active-scope memory collection-id))
+        selected (domain/pick-vocab words
+                                    #(vocabulary/urgency-of now-ms %)
+                                    vocab-pool-size
+                                    vocab-per-lesson)]
+    (if-not (seq selected)
+      {:error :no-words-available}
+      (let [vocab    (mapv lesson-vocab selected)
+            word-ids (set (map :id vocab))]
+        ;; Which examples a read in this collection sees is one rule, and it
+        ;; lives in `use-cases.examples`.
+        {:lesson-state (domain/initial-state
+                        vocab
+                        (-> (into []
+                                  (comp (mapcat #(get-in memory [:examples-by-word %]))
+                                        (map (:examples memory)))
+                                  word-ids)
+                            (examples/visible-in collection-id))
+                        trial-selector)}))))
+
+
+(defn ^:async begin!
+  "Stores the lesson just started, over whichever one is stored. Run after
+   the screen is painted: the lesson on screen is the one in app state, and
+   the document is what answers are written against."
+  [{:keys [lessons]} lesson-state]
+  (await ((:lessons/save! lessons) lesson-state)))
 
 
 (defn ^:async finish!
@@ -72,18 +77,11 @@
   (await ((:lessons/remove! lessons))))
 
 
-(defn ^:async restart!
-  "Always starts a fresh lesson session by removing any persisted lesson first."
-  [capabilities]
-  (await (finish! capabilities))
-  (await (start! capabilities {})))
-
-
 (defn ^:async check-answer!
-  "Check the user's answer. Returns {:lesson-state ...}."
-  [{:keys [lessons] :as capabilities} answer]
-  (let [current-state (await (state lessons))
-        answer        (clamp-answer answer)]
+  "Check the user's answer against `current-state`, the lesson on screen.
+   Returns {:lesson-state ...}."
+  [capabilities current-state answer]
+  (let [answer (clamp-answer answer)]
     (if-not current-state
       (do
         (log/warn :lesson/check-answer-missing {:answer answer})
@@ -100,45 +98,28 @@
                     (:word-id current-trial)
                     (-> lesson-state domain/last-result :correct?)
                     (:prompt current-trial))))
-          (await ((:lessons/save! lessons) lesson-state))
+          (await ((:lessons/save! (:lessons capabilities)) lesson-state))
           {:lesson-state lesson-state}
           (catch js/Error err
             (log/error :lesson/check-answer-save-failed {:error (ex-message err)})
             {:error :lesson-save-failed :lesson-state lesson-state}))))))
 
 
-(defn- ^:async advance-once!
-  [{:keys [lessons]}]
-  (let [lesson-state (await (state lessons))]
-    (if-not lesson-state
-      (do
-        (log/warn :advance-lesson/missing-state {})
-        {:error :lesson-not-found})
-      (when-let [next-state (domain/advance lesson-state)]
-        (try
-          (await ((:lessons/save! lessons) next-state))
-          {:lesson-state next-state}
-          (catch js/Error err
-            (log/error :advance-lesson/save-failed {:error (ex-message err)})
-            {:error :lesson-save-failed}))))))
-
-
-;; The advance in flight, if any. Two activations of the continue button
-;; faster than a save — a double click — both read the same revision, and the
-;; second save failed with a document update conflict (#277).
-(defonce ^:private advancing
-  (atom nil))
-
-
-(defn advance!
-  "Select the next trial. Returns {:lesson-state ...} or {:error ...}.
-   A call made while an advance is in flight joins it instead of advancing
-   a second time."
-  [capabilities]
-  (or @advancing
-      (reset! advancing
-        (.finally (advance-once! capabilities)
-                  #(reset! advancing nil)))))
+(defn ^:async advance!
+  "Select the trial after `lesson-state`, the lesson on screen. Returns
+   {:lesson-state ...} or {:error ...}."
+  [{:keys [lessons]} lesson-state]
+  (if-not lesson-state
+    (do
+      (log/warn :advance-lesson/missing-state {})
+      {:error :lesson-not-found})
+    (when-let [next-state (domain/advance lesson-state)]
+      (try
+        (await ((:lessons/save! lessons) next-state))
+        {:lesson-state next-state}
+        (catch js/Error err
+          (log/error :advance-lesson/save-failed {:error (ex-message err)})
+          {:error :lesson-save-failed})))))
 
 
 (defn- token-state

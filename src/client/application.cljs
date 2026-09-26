@@ -6,9 +6,12 @@
    [install-guide.view :as install-guide]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
+   [pages.collections.actions]
    [pages.collections.view :as pages.collections.view]
+   [pages.home.actions]
    [pages.home.view :as pages.home.view]
    [pages.lesson.view :as pages.lesson.view]
+   [pages.words.actions]
    [pages.words.view :as pages.words.view]
    [replicant.dom :as r]))
 
@@ -35,23 +38,82 @@
 
 
 (nxr/register-effect! :effect/navigate
-  (fn navigate-effect [{:keys [capabilities]} _ page]
+  (fn navigate-effect [{:keys [capabilities dispatch]} _ page]
     (when-let [navigate! (get-in capabilities [:navigation :navigation/navigate])]
-      (navigate! page))))
+      (navigate! page #(dispatch [[:effect/enter :action/open-home]])))))
 
 
 (nxr/register-effect! :effect/sync-pull
-  ;; Only a pull that wrote something changes the screen: a poke from a socket
-  ;; reconnect, or the pull on route entry, brings nothing most of the time,
-  ;; and reloading the page for it re-rendered the themes screen every ~2 min
-  ;; on the phone. The pairing receipt is itself a pulled document, so the
-  ;; same condition covers the dialog.
+  ;; What a pull brings reaches the screen through memory, which follows the
+  ;; local change feed; the pull itself reloads nothing. Only the pairing
+  ;; dialog asks after it: the receipt is itself a pulled document.
   (fn sync-pull [{:keys [capabilities dispatch]} _ & [reason]]
     (when-let [pull! (get-in capabilities [:capabilities/sync :sync/pull!])]
       (some-> (pull! reason)
               (.then (fn [{:keys [pulled]}]
                        (when (and pulled (pos? pulled))
-                         (dispatch [[:action/reload-page] [:action/confirm-pairing]]))))))))
+                         (dispatch [[:action/confirm-pairing]]))))))))
+
+
+(defn- page-context
+  "What a page's content needs besides app state: the stored active
+   collection and the time retention is measured at."
+  [capabilities]
+  {:active-id ((get-in capabilities [:collections :collections/active-id]))
+   :now-ms    ((get-in capabilities [:clock :clock/now-ms]))})
+
+
+(nxr/register-effect! :effect/enter
+  ;; A page's action, handed what it cannot read from state — then `args` —
+  ;; and dispatched in the same task: a route's entry, a query, a page more.
+  (fn enter [{:keys [capabilities dispatch]} _ action & args]
+    (dispatch [(into [action (page-context capabilities)] args)])))
+
+
+(nxr/register-effect! :effect/after-paint
+  ;; Runs `actions` once the frame the current task is building has been
+  ;; painted: work the screen does not show goes after the screen.
+  (fn after-paint [{:keys [dispatch]} _ actions]
+    (js/requestAnimationFrame
+     (fn [_]
+       (js/setTimeout #(dispatch actions) 0)))))
+
+
+(defn- page-content
+  "What the page on display shows of the learner's data, recomputed from
+   `state`. The lesson is drawn once, on entry, and keeps what it drew."
+  [state context]
+  (case (:page/current state)
+    :page/collections (pages.collections.actions/content state context)
+    :page/home        (pages.home.actions/content state context)
+    :page/words       (pages.words.actions/content state context)
+    nil))
+
+
+(defn memory-changer
+  "The function `adapters.memory` calls to change memory: applies `f` to the
+   learner's data and recomputes the page on display in the same store
+   write, so a change renders once and reaches the open screen however it
+   arrived — this tab's write, another tab's, a pull. `:ready` marks the
+   load complete; a lesson opened before it is drawn then."
+  [store capabilities dispatch]
+  (fn [f & [ready]]
+    (let [[old new]
+          (swap-vals! store
+                      (fn [state]
+                        (let [memory (f (:learner/memory state))]
+                          (if (and (identical? memory (:learner/memory state)) (not ready))
+                            state
+                            (let [state (cond-> (assoc state :learner/memory memory)
+                                          ready (assoc :learner/ready? true))]
+                              (cond-> state
+                                (:learner/ready? state)
+                                (merge (page-content state (page-context capabilities)))))))))]
+      (when (and ready
+                 (not (identical? old new))
+                 (= :page/lesson (:page/current new))
+                 (:lesson/waiting? new))
+        (dispatch [[:effect/enter :effect/open-lesson]])))))
 
 
 (nxr/register-effect! :effect/hold-status-region
@@ -73,12 +135,6 @@
     (when-let [region (:app/status-region @(:store system))]
       (set! (.-textContent region) "")
       (js/setTimeout #(set! (.-textContent region) message) announce-delay-ms))))
-
-
-(nxr/register-action! :action/reload-page
-  (fn reload-page [state]
-    (when-let [load-effect (:page/load state)]
-      [load-effect])))
 
 
 (nxr/register-effect! :effect/load-account
@@ -624,25 +680,25 @@
 
 (defn routes
   [dispatch]
+  ;; Every entry computes its screen from memory in the task that changed the
+  ;; route; the pull goes after the paint.
   [["/home"
     {:name        :page/home
-     :controllers [{:start #(dispatch [[:effect/load-home] [:effect/sync-pull]])}]}]
+     :controllers [{:start #(dispatch [[:effect/enter :action/open-home]
+                                       [:effect/after-paint [[:effect/sync-pull]]]])}]}]
    ["/words"
     {:name        :page/words
-     ;; Entering the screen opens no dialog. The rows no longer clear
-     ;; `:words/editing` on their way in (#439), so leaving the screen with a
-     ;; word open would otherwise bring it back on the return.
-     :controllers [{:start #(dispatch [[:action/close-word-edit]
-                                       [:action/load-words]
-                                       [:effect/sync-pull]])}]}]
+     :controllers [{:start #(dispatch [[:effect/enter :action/open-words]
+                                       [:effect/after-paint [[:effect/sync-pull]]]])}]}]
    ["/lesson"
     {:name        :page/lesson
      ;; Leaving the route ends the lesson, whatever did the leaving: Back,
-     ;; the corner ✕, the finish button (#484).
-     :controllers [{:start #(dispatch [[:effect/load-lesson] [:effect/sync-pull]])
-                    :stop  #(dispatch [[:effect/end-lesson]])}]}]
+     ;; the corner ✕, the finish button (#484) — once the screen it went to
+     ;; is painted.
+     :controllers [{:start #(dispatch [[:effect/enter :effect/open-lesson]
+                                       [:effect/after-paint [[:effect/sync-pull]]]])
+                    :stop  #(dispatch [[:effect/after-paint [[:effect/end-lesson]]]])}]}]
    ["/collections"
     {:name        :page/collections
-     :controllers [{:start #(dispatch [[:action/open-collections]
-                                       [:effect/load-collections]
-                                       [:effect/sync-pull]])}]}]])
+     :controllers [{:start #(dispatch [[:effect/enter :action/open-collections]
+                                       [:effect/after-paint [[:effect/sync-pull]]]])}]}]])

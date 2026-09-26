@@ -13,21 +13,49 @@
     [[:effect/navigate :page/lesson]]))
 
 
-(nxr/register-effect! :effect/load-lesson
-  (fn ^:async load-lesson
-    [{:keys [capabilities dispatch]} _]
+(defn- shown
+  "The lesson screen with `lesson-state` on it, fresh: no answer revealed, no
+   hint open."
+  [{:keys [lesson-state error]}]
+  {:lesson/answer-hints    nil
+   :lesson/empty?          (boolean error)
+   :lesson/open-hint-index nil
+   :lesson/state           lesson-state
+   :lesson/waiting?        false
+   :page/current           :page/lesson})
+
+
+(nxr/register-effect! :effect/open-lesson
+  ;; The lesson is drawn from memory and on screen in the task of the tap;
+  ;; storing it waits until the screen is painted. Opened before memory is
+  ;; ready, the screen waits for it, and the memory that arrives draws the
+  ;; lesson (`application/memory-changer`).
+  (fn open-lesson
+    [{:keys [dispatch]} {:keys [store]} {:keys [active-id now-ms]}]
+    (let [state @store]
+      (if-not (:learner/ready? state)
+        (swap! store merge (assoc (shown {}) :lesson/waiting? true))
+        (let [{:keys [lesson-state] :as started}
+              (lesson/start (:learner/memory state) active-id {} now-ms)]
+          (swap! store merge (shown started))
+          (when lesson-state
+            (dispatch [[:effect/after-paint [[:effect/begin-lesson lesson-state]]]])))))))
+
+
+(nxr/register-effect! :effect/begin-lesson
+  (fn ^:async begin-lesson
+    [{:keys [capabilities]} _ lesson-state]
     (try
-      (let [{:keys [lesson-state error]} (await (lesson/restart! capabilities))]
-        (dispatch [[:action/show-lesson {:lesson-state lesson-state :error error}]]))
-      (catch js/Error err
-        (log/error :effect/load-lesson {:error (str err)})))))
+      (await (lesson/begin! capabilities lesson-state))
+      (catch :default err
+        (log/error :effect/begin-lesson {:error (str err)})))))
 
 
 (nxr/register-effect! :effect/check-answer
   (fn ^:async check-answer
-    [{:keys [capabilities dispatch]} _ answer]
+    [{:keys [capabilities dispatch]} _ current-state answer]
     (try
-      (let [{:keys [lesson-state]} (await (lesson/check-answer! capabilities answer))]
+      (let [{:keys [lesson-state]} (await (lesson/check-answer! capabilities current-state answer))]
         (when lesson-state
           (dispatch [[:action/update-lesson lesson-state]])
           ;; The revealed answer carries hints for its annotated words; their
@@ -42,16 +70,17 @@
 
 (nxr/register-effect! :effect/next-trial
   (fn ^:async next-trial
-    [{:keys [capabilities dispatch]} _]
+    [{:keys [capabilities dispatch]} _ current-state]
     (try
-      (let [{:keys [lesson-state]} (await (lesson/advance! capabilities))]
+      (let [{:keys [lesson-state]} (await (lesson/advance! capabilities current-state))]
         (when lesson-state
           (dispatch [[:action/update-lesson lesson-state]])))
       (catch js/Error err
         (log/error :effect/next-trial {:error (str err)})))))
 
 
-;; Run by the route's `:stop`, after the navigation away: it only ends.
+;; Run by the route's `:stop`, after the navigation away and after the paint
+;; of the screen it went to: it only ends.
 (nxr/register-effect! :effect/end-lesson
   (fn ^:async end-lesson
     [{:keys [capabilities]} _]

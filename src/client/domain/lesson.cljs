@@ -18,35 +18,51 @@
 
 
 (defn pick-vocab
-  "Picks `n` items for a lesson out of `rows`, each carrying the `:urgency`
-   the vocabulary was sorted on. Strict urgency still wins: the sort runs
-   over every row, so a more due item outranks a less due one every time,
-   not merely usually.
+  "Picks `n` items for a lesson out of `rows`, ranked by `urgency-of` —
+   `:urgency` unless given. Strict urgency still wins: every row is ranked,
+   so a more due item outranks a less due one every time, not merely
+   usually.
 
-   Shuffled twice, for two unrelated reasons — deleting either brings a bug
+   Randomised twice, for two unrelated reasons — deleting either brings a bug
    back.
 
-   The first shuffle breaks ties. `sort-by` is stable (`cljs.core/sort`
-   hands off to `goog.array.stableSort`; the docstring does not promise it,
-   so the tie test below is what holds this), which means equal urgencies
-   keep the order they arrived in, and that order is the repository's —
-   `_id`, the alphabet. Urgency ties in bulk: every item never reviewed sits
-   at `##Inf`, and elapsed time is truncated to seconds, so a batch added
-   together ties too. Without the shuffle the pool is cut alphabetically and
-   the lesson walks `ab-` again (#431).
+   Ties are broken at random. Urgency ties in bulk: every item never reviewed
+   sits at `##Inf`, and elapsed time is truncated to seconds, so a batch
+   added together ties too. Broken by the order the rows arrive in, the pool
+   is cut alphabetically and the lesson walks `ab-` again (#431).
 
-   The second shuffle is the draw: it takes `n` of the pool uniformly, so
-   consecutive lessons over an unchanged vocabulary differ.
+   The draw is the second: it takes `n` of the pool uniformly, so consecutive
+   lessons over an unchanged vocabulary differ.
+
+   One pass keeps the most due `pool-size`, each with a random tie key, in a
+   small array: a vocabulary is not sorted to keep twenty, since the lesson is
+   drawn in the task of the tap. `##Inf` compares; it is never subtracted.
 
    A pool shorter than `n` is taken whole."
-  [rows pool-size n]
-  (->> rows
-       shuffle
-       (sort-by :urgency >)
-       (take pool-size)
-       shuffle
-       (take n)
-       vec))
+  ([rows pool-size n]
+   (pick-vocab rows :urgency pool-size n))
+  ([rows urgency-of pool-size n]
+   (let [pool    #js []
+         before? (fn [u t ^js kept]
+                   (or (> u (aget kept 1))
+                       (and (== u (aget kept 1)) (< t (aget kept 2)))))]
+     (doseq [row   rows
+             :let  [u (urgency-of row)
+                    t (js/Math.random)]
+             :when (or (< (.-length pool) pool-size)
+                       (before? u t (aget pool (dec (.-length pool)))))]
+       (let [at (loop [i 0]
+                  (if (and (< i (.-length pool)) (not (before? u t (aget pool i))))
+                    (recur (inc i))
+                    i))]
+         (.splice pool at 0 #js [row u t])
+         (when (> (.-length pool) pool-size)
+           (.pop pool))))
+     (->> pool
+          (map #(aget % 0))
+          shuffle
+          (take n)
+          vec))))
 
 
 (def trial-type-word "word")
@@ -137,7 +153,9 @@
 
 (defn- select-trial
   [trials trial-selector]
-  (let [trial-selector (case trial-selector
+  ;; Read back from the lesson document the option is a string; the lesson
+  ;; on screen still carries the keyword.
+  (let [trial-selector (case (some-> trial-selector keyword)
                          :first  first
                          :random rand-nth
                          default-trial-selector)]

@@ -32,6 +32,7 @@
    :frames            0
    :layout-shift      {:entries [] :input-excluded 0.0 :score 0.0}
    :long-frames       []
+   :memory            {}
    :nested-dispatches 0
    :renders           0
    :web-vitals        {}})
@@ -144,6 +145,27 @@
                         (catch :default _ nil))]
       (when measure
         (swap! metrics assoc-in [:dictionary :ready-ms] (.-duration measure))))))
+
+
+(defn memory-start!
+  "Opens the interval of the learner's data loading into memory (ADR-0016)."
+  []
+  (.mark js/performance "memory-start"))
+
+
+(defn memory-ready!
+  "Closes it: `:memory {:load-ms :ready-ms}`, the load itself and how long
+   after navigation start memory was ready — the moment a screen opened
+   before it fills in."
+  []
+  (let [^js measure (try
+                      (.measure js/performance "memory-ready" "memory-start")
+                      (catch :default _ nil))]
+    (when measure
+      (swap! metrics assoc
+        :memory
+        {:load-ms  (.-duration measure)
+         :ready-ms (.now js/performance)}))))
 
 
 (defn dictionary-phase!

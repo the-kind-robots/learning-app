@@ -29,11 +29,8 @@ async function addWord(page, value, translation) {
   await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
 }
 
-// Enough words and reviews that reading them takes longer than a frame: on a
-// handful the summary resolves before the next render and the loading state
-// is never painted, which is the behaviour the requirement is about too —
-// the loading state is for the seconds a real vocabulary takes. Seeded at
-// the engine level (see README, "Seeding from a spec").
+// Enough words and reviews that loading them into memory takes longer than a
+// frame. Seeded at the engine level (see README, "Seeding from a spec").
 async function seedVocabulary(page, words) {
   await page.evaluate(async (n) => {
     const now = new Date().toISOString();
@@ -48,16 +45,17 @@ async function seedVocabulary(page, words) {
   }, words);
 }
 
-test('opening the themes screen shows a loading state before its tiles', async ({ page }) => {
+// The loading state is for the time the learner's data takes to reach memory
+// at start (#494): a screen opened then opens at once and fills in. Opened
+// once memory is ready, the tiles are there on the tap.
+test('the themes screen opened before memory is ready shows a loading state, then its tiles', async ({ page }) => {
   await page.addInitScript(watchSwitcher);
   await page.goto('/');
   await addWord(page, 'der Hund', 'пёс');
   await seedVocabulary(page, 200);
 
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
+  await page.goto('/collections');
 
-  // The first read after a seed also builds the words view over every
-  // document for the count; the loading state is on screen for all of it.
   // One tile: «Всё подряд» with the 201 words.
   await expect(page.getByRole('button', { name: 'Всё подряд 201', exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.locator('.switcher__loading')).toHaveCount(0);

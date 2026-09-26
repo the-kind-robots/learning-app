@@ -1,100 +1,61 @@
 (ns pages.words.actions
   (:require
-   [nexus.registry :as nxr]))
+   [nexus.registry :as nxr]
+   [use-cases.collections :as collections]
+   [use-cases.vocabulary :as vocabulary]))
 
 
 (def ^:private page-size
-  "Rows the list grows by. The first read asks for one page; reaching the
-   bottom asks for one more. Decided here, and handed to the effects as an
-   argument: the route's first read has no view to pass it."
+  "Rows the list grows by. Entry and a new query show one page; reaching the
+   bottom shows one more."
   50)
 
 
-(defn- next-read-token
-  "The number for the next read of the list. Reads are numbered because five
-   callers write `:words/*` — the first render, the search, the next page, and
-   the reloads after an edit and after a synchronisation pull — and the
-   storage they go through answers in its own order."
-  [state]
-  (inc (or (:words/read-token state) 0)))
+(defn content
+  "The rows the word list shows, cut from the learner's data in `state` by the
+   query and the row count the list holds: `:words/rows`, `:words/total` (the
+   words in scope before the query, which is how an empty vocabulary and a
+   query with no match tell apart) and `:words/more?` (whether the query
+   matched more than the rows shown).
+
+   Before memory is ready it shows no rows and, with `:words/total` nil, makes
+   no claim about the vocabulary either way."
+  [state {:keys [active-id now-ms]}]
+  (if-not (:learner/ready? state)
+    {:words/more? false
+     :words/rows  []
+     :words/total nil}
+    (let [memory (:learner/memory state)
+          {:keys [matches total words]}
+          (vocabulary/rows memory
+                           {:limit    (:words/limit state)
+                            :search   (:words/search state)
+                            :word-ids (collections/active-scope memory active-id)}
+                           now-ms)]
+      {:words/more? (< (count words) matches)
+       :words/rows  words
+       :words/total total})))
 
 
-(defn- current-read?
-  "Whether these rows answer the read the list is still waiting for. A read
-   that a later one overtook is dropped, so a page asked for before a search
-   cannot land after it and put the unfiltered rows back under a search box
-   that still holds the query."
-  [state {:keys [token]}]
-  (= token (:words/read-token state)))
+(defn- shown
+  "`changes` to the list's query or row count, with the rows they cut."
+  [state context changes]
+  (let [state (merge state changes)]
+    (merge changes (content state context))))
 
 
-(defn- more-to-read?
-  "Whether reaching the end should ask for another page. A search that has not
-   answered yet says no: its rows replace the ones that page would extend, and
-   the query the page would carry is already the one being replaced."
-  [state]
-  (boolean (and (:words/more? state)
-                (nil? (:words/pending-search state)))))
-
-
-(defn- new-query?
-  "Whether arriving rows answer a different query than the rows on screen.
-   They do when the reader's typing has been read: these rows replace what was
-   being read rather than extending it, and that is when the list goes back to
-   its first row — not on the keystroke 400 ms earlier, with the old rows still
-   under a reader free to scroll them."
-  [state {:keys [search]}]
-  (not= (or search "") (or (:words/search state) "")))
-
-
-(defn words-shown
-  "State for a page of words that has just been read. `:page/load` carries the
-   query these rows came from, so the reload a sync pull triggers
-   (`:action/reload-page`) asks for the page the reader has rather than the
-   first one — otherwise a reader 500 rows down loses 450 of them to a pull
-   that happened to bring a document. It names the action rather than the
-   effect: the effect takes the number of the read it is answering, and a
-   vector stored here would hand a pull the number of the read that produced
-   these rows.
-
-   `limit` is the row count these rows were asked for, kept so a reload after
-   an edit lands on the same rows. `:words/more?` compares the rows against
-   `matches`, the count the search left — `total` counts before the filter
-   and cannot answer this.
-
-   `:words/editing` is left alone. Rows arrive on their own now — the sentinel
-   observer asks for them — and clearing it here shut an open dialog under the
-   reader, one being typed into included (#439)."
-  [{:keys [limit matches search total words]}]
-  {:page/current :page/words
-   :page/load    [:action/load-words {:limit limit :search search}]
-   :words/limit  limit
-   :words/more?  (< (count words) (or matches 0))
-   :words/rows   words
-   :words/search (or search "")
-   :words/total  total})
-
-
-(nxr/register-action! :action/load-words
-  ;; Every read of the list is numbered, and the number comes from the state,
-  ;; so every caller reaches the effect through an action that stamps it. This
-  ;; one is the screen's own: route entry, and the reload a pull re-dispatches.
-  ;; Route entry passes no limit and starts at the first page; the reload
-  ;; carries the limit of the rows on screen.
-  (fn load-words [state opts]
-    (let [token (next-read-token state)]
-      [[:effect/save {:words/read-token token}]
-       [:effect/load-words (merge {:limit page-size} opts) token]])))
-
-
-(nxr/register-action! :action/show-words
-  ;; Rows read under a different query replace the ones the reader was
-  ;; reading, and that is the moment the list goes back to its first row.
-  (fn show-words [state words]
-    (when (current-read? state words)
-      (cond-> [[:effect/save (words-shown words)]]
-        (new-query? state words)
-        (conj [:effect/scroll-words-to-top])))))
+(nxr/register-action! :action/open-words
+  ;; The screen and its first page in one write, in the task of the tap. It
+  ;; opens no dialog: leaving with a word open would otherwise bring it back
+  ;; on the return.
+  (fn open-words [state context]
+    [[:effect/save
+      (shown state
+             context
+             {:page/current  :page/words
+              :words/editing nil
+              :words/limit   page-size
+              :words/search  ""})]]))
 
 
 (nxr/register-action! :action/open-word-edit
@@ -108,65 +69,41 @@
 
 
 (nxr/register-action! :action/search-words
-  ;; A new query starts at the first page: the rows loaded for the old one say
-  ;; nothing about how far down this one the reader has read. The list goes
-  ;; back to the top with them, on `:action/show-words` — the rows are 400 ms
-  ;; away and scrolling here moved a reader who was still reading the old ones,
-  ;; then left them free to scroll back down onto the sentinel before the
-  ;; shorter list arrived (#439).
-  ;;
-  ;; The read is numbered on the keystroke, not when the debounce runs out:
-  ;; from here on this query is what the list is going to hold. The number is
-  ;; kept under `:words/pending-search` as well, which is how reaching the end
-  ;; in the meantime knows to stand down.
-  (fn search-words [state search]
-    (let [token (next-read-token state)]
-      [[:effect/save {:words/pending-search token :words/read-token token}]
-       [:effect/set-words-search {:limit page-size :search search} token]])))
+  (fn search-words [_ search]
+    [[:effect/enter :action/show-search search]]))
 
 
-(nxr/register-action! :action/words-search-settled
-  ;; The search has answered, or failed. It stops holding the next page back,
-  ;; unless a newer keystroke has already taken its place.
-  (fn words-search-settled [state token]
-    (when (= token (:words/pending-search state))
-      [[:effect/save {:words/pending-search nil}]])))
+(nxr/register-action! :action/show-search
+  ;; A new query starts at the first page, and the list goes back to its top
+  ;; with the matching rows, on the keystroke: the rows loaded for the old
+  ;; query say nothing about how far down this one the reader has read.
+  (fn show-search [state context search]
+    [[:effect/save (shown state context {:words/limit page-size :words/search search})]
+     [:effect/scroll-words-to-top]]))
 
 
 (nxr/register-action! :action/show-more-words
   (fn show-more-words [state]
-    (when (more-to-read? state)
-      (let [token (next-read-token state)]
-        [[:effect/save {:words/read-token token}]
-         [:effect/load-more-words
-          {:limit  (+ (:words/limit state) page-size)
-           :search (:words/search state)}
-          token]]))))
+    (when (:words/more? state)
+      [[:effect/enter :action/show-page (+ (:words/limit state) page-size)]])))
 
 
-;; A mutation reloads the list at the row count already on screen, so saving or
-;; removing a word does not throw the reader back to the first page.
+(nxr/register-action! :action/show-page
+  (fn show-page [state context limit]
+    [[:effect/save (shown state context {:words/limit limit})]]))
+
+
+;; An edit or a removal changes memory once PouchDB accepts it, and the rows
+;; follow memory at the row count already on screen, so neither throws the
+;; reader back to the first page.
 (nxr/register-action! :action/save-word
-  (fn save-word [state {:keys [id translation]}]
-    ;; Saving closes the dialog. It used to close on the rows the save brought
-    ;; back, which also shut it on rows nobody asked for (#439).
-    (let [token (next-read-token state)]
-      [[:effect/save {:words/editing nil :words/read-token token}]
-       [:effect/update-word
-        {:id          id
-         :translation translation
-         :limit       (:words/limit state)
-         :search      (:words/search state)}
-        token]])))
+  (fn save-word [_ {:keys [id translation]}]
+    ;; Saving closes the dialog; rows arriving for any other reason do not
+    ;; (#439).
+    [[:effect/save {:words/editing nil}]
+     [:effect/update-word {:id id :translation translation}]]))
 
 
 (nxr/register-action! :action/remove-word
-  (fn remove-word [state {:keys [id value]}]
-    (let [token (next-read-token state)]
-      [[:effect/save {:words/read-token token}]
-       [:effect/delete-word
-        {:id     id
-         :value  value
-         :limit  (:words/limit state)
-         :search (:words/search state)}
-        token]])))
+  (fn remove-word [_ word]
+    [[:effect/delete-word word]]))

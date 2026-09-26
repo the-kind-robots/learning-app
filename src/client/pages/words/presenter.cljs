@@ -38,7 +38,7 @@
    search filter, so an empty vocabulary and a filter that matched nothing tell
    apart here rather than in the view."
   [words total]
-  (when (empty? words)
+  (when (and (some? total) (empty? words))
     (if (pos? total)
       no-matches-state
       first-run-state)))
@@ -48,11 +48,13 @@
   "What the word list renders: the rows, the placeholder that replaces them,
    and whether the page chrome — header, search box, lesson button — applies.
    An empty vocabulary drops the chrome; an empty filter keeps it so the query
-   stays editable."
+   stays editable. Until the learner's data is in memory `total` is nil and
+   the list shows nothing — neither placeholder."
   [{:words/keys [editing more? rows search total]}]
   {:editing     editing
    :empty-state (empty-state rows total)
    :items       (word-list-props rows)
+   :known?      (some? total)
    :more?       more?
    :search      search
-   :vocabulary? (pos? total)})
+   :vocabulary? (boolean (some-> total pos?))})
