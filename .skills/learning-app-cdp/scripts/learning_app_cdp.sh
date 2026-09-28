@@ -426,6 +426,24 @@ wait_for_path() {
   done
 }
 
+# The flag outlives the CDP connection, so prod clears what an earlier session left.
+set_force_update_on_reload() {
+  local ws_url="$1"
+  local enabled="$2"
+  bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method ServiceWorker.enable --params '{}'
+  bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method ServiceWorker.setForceUpdateOnPageLoad --params "{\"forceUpdateOnPageLoad\":${enabled}}"
+}
+
+clear_prod_force_update() {
+  local env_name="$1"
+  local url_substring="$2"
+  [[ "$env_name" == "prod" ]] || return 0
+  local ws_url
+  ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
+  [[ -n "$ws_url" ]] || return 0
+  set_force_update_on_reload "$ws_url" false >/dev/null
+}
+
 start_env() {
   local env_name="$1"
   local base_url="$2"
@@ -449,6 +467,7 @@ start_env() {
     if [[ -n "$saved_path" ]]; then
       wait_for_path "$PORT" "$env_name" "$url_substring" "$saved_path"
     fi
+    clear_prod_force_update "$env_name" "$url_substring"
     cat /tmp/learning-app-cdp-version.json
     rm -f /tmp/learning-app-cdp-version.json
     return 0
@@ -462,6 +481,7 @@ start_env() {
   else
     wait_for_page_ws_url "$PORT" "$env_name" "$url_substring" >/dev/null
   fi
+  clear_prod_force_update "$env_name" "$url_substring"
 }
 
 monitor_env() {
@@ -538,9 +558,14 @@ refresh_env() {
   ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Chrome is up, but no tab matches this environment — open one with: bash ${BASH_SOURCE[0]} start-local"
 
-  bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method ServiceWorker.enable --params '{}'
-  bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method ServiceWorker.setForceUpdateOnPageLoad --params '{"forceUpdateOnPageLoad":true}'
-  bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method Page.reload --params '{"ignoreCache":true}'
+  # Local skips stale builds; prod reloads as a user does, the new build arriving via «Обновить».
+  if [[ "$env_name" == "local" ]]; then
+    set_force_update_on_reload "$ws_url" true
+    bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method Page.reload --params '{"ignoreCache":true}'
+  else
+    set_force_update_on_reload "$ws_url" false
+    bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method Page.reload --params '{}'
+  fi
 
   saved_path="$(read_saved_path "$env_name" "$PORT")"
   [[ -n "$saved_path" ]] || return 0
