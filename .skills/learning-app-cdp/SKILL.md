@@ -40,7 +40,7 @@ Use this skill for:
 - opening the app in Windows Chrome with a remote debugging port
 - inspecting the current page target, DOM state, or JS state on home, lesson, or vocabulary screens
 - comparing local and production behavior in the same CDP workflow
-- refreshing the app with service-worker update-on-reload enabled so local debugging does not inspect stale builds
+- refreshing the local app with service-worker update-on-reload so local debugging does not inspect stale builds; production reloads the way a user does
 
 Use this skill especially when the user cares about visual quality questions such as:
 
@@ -163,7 +163,7 @@ bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh wait-local \
   --selector '#lesson-answer'
 ```
 
-Refresh production with service-worker update-on-reload:
+Refresh production the way a user does (a new build arrives via «Обновить»):
 
 ```bash
 bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh refresh-prod
@@ -310,7 +310,8 @@ bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
 - Production URL is `https://sprecha.de`.
 - The wrapper defaults to port `9333`.
 - For this repository, prefer this skill over generic browser workflows when inspecting app behavior in a real browser.
-- `refresh-local` / `refresh-prod` enable Chrome's service-worker update-on-reload behavior before reloading the page.
+- `refresh-local` enables Chrome's service-worker update-on-reload and reloads ignoring the cache. Force update is local-only.
+- `refresh-prod` and `start-prod` turn update-on-reload off (the flag outlives the CDP connection); `refresh-prod` then reloads plainly, so the service worker serves the page and a new build arrives via «Обновить».
 - Use `monitor-start -> user interacts -> read` as the primary debugging workflow.
 - For layout-stability bugs, combine event traces with visual measurements. HTMX/DOM traces can prove swap order, but they do not by themselves prove the absence of visual jerk.
 - When a transition replaces the page or destroys the JS runtime, prefer an external DevTools trace or repeated geometry snapshots that survive the swap, rather than relying only on in-page probes.
