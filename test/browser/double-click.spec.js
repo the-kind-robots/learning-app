@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // A screen renders in the task of the tap that opened it (#494), so the
 // second click of a double click lands on the new screen. It must not act

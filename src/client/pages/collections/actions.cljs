@@ -39,11 +39,11 @@
   ;; The tiles without the deleted collection, computed from memory once it
   ;; took the deletion and with the stored pointer as it is now — deleting the
   ;; active collection clears it; focus on the neighbour picked before, and
-  ;; the status line naming it.
-  (fn show-deleted [state context {:keys [name focus-id]}]
+  ;; the status line naming it, the one whose id the delete control passed.
+  (fn show-deleted [state context {:keys [name focus-id status-region]}]
     [[:effect/save (assoc (content state context) :collections/editing-id nil)]
      [:effect/focus-collection focus-id]
-     [:effect/announce (deleted-message name)]]))
+     [:effect/announce status-region (deleted-message name)]]))
 
 
 (nxr/register-action! :action/handle-tab-click

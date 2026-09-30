@@ -1,5 +1,6 @@
 (ns pages.collections.view
   (:require
+   [application.shell :as shell]
    [pages.collections.presenter :as presenter]))
 
 
@@ -18,14 +19,18 @@
   "The delete control. It follows its target in the DOM, so the keyboard
    reaches it right after that target, and it is always in the Tab order;
    the CSS shows it in the editing state or while keyboard focus is on the
-   target or on itself."
+   target or on itself. Its action names the status line the delete is
+   announced in."
   [{:keys [id name delete-label]}]
   [:button.tile__close
    {:type       "button"
     :aria-label delete-label
     :on         {:pointerdown [[:effect/stop-propagation]]
                  :click       [[:effect/stop-propagation]
-                               [:effect/delete-collection {:id id :name name}]]}}
+                               [:effect/delete-collection
+                                {:id            id
+                                 :name          name
+                                 :status-region shell/status-region-id}]]}}
    (close-icon)])
 
 

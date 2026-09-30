@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // Where the shadow-cljs devtools client will open its socket. The preload
 // (`dev/cljs/dev/devtools_socket.cljs`) sets it before the client loads, and a

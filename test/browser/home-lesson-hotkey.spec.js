@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // One word is all a lesson needs to exist, and adding it is also what makes
 // the lesson footer — and with it the hotkey — live.

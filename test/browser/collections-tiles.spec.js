@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // Seeded at the engine level (see README, "Seeding from a spec"): a
 // collection document carries its own word ids, so no vocabulary is needed

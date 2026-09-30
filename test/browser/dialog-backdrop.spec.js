@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // The sync-menu dialog only exists once an account is provisioned, which
 // needs a burned invite grant — absent in a fresh environment. The

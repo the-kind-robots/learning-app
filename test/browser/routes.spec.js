@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 test('route entry renders shell and lists', async ({ page }) => {
   // An unknown path is a redirect, not a visit.

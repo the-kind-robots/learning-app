@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // The list is ordered and paged off the view's key, so what a page holds and
 // in what order is one question. Rows are located by their class for the same

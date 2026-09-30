@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // Examples replicate with the account (#528, ADR-0020). A device whose user-db
 // received a word together with its example sends no example request for it,

@@ -79,6 +79,22 @@ uploads `test-results/` (traces) and the backend log as an artifact.
     does this through a named `nothingHappensFor` helper — a bare
     `waitForTimeout` before a positive assertion is still a flake waiting to
     happen and still banned.
+- Import `test` and `expect` from `./fixtures`, not from `@playwright/test`.
+  The fixture fails a test when Replicant's development build reports
+  "Triggered a render while rendering": a life-cycle hook wrote the store
+  during a render, and Replicant deferred that render to a later frame (#515).
+  A context a spec launches itself is not watched. `render-guard.spec.js`
+  renders during a render on purpose and is expected to fail through the
+  guard.
+  - The report is broader than the rule it guards (no life-cycle hook writes
+    the store). A DOM event that Replicant's own DOM change fires
+    synchronously reports too: Chrome fires `blur` on a focused field while
+    Replicant removes it, so the home word field's blur dismisses its
+    suggestions mid-render — type a word, open the themes, ✕, then the
+    browser's Forward. That case is known and harmless (the deferred frame
+    draws the screen already on display), and no spec takes that path
+    today. A spec that does will fail on the guard; that is not a defect to
+    fix blindly.
 - Each test gets a fresh browser context, so client-side storage starts empty
   and tests are order-independent.
 - Geometry and performance specs additionally read `boundingBox()` and

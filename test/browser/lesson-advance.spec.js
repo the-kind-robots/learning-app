@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const { addWord } = require('./lesson-answer.shared');
 
 // One Enter on the focused ДАЛЕЕ advances the lesson once (#277). The button

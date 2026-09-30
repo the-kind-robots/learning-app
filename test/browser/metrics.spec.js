@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const { readMetrics, dictionaryReady } = require('./service-worker.shared');
 
 const readStorage = (page) => page.evaluate(() => window.__storage());

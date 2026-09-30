@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // The learner's data in memory stays a projection of PouchDB (#494,
 // ADR-0016). A screen reads it when opened and does not follow it while open:

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const shared = require('./service-worker.shared');
 
 // The worker's update path (ADR-0014). The backend prepends SW_VERSION to
