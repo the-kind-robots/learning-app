@@ -103,4 +103,38 @@
   --color-blueberry: 17, 82, 167;
   --color-ether: 60, 89, 141;
   --color-ultra-violet: 97, 33, 194;
+
+  /* The pole opposite the ground: hairlines, hover tints and darkening mixes
+     read it so they invert with the scheme. Shadows stay black. */
+  --color-ink: 0, 0, 0;
+
+  color-scheme: light dark;
+}
+
+/* Night violet (#413). Only the tokens the app reads are redefined. The
+   green and the blue are calm light fills that carry a dark label; purple
+   is lightened. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-snow: 21, 15, 28;
+    --color-polar: 33, 26, 43;
+    --color-swan: 58, 48, 71;
+    --color-hare: 125, 113, 137;
+    --color-wolf: 171, 158, 184;
+    --color-gray-text: 154, 141, 167;
+    --color-eel: 228, 219, 235;
+    --color-black-text: 243, 236, 248;
+    --color-owl: 138, 199, 107;
+    --color-tree-frog: 110, 178, 77;
+    --color-sea-sponge: 36, 54, 28;
+    --color-walking-fish: 62, 30, 33;
+    --color-fire-ant: 244, 113, 113;
+    --color-cardinal: 248, 119, 119;
+    --color-macaw: 108, 175, 208;
+    --color-whale: 74, 149, 186;
+    --color-iguana: 38, 62, 74;
+    --color-humpback: 168, 209, 230;
+    --color-beetle: 218, 145, 243;
+    --color-ink: 243, 236, 248;
+  }
 }

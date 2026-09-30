@@ -622,7 +622,7 @@
   background: rgb(var(--color-macaw));
   border: none;
   border-radius: 12px;
-  color: white;
+  color: rgb(var(--color-snow));
   font-family: inherit;
   font-size: 15px;
   font-weight: 700;

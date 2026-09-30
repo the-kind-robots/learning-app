@@ -110,7 +110,7 @@
 
 @keyframes home-add-success-flash {
   0%   { background: rgb(var(--color-sea-sponge), 0.2);}
-  100% { background: rgb(255 255 255 / 0.7);}
+  100% { background: rgba(var(--color-snow), 0.7);}
 }
 
 .home__add--success {
@@ -118,8 +118,8 @@
 }
 
 .home__add {
-  background: rgb(255 255 255 / 0.7);
-  border: 2px solid rgb(0 0 0 / 0.08);
+  background: rgba(var(--color-snow), 0.7);
+  border: 2px solid rgba(var(--color-ink), 0.08);
   border-radius: 18px;
   display: flex;
   flex-direction: column;
