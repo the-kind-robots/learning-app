@@ -260,3 +260,65 @@
         (await (js/Promise. (fn [res] (js/setTimeout res 100))))
         (let [tasks (await (get-tasks-by-type device-db "succeed-task"))]
           (is (empty? tasks) "Task should be processed immediately after creation"))))))
+
+
+(def ^:private throttled-runs
+  "Ids of the throttle-once tasks in the order the queue started them."
+  (atom []))
+
+
+(defmethod sut/execute-task "throttle-once-task"
+  [task _dbs]
+  (swap! throttled-runs conj (:_id task))
+  (js/Promise.resolve (if (= 1 (count @throttled-runs))
+                        {:retry-after-ms 300}
+                        true)))
+
+
+(defn- sleep
+  [ms]
+  (js/Promise. (fn [res] (js/setTimeout res ms))))
+
+
+(defn ^:async wait-until
+  "Waits until `done?` answers true or three seconds pass."
+  [done?]
+  (let [waited (atom 0)]
+    (while (and (not (done?)) (< @waited 3000))
+      (await (sleep 20))
+      (swap! waited + 20))))
+
+
+(deftest throttled-answer-pauses-the-whole-queue
+  (async-testing "a throttled answer stops the queue until Retry-After elapses, then it drains"
+    (with-mocked-env {}
+      (^:async fn
+       [{device-db :device/db :as dbs}]
+       (reset! throttled-runs [])
+       (let [now   (atom 1000)
+             clock {:clock/now-iso #(utils/ms->iso @now)
+                    :clock/now-ms  #(deref now)}]
+         (reset! @#'sut/state {:enabled? true :dbs dbs :clock clock})
+         (await (sut/create-tasks! dbs
+                                   clock
+                                   "throttle-once-task"
+                                   (mapv (fn [i] {:id (str "throttle-once-task:" i) :data {}})
+                                         (range 10))))
+         (await (sleep 300))
+         (is (= 3 (count @throttled-runs))
+             "only the tasks already started when the answer came are run")
+         (let [waiting (await (get-tasks-by-type device-db "throttle-once-task"))
+               started (set @throttled-runs)]
+           (is (= 8 (count waiting)) "the throttled task stays queued")
+           (is (every? #(= (:created-at %) (:run-at %))
+                       (remove #(started (:_id %)) waiting))
+               "the tasks never started keep their run-at"))
+         (sut/flush!)
+         (await (sut/create-tasks! dbs clock "throttle-once-task" [{:id "throttle-once-task:late" :data {}}]))
+         (await (sleep 400))
+         (is (= 3 (count @throttled-runs)) "an earlier flush does not end the wait")
+         (reset! now 1300)
+         (await (wait-until #(= 12 (count @throttled-runs))))
+         (is (= 12 (count @throttled-runs))
+             "after the wait the queue resumes on its own and runs everything, the throttled task included")
+         (is (empty? (await (get-tasks-by-type device-db "throttle-once-task")))))))))

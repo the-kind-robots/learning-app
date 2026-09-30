@@ -137,6 +137,32 @@
                     :else          true))))))
 
 
+(def ^:private state (atom {}))
+
+
+(declare flush!)
+
+
+(defn- schedule-retry!
+  [delay-ms]
+  (js/setTimeout flush! delay-ms))
+
+
+(defn- throttled-for-ms
+  "How long the queue still waits before it starts another task. A throttled
+   answer tells the queue to wait, and the wait holds for every task, because
+   the endpoint refused the device, not that one task."
+  [clock]
+  (max 0 (- (:throttled-until-ms @state 0) (now-ms clock))))
+
+
+(defn- throttle!
+  "Stops the queue from starting tasks for `delay-ms`. A second throttled
+   answer never shortens a wait that is already longer."
+  [clock delay-ms]
+  (swap! state update :throttled-until-ms (fnil max 0) (+ (now-ms clock) delay-ms)))
+
+
 (defn- run-task!
   [{:keys [clock dbs] :as env} task]
   (-> ((fn ^:async f []
@@ -152,6 +178,7 @@
                (log/debug :tasks/retrying-with-hint
                           {:id (:_id task)
                            :retry-after-ms (:retry-after-ms result)})
+               (throttle! clock (:retry-after-ms result))
                (await (mark-failed! dbs clock task (:retry-after-ms result))))
 
              result
@@ -169,16 +196,17 @@
 
 
 (defn ^:async run-worker!
-  [env queue]
+  [{:keys [clock] :as env} queue]
   (let [running (atom true)]
     (while @running
-      (if-let [task (let [result (atom nil)]
-                      (swap! queue
-                        (fn [tasks]
-                          (if (seq tasks)
-                            (do (reset! result (first tasks)) (subvec tasks 1))
-                            tasks)))
-                      @result)]
+      (if-let [task (when (zero? (throttled-for-ms clock))
+                      (let [result (atom nil)]
+                        (swap! queue
+                          (fn [tasks]
+                            (if (seq tasks)
+                              (do (reset! result (first tasks)) (subvec tasks 1))
+                              tasks)))
+                        @result))]
         (await (run-task! env task))
         (reset! running false)))))
 
@@ -189,17 +217,6 @@
     (await (js/Promise.all
             (into-array (repeatedly (:max-concurrent config)
                                     #(run-worker! env queue)))))))
-
-
-(def ^:private state (atom {}))
-
-
-(declare flush!)
-
-
-(defn- schedule-retry!
-  [delay-ms]
-  (js/setTimeout flush! delay-ms))
 
 
 (defn ^:async nearest-retry-delay
@@ -222,7 +239,7 @@
 (defn ^:async run-cycle!
   [dbs clock]
   (let [running (atom true)]
-    (while (and (online?) (:enabled? @state) @running)
+    (while (and (online?) (:enabled? @state) (zero? (throttled-for-ms clock)) @running)
       (let [tasks (await (fetch-due-tasks dbs (now-iso clock)))]
         (log/debug :run-cycle/tasks tasks)
         (if (seq tasks)
@@ -235,19 +252,24 @@
 
 
 (defn flush!
-  "Trigger a run cycle if enabled and online. Fire-and-forget."
+  "Trigger a run cycle if enabled and online. Fire-and-forget.
+   While the queue is throttled, a flush starts nothing and calls itself again
+   when the wait ends."
   []
   (when-let [{:keys [clock dbs enabled? running?]} @state]
     (when (and (some? dbs) (some? clock) enabled? (online?) (not running?))
-      (swap! state assoc :running? true)
-      (-> ((fn ^:async f []
-             (try
-               (await (run-cycle! dbs clock))
-               (catch js/Error err
-                 (log/error :tasks/flush-error {:error (str err)}))
-               (finally
-                (swap! state assoc :running? false)))))
-          (.catch identity))))
+      (if (pos? (throttled-for-ms clock))
+        (schedule-retry! (throttled-for-ms clock))
+        (do
+          (swap! state assoc :running? true)
+          (-> ((fn ^:async f []
+                 (try
+                   (await (run-cycle! dbs clock))
+                   (catch js/Error err
+                     (log/error :tasks/flush-error {:error (str err)}))
+                   (finally
+                    (swap! state assoc :running? false)))))
+              (.catch identity))))))
   nil)
 
 
