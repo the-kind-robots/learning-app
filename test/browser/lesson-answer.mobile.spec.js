@@ -1,4 +1,4 @@
-const { test } = require('@playwright/test');
+const { test } = require('./fixtures');
 const { setUpLesson, expectHintedAnswerAsWideAsPlainText } = require('./lesson-answer.shared');
 
 // The same width check as the desktop spec, at phone width, where the

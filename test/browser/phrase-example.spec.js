@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // A phrase gets an example, like a word does (GH-371). The path CI does not
 // otherwise exercise: add form -> example-fetch task -> /api/examples -> stored

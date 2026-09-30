@@ -128,13 +128,6 @@
       nil)))
 
 
-(nxr/register-effect! :effect/hold-status-region
-  ;; The node sits in the state for `:effect/announce` alone: nothing
-  ;; renders from it.
-  (fn hold-status-region [{:keys [dispatch dispatch-data]} _]
-    (dispatch [[:effect/save {:app/status-region (:replicant/node dispatch-data)}]])))
-
-
 ;; Past the frame that renders the emptied region, so the accessibility tree
 ;; sees it empty before the message and speaks a repeated one again.
 (def ^:private announce-delay-ms 100)
@@ -142,9 +135,10 @@
 
 (nxr/register-effect! :effect/announce
   ;; A live region speaks when its text changes: the message is written into
-  ;; an emptied region, so the same one twice in a row is spoken twice.
-  (fn announce [_ system message]
-    (when-let [region (:app/status-region @(:store system))]
+  ;; an emptied region, so the same one twice in a row is spoken twice. The
+  ;; action names the region by its id.
+  (fn announce [_ _ region-id message]
+    (when-let [region (js/document.getElementById region-id)]
       (set! (.-textContent region) "")
       (js/setTimeout #(set! (.-textContent region) message) announce-delay-ms))))
 
@@ -656,10 +650,11 @@
        [:div.app-loading "Загружаем..."])
      ;; The one status line every screen announces through. Rendered empty
      ;; and always, so replicant never diffs its text and a message written
-     ;; into it is announced; `:effect/announce` writes it.
+     ;; into it is announced. An action announces through it by passing its
+     ;; id to `:effect/announce`.
      [:p.visually-hidden
-      {:role "status"
-       :replicant/on-mount [[:effect/hold-status-region]]}])))
+      {:id   "app-status"
+       :role "status"}])))
 
 
 (defn render!
@@ -668,13 +663,6 @@
   (sync-virtual-keyboard!))
 
 
-;; One render per dispatch that changed state, none for a dispatch that
-;; changed nothing. The store watch renders immediately outside a dispatch —
-;; external writes keep rendering — and only marks dirty inside one;
-;; `:after-dispatch` back at depth zero renders once if anything got dirty.
-;; A counter, not a flag: effects dispatch actions from inside a dispatch
-;; (dialog on-mount), and an async continuation arrives as a new top-level
-;; dispatch — both must keep the guard up until their own dispatch unwinds.
 (defn install-render!
   "Renders on every state change and only on change. `identical?` is enough:
    CLJS `assoc`/`merge` hand back the same map when nothing differs, so a

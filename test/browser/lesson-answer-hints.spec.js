@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const { setUpLesson, token, expectHintedAnswerAsWideAsPlainText } = require('./lesson-answer.shared');
 
 // Answer-hint popover in the lesson (GH-273). Scenarios:

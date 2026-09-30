@@ -43,7 +43,7 @@
   (fn show-deleted [state context {:keys [name focus-id]}]
     [[:effect/save (assoc (content state context) :collections/editing-id nil)]
      [:effect/focus-collection focus-id]
-     [:effect/announce (deleted-message name)]]))
+     [:effect/announce "app-status" (deleted-message name)]]))
 
 
 (nxr/register-action! :action/handle-tab-click

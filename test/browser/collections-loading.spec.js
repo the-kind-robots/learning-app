@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // Watches the document from before the app boots and notes the first moment
 // the splash, a loading state and the first tile are in the DOM. The

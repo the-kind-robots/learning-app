@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // Every screen transition puts the target screen, with its data, in the page
 // before the first animation frame after the tap (#494). The tap and the

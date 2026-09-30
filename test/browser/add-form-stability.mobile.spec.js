@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // The phone half of the add-form stability specs (GH-289), rewritten for the
 // list in flow (GH-373). Runs in the `mobile` project only: at 390x844 the

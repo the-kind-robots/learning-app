@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { test, expect, chromium } = require('@playwright/test');
+const { test, expect, chromium } = require('./fixtures');
 
 // The issue's phone (#456): 384 × 800.
 test.use({ viewport: { width: 384, height: 800 } });

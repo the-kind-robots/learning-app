@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const tray = require('./words-tray.shared');
 
 test('on a phone the search sits above the lesson button, the rows under the bar', async ({ page }) => {
