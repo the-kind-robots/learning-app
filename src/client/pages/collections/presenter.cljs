@@ -137,5 +137,4 @@
 
 (defn page-props
   [state]
-  {:loading? (boolean (:collections/loading? state))
-   :tiles    (tiles state)})
+  {:tiles (tiles state)})

@@ -1,13 +1,7 @@
 (ns client.presenter.vocabulary-test
   (:require
    [cljs.test :refer-macros [deftest is testing]]
-   [pages.words.actions :as actions]
    [pages.words.presenter :as sut]))
-
-
-(def ^:private page-size
-  "One page of the word list, as `pages.words.actions` asks for it."
-  50)
 
 
 (deftest word-item-props-builds-view-model
@@ -20,7 +14,14 @@
       (is (= "word-1" (:id props)))
       (is (= "der Hund" (:value props)))
       (is (= "пёс" (:translation props)))
-      (is (= 42.5 (:retention-level props))))))
+      (is (= "color-mix(in hsl, rgb(88, 204, 2) 42.5%, rgb(255, 75, 75))" (:retention-color props)))
+      (is (= "Нужно повторить (42%)" (:retention-title props))))))
+
+
+(deftest a-row-whose-retention-is-not-read-yet-is-grey-and-untitled
+  (let [props (sut/word-item-props {:id "word-1" :value "der Hund" :translation [] :retention-level nil})]
+    (is (= "rgb(var(--color-hare))" (:retention-color props)))
+    (is (nil? (:retention-title props)))))
 
 
 (deftest the-presenter-decides-what-is-a-phrase
@@ -50,10 +51,12 @@
 
 
 (defn- shown
-  "A read as the action stores it, next to what the presenter makes of it."
-  [read]
-  (let [state (actions/words-shown read)]
-    (merge state (sut/page-props state))))
+  "What the presenter makes of the list the actions stored."
+  [{:keys [search total words]}]
+  (sut/page-props {:words/more?  false
+                   :words/rows   words
+                   :words/search (or search "")
+                   :words/total  total}))
 
 
 (def ^:private rows
@@ -90,34 +93,9 @@
       (is (true? (:vocabulary? props))))))
 
 
-(defn- word-rows
-  [n]
-  (for [i (range n)]
-    {:id (str "word-" i) :value (str "Wort" i) :translation [] :retention-level i}))
-
-
-(deftest a-page-that-did-not-exhaust-the-matches-keeps-the-sentinel
-  (testing "fewer rows than the filter matched means another page follows"
-    (let [props (shown {:limit   page-size
-                        :matches 137
-                        :total   137
-                        :words   (word-rows page-size)})]
-      (is (= 50 (count (:items props)))
-          "the first page is one page of rows, not the vocabulary")
-      (is (true? (:more? props)))
-      (is (= 50 (:words/limit props))
-          "the loaded row count rides in state, so a reload can ask for it again"))))
-
-
-(deftest the-last-page-drops-the-sentinel
-  (testing "every matching row on screen"
-    (let [props (shown {:limit   100
-                        :matches 60
-                        :total   60
-                        :words   (word-rows 60)})]
-      (is (false? (:more? props)))
-      (is (= 100 (:words/limit props)))))
-  (testing "an empty list has nothing to append"
-    (let [props (shown {:limit page-size :matches 0 :total 3 :words []})]
-      (is (false? (:more? props))
-          "a search with no match must not render a sentinel beside the placeholder"))))
+(deftest before-memory-is-ready-the-list-claims-nothing
+  (testing "no total yet: neither the first-run invitation nor no-matches"
+    (let [props (shown {:search "" :total nil :words []})]
+      (is (nil? (:empty-state props)))
+      (is (false? (:known? props)))
+      (is (false? (:vocabulary? props))))))

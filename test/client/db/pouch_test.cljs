@@ -2,7 +2,6 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.reviews :as reviews]
    [adapters.words :as words]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.schemas :as schemas]
@@ -64,7 +63,7 @@
          (await (sync-pass! local remote))
          (let [local-ids  (await (ids local))
                remote-ids (await (ids remote))]
-           (is (contains? local-ids "_design/reviews-by-word"))
+           (is (contains? local-ids "_design/vocab-preview"))
            (is (contains? local-ids "vocab:katze"))
            (is (not (contains? local-ids "_design/remote-only")))
            (is (contains? remote-ids "vocab:hund"))
@@ -87,38 +86,23 @@
          (is (contains? (await (names)) "by-type") "the engine's own index")
          (is (contains? (await (names)) "by-type-word-id"))
          (is (contains? (await (names)) "by-type-run-at-created-at"))
-         (let [rev-1 (await (rev-of "_design/reviews-by-word"))]
+         (let [rev-1 (await (rev-of "_design/vocab-preview"))]
            (await (sut/ensure-views! local (mapcat :views schemas/all)))
-           (is (= rev-1 (await (rev-of "_design/reviews-by-word"))) "an unchanged view is not rewritten")
+           (is (= rev-1 (await (rev-of "_design/vocab-preview"))) "an unchanged view is not rewritten")
            (await (sut/ensure-views! local (:views changed)))
            (is (not= rev-1 (await (rev-of "_design/vocab-preview"))) "a changed map is")))))))
 
 
-(deftest the-reviews-view-answers-per-word
-  (async-testing "reviews-by-word rows carry [created-at retained] keyed by word id"
+(deftest the-preview-view-answers-per-word
+  (async-testing "vocab-preview rows carry what a list shows, read by key"
     (db-fixtures/with-test-db
       local-name
       (^:async fn
        [local]
        (let [dbs {:user/db local}]
-         (await (sut/insert dbs
-                            reviews/schema
-                            {:word-id "vocab:a" :retained true :created-at "2024-01-01T00:00:00.000Z"}))
-         (await (sut/insert dbs
-                            reviews/schema
-                            {:word-id "vocab:a" :retained false :created-at "2024-01-02T00:00:00.000Z"}))
-         (await (sut/insert dbs
-                            reviews/schema
-                            {:word-id "vocab:b" :retained true :created-at "2024-01-03T00:00:00.000Z"}))
          (await (sut/insert dbs words/schema {:_id "vocab:a" :value "a"}))
-         (let [by-word  (await (reviews/reviews-by-word dbs ["vocab:a"]))
-               previews (await (words/previews dbs nil))]
-           (is (= ["vocab:a"] (keys by-word)))
-           (is (= #{{:word-id "vocab:a" :created-at "2024-01-01T00:00:00.000Z" :retained true}
-                    {:word-id "vocab:a" :created-at "2024-01-02T00:00:00.000Z" :retained false}}
-                  (set (by-word "vocab:a"))))
-           (is (= [{:id "vocab:a" :kind nil :translation nil :value "a"}] previews))
-           (is (= [] (await (words/previews dbs ["vocab:none"]))))))))))
+         (is (= [{:id "vocab:a" :kind nil :translation nil :value "a"}] (await (words/previews dbs nil))))
+         (is (= [] (await (words/previews dbs ["vocab:none"])))))))))
 
 
 (deftest a-pass-reports-the-ids-the-pull-wrote-under-their-types
@@ -190,8 +174,8 @@
   ["der Hund" "die Katze" "das Auto" "der Zug" "die Bank" "aufstehen"])
 
 
-(deftest the-preview-view-files-a-noun-under-its-word-not-its-article
-  (async-testing "a page off the view comes back with the article ignored, and the next page continues it (#438)"
+(deftest the-preview-view-finds-a-word-by-the-id-it-is-stored-under
+  (async-testing "the view is keyed by what a word is filed under, and a keyed read still finds it (#438)"
     (db-fixtures/with-test-db
       local-name
       (^:async fn
@@ -201,13 +185,21 @@
                  (into-array
                   (for [value nouns-and-a-verb]
                     (sut/insert dbs words/schema {:_id (vocabulary/vocab-id value) :value value})))))
-         (let [first-page  (await (words/previews-page dbs {:limit 3 :skip 0}))
-               second-page (await (words/previews-page dbs {:limit 3 :skip 3}))]
-           (is (= ["aufstehen" "das Auto" "die Bank"] (mapv :value first-page))
-               "the article is ignored while ordering and still shown in full")
-           (is (= ["der Hund" "die Katze" "der Zug"] (mapv :value second-page))
-               "a page past the first continues the same order"))
          (is (= ["der Zug"]
                 (mapv :value (await (words/previews dbs [(vocabulary/vocab-id "der Zug")]))))
              "a row is still found by the id the word is stored under")
          (is (= [] (await (words/previews dbs ["vocab:none"])))))))))
+
+
+(deftest a-read-goes-past-one-page
+  (async-testing "read-docs pages through every document, and through an id range"
+    (db-fixtures/with-test-db
+      local-name
+      (^:async fn
+       [local]
+       (await (db/bulk-docs local (vec (for [i (range 2345)]
+                                         {:_id (str (if (< i 1500) "a:" "b:") (+ 10000 i)) :type "x"}))))
+       (let [dbs {:user/db local}]
+         ;; Design documents come too; memory keeps no document of their type.
+         (is (= 2345 (count (filter #(= "x" (:type %)) (await (sut/read-docs dbs :user/db {}))))))
+         (is (= 1500 (count (await (sut/read-docs dbs :user/db {:end "a:\ufff0" :start "a:"}))))))))))

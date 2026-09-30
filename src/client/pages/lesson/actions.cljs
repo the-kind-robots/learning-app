@@ -1,38 +1,39 @@
 (ns pages.lesson.actions
   (:require
+   [domain.lesson :as domain]
    [nexus.registry :as nxr]))
 
 
-(nxr/register-action! :action/show-lesson
-  (fn show-lesson [_ {:keys [lesson-state error]}]
-    [[:effect/save
-      {:page/current  :page/lesson
-       :page/load     nil
-       :lesson/empty? (boolean error)
-       :lesson/state  (when-not error lesson-state)}]]))
+;; An answer is checked and its review written before the result is shown,
+;; and the reader may have left the lesson, or started another, in the
+;; meantime. A result is shown only over the lesson it was computed from.
 
 
 (nxr/register-action! :action/update-lesson
-  (fn update-lesson [_ lesson-state]
-    [[:effect/save
-      {:lesson/state        lesson-state
-       :lesson/answer-hints nil
-       :lesson/open-hint-index nil}]]))
+  (fn update-lesson [state from lesson-state]
+    (when (= from (:lesson/state state))
+      [[:effect/save
+        {:lesson/answer-hints nil
+         :lesson/open-hint-index nil
+         :lesson/state        lesson-state}]])))
 
 
 (nxr/register-action! :action/annotate-answer
-  (fn annotate-answer [_ hints]
-    [[:effect/save {:lesson/answer-hints hints}]]))
+  (fn annotate-answer [state lesson-state hints]
+    (when (= lesson-state (:lesson/state state))
+      [[:effect/save {:lesson/answer-hints hints}]])))
 
 
 (nxr/register-action! :action/check-answer
-  (fn check-answer [_ answer]
-    [[:effect/check-answer answer]]))
+  (fn check-answer [state answer]
+    [[:effect/check-answer (:lesson/state state) answer]]))
 
 
 (nxr/register-action! :action/next-trial
-  (fn next-trial [_]
-    [[:effect/next-trial]]))
+  (fn next-trial [state]
+    (let [from (:lesson/state state)]
+      (when-let [lesson-state (some-> from domain/advance)]
+        [[:action/update-lesson from lesson-state]]))))
 
 
 (nxr/register-action! :action/open-answer-hint
@@ -53,7 +54,10 @@
 
 (nxr/register-action! :action/save-lesson-word
   (fn save-lesson-word [state payload]
-    [[:effect/add-token (assoc payload :hints (:lesson/answer-hints state))]]))
+    [[:effect/add-token
+      (assoc payload
+             :hints        (:lesson/answer-hints state)
+             :lesson-state (:lesson/state state))]]))
 
 
 (nxr/register-action! :action/focus-lesson-input

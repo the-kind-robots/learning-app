@@ -16,7 +16,7 @@
              {:name "by-type-collection-id" :fields [:type :collection-id]}]})
 
 
-(defn- doc->example
+(defn doc->example
   "Outward an example is
    `{:id :word-id :collection-id :word :value :translation :structure :created-at}`."
   [doc]

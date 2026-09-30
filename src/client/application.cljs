@@ -1,6 +1,7 @@
 (ns application
   (:require
    ["qrcode" :as QRCode]
+   [adapters.memory :as memory]
    [adapters.identity :as identity]
    [application.presenter :as presenter]
    [install-guide.view :as install-guide]
@@ -35,23 +36,96 @@
 
 
 (nxr/register-effect! :effect/navigate
-  (fn navigate-effect [{:keys [capabilities]} _ page]
+  (fn navigate-effect [{:keys [capabilities dispatch]} _ page]
     (when-let [navigate! (get-in capabilities [:navigation :navigation/navigate])]
-      (navigate! page))))
+      (navigate! page #(dispatch [[:effect/enter :action/open-home]])))))
 
 
 (nxr/register-effect! :effect/sync-pull
-  ;; Only a pull that wrote something changes the screen: a poke from a socket
-  ;; reconnect, or the pull on route entry, brings nothing most of the time,
-  ;; and reloading the page for it re-rendered the themes screen every ~2 min
-  ;; on the phone. The pairing receipt is itself a pulled document, so the
-  ;; same condition covers the dialog.
+  ;; What a pull brings reaches the screen through memory, which follows the
+  ;; local change feed; the pull itself reloads nothing. Only the pairing
+  ;; dialog asks after it: the receipt is itself a pulled document.
   (fn sync-pull [{:keys [capabilities dispatch]} _ & [reason]]
     (when-let [pull! (get-in capabilities [:capabilities/sync :sync/pull!])]
       (some-> (pull! reason)
               (.then (fn [{:keys [pulled]}]
                        (when (and pulled (pos? pulled))
-                         (dispatch [[:action/reload-page] [:action/confirm-pairing]]))))))))
+                         (dispatch [[:action/confirm-pairing]]))))))))
+
+
+(defn- page-context
+  "What a page's content needs besides app state: the stored active
+   collection and the time retention is measured at."
+  [capabilities]
+  {:active-id ((get-in capabilities [:collections :collections/active-id]))
+   :now-ms    ((get-in capabilities [:clock :clock/now-ms]))})
+
+
+(nxr/register-effect! :effect/enter
+  ;; A page's action, handed what it cannot read from state — then `args` —
+  ;; and dispatched in the same task: a route's entry, a query, a page more.
+  (fn enter [{:keys [capabilities dispatch]} _ action & args]
+    (dispatch [(into [action (page-context capabilities)] args)])))
+
+
+(nxr/register-effect! :effect/after-paint
+  ;; Runs `actions` once the frame the current task is building has been
+  ;; painted: work the screen does not show goes after the screen.
+  (fn after-paint [{:keys [dispatch]} _ actions]
+    (js/requestAnimationFrame
+     (fn [_]
+       (js/setTimeout #(dispatch actions) 0)))))
+
+
+;;
+;; The learner's data in memory (ADR-0016). `adapters.memory-loader` reads the
+;; databases and hands the documents to these three effects; nothing else
+;; writes memory. A screen reads memory when it is entered, and does not
+;; follow memory while it is open.
+;;
+
+
+(defn- memorized
+  "`state` with `docs` taken into the learner's data in memory."
+  [state docs]
+  (update state :learner/memory memory/with-docs docs))
+
+
+(nxr/register-effect! :effect/memory-loaded-basic
+  ;; The words and the collections: the splash goes, and the screen under it
+  ;; is filled in.
+  (fn memory-loaded-basic [{:keys [dispatch]} {:keys [store]} docs]
+    (swap! store #(assoc (memorized % docs) :learner/readiness :basic))
+    (dispatch [[:effect/enter :action/refresh-page]])))
+
+
+(nxr/register-effect! :effect/memory-loaded-full
+  ;; Reviews and examples: retention and the lesson can be read now.
+  (fn memory-loaded-full [{:keys [dispatch]} {:keys [store]} docs]
+    (swap! store #(assoc (memorized % docs) :learner/readiness :full))
+    (dispatch [[:effect/enter :action/refresh-page]])))
+
+
+(nxr/register-effect! :effect/memory-changed
+  ;; A batch written after the load: this app's own write once PouchDB took
+  ;; it, another tab's, a replicated one. The open screen is left as it is.
+  (fn memory-changed [_ {:keys [store]} docs]
+    (swap! store memorized docs)))
+
+
+(nxr/register-action! :action/refresh-page
+  ;; The screen on display computed again from memory: after the load
+  ;; reached a new stage, and after the reader's own change on it.
+  (fn refresh-page [state context]
+    (case (:page/current state)
+      :page/collections [[:action/show-collections context]]
+      :page/home        [[:action/show-home context]]
+      :page/lesson      (when (and (= :full (:learner/readiness state))
+                                   (nil? (:lesson/state state))
+                                   (not (:lesson/empty? state)))
+                          [[:effect/enter :action/open-lesson]])
+      :page/words       [[:action/show-words context]]
+      nil)))
 
 
 (nxr/register-effect! :effect/hold-status-region
@@ -73,12 +147,6 @@
     (when-let [region (:app/status-region @(:store system))]
       (set! (.-textContent region) "")
       (js/setTimeout #(set! (.-textContent region) message) announce-delay-ms))))
-
-
-(nxr/register-action! :action/reload-page
-  (fn reload-page [state]
-    (when-let [load-effect (:page/load state)]
-      [load-effect])))
 
 
 (nxr/register-effect! :effect/load-account
@@ -622,27 +690,37 @@
                  (render-fn state)))))
 
 
+(defn guard-double-clicks!
+  "A screen is rendered in the task of the tap that opened it, so the second
+   click of a double click lands on the new screen, on whatever control sits
+   under the finger: «НАЧАТЬ УРОК» twice checks an empty answer, «ЗАКОНЧИТЬ»
+   twice starts another lesson, ✕ twice opens the themes. A click that
+   continues a multi-click (`detail` above 1) and finds another screen than
+   the click before it does nothing."
+  [store]
+  (let [page-before (volatile! nil)]
+    (js/window.addEventListener
+     "click"
+     (fn [^js event]
+       (let [page (:page/current @store)]
+         (when (and (> (.-detail event) 1) (not= page @page-before))
+           (.stopPropagation event)
+           (.preventDefault event))
+         (vreset! page-before page)))
+     #js {:capture true})))
+
+
+(defn- entered
+  "A route's controllers: its screen computed from memory in the task that
+   changed the route, the pull after the paint."
+  [dispatch open]
+  [{:start #(dispatch [[:effect/enter open]
+                       [:effect/after-paint [[:effect/sync-pull]]]])}])
+
+
 (defn routes
   [dispatch]
-  [["/home"
-    {:name        :page/home
-     :controllers [{:start #(dispatch [[:effect/load-home] [:effect/sync-pull]])}]}]
-   ["/words"
-    {:name        :page/words
-     ;; Entering the screen opens no dialog. The rows no longer clear
-     ;; `:words/editing` on their way in (#439), so leaving the screen with a
-     ;; word open would otherwise bring it back on the return.
-     :controllers [{:start #(dispatch [[:action/close-word-edit]
-                                       [:action/load-words]
-                                       [:effect/sync-pull]])}]}]
-   ["/lesson"
-    {:name        :page/lesson
-     ;; Leaving the route ends the lesson, whatever did the leaving: Back,
-     ;; the corner ✕, the finish button (#484).
-     :controllers [{:start #(dispatch [[:effect/load-lesson] [:effect/sync-pull]])
-                    :stop  #(dispatch [[:effect/end-lesson]])}]}]
-   ["/collections"
-    {:name        :page/collections
-     :controllers [{:start #(dispatch [[:action/open-collections]
-                                       [:effect/load-collections]
-                                       [:effect/sync-pull]])}]}]])
+  [["/home"        {:name :page/home :controllers (entered dispatch :action/open-home)}]
+   ["/words"       {:name :page/words :controllers (entered dispatch :action/open-words)}]
+   ["/lesson"      {:name :page/lesson :controllers (entered dispatch :action/open-lesson)}]
+   ["/collections" {:name :page/collections :controllers (entered dispatch :action/open-collections)}]])

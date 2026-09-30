@@ -43,12 +43,14 @@ src/client/
 │
 ├── ports/                    # Capabilities the system hands to use-cases and pages
 │   ├── backup.cljs  clock.cljs  collections.cljs  dictionary.cljs  examples.cljs
-│   └── lessons.cljs  navigation.cljs  reviews.cljs  task_queue.cljs  words.cljs
+│   └── navigation.cljs  reviews.cljs  task_queue.cljs  words.cljs
 │
 ├── adapters/                 # Repositories: own a document type, speak domain outward
 │   ├── repository.cljs       # Shared edge: stored doc ↔ entity keyed by :id
+│   ├── memory.cljs           # The learner's data in memory, a projection of both databases
+│   ├── memory_loader.cljs    # Loads memory and follows both databases' changes
 │   ├── words.cljs  reviews.cljs  collections.cljs     # user-db
-│   ├── lessons.cljs  examples.cljs                    # device-db
+│   ├── examples.cljs                                  # device-db
 │   ├── dictionary.cljs       # SQL through the worker proxy
 │   ├── identity.cljs         # Device identity (account id + token) in device-db
 │   ├── data_export.cljs      # Export/import every user-db document
@@ -83,7 +85,9 @@ Every tab has a worker, but the dictionary belongs to the tab being typed into: 
 **User data** — PouchDB, split in two databases. Each adapter's schema names its database:
 
 - `user-db` — words, reviews, collections. What follows the learner across devices: replicated to the account's CouchDB database `userdb-N` through `/db/` (ADR-0006). `sync.cljs` pushes on local changes (throttled) and pulls on data-page entry; vocab conflicts resolve last-writer-wins by `:modified-at`. A device without an account is local-only and makes no network call.
-- `device-db` — lessons, examples, tasks, the device identity. Never replicated.
+- `device-db` — examples, tasks, the device identity. Never replicated.
+
+**Learner's data in memory** — what screens show of the learner's data is held in the app store under `:learner/memory`, a projection of both databases kept by `adapters/memory.cljs` — the value, documents in and memory out — and loaded by `adapters/memory_loader.cljs` (ADR-0016). What it guarantees is in `openspec/specs/learner-data-memory/spec.md`. It reads the databases through `db.pouch` and hands the documents to three effects in `application` (`:effect/memory-loaded-basic`, `:effect/memory-loaded-full`, `:effect/memory-changed`), the only writers of memory.
 
 `db_migrations.cljs` runs before `db.pouch` opens the databases; it once split the old single `local-db` into these two.
 

@@ -5,8 +5,16 @@
 
 
 (defn start!
-  [{:keys [clock db]}]
-  {:collections/active-id     active-collection/active-collection-id
+  [{:keys [clock db store]}]
+  {:collections/active-id     (fn active-id
+                                []
+                                ;; The active collection is the one memory
+                                ;; holds under the stored id. An id memory
+                                ;; holds no collection under — deleted here or
+                                ;; on another device — is none: «Всё подряд».
+                                (let [id (active-collection/active-collection-id)]
+                                  (when (some-> store deref (get-in [:learner/memory :collections id]))
+                                    id)))
    :collections/set-active!   active-collection/set-active-collection!
    :collections/list          (fn list [] (collections/list-collections db))
    :collections/get           (fn get

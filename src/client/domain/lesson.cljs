@@ -18,35 +18,53 @@
 
 
 (defn pick-vocab
-  "Picks `n` items for a lesson out of `rows`, each carrying the `:urgency`
-   the vocabulary was sorted on. Strict urgency still wins: the sort runs
-   over every row, so a more due item outranks a less due one every time,
-   not merely usually.
+  "Picks `n` items for a lesson out of `rows`, ranked by `urgency-of` —
+   `:urgency` unless given. Strict urgency still wins: every row is ranked,
+   so a more due item outranks a less due one every time, not merely
+   usually.
 
-   Shuffled twice, for two unrelated reasons — deleting either brings a bug
+   Randomised twice, for two unrelated reasons — deleting either brings a bug
    back.
 
-   The first shuffle breaks ties. `sort-by` is stable (`cljs.core/sort`
-   hands off to `goog.array.stableSort`; the docstring does not promise it,
-   so the tie test below is what holds this), which means equal urgencies
-   keep the order they arrived in, and that order is the repository's —
-   `_id`, the alphabet. Urgency ties in bulk: every item never reviewed sits
-   at `##Inf`, and elapsed time is truncated to seconds, so a batch added
-   together ties too. Without the shuffle the pool is cut alphabetically and
-   the lesson walks `ab-` again (#431).
+   Ties are broken at random. Urgency ties in bulk: every item never reviewed
+   sits at `##Inf`, and elapsed time is truncated to seconds, so a batch
+   added together ties too. Broken by the order the rows arrive in, the pool
+   is cut alphabetically and the lesson walks `ab-` again (#431).
 
-   The second shuffle is the draw: it takes `n` of the pool uniformly, so
-   consecutive lessons over an unchanged vocabulary differ.
+   The draw is the second: it takes `n` of the pool uniformly, so consecutive
+   lessons over an unchanged vocabulary differ.
 
-   A pool shorter than `n` is taken whole."
-  [rows pool-size n]
-  (->> rows
-       shuffle
-       (sort-by :urgency >)
-       (take pool-size)
-       shuffle
-       (take n)
-       vec))
+   One pass keeps the most due `pool-size`, each with a random tie key, in a
+   small array: a vocabulary is not sorted to keep twenty, since the lesson is
+   drawn in the task of the tap. `##Inf` compares; it is never subtracted.
+
+   A pool shorter than `n` is taken whole; no pool, nothing. An urgency that
+   is not a number ranks last, so it can never hold a place in the pool
+   against a real one."
+  ([rows urgency-of pool-size n]
+   (let [pool-size (or pool-size 0)
+         pool      #js []
+         before?   (fn [u t ^js kept]
+                     (or (> u (aget kept 1))
+                         (and (== u (aget kept 1)) (< t (aget kept 2)))))]
+     (doseq [row   rows
+             :let  [u (let [u (urgency-of row)] (if (js/Number.isNaN u) ##-Inf u))
+                    t (js/Math.random)]
+             :when (and (pos? pool-size)
+                        (or (< (.-length pool) pool-size)
+                            (before? u t (aget pool (dec (.-length pool))))))]
+       (let [at (loop [i 0]
+                  (if (and (< i (.-length pool)) (not (before? u t (aget pool i))))
+                    (recur (inc i))
+                    i))]
+         (.splice pool at 0 #js [row u t])
+         (when (> (.-length pool) pool-size)
+           (.pop pool))))
+     (->> pool
+          (map #(aget % 0))
+          shuffle
+          (take n)
+          vec))))
 
 
 (def trial-type-word "word")
@@ -179,26 +197,24 @@
 
 
 (defn check-answer
+  "The lesson after `answer` to its current trial. A blank answer is not an
+   answer: the lesson is returned as it was, nothing graded."
   [state answer]
-  (let [current-trial  (:current-trial state)
-        correct-answer (expected-answer state)
-        correct?       (= (trial-normalized current-trial answer)
-                          (trial-normalized current-trial correct-answer))
-        remaining      (cond-> (:remaining-trials state)
-                         correct? (remove-trial current-trial))
-        unlock?        (and correct? (vocab-trial? current-trial))
-        remaining      (if unlock?
-                         (unlock-example-trials remaining (:word-id current-trial))
-                         remaining)
-        trials         (if unlock?
-                         (unlock-example-trials (:trials state) (:word-id current-trial))
-                         (:trials state))
-        last-result    {:correct? correct?
-                        :answer   answer}]
-    (-> state
-        (assoc :trials trials)
-        (assoc :remaining-trials remaining)
-        (assoc :last-result last-result))))
+  (if (str/blank? answer)
+    state
+    (let [current-trial  (:current-trial state)
+          correct-answer (expected-answer state)
+          correct?       (= (trial-normalized current-trial answer)
+                            (trial-normalized current-trial correct-answer))
+          unlock?        (and correct? (vocab-trial? current-trial))
+          remaining      (cond-> (:remaining-trials state)
+                           correct? (remove-trial current-trial)
+                           unlock?  (unlock-example-trials (:word-id current-trial)))]
+      (assoc state
+             :last-result      {:answer answer :correct? correct?}
+             :remaining-trials remaining
+             :trials           (cond-> (:trials state)
+                                 unlock? (unlock-example-trials (:word-id current-trial)))))))
 
 
 (defn- available-trials

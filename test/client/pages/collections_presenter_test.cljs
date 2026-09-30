@@ -77,9 +77,7 @@
 
 
 (deftest page-props-are-one-sequence-of-tiles
-  (let [props (sut/page-props {:collections/items    [(collection "b" "B") (collection "a" "A")]
-                               :collections/loading? nil})]
-    (is (false? (:loading? props)))
+  (let [props (sut/page-props {:collections/items [(collection "b" "B") (collection "a" "A")]})]
     (is (= ["Всё подряд" "A" "B"] (mapv :name (:tiles props)))
         "one alphabetical sequence; the columns are the stylesheet's job")))
 

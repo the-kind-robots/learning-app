@@ -21,20 +21,6 @@ The system SHALL use trial-selector from lesson options when advancing to next t
 - **THEN** the selection uses the `trial-selector` from lesson `options`
 - **AND** maintains backward compatibility for lessons without options
 
-### Requirement: Lesson documents follow data-model spec
-The system SHALL store lesson documents according to `specs/data-model/spec.md`.
-
-#### Scenario: Lesson document shape
-- **WHEN** a lesson is persisted
-- **THEN** it matches the lesson document shape in `specs/data-model/spec.md`
-
-### Requirement: Lesson trials follow data-model spec
-The system SHALL store lesson trials according to `specs/data-model/spec.md`.
-
-#### Scenario: Trial document shape
-- **WHEN** a lesson trial is persisted
-- **THEN** it matches the lesson trial shape in `specs/data-model/spec.md`
-
 ### Requirement: Lesson answer checks update lesson state
 The system SHALL return updated lesson state after answer checks, recording the result in `:last-result`.
 
@@ -56,20 +42,28 @@ The system SHALL generate trials for each word, each phrase, and each example, u
 - **AND** each example stored for that phrase produces an example trial, locked until the phrase trial is answered correctly
 
 ### Requirement: Lesson state is denormalized
-The system SHALL store lesson state without a separate `:words` collection.
+The system SHALL hold lesson state without a separate `:words` collection.
 
 #### Scenario: Lesson state fields
-- **WHEN** lesson state is stored
-- **THEN** it includes `:trials`, `:remaining-trials`, `:current-trial`, and `:last-result`
+- **WHEN** a lesson starts
+- **THEN** its state includes `:trials`, `:remaining-trials`, `:current-trial`, and `:last-result`
 - **AND** it omits a `:words` field
 
 ### Requirement: Lesson entry starts a fresh session
-The system SHALL start a new lesson session when the user enters the lesson flow from the UI, rather than silently reusing an older persisted lesson document.
+The system SHALL start a new lesson session every time the user enters the lesson flow from the UI, drawn from the current vocabulary state.
 
 #### Scenario: Re-entering lesson after leaving an unfinished session
-- **WHEN** a user enters the lesson flow while a previous local lesson document still exists
+- **WHEN** a user enters the lesson flow after leaving an unfinished session
 - **THEN** the system creates a new lesson session from the current vocabulary state
-- **AND** the newly rendered lesson does not reuse the stale persisted session
+- **AND** the newly rendered lesson does not continue the one that was left
+
+### Requirement: A lesson in progress is not stored
+The lesson in progress SHALL be held by the open app only and SHALL NOT be written to a database. What its answers record — the reviews — is written as before.
+
+#### Scenario: Answering a lesson
+- **WHEN** a learner starts a lesson and answers its trials
+- **THEN** no lesson document is written to any local database
+- **AND** a review is recorded for each checked word-trial answer
 
 ### Requirement: Word-trial answers record review progress
 The system SHALL record review data for word-trial answers so retention-based progress updates are reflected after lesson activity.
@@ -213,21 +207,21 @@ The lesson's items SHALL be drawn from that pool uniformly at random, without re
 - **THEN** the more due item is in the pool on every lesson
 
 ### Requirement: Leaving a lesson returns home
-The system SHALL show the home screen when a learner leaves a lesson — by finishing it, by closing it, or by the browser's or the system's Back — and leaving SHALL end the lesson: the stored lesson in progress is removed, whichever way out was taken. Pressing the browser's Back on home SHALL NOT restore the lesson.
+The system SHALL show the home screen when a learner leaves a lesson — by finishing it, by closing it, or by the browser's or the system's Back — and leaving SHALL end the lesson, whichever way out was taken. Pressing the browser's Back on home SHALL NOT restore the lesson.
 
 #### Scenario: Finished lesson exit
 - **WHEN** a learner completes the final lesson trial and exits the lesson flow
-- **THEN** the home screen is on display and no lesson is stored
+- **THEN** the home screen is on display
 - **AND** pressing the browser's Back does not show the lesson
 
 #### Scenario: Cancelled lesson exit
 - **WHEN** a learner closes an active lesson from the corner
-- **THEN** the home screen is on display and no lesson is stored
+- **THEN** the home screen is on display
 - **AND** pressing the browser's Back does not show the lesson
 
 #### Scenario: Leaving a lesson by Back
 - **WHEN** a learner who has answered part of a lesson presses the browser's Back
-- **THEN** the home screen is on display and no lesson is stored
+- **THEN** the home screen is on display
 - **AND** entering the lesson again starts a fresh session
 
 ### Requirement: Hinted words take the width of plain text
@@ -238,14 +232,21 @@ The revealed correct answer SHALL occupy the same width whether or not its words
 - **THEN** its rendered width equals that of the same text without hints, within half a pixel
 
 ### Requirement: Continuing a lesson advances one trial
-Activating the continue button («ДАЛЕЕ» or «ЗАКОНЧИТЬ») once SHALL act once: one press of Enter on the focused button, or one click, advances the lesson by exactly one trial and saves it without a conflict. Activations arriving while an advance is still being saved SHALL join that advance rather than start another.
+Activating the continue button («ДАЛЕЕ» or «ЗАКОНЧИТЬ») once SHALL act once: one press of Enter on the focused button, or one click, advances the lesson by exactly one trial. A double click SHALL advance it by one trial as well.
 
 #### Scenario: Enter on the continue button
 - **WHEN** the continue button is focused after an answer and the user presses Enter once
 - **THEN** the lesson shows the next trial, skipping none
-- **AND** no lesson save fails
 
 #### Scenario: Double click on the continue button
 - **WHEN** the user double-clicks the continue button
 - **THEN** the lesson advances by one trial
-- **AND** no lesson save fails
+
+### Requirement: A blank answer is not checked
+Checking an answer that is empty or only whitespace SHALL do nothing: the trial stays
+waiting for its answer, nothing is revealed, and no review is recorded.
+
+#### Scenario: Checking with nothing typed
+- **WHEN** the answer field is empty and the user activates «ПРОВЕРИТЬ»
+- **THEN** the answer field is still on screen and no answer is revealed
+- **AND** no review is recorded

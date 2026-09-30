@@ -10,7 +10,6 @@
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [domain.lesson :as domain]
-   [ports.lessons :as lessons]
    [ports.reviews :as reviews]
    [ports.words :as words]
    [use-cases.lesson :as sut]
@@ -44,14 +43,43 @@
   ([dbs request!]
    (let [clock {:clock/now-iso time/now-iso
                 :clock/now-ms  time/now-ms}]
-     {:clock       clock
-      :lessons     (lessons/start! {:db dbs :clock clock})
+     {::dbs        dbs
+      :clock       clock
       :reviews     (reviews/start! {:db dbs :clock clock})
       :words       (words/start! {:db dbs :clock clock})
       :collections {:collections/active-id (fn [] nil)
                     :collections/get       (fn [_] nil)}
       :examples    {:examples/list     (fn [word-ids] (examples/list dbs word-ids))
                     :examples/request! request!}})))
+
+
+(defn- ^:async start!
+  "What entering the lesson does: draw it from memory loaded off `dbs`."
+  [capabilities opts]
+  (let [dbs    (::dbs capabilities)
+        memory (await (db-seed/memory-of (:user/db dbs) (:device/db dbs)))]
+    (sut/start memory ((get-in capabilities [:collections :collections/active-id])) opts (time/now-ms))))
+
+
+(defn- ^:async started
+  "The lesson state `start!` draws."
+  [capabilities opts]
+  (:lesson-state (await (start! capabilities opts))))
+
+
+(defn- ^:async held-words
+  "Every word as memory would hold `dbs` now, with its retention level and
+   the urgency a lesson ranks it by."
+  [capabilities]
+  (let [dbs    (::dbs capabilities)
+        memory (await (db-seed/memory-of (:user/db dbs) (:device/db dbs)))
+        now    (time/now-ms)
+        levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows memory {} now)))]
+    {:words (mapv (fn [{:keys [word] :as card}]
+                    {:id      (:id word)
+                     :retention-level (levels (:id word))
+                     :urgency (vocabulary/urgency-of card now)})
+                  (vocabulary/collection-cards memory nil))}))
 
 
 (deftest start-creates-lesson-when-words-available
@@ -63,15 +91,13 @@
               (:user/db dbs)
               [{:_id "word-1" :value "der Hund" :translation "пёс"}
                {:_id "word-2" :value "die Katze" :translation "кошка"}]))
-      (let [result (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))]
+      (let [result (await (start! (test-capabilities dbs) {:trial-selector :first}))]
         (is (some? (:lesson-state result)))
         (is (nil? (:error result)))
-        (let [lesson (:lesson-state result)
-              stored (await (db-queries/fetch-by-type (:device/db dbs) "lesson"))]
+        (let [lesson (:lesson-state result)]
           (is (= 2 (count (:trials lesson))))
           (is (some? (:current-trial lesson)))
-          (is (nil? (:_id lesson)) "the state carries no storage names")
-          (is (= ["lesson"] (map :_id stored)) "and is stored under the one lesson document")))))))
+          (is (nil? (:_id lesson)) "the state carries no storage names")))))))
 
 
 (deftest start-returns-error-when-no-words
@@ -79,21 +105,9 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [result (await (sut/start! (test-capabilities dbs) {}))]
+      (let [result (await (start! (test-capabilities dbs) {}))]
         (is (= :no-words-available (:error result)))
         (is (nil? (:lesson-state result))))))))
-
-
-(deftest start-returns-error-when-db-insert-fails
-  (async-testing "`start!` errors on db failure"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (with-redefs [db/insert (fn [_ _] (js/Promise.reject (ex-info "DB error" {})))]
-        (let [result (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))]
-          (is (= :lesson-start-failed (:error result)))
-          (is (nil? (:lesson-state result)))))))))
 
 
 (deftest start-includes-example-trials
@@ -108,7 +122,7 @@
                                        :word        "der Hund"
                                        :value       "Der Hund schlaeft."
                                        :translation "Пёс спит"}]))
-      (let [result (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
+      (let [result (await (start! (test-capabilities dbs) {:trial-selector :first}))
             trials (:trials (:lesson-state result))]
         (is (= 2 (count trials)))
         (is (= 1 (count (filter #(= "word" (:type %)) trials))))
@@ -120,47 +134,14 @@
                     vec))))))))
 
 
-(deftest restart-replaces-existing-lesson-with-fresh-session
-  (async-testing "`restart!` discards persisted lesson state and starts fresh"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db-seed/seed-vocabulary!
-              (:user/db dbs)
-              [{:_id "word-1" :value "der Hund" :translation "пёс"}
-               {:_id "word-2" :value "die Katze" :translation "кошка"}]))
-      (let [start-result (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-            first-trial  (domain/current-trial (:lesson-state start-result))]
-        (await (sut/check-answer! (test-capabilities dbs) (:answer first-trial)))
-        (let [restarted    (await (sut/restart! (test-capabilities dbs)))
-              lessons      (await (db-queries/fetch-by-type (:device/db dbs) "lesson"))
-              lesson-state (:lesson-state restarted)]
-          (is (some? lesson-state))
-          (is (nil? (:error restarted)))
-          (is (= 1 (count lessons)))
-          (is (= (count (:trials lesson-state))
-                 (count (:remaining-trials lesson-state))))
-          (is (nil? (domain/last-result lesson-state)))))))))
-
-
-(deftest restart-returns-error-when-no-words
-  (async-testing "`restart!` propagates start errors"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [result (await (sut/restart! (test-capabilities dbs)))]
-        (is (= :no-words-available (:error result)))
-        (is (nil? (:lesson-state result))))))))
-
-
 (deftest check-answer-correct-word-trial
   (async-testing "`check-answer!` creates review on correct answer"
     (with-test-dbs
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-      (let [result      (await (sut/check-answer! (test-capabilities dbs) "der Hund"))
+      (let [lesson      (await (started (test-capabilities dbs) {:trial-selector :first}))
+            result      (await (sut/check-answer! (test-capabilities dbs) lesson "der Hund"))
             last-result (domain/last-result (:lesson-state result))]
         (is (some? (:lesson-state result)))
         (is (nil? (:error result)))
@@ -182,8 +163,8 @@
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-      (let [result      (await (sut/check-answer! (test-capabilities dbs) "wrong answer"))
+      (let [lesson      (await (started (test-capabilities dbs) {:trial-selector :first}))
+            result      (await (sut/check-answer! (test-capabilities dbs) lesson "wrong answer"))
             last-result (domain/last-result (:lesson-state result))]
         (is (some? (:lesson-state result)))
         (is (false? (:correct? last-result))))
@@ -198,8 +179,8 @@
       [dbs]
       (let [long-answer (apply str (repeat 1400 "x"))]
         (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-        (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-        (let [result (await (sut/check-answer! (test-capabilities dbs) long-answer))
+        (let [lesson (await (started (test-capabilities dbs) {:trial-selector :first}))
+              result (await (sut/check-answer! (test-capabilities dbs) lesson long-answer))
               answer (-> result :lesson-state domain/last-result :answer)]
           (is (= 1000 (count answer)))
           (is (= (subs long-answer 0 1000) answer))))))))
@@ -217,11 +198,10 @@
                                        :word        "der Hund"
                                        :value       "Der Hund schlaeft."
                                        :translation "Пёс спит."}]))
-      (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-      (await (sut/check-answer! (test-capabilities dbs) "der Hund"))
-      (await (sut/advance! (test-capabilities dbs)))
-      (let [initial-reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
-        (await (sut/check-answer! (test-capabilities dbs) "Der Hund schlaeft."))
+      (let [lesson          (await (started (test-capabilities dbs) {:trial-selector :first}))
+            checked         (:lesson-state (await (sut/check-answer! (test-capabilities dbs) lesson "der Hund")))
+            initial-reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
+        (await (sut/check-answer! (test-capabilities dbs) (domain/advance checked) "Der Hund schlaeft."))
         (let [final-reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
           (is (= (count initial-reviews) (count final-reviews)))))))))
 
@@ -238,8 +218,8 @@
                                        :word        "der Hund"
                                        :value       "Der Hund schlaeft."
                                        :translation "Пёс спит."}]))
-      (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-      (let [result (await (sut/check-answer! (test-capabilities dbs) "der Hund"))
+      (let [lesson (await (started (test-capabilities dbs) {:trial-selector :first}))
+            result (await (sut/check-answer! (test-capabilities dbs) lesson "der Hund"))
             trial  (->> (:remaining-trials (:lesson-state result))
                         (filter domain/example-trial?)
                         first)]
@@ -283,7 +263,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [result (await (sut/check-answer! (test-capabilities dbs) "any answer"))]
+      (let [result (await (sut/check-answer! (test-capabilities dbs) nil "any answer"))]
         (is (= :lesson-not-found (:error result)))
         (is (nil? (:lesson-state result))))))))
 
@@ -294,117 +274,17 @@
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-      (with-redefs [db/insert (fn [_ _] (js/Promise.reject (ex-info "DB error" {})))]
-        (let [result      (await (sut/check-answer! (test-capabilities dbs) "der Hund"))
-              last-result (domain/last-result (:lesson-state result))]
-          (is (= :lesson-save-failed (:error result)))
-          (is (some? (:lesson-state result)))
-          (is (true? (:correct? last-result)))))))))
-
-
-(deftest advance-selects-next-trial
-  (async-testing "`advance!` moves to next trial"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs)
-                                       [{:_id "word-1" :value "der Hund" :translation "пёс"}
-                                        {:_id "word-2" :value "die Katze" :translation "cat"}]))
-      (let [start-result (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-            first-trial  (domain/current-trial (:lesson-state start-result))]
-        (await (sut/check-answer! (test-capabilities dbs) (:answer first-trial)))
-        (let [advance-result (await (sut/advance! (test-capabilities dbs)))
-              next-trial     (domain/current-trial (:lesson-state advance-result))]
-          (is (some? (:lesson-state advance-result)))
-          (is (nil? (:error advance-result)))
-          (is (some? next-trial))
-          (is (not= first-trial next-trial))))))))
-
-
-(deftest concurrent-advances-advance-once
-  (async-testing "`advance!` called twice at once advances one trial, no conflict"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs)
-                                       [{:_id "word-1" :value "der Hund" :translation "пёс"}
-                                        {:_id "word-2" :value "die Katze" :translation "cat"}
-                                        {:_id "word-3" :value "das Haus" :translation "дом"}]))
-      (let [start-result (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-            first-trial  (domain/current-trial (:lesson-state start-result))]
-        (await (sut/check-answer! (test-capabilities dbs) (:answer first-trial)))
-        (let [[one two] (await (js/Promise.all
-                                #js [(sut/advance! (test-capabilities dbs))
-                                     (sut/advance! (test-capabilities dbs))]))
-              stored    (await (db-queries/fetch-by-type (:device/db dbs) "lesson"))]
-          (is (nil? (:error one)))
-          (is (nil? (:error two)))
-          (is (= (:lesson-state one) (:lesson-state two)))
-          (is (= 1 (count stored)))))))))
-
-
-(deftest advance-returns-nil-when-finished
-  (async-testing "`advance!` returns nil when finished"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-      (await (sut/check-answer! (test-capabilities dbs) "der Hund"))
-      (let [result (await (sut/advance! (test-capabilities dbs)))]
-        (is (nil? result)))))))
-
-
-(deftest advance-returns-error-when-no-lesson
-  (async-testing "`advance!` errors when no lesson"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [result (await (sut/advance! (test-capabilities dbs)))]
-        (is (= :lesson-not-found (:error result))))))))
-
-
-(deftest advance-handles-db-insert-failure
-  (async-testing "`advance!` errors on db failure"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs)
-                                       [{:_id "word-1" :value "der Hund" :translation "пёс"}
-                                        {:_id "word-2" :value "die Katze" :translation "cat"}]))
-      (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-      (await (sut/check-answer! (test-capabilities dbs) "der Hund"))
-      (with-redefs [db/insert (fn [_ _] (js/Promise.reject (ex-info "DB error" {})))]
-        (let [result (await (sut/advance! (test-capabilities dbs)))]
-          (is (= :lesson-save-failed (:error result)))))))))
-
-
-(deftest finish-removes-lesson
-  (async-testing "`finish!` removes lesson from db"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))
-      (let [lessons-before (await (db-queries/fetch-by-type (:device/db dbs) "lesson"))]
-        (await (sut/finish! (test-capabilities dbs)))
-        (let [lessons-after (await (db-queries/fetch-by-type (:device/db dbs) "lesson"))]
-          (is (= 1 (count lessons-before)))
-          (is (= 0 (count lessons-after)))))))))
-
-
-(deftest finish-is-noop-when-no-lesson
-  (async-testing "`finish!` no-op when no lesson"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [result (await (sut/finish! (test-capabilities dbs)))]
-        (is (nil? result)))))))
+      (let [lesson (await (started (test-capabilities dbs) {:trial-selector :first}))]
+        (with-redefs [db/insert (fn [_ _] (js/Promise.reject (ex-info "DB error" {})))]
+          (let [result      (await (sut/check-answer! (test-capabilities dbs) lesson "der Hund"))
+                last-result (domain/last-result (:lesson-state result))]
+            (is (= :review-save-failed (:error result)))
+            (is (some? (:lesson-state result)))
+            (is (true? (:correct? last-result))))))))))
 
 
 (deftest full-lesson-flow-completes-successfully
-  (async-testing "full lesson flow: start → answer → finish"
+  (async-testing "full lesson flow: start → answer → advance → finished"
     (with-test-dbs
      (^:async fn
       [dbs]
@@ -412,22 +292,16 @@
               (:user/db dbs)
               [{:_id "word-1" :value "der Hund" :translation "пёс"}
                {:_id "word-2" :value "die Katze" :translation "cat"}]))
-      (let [start-result (await (sut/start! (test-capabilities dbs) {:trial-selector :first}))]
-        (is (some? (:lesson-state start-result)))
-        (let [first-trial (domain/current-trial (:lesson-state start-result))
-              check1      (await (sut/check-answer! (test-capabilities dbs) (:answer first-trial)))]
-          (is (true? (:correct? (domain/last-result (:lesson-state check1)))))
-          (let [advance1 (await (sut/advance! (test-capabilities dbs)))]
-            (is (some? (:lesson-state advance1)))
-            (let [second-trial (domain/current-trial (:lesson-state advance1))
-                  check2       (await (sut/check-answer! (test-capabilities dbs) (:answer second-trial)))]
-              (is (true? (:correct? (domain/last-result (:lesson-state check2)))))
-              (is (domain/finished? (:lesson-state check2)))
-              (let [advance2 (await (sut/advance! (test-capabilities dbs)))]
-                (is (nil? advance2)))
-              (await (sut/finish! (test-capabilities dbs)))
-              (let [lessons (await (db-queries/fetch-by-type (:device/db dbs) "lesson"))]
-                (is (empty? lessons)))))))))))
+      (let [capabilities (test-capabilities dbs)
+            lesson       (await (started capabilities {:trial-selector :first}))
+            check1       (:lesson-state (await (sut/check-answer! capabilities lesson (:answer (domain/current-trial lesson)))))
+            advanced     (domain/advance check1)
+            check2       (:lesson-state (await (sut/check-answer! capabilities advanced (:answer (domain/current-trial advanced)))))]
+        (is (true? (:correct? (domain/last-result check1))))
+        (is (not= (domain/current-trial lesson) (domain/current-trial advanced)))
+        (is (true? (:correct? (domain/last-result check2))))
+        (is (domain/finished? check2))
+        (is (nil? (domain/advance check2))))))))
 
 
 (defn- ^:async seed-stale-vocabulary!
@@ -474,12 +348,12 @@
                {:id "vocab:zug" :value "der Zug" :days-ago 300}
                {:id "vocab:zurueck" :value "zurück" :days-ago 300}]))
       (let [capabilities    (test-capabilities dbs)
-            {:keys [words]} (await (vocabulary/list capabilities {:order :most-due}))
+            {:keys [words]} (await (held-words capabilities))
             {:keys [lesson-state]}
-            (await (sut/start! capabilities
-                               {:vocab-pool-size  3
-                                :vocab-per-lesson 3
-                                :trial-selector   :first}))]
+            (await (start! capabilities
+                           {:vocab-pool-size  3
+                            :vocab-per-lesson 3
+                            :trial-selector   :first}))]
         (is (every? zero? (map :retention-level words))
             "the premise: retention has underflowed to zero for all six")
         (is (= #{"vocab:zeit" "vocab:zug" "vocab:zurueck"}
@@ -517,7 +391,7 @@
               ["abend" "abfahrt" "abholen" "ankommen" "aufstehen"
                "bleiben" "bringen" "denken" "essen" "fahren"]))
       (let [capabilities (test-capabilities dbs)
-            urgencies    (->> (await (vocabulary/list capabilities {:order :most-due}))
+            urgencies    (->> (await (held-words capabilities))
                               :words
                               (map :urgency)
                               set)
@@ -526,9 +400,9 @@
             draw         (^:async fn
                           []
                           (let [{:keys [lesson-state]}
-                                (await (sut/start! capabilities
-                                                   {:vocab-pool-size 3
-                                                    :trial-selector  :first}))]
+                                (await (start! capabilities
+                                               {:vocab-pool-size 3
+                                                :trial-selector  :first}))]
                             (set (map :word-id (:trials lesson-state)))))
             first-draw   (await (draw))
             second-draw  (await (draw))

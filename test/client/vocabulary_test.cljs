@@ -3,8 +3,10 @@
    [client.support.test :refer [async-testing]])
   (:require
    [adapters.examples :as examples]
+   [adapters.memory :as memory]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
+   [client.support.db-seed :as db-seed]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
@@ -50,9 +52,27 @@
                    :collections/add-word!     (fn [_ _] (js/Promise.resolve nil))
                    :collections/docs-without-word (fn [_] (js/Promise.resolve []))
                    :collections/exclude-word! (fn [_ _] (js/Promise.resolve nil))}
-     :examples    {:examples/of-word  (fn [_] (js/Promise.resolve []))
+     :examples    {:examples/of-word        (fn [_] (js/Promise.resolve []))
                    :examples/purge-by-word! (fn [word-id] (examples/purge-by-word! dbs word-id))
-                   :examples/request! (fn [_ _ _] nil)}}))
+                   :examples/request!       (fn [_ _ _] nil)}}))
+
+
+(defn- ^:async list-of
+  "`rows` over the learner's data as memory would hold `dbs` now. `:word-ids`
+   become a collection holding them."
+  [dbs {:keys [word-ids] :as opts}]
+  (let [memory (cond-> (await (db-seed/memory-of (:user/db dbs)))
+                 word-ids (memory/with-docs [{:_id "collection:listed" :_rev "1-a" :type "collection"
+                                              :name "listed" :word-ids (vec word-ids)}]))]
+    (sut/rows memory
+              (cond-> (dissoc opts :word-ids)
+                word-ids (assoc :collection (get-in memory [:collections "collection:listed"])))
+              (time/now-ms))))
+
+
+(defn- ^:async count-of
+  [dbs]
+  (count (:words (await (db-seed/memory-of (:user/db dbs))))))
 
 
 (deftest add-creates-vocab-and-initial-review
@@ -79,7 +99,7 @@
       [dbs]
       (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
       (await (sut/add! (test-capabilities dbs) "die Katze" "кот" :word))
-      (let [{:keys [words total]} (await (sut/list (test-capabilities dbs) {}))]
+      (let [{:keys [words total]} (await (list-of dbs {}))]
         (is (= 2 (count words)))
         (is (= 2 total))
         (is (every? :retention-level words)))))))
@@ -93,13 +113,13 @@
       (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
       (await (sut/add! (test-capabilities dbs) "die Katze" "кот" :word))
       (await (sut/add! (test-capabilities dbs) "der Vogel" "птица" :word))
-      (let [{:keys [matches words total]} (await (sut/list (test-capabilities dbs) {:search "Hund" :limit 1}))]
+      (let [{:keys [matches words total]} (await (list-of dbs {:search "Hund" :limit 1}))]
         (is (= 3 total))
         (is (= 1 matches)
             "`matches` counts what the search left, `total` what the scope holds")
         (is (= 1 (count words)))
         (is (= "der Hund" (:value (first words)))))
-      (let [{:keys [matches words total]} (await (sut/list (test-capabilities dbs) {:search "zzz" :limit 50}))]
+      (let [{:keys [matches words total]} (await (list-of dbs {:search "zzz" :limit 50}))]
         (is (= [] words) "an empty page reads no reviews and returns no rows")
         (is (= 0 matches))
         (is
@@ -115,16 +135,16 @@
       [dbs]
       (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
       (await (sut/add! (test-capabilities dbs) "auf jeden Fall" "в любом случае" :phrase))
-      (is (= 2 (await (sut/count (test-capabilities dbs))))
-          "the count comes off the view's row count, and a phrase is a row of it")
-      (let [{:keys [matches total words]} (await (sut/list (test-capabilities dbs) {:limit 50}))]
+      (is (= 2 (await (count-of dbs)))
+          "a phrase is counted like a word")
+      (let [{:keys [matches total words]} (await (list-of dbs {:limit 50}))]
         (is (= ["vocab:auf jeden fall" "vocab:der hund"] (mapv :id words))
             "both kinds in one alphabet")
         (is (= ["phrase" nil] (mapv :kind words))
             "the kind rides along, so the row can be rendered as a phrase")
         (is (= 2 total))
         (is (= 2 matches)))
-      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:search "jeden" :limit 50}))]
+      (let [{:keys [words]} (await (list-of dbs {:search "jeden" :limit 50}))]
         (is (= ["vocab:auf jeden fall"] (mapv :id words))
             "a phrase is searchable by its value like a word"))))))
 
@@ -138,65 +158,13 @@
               (into-array (map (fn [i]
                                  (sut/add! (test-capabilities dbs) (str "wort-" i) (str "перевод-" i) :word))
                                (range 12)))))
-      (let [{:keys [matches words total]} (await (sut/list (test-capabilities dbs) {:limit 5}))]
+      (let [{:keys [matches words total]} (await (list-of dbs {:limit 5}))]
         (is (= 5 (count words)) "the page is the limit")
         (is (= 12 matches) "every word matched the empty filter")
         (is (= 12 total)))
-      (let [{:keys [matches words]} (await (sut/list (test-capabilities dbs) {:limit 50}))]
+      (let [{:keys [matches words]} (await (list-of dbs {:limit 50}))]
         (is (= 12 (count words)))
         (is (= 12 matches) "a page larger than the list leaves nothing behind"))))))
-
-
-(deftest count-reads-the-vocab-view-not-the-documents
-  (async-testing "`count` reads the view's row count and no rows at all"
-    (let [find-calls  (atom 0)
-          query-calls (atom [])
-          row-count   26]
-      (with-redefs [db/find
-                    (fn [_ _]
-                      (swap! find-calls inc)
-                      (js/Promise.resolve {:docs []}))
-
-                    db/query
-                    (fn [_ view opts]
-                      (swap! query-calls conj [view opts])
-                      (js/Promise.resolve {:rows [] :total-rows row-count}))]
-        (let [cnt (await (sut/count (test-capabilities {:user/db :fake})))]
-          (is (= row-count cnt))
-          (is (= 0 @find-calls))
-          (is (= [["vocab-preview/rows" {:limit 0}]] @query-calls)
-              "`:limit 0` asks for the count the view carries and for no rows"))))))
-
-
-(deftest list-reads-the-page-it-returns-and-nothing-more
-  (async-testing "a first page costs its own rows, whatever the vocabulary holds"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (js/Promise.all
-              (into-array (map (fn [i]
-                                 (sut/add! (test-capabilities dbs)
-                                           (str "wort-" (+ 100 i))
-                                           (str "перевод-" i)
-                                           :word))
-                               (range 120)))))
-      (let [calls    (atom [])
-            original db/query]
-        (with-redefs [db/query (fn [db view opts]
-                                 (swap! calls conj [view opts])
-                                 (original db view opts))]
-          (let [{:keys [matches total words]} (await (sut/list (test-capabilities dbs) {:limit 50}))
-                previews (->> @calls (filter #(= "vocab-preview/rows" (first %))) (mapv second))
-                reviews  (->> @calls (filter #(= "reviews-by-word/rows" (first %))) (mapv second))]
-            (is (= 50 (count words)))
-            (is (= 120 total))
-            (is (= 120 matches))
-            (is (every? :limit previews)
-                "no read of the whole preview view — the page and the count both carry a limit")
-            (is (some #(= {:limit 50} %) previews)
-                "the page is read as 50 rows off the id-ordered view")
-            (is (= [50] (mapv #(count (:keys %)) reviews))
-                "one review read, keyed by the 50 words on the page"))))))))
 
 
 (deftest list-and-count-return-all-words-beyond-25
@@ -207,24 +175,11 @@
       (await (js/Promise.all
               (into-array (map (fn [i] (sut/add! (test-capabilities dbs) (str "word-" i) (str "перевод-" i) :word))
                                (range 30)))))
-      (let [cnt (await (sut/count (test-capabilities dbs)))
-            {:keys [words total]} (await (sut/list (test-capabilities dbs) {}))]
+      (let [cnt (await (count-of dbs))
+            {:keys [words total]} (await (list-of dbs {}))]
         (is (= 30 cnt))
         (is (= 30 total))
         (is (= 30 (count words))))))))
-
-
-(deftest get-returns-summary
-  (async-testing "`get` returns word summary"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
-            result (await (sut/get (test-capabilities dbs) word-id))]
-        (is (= word-id (:id result)))
-        (is (= "der Hund" (:value result)))
-        (is (= "пёс" (-> result :translation first :value)))
-        (is (number? (:retention-level result))))))))
 
 
 (deftest update-updates-and-returns-summary
@@ -305,11 +260,14 @@
         (let [{reviews :docs} (await (db/find-all (:user/db dbs) {:selector {:type "review"}}))
               expected (->> (group-by :word-id reviews)
                             (map (fn [[word-id reviews]]
-                                   [word-id (retention/retention-level reviews (time/now-ms))]))
+                                   (let [log (reduce retention/with-review
+                                                     retention/empty-reviews
+                                                     (map #(assoc % :id (:_id %)) reviews))]
+                                     [word-id (retention/level (retention/urgency log (time/now-ms)))])))
                             (into {}))
-              {:keys [words]} (await (sut/list (test-capabilities dbs) {}))
+              {:keys [words]} (await (list-of dbs {}))
               actual (into {} (map (juxt :id :retention-level)) words)
-              {subset :words} (await (sut/list (test-capabilities dbs) {:word-ids (take 2 word-ids)}))]
+              {subset :words} (await (list-of dbs {:word-ids (take 2 word-ids)}))]
           (is (= 35 (count reviews)))
           (is (= 5 (count (distinct (vals expected)))))
           (is (= expected actual))
@@ -335,23 +293,7 @@
                                                    (* days-ago 24 3600 1000)))})))
 
 
-(deftest list-orders-by-dueness-past-the-retention-underflow
-  (async-testing "`list` orders long-unreviewed words by how due they are, not by the alphabet"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      ;; `vocab:a-…` reads first from the id-keyed view and is the least due;
-      ;; ordering by retention alone leaves it first, because every level here
-      ;; has underflowed to the same zero (#431).
-      (await (seed-single-review! dbs "vocab:a-wort" "A-Wort" 5))
-      (await (seed-single-review! dbs "vocab:m-wort" "M-Wort" 60))
-      (await (seed-single-review! dbs "vocab:z-wort" "Z-Wort" 300))
-      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:order :most-due}))]
-        (is (every? zero? (map :retention-level words)))
-        (is (= ["vocab:z-wort" "vocab:m-wort" "vocab:a-wort"] (mapv :id words))))))))
-
-
-(deftest list-is-alphabetical-unless-the-caller-asks-for-the-due-ones
+(deftest the-list-is-alphabetical-whatever-the-retention
   (async-testing "the word list's order is the alphabet, whatever the retention"
     (with-test-dbs
      (^:async fn
@@ -359,14 +301,16 @@
       (await (seed-single-review! dbs "vocab:a-wort" "A-Wort" 5))
       (await (seed-single-review! dbs "vocab:m-wort" "M-Wort" 60))
       (await (seed-single-review! dbs "vocab:z-wort" "Z-Wort" 300))
-      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {}))]
+      (let [{:keys [words]} (await (list-of dbs {}))]
         (is (= ["vocab:a-wort" "vocab:m-wort" "vocab:z-wort"] (mapv :id words))
             "default order, and it is not the most due first")
         (is (every? :retention-level words)
             "a level for every row on the page, read by key"))
-      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:limit 2}))]
+      (let [{:keys [words]} (await (list-of dbs {:limit 2}))]
         (is (= ["vocab:a-wort" "vocab:m-wort"] (mapv :id words))
             "the page is the head of the alphabet, not of the due list"))))))
+
+
 (def ^:private nouns-and-a-verb
   "The issue's own six words. `aufstehen` before `das Auto`: `auf` sorts
    before `aut`, whatever the issue's illustration says."
@@ -394,17 +338,17 @@
      (^:async fn
       [dbs]
       (await (seed-nouns! dbs))
-      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:limit 50}))]
+      (let [{:keys [words]} (await (list-of dbs {:limit 50}))]
         (is (= filed-order (mapv :value words)) "the whole vocabulary, paged off the view"))
-      (let [page-1 (await (sut/list (test-capabilities dbs) {:limit 3 :offset 0}))
-            page-2 (await (sut/list (test-capabilities dbs) {:limit 3 :offset 3}))]
+      (let [page-1 (await (list-of dbs {:limit 3 :offset 0}))
+            page-2 (await (list-of dbs {:limit 3 :offset 3}))]
         (is (= filed-order (into (mapv :value (:words page-1)) (mapv :value (:words page-2))))
             "a page past the first continues the order, none repeated and none skipped"))
-      (let [ids (mapv :id (:words (await (sut/list (test-capabilities dbs) {:limit 50}))))
-            {:keys [words]} (await (sut/list (test-capabilities dbs)
-                                             {:limit 50 :word-ids (shuffle ids)}))]
+      (let [ids (mapv :id (:words (await (list-of dbs {:limit 50}))))
+            {:keys [words]} (await (list-of dbs
+                                            {:limit 50 :word-ids (shuffle ids)}))]
         (is (= filed-order (mapv :value words)) "a collection-scoped page sorts on the same key"))
       ;; `z` matches Katze and Zug and nothing else here. Ordered by id they
       ;; would come back `der Zug`, `die Katze`.
-      (let [{:keys [words]} (await (sut/list (test-capabilities dbs) {:limit 50 :search "z"}))]
+      (let [{:keys [words]} (await (list-of dbs {:limit 50 :search "z"}))]
         (is (= ["die Katze" "der Zug"] (mapv :value words)) "so does a searched page"))))))

@@ -48,7 +48,7 @@ The system SHALL store no document for «Всё подряд»: it is the state 
 - **THEN** the words list and a lesson draw from the whole vocabulary
 
 ### Requirement: The active collection persists across restarts
-The system SHALL remember the id of the active collection across restarts, and SHALL treat the absence of a remembered id as «Всё подряд». Deleting the active collection SHALL clear what is remembered.
+The system SHALL remember the id of the active collection across restarts. The active collection SHALL be the collection the learner's data holds under the remembered id. With no id remembered, or with an id under which the learner's data holds no collection — a collection deleted on this device or on another — «Всё подряд» SHALL be the active one, on every screen and in every action that follows the active collection.
 
 #### Scenario: Active collection restored on app load
 - **WHEN** the app starts and a collection id is remembered
@@ -56,7 +56,11 @@ The system SHALL remember the id of the active collection across restarts, and S
 
 #### Scenario: Deleting the active collection
 - **WHEN** the active collection is deleted
-- **THEN** nothing is remembered as active and «Всё подряд» is the active one
+- **THEN** «Всё подряд» is the active one
+
+#### Scenario: A remembered collection deleted on another device
+- **WHEN** the app starts and the remembered id names a collection the learner's data no longer holds
+- **THEN** home, the words list, a lesson, the themes screen, removing a word and adding a word all act as with «Всё подряд» active
 
 ### Requirement: Deleting a collection deletes its document and its examples
 The system SHALL delete the collection document and purge the examples generated for that collection. The word documents SHALL remain: a word held only by the deleted collection stays in the vocabulary.

@@ -170,27 +170,13 @@
         (dispatch [[:effect/save {:collections/editing-id nil}]])))))
 
 
-(nxr/register-effect! :effect/load-collections
-  (fn ^:async load-collections
-    [{:keys [capabilities dispatch]} _]
-    (try
-      (let [data (await (collections/summary capabilities))]
-        (dispatch [[:action/show-collections data]]))
-      (catch js/Error err
-        (log/error :effect/load-collections {:error (str err)})
-        ;; The screen shows what it has (its empty state at worst), not
-        ;; «Загружаем…» forever.
-        (dispatch [[:effect/save {:collections/loading? false}]])))))
-
-
 (nxr/register-effect! :effect/prompt-create-collection
   (fn ^:async prompt-create-collection
     [{:keys [capabilities dispatch]} _]
     (try
       (when-let [raw-name (js/prompt "Название нового набора:")]
-        (let [{:keys [ok]} (await (collections/create! capabilities raw-name))]
-          (when ok
-            (dispatch [[:effect/load-collections]]))))
+        (await (collections/create! capabilities raw-name))
+        (dispatch [[:effect/enter :action/refresh-page]]))
       (catch js/Error err
         (log/error :effect/prompt-create-collection {:error (str err)})))))
 
@@ -218,11 +204,9 @@
     (let [focus-id (neighbour (target-ids) id)]
       (try
         (await (collections/delete! capabilities id))
-        (let [data (await (collections/summary capabilities))]
-          (dispatch [[:action/show-deleted data {:name name :focus-id focus-id}]]))
+        (dispatch [[:effect/enter :action/show-deleted {:name name :focus-id focus-id}]])
         (catch js/Error err
-          (log/error :effect/delete-collection {:error (str err)})
-          (dispatch [[:effect/load-collections]]))))))
+          (log/error :effect/delete-collection {:error (str err)}))))))
 
 
 (nxr/register-effect! :effect/focus-collection

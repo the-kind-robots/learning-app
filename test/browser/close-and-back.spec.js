@@ -134,9 +134,9 @@ test('a screen opened directly has home beneath it, reload included', async ({ p
 });
 
 // Leaving a lesson ends it, whatever did the leaving: Back, the corner close,
-// the finish button (#484). The stored lesson is the evidence — nothing on
-// home renders it, and entering again would start fresh either way. Read at
-// the engine level, as test/browser/README.md prescribes.
+// the finish button (#484); entering again starts fresh. The lesson lives in
+// app state only, so no lesson document is ever written — read at the engine
+// level, as test/browser/README.md prescribes.
 async function storedLessons(page) {
   return page.evaluate(async () => {
     const kw = cljs.core.keyword;
@@ -163,7 +163,6 @@ async function startLesson(page) {
   await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
   await expect(page).toHaveURL(/\/lesson$/);
   await expect(progress(page)).toHaveAttribute('aria-valuenow', '0');
-  await expect.poll(() => storedLessons(page)).toBe(1);
 }
 
 // The answer field is on screen only while a trial waits for its answer, so
@@ -187,7 +186,7 @@ test('Back out of a lesson ends it; entering again starts fresh', async ({ page 
   await page.goBack();
   await expect(page).toHaveURL(/\/home$/);
   await expect(homeHeading(page)).toBeVisible();
-  await expect.poll(() => storedLessons(page)).toBe(0);
+  expect(await storedLessons(page)).toBe(0);
 
   await startLesson(page);
 });
@@ -200,7 +199,7 @@ test('closing a lesson from the corner ends it', async ({ page }) => {
 
   await close(page).click();
   await expect(homeHeading(page)).toBeVisible();
-  await expect.poll(() => storedLessons(page)).toBe(0);
+  expect(await storedLessons(page)).toBe(0);
 });
 
 test('finishing a lesson ends it and goes home', async ({ page }) => {
@@ -214,5 +213,7 @@ test('finishing a lesson ends it and goes home', async ({ page }) => {
   await page.getByRole('button', { name: 'ЗАКОНЧИТЬ' }).click();
   await expect(page).toHaveURL(/\/home$/);
   await expect(homeHeading(page)).toBeVisible();
-  await expect.poll(() => storedLessons(page)).toBe(0);
+  expect(await storedLessons(page)).toBe(0);
+
+  await startLesson(page);
 });
