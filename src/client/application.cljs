@@ -92,11 +92,14 @@
 
 
 (nxr/register-effect! :effect/memory-loaded-basic
-  ;; The words and the collections: the splash goes, and the screen under it
-  ;; is filled in.
+  ;; The words and the collections. The screen asked for is computed from
+  ;; them first, and only then is readiness set: the store renders nothing
+  ;; before it, so the first render draws that screen in place of the
+  ;; server's splash.
   (fn memory-loaded-basic [{:keys [dispatch]} {:keys [store]} docs]
-    (swap! store #(assoc (memorized % docs) :learner/readiness :basic))
-    (dispatch [[:effect/enter :action/refresh-page]])))
+    (swap! store memorized docs)
+    (dispatch [[:effect/enter :action/refresh-page]])
+    (swap! store assoc :learner/readiness :basic)))
 
 
 (nxr/register-effect! :effect/memory-loaded-full
@@ -647,7 +650,7 @@
        :page/home        (pages.home.view/page state)
        :page/lesson      (pages.lesson.view/page state)
        :page/words       (pages.words.view/page state)
-       [:div.app-loading "Загружаем..."])
+       nil)
      ;; The one status line every screen announces through. Rendered empty
      ;; and always, so replicant never diffs its text and a message written
      ;; into it is announced. An action announces through it by passing its

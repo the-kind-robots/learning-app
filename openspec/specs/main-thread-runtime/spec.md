@@ -20,10 +20,10 @@ The system SHALL initialise the application from a main-thread ClojureScript ent
 - **AND** it starts the frontend router last
 
 ### Requirement: Replicant renders all UI from state
-The system SHALL use Replicant to diff and apply hiccup data to the DOM; the Service Worker SHALL NOT render application UI or route-specific HTML at runtime, but it MAY return a cached static app shell document for navigation fallback. Renders SHALL follow store changes without reordering effects: every store change renders, a write that changes nothing renders nothing, and a store write outside any dispatch renders immediately. Several changes inside one dispatch MAY render several times — extra renders inside a synchronous dispatch cost diffing, not paints (#213).
+The system SHALL use Replicant to diff and apply hiccup data to the DOM; the Service Worker SHALL NOT render application UI or route-specific HTML at runtime, but it MAY return a cached static app shell document for navigation fallback. The first render SHALL happen as the `learner-data-memory` requirement "The app opens on a splash until the words and collections are read" states; from then on renders SHALL follow store changes without reordering effects: every store change renders, a write that changes nothing renders nothing, and a store write outside any dispatch renders immediately. Several changes inside one dispatch MAY render several times — extra renders inside a synchronous dispatch cost diffing, not paints (#213).
 
 #### Scenario: Initial render
-- **WHEN** the app state atom is first populated after boot
+- **WHEN** the app is opened and the first render happens as the `learner-data-memory` requirement "The app opens on a splash until the words and collections are read" states
 - **THEN** Replicant renders the current page hiccup on the document body
 
 #### Scenario: Several state writes render per change
@@ -72,7 +72,7 @@ The system SHALL use Nexus as the mechanism for mutating app state; UI events em
 - **WHEN** the browser route changes to `/home`, `/words`, `/lesson` or `/collections`
 - **THEN** the `reitit.frontend` controller dispatches the page's entry through runtime dispatch
 - **AND** the entry computes the page slice from the learner's data in app state, synchronously, without a storage read
-- **AND** Replicant renders the page view in the same task
+- **AND** Replicant renders the page view in the same task, except for the route entered at boot, which is first rendered as the `learner-data-memory` requirement "The app opens on a splash until the words and collections are read" states
 
 ### Requirement: App state uses namespaced page slices
 The system SHALL maintain app state as namespaced flat page slices keyed by `:app/page`, page-specific keys, and modal keys.

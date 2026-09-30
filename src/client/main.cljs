@@ -66,8 +66,7 @@
 
   (system/start!
    {:app/store             {:start (fn [_]
-                                     (atom {:learner/memory memory/empty-memory
-                                            :page/current   :page/loading}))}
+                                     (atom {:learner/memory memory/empty-memory}))}
 
     ;; Ask the browser to exempt our storage (device-db, the durable home of the
     ;; account token) from automatic eviction. The auth cookie is rebuilt from
@@ -181,19 +180,23 @@
                                           (nxr/register-system->state! #(-> % :store deref))
                                           (r/set-dispatch! dispatch)
                                           (application/guard-double-clicks! store)
+                                          ;; Nothing is rendered until the learner's words and
+                                          ;; collections are in memory: the server's splash
+                                          ;; stays until the first screen replaces it.
                                           (application/install-render!
                                            store
-                                           (if ^boolean goog/DEBUG
-                                             (fn [state]
-                                               (instrumentation/render! application/render! state))
-                                             application/render!))
+                                           (fn [state]
+                                             (when (:learner/readiness state)
+                                               (if ^boolean goog/DEBUG
+                                                 (instrumentation/render! application/render! state)
+                                                 (application/render! state)))))
                                           (when ^boolean goog/DEBUG
                                             (instrumentation/install!))
                                           {:dispatch #(dispatch {} %)}))}
 
     ;; The learner's data, held in the store as a projection of the local
     ;; databases (ADR-0016). Starting returns at once; the load runs on, and
-    ;; the screen on display fills in when it completes.
+    ;; the first screen is rendered when the words and collections are in.
     :learner/memory        {:requires {:db     :db/pouch
                                        :render :app/render}
                             :start    (fn [{:keys [db render]}]

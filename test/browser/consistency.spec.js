@@ -117,15 +117,13 @@ test('leaving the words screen at once does not bring it back over home', async 
   await expect(homeHeading(page)).toBeAttached();
 });
 
-// Watches the page from before the app boots: whether the splash was on
-// display, and whether either empty state of the words screen ever was — a
-// claim shown for a moment is caught.
+// Watches the page from before the app boots: whether either empty state of
+// the words screen was ever on display — a claim shown for a moment is
+// caught.
 const watchStartup = `
   window.__claimed = [];
-  window.__splash = false;
   new MutationObserver(() => {
     if (!document.body) return;
-    if (document.querySelector('.app-loading')) window.__splash = true;
     for (const text of ['Слов пока нет', 'Ничего не найдено']) {
       if (document.body.textContent.includes(text) && !window.__claimed.includes(text)) {
         window.__claimed.push(text);
@@ -145,7 +143,7 @@ async function seedWords(page, n) {
   }, n);
 }
 
-test('the app opens on a splash, then the screen asked for with its words', async ({ page }) => {
+test('the app opens on the screen asked for with its words, never on an empty state', async ({ page }) => {
   await page.goto('/home');
   await memoryReady(page);
   await seedWords(page, 2000);
@@ -154,7 +152,6 @@ test('the app opens on a splash, then the screen asked for with its words', asyn
   await page.goto('/words');
   await expect(rows(page).first()).toBeVisible({ timeout: 30000 });
   await expect(page).toHaveURL(/\/words$/);
-  expect(await page.evaluate(() => window.__splash)).toBe(true);
   expect(await page.evaluate(() => window.__claimed)).toEqual([]);
 });
 
