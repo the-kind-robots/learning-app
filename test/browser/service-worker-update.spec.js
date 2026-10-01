@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const shared = require('./service-worker.shared');
 
-// The worker's update path (ADR-0014). The backend prepends SW_VERSION to
+// The worker's update path (ADR-0017). The backend prepends SW_VERSION to
 // sw.js from a hash of resources/public, and a build "changes" here by
 // handing the registration a script with another version line. Only the
 // registration's fetch can be rewritten: it passes through context.route
@@ -23,23 +23,6 @@ async function registerWorkerVersion(context, version) {
 const openControlled = (page) =>
   shared.openControlled(page, (p) => p.evaluate(() => { window.__firstLoad = true; }));
 
-// The worker's states as the page saw them, kept in localStorage because the
-// page that records them is about to reload.
-async function recordWorkerStates(page) {
-  await page.evaluate(async () => {
-    localStorage.setItem('sw-states', '[]');
-    const registration = await navigator.serviceWorker.getRegistration();
-    registration.addEventListener('updatefound', () => {
-      const worker = registration.installing;
-      worker.addEventListener('statechange', () => {
-        const states = JSON.parse(localStorage.getItem('sw-states'));
-        states.push(worker.state);
-        localStorage.setItem('sw-states', JSON.stringify(states));
-      });
-    });
-  });
-}
-
 async function cacheBuckets(page) {
   return page.evaluate(() => caches.keys());
 }
@@ -49,48 +32,116 @@ async function developmentBuild(page) {
   return page.evaluate(() => typeof window.__metrics === 'function');
 }
 
-test('a changed worker waits, and the page reloads once onto it after the tap', async ({ context, page }) => {
+// A new build arriving: the check on return to the app fetches the real sw.js,
+// which differs from test-v1, and it installs. Resolves once it waits. The
+// install precaches the whole shell, which took longer than the default 5 s
+// with the suite running in parallel.
+async function newBuildWaiting(page) {
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(() => page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    return registration.waiting && registration.waiting.state;
+  }), { timeout: 30000 }).toBe('installed');
+}
+
+// DevTools' «Update on reload» (#517): every load of a controlled page makes
+// the browser install a worker once more and put it in charge at once, waiting
+// skipped. The flag belongs to the storage partition, so one CDP session sets
+// it for every page of the context.
+async function updateOnReload(context, page) {
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('ServiceWorker.enable');
+  await cdp.send('ServiceWorker.setForceUpdateOnPageLoad', { forceUpdateOnPageLoad: true });
+}
+
+// Controller changes as the current document saw them, and whether it has
+// started to reload: `beforeunload` fires when the reload is asked for, in the
+// document that asks, long before the next one loads. The listeners come
+// before the app's, and the app has nothing that waits before reloading, so
+// by the time a change is counted a reload it caused would be marked.
+const markReloads = (page) => page.addInitScript(() => {
+  window.__controllerChanges = 0;
+  window.__reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { window.__controllerChanges++; });
+  addEventListener('beforeunload', () => { window.__reloading = true; });
+});
+
+// The page saw its controller change to a worker that is now activated, and
+// did not start to reload for it.
+async function stayedThroughTakeover(page) {
+  await page.waitForFunction(() => window.__controllerChanges >= 1 &&
+                                   navigator.serviceWorker.controller.state === 'activated');
+  expect(await page.evaluate(() => window.__reloading)).toBe(false);
+}
+
+const updateControl = (page) => page.getByRole('button', { name: 'Обновить' });
+
+test('a new build waits, nothing offers it, and a forced takeover reloads no page', async ({ context }) => {
+  await registerWorkerVersion(context, 'test-v1');
+  const pages = [];
+  for (let i = 0; i < 3; i++) {
+    const page = await context.newPage();
+    await markReloads(page);
+    await openControlled(page);
+    pages.push(page);
+  }
+  // From here the registration's own fetch brings the real build too, as a
+  // deployed one does: test-v1 was the build before it.
+  await context.unrouteAll();
+  const [first, ...others] = pages;
+  await newBuildWaiting(first);
+  for (const page of pages) await expect(updateControl(page)).toHaveCount(0);
+
+  // DevTools forces a build in under the open pages: their controller
+  // changes, and none of them reloads for it.
+  await updateOnReload(context, first);
+  await first.reload();
+  for (const page of others) {
+    await stayedThroughTakeover(page);
+    await expect(updateControl(page)).toHaveCount(0);
+  }
+  expect(await first.evaluate(() => window.__reloading)).toBe(false);
+});
+
+test('the new build runs once every page of the app has closed', async ({ context }) => {
+  await registerWorkerVersion(context, 'test-v1');
+  const first = await context.newPage();
+  await openControlled(first);
+  await context.unrouteAll();
+  await newBuildWaiting(first);
+
+  // A page opened now gets the build already running.
+  const second = await context.newPage();
+  await second.goto('/');
+  expect(await second.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    return navigator.serviceWorker.controller.scriptURL === registration.active.scriptURL &&
+           registration.active.state === 'activated' &&
+           registration.waiting !== null;
+  })).toBe(true);
+  expect(await cacheBuckets(second)).toContain('test-v1');
+
+  await first.close();
+  await second.close();
+  const next = await context.newPage();
+  await openControlled(next);
+  await expect.poll(() => cacheBuckets(next)).toHaveLength(1);
+  expect(await cacheBuckets(next)).not.toContain('test-v1');
+  expect(await next.evaluate(async () =>
+    (await navigator.serviceWorker.getRegistration()).waiting)).toBeNull();
+});
+
+test('«Update on reload» and one reload give one load', async ({ context, page }) => {
+  await openControlled(page);
+  await updateOnReload(context, page);
+  await markReloads(page);
   const loads = [];
   page.on('load', () => loads.push(Date.now()));
-  await registerWorkerVersion(context, 'test-v1');
-  await openControlled(page);
 
-  // The first worker claimed a page that started uncontrolled: no reload.
-  expect(await page.evaluate(() => window.__firstLoad)).toBe(true);
-  expect(await cacheBuckets(page)).toEqual(['test-v1']);
-
-  await recordWorkerStates(page);
-  // Which build ran is part of the evidence; the update path no longer
-  // differs between them, so nothing below branches on it.
-  const dev = await developmentBuild(page);
-  console.log(`service-worker-update: ${dev ? 'development' : 'release'} build`);
-
-  // Nothing is waiting yet, so nothing is offered.
-  const update = page.getByRole('button', { name: 'Обновить' });
-  await expect(update).toHaveCount(0);
-
-  // Coming back to the app is what asks for the update check; the check
-  // brings the real build, which differs from test-v1.
-  const reloaded = page.waitForEvent('load');
-  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-
-  // The new worker is offered, never taken by itself — in this build too:
-  // it waits, no page has reloaded, and the tap is what activates it.
-  await expect(update).toBeVisible();
+  await page.reload();
+  // The same build, installed again, has taken this document over.
+  await stayedThroughTakeover(page);
   expect(loads.length).toBe(1);
-  await update.click();
-  await reloaded;
-
-  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
-  await expect.poll(async () => (await cacheBuckets(page)).length).toBe(1);
-  expect(await cacheBuckets(page)).not.toEqual(['test-v1']);
-  const states = await page.evaluate(() => JSON.parse(localStorage.getItem('sw-states')));
-  expect(states).toEqual(['installed', 'activating', 'activated']);
-  expect(await page.evaluate(() => window.__firstLoad)).toBeUndefined();
-
-  // One reload, not two: the bucket assertion above already let a second
-  // controller change — had there been one — fire, so this is not a race.
-  expect(loads.length).toBe(2);
 });
 
 // The build mark and the trace export exist in a development build only; on a

@@ -198,37 +198,6 @@
   width: 20px;
 }
 
-/* The update offer: an icon button's box with a word in it. */
-.app-shell__text-button {
-  align-items: center;
-  background: none;
-  border: none;
-  border-radius: 8px;
-  color: rgb(var(--color-wolf));
-  cursor: pointer;
-  display: inline-flex;
-  font-family: Nunito, sans-serif;
-  font-size: 14px;
-  font-weight: 700;
-  height: 32px;
-  line-height: 1;
-  min-height: auto;
-  padding: 0 8px;
-  transition: color 0.15s, background-color 0.15s;
-}
-
-@media (hover: hover) {
-  .app-shell__text-button:hover {
-    background: rgb(var(--color-polar));
-    color: rgb(var(--color-owl));
-  }
-}
-
-.app-shell__text-button:active {
-  background: rgb(var(--color-polar));
-  color: rgb(var(--color-owl));
-}
-
 @media (hover: hover) {
   .app-shell__icon-button:hover {
     background: rgb(var(--color-polar));

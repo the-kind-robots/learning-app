@@ -205,13 +205,6 @@
                                         (let [dispatch (:dispatch render)]
                                           (dispatch [[:effect/pwa-init]])))}
 
-    ;; The worker's other half: a waiting build becomes the state flag
-    ;; «Обновить» reads. Here rather than in the worker component because it
-    ;; is the part that needs dispatch, and the worker must not.
-    :pwa/new-build         {:requires {:render :app/render
-                                       :worker :worker/service-worker}
-                            :start    service-worker/announce-new-builds!}
-
     :app/sync              {:requires {:capabilities :app/capabilities
                                        :render       :app/render}
                             :start    (fn [{:keys [capabilities render]}]

@@ -25,7 +25,7 @@ src/client/
 ├── logging.cljs              # glogi configuration
 ├── instrumentation.cljs      # Dev-only metrics (window.__metrics); gone in release
 ├── build_identity.cljs       # Dev build stamp (commit + time); empty in release
-├── service_worker.cljs       # Registers sw.js, announces and takes new builds (ADR-0014)
+├── service_worker.cljs       # Registers sw.js; the build mark takes new builds (ADR-0017)
 ├── sync.cljs                 # user-db ↔ CouchDB replication, LWW vocab conflicts, pairing
 ├── tasks.cljs                # Background task queue stored in device-db
 ├── db_migrations.cljs        # One-time data migrations (the local-db split)
@@ -91,7 +91,7 @@ Every tab has a worker, but the dictionary belongs to the tab being typed into: 
 
 `db_migrations.cljs` runs before `db.pouch` opens the databases; it once split the old single `local-db` into these two.
 
-**Service worker** — plain JS, `resources/public/js/sw.js`; does not run ClojureScript. The backend serves it at `/js/app/sw.js` and prepends `SW_VERSION` (the cache bucket name) and `PRECACHE_URLS` (`src/backend/core.clj`, `service-worker-handler`). It never skips waiting on its own; `service_worker.cljs` announces a new build and takes it only when asked (ADR-0014).
+**Service worker** — plain JS, `resources/public/js/sw.js`; does not run ClojureScript. The backend serves it at `/js/app/sw.js` and prepends `SW_VERSION` (the cache bucket name) and `PRECACHE_URLS` (`src/backend/core.clj`, `service-worker-handler`). A new build waits for every window of the app to close (ADR-0017).
 
 ## Building
 

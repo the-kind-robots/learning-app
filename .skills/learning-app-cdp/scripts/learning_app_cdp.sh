@@ -558,7 +558,7 @@ refresh_env() {
   ws_url="$(wait_for_page_ws_url "$PORT" "$env_name" "$url_substring")"
   [[ -n "$ws_url" ]] || die "Chrome is up, but no tab matches this environment — open one with: bash ${BASH_SOURCE[0]} start-local"
 
-  # Local skips stale builds; prod reloads as a user does, the new build arriving via «Обновить».
+  # Local skips stale builds; prod reloads as a user does, a new build waiting for every window to close.
   if [[ "$env_name" == "local" ]]; then
     set_force_update_on_reload "$ws_url" true
     bash "$LOW_LEVEL_SCRIPT" send --ws-url "$ws_url" --method Page.reload --params '{"ignoreCache":true}'

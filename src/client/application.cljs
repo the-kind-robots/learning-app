@@ -577,7 +577,7 @@
 
 (defn- render
   [state]
-  (let [{:keys [build-mark corner menu-open? page pairing show-install? show-sync? show-update?]}
+  (let [{:keys [build-mark corner menu-open? page pairing show-install? show-sync?]}
         (presenter/shell-props state)]
     (list
      ;; One bar across the top holds the three slots: the word mark, the build
@@ -616,13 +616,6 @@
            :aria-label "Экспортировать трассу"
            :on         {:click [[:effect/export-trace]]}}
           (trace-export-icon)])
-       ;; A new build waits until asked (ADR-0014); this is the asking.
-       (when show-update?
-         [:button.app-shell__text-button
-          {:type  "button"
-           :title "Обновить приложение"
-           :on    {:click [[:effect/take-new-build]]}}
-          "Обновить"])
        ;; Install stands on its own — it is not a sync action, and it is offered
        ;; before any account exists.
        (when show-install?

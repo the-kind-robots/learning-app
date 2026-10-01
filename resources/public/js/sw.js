@@ -63,14 +63,18 @@ self.addEventListener("install", event => {
   );
 });
 
-// No skipWaiting in install (#278): activating deletes every other bucket,
-// and a page still open on the old build loads its assets from one of them.
-// A new worker therefore waits until a page asks for it. Asking is safe
-// because every page that started under a controller reloads itself once
-// on controllerchange (service_worker.cljs, ADR-0014) — the old bucket goes,
-// and no page keeps running on it. No build asks by itself: the request is
-// always the user's — «Обновить» in every build, or a tap on the red D in a
-// development build.
+// No skipWaiting in install (#278), and none on request in a release build
+// (ADR-0017): two builds must never run at once, since both would write to the
+// same local databases under their own data models. A new worker waits until
+// every window of the app is closed; the browser activates it then, and the
+// next open runs it.
+//
+// The one exception is development. A development bundle's build mark sends
+// "activate-waiting" so that a recompile reaches a tab that stays open, and the
+// tab reloads itself once the new worker is activated (service_worker.cljs).
+// This file is the same in every build and cannot tell which one sent the
+// message; what keeps the handler out of reach of a release build is that the
+// release bundle has no code that sends it.
 self.addEventListener("message", event => {
   if (event.data && event.data.type === "activate-waiting") {
     self.skipWaiting();
@@ -81,8 +85,8 @@ self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== SW_VERSION).map(k => caches.delete(k))))
-      // claim() takes control of already-open tabs immediately, without waiting
-      // for them to reload — so they get the new SW's fetch handler right away.
+      // claim() takes control of the pages already open: the first page of a
+      // first install, or the tab whose build mark asked in a development build.
       .then(() => self.clients.claim())
   );
 });
