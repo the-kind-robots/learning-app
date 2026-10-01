@@ -241,6 +241,13 @@
                                         (let [dispatch    (:dispatch render)
                                               controllers (atom nil)
                                               router      (rf/router (application/routes dispatch))]
+                                          ;; A query that is not valid percent-encoding makes the
+                                          ;; router throw (`URIError`) and the app would not start.
+                                          ;; Such a query is dropped: the address keeps its path.
+                                          (try
+                                            (js/decodeURIComponent js/location.search)
+                                            (catch :default _
+                                              (js/history.replaceState nil "" (str js/location.pathname js/location.hash))))
                                           (navigation/put-home-beneath! router)
                                           (rfe/start!
                                            router
