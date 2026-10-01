@@ -45,8 +45,7 @@
                     "Не получается прочитать данные на устройстве. Перезагрузите страницу.")
    :show-install? (boolean (:pwa/install-available? state))
    :show-sync?    (and (= :page/home (:page/current state))
-                       (some? (:app/account-id state)))
-   :show-update?  (boolean (:pwa/new-build-waiting? state))})
+                       (some? (:app/account-id state)))})
 
 
 (defn sync-menu-props

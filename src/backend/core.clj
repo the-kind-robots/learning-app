@@ -459,6 +459,13 @@
     (public-dir-hash)))
 
 
+(defn- serve-now-allowed?
+  "True for a source checkout, which is where a development bundle runs; a
+   packaged build carries the version file and refuses the build mark's message."
+  []
+  (nil? (io/resource sw-version-resource)))
+
+
 (def ^:private sw-precache-resource
   "Where the build leaves the asset paths, one per line. The name is repeated
    in build.clj, which writes it."
@@ -537,6 +544,8 @@
            (str "const SW_VERSION=\""
                 (service-worker-version)
                 "\";\n"
+                "const SERVE_NOW_ALLOWED=" (serve-now-allowed?)
+                ";\n"
                 "const PRECACHE_URLS=" (cheshire/generate-string (precache-paths))
                 ";\n"
                 (slurp res)))

@@ -1,47 +1,29 @@
 # service-worker-update Specification
 
 ## Purpose
-Define when a new service worker takes over: it stays waiting until the user asks for it, every page that was under a controller reloads once when the controller changes, and the registration checks for a new worker when the app comes back into view.
+Define when a new service worker takes over: in a release build it waits until every window of the app is closed, no page reloads when its controller changes, a development build's build mark takes it at once, and the registration checks for a new worker when the app comes back into view.
+
 ## Requirements
-### Requirement: The service worker activates only on request
-The service worker SHALL NOT skip waiting on its own: a newly installed worker stays waiting while an older one controls the origin. It SHALL activate when a page posts it the message `{type: "activate-waiting"}`, and on activation it SHALL delete every cache bucket but its own and claim the open pages, as before.
+
+### Requirement: A new build activates only when no window of the app is open
+A release build SHALL NOT make a waiting worker skip waiting, neither on install nor on any request: two builds SHALL NOT run at the same time. A newly installed worker SHALL wait while an older one controls any window of the origin, and the browser's own lifecycle SHALL activate it once every such window is closed. A page opened while another window is still open SHALL be served by the build already running. On activation the worker SHALL delete every cache bucket but its own and claim the open pages. The worker SHALL activate on the message `{type: "activate-waiting"}`, which only a development build sends and which a packaged build SHALL ignore.
 
 #### Scenario: A new worker waits
 - **WHEN** a page with a controlling worker fetches a changed `sw.js`
 - **THEN** the new worker installs and stays in the waiting state
-- **AND** the controlling worker keeps serving the page
+- **AND** the controlling worker keeps serving every open page, including a page opened after the new worker installed
+
+#### Scenario: Every window closed
+- **WHEN** a worker is waiting and every window of the app is closed
+- **THEN** the next page opened runs the new build
 
 #### Scenario: The activation message
-- **WHEN** a page posts `{type: "activate-waiting"}` to the waiting worker
+- **WHEN** a development build's page posts `{type: "activate-waiting"}` to the waiting worker
 - **THEN** the worker activates, deletes the other cache buckets and claims the pages
 
-### Requirement: A waiting worker is offered to the user
-The app SHALL detect a waiting worker — one already waiting when the registration resolves, or one that reaches the installed state while a controller exists — and SHALL show an «Обновить» control in the app shell's actions row; tapping it SHALL post the activation message to the waiting worker. No build SHALL post the message unasked: a development build offers the worker the same way, so a recompile does not reload the open pages.
-
-#### Scenario: A waiting worker shows the control
-- **WHEN** the app detects a waiting worker
-- **THEN** the shell shows «Обновить»
-- **AND** tapping it activates the waiting worker
-
-#### Scenario: A development build also waits to be asked
-- **WHEN** a development build detects a waiting worker
-- **THEN** the shell shows «Обновить» and the worker stays waiting
-- **AND** no page reloads until the control is tapped
-
-#### Scenario: No waiting worker
-- **WHEN** no worker is waiting
-- **THEN** the shell shows no «Обновить» control
-
-### Requirement: Every page reloads once when its controller changes
-A page that started under a controlling worker SHALL reload itself once when `navigator.serviceWorker`'s controller changes, so no page keeps running on a deleted cache bucket. A page that started without a controller SHALL NOT reload when the first worker claims it. A second controller change before the reload completes SHALL NOT reload again.
-
-#### Scenario: Two tabs after an activation
-- **WHEN** two tabs of the origin are open under the old worker and one of them activates the waiting worker
-- **THEN** both tabs reload and are controlled by the new worker
-
-#### Scenario: First visit
-- **WHEN** a page loads with no controlling worker and the first worker installs, activates and claims it
-- **THEN** the page does not reload
+#### Scenario: The activation message in a packaged build
+- **WHEN** a page posts `{type: "activate-waiting"}` to the waiting worker of a packaged build
+- **THEN** the worker stays waiting
 
 ### Requirement: The registration checks for an update when the document becomes visible
 Every time the document becomes visible the app SHALL ask the registration to update, so a phone returning to the app fetches the current `sw.js`.
@@ -51,7 +33,7 @@ Every time the document becomes visible the app SHALL ask the registration to up
 - **THEN** the service worker registration fetches `sw.js` again
 
 ### Requirement: A tap on the build mark forces a reload in a development build
-In a development build the shell's build mark — the line that says which bundle the page loaded — SHALL be the forced reload: a tap SHALL check the registration for an update; if a worker is then waiting or finishes installing, it SHALL post the activation message and let the controller change reload the page; otherwise it SHALL reload the page. The trace export SHALL be a separate control in the shell's actions row, and a tap on it SHALL NOT reload the page.
+In a development build the shell's build mark — the line that says which bundle the page loaded — SHALL be the forced reload: a tap SHALL check the registration for an update; if a worker is then waiting or finishes installing, it SHALL post the activation message to it and reload the page once that worker is activated or has gone redundant, or after a short wait if neither happens; otherwise it SHALL reload the page. Other open pages SHALL NOT be reloaded. The trace export SHALL be a separate control in the shell's actions row, and a tap on it SHALL NOT reload the page.
 
 #### Scenario: Tap with a new build
 - **WHEN** the user taps the build mark and a changed `sw.js` is served
@@ -65,3 +47,14 @@ In a development build the shell's build mark — the line that says which bundl
 - **WHEN** the user taps the trace export in the actions row
 - **THEN** the trace export runs and the page does not reload
 
+### Requirement: No page reloads when its controller changes
+A page SHALL NOT reload because `navigator.serviceWorker`'s controller changed, and the app SHALL show no control that offers a waiting build. Outside the build mark's tap, a controller change happens only with no page open on the old build, at a first install, or when DevTools forces one in.
+
+#### Scenario: A build waiting, nothing offered
+- **WHEN** a new worker is waiting under the running build
+- **THEN** no open page shows a control for it and no page reloads
+
+#### Scenario: DevTools' «Update on reload»
+- **WHEN** «Update on reload» is on and an open page loads again, so the browser installs and activates a worker and every open page's controller changes
+- **THEN** no page reloads for it
+- **AND** the page that loaded again loaded once
