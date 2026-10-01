@@ -20,10 +20,10 @@ The system SHALL initialise the application from a main-thread ClojureScript ent
 - **AND** it starts the frontend router last
 
 ### Requirement: Replicant renders all UI from state
-The system SHALL use Replicant to diff and apply hiccup data to the DOM; the Service Worker SHALL NOT render application UI or route-specific HTML at runtime, but it MAY return a cached static app shell document for navigation fallback. Renders SHALL follow store changes without reordering effects: every store change renders, a write that changes nothing renders nothing, and a store write outside any dispatch renders immediately. Several changes inside one dispatch MAY render several times — extra renders inside a synchronous dispatch cost diffing, not paints (#213).
+The system SHALL use Replicant to diff and apply hiccup data to the DOM; the Service Worker SHALL NOT render application UI or route-specific HTML at runtime, but it MAY return a cached static app shell document for navigation fallback. The first render SHALL happen as the `learner-data-memory` requirement "The app opens on a splash until the words and collections are read" states; from then on renders SHALL follow store changes without reordering effects: every store change renders, a write that changes nothing renders nothing, and a store write outside any dispatch renders immediately. Several changes inside one dispatch MAY render several times — extra renders inside a synchronous dispatch cost diffing, not paints (#213).
 
 #### Scenario: Initial render
-- **WHEN** the app state atom is first populated after boot
+- **WHEN** the app is opened and the first render happens as the `learner-data-memory` requirement "The app opens on a splash until the words and collections are read" states
 - **THEN** Replicant renders the current page hiccup on the document body
 
 #### Scenario: Several state writes render per change
@@ -72,7 +72,7 @@ The system SHALL use Nexus as the mechanism for mutating app state; UI events em
 - **WHEN** the browser route changes to `/home`, `/words`, `/lesson` or `/collections`
 - **THEN** the `reitit.frontend` controller dispatches the page's entry through runtime dispatch
 - **AND** the entry computes the page slice from the learner's data in app state, synchronously, without a storage read
-- **AND** Replicant renders the page view in the same task
+- **AND** Replicant renders the page view in the same task, except for the route entered at boot, which is first rendered as the `learner-data-memory` requirement "The app opens on a splash until the words and collections are read" states
 
 ### Requirement: App state uses namespaced page slices
 The system SHALL maintain app state as namespaced flat page slices keyed by `:app/page`, page-specific keys, and modal keys.
@@ -149,3 +149,15 @@ The Service Worker SHALL key cached static assets by path, so a query string nei
 - **WHEN** a page under a controlling Service Worker, online or offline, starts the dictionary worker from the cache
 - **THEN** the dictionary answers queries
 - **AND** a development build reports the worker's phase timings, `cache-hit` included
+
+### Requirement: A tab shown again keeps the screen it rendered
+A life-cycle hook (`:replicant/on-mount`, `:replicant/on-render`, `:replicant/on-unmount`) SHALL NOT write the store: a DOM node is not state. A tab that is brought on screen SHALL keep showing the screen it last rendered, and no older screen SHALL be painted over it.
+
+#### Scenario: Opening the app in a development build
+- **WHEN** the app is opened on any screen in a development build
+- **THEN** the console shows no Replicant report "Triggered a render while rendering"
+
+#### Scenario: A tab loads while it is not on screen
+- **WHEN** the app loads in a tab that is not on screen and home is rendered
+- **AND** the tab is then brought on screen
+- **THEN** home is still on display, not the splash

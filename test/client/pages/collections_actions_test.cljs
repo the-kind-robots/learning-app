@@ -30,4 +30,4 @@
   (let [show-deleted       (get-in (nxr/get-registry) [:nexus/actions :action/show-deleted])
         [_ focus announce] (show-deleted {} {} {:name "Solo" :focus-id "collection:travel"})]
     (is (= [:effect/focus-collection "collection:travel"] focus))
-    (is (= [:effect/announce "Набор «Solo» удалён"] announce))))
+    (is (= [:effect/announce "app-status" "Набор «Solo» удалён"] announce))))

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // The add form auto-grows its two textareas and swaps copy the moment the
 // input reads as a phrase. Both mechanics used to move the form under the

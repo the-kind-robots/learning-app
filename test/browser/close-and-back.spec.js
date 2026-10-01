@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // Every screen but home closes from the corner, and home has no app screen
 // behind it (#411, ADR-0015).

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // GH-358: picking a suggestion used to freeze the mode for the rest of the
 // edit, so a phrase typed onto a picked word was saved as a word. The pick

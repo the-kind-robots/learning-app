@@ -6,11 +6,11 @@
 
 (deftest shell-props-offers-the-update-only-while-a-new-build-waits
   (testing "no flag, no control"
-    (is (false? (:show-update? (sut/shell-props {})))))
+    (is (false? (:show-update? (sut/shell-props {:page/current :page/home})))))
   (testing "a waiting build shows the control"
-    (is (true? (:show-update? (sut/shell-props {:pwa/new-build-waiting? true})))))
+    (is (true? (:show-update? (sut/shell-props {:page/current :page/home :pwa/new-build-waiting? true})))))
   (testing "the flag cleared hides it again"
-    (is (false? (:show-update? (sut/shell-props {:pwa/new-build-waiting? false}))))))
+    (is (false? (:show-update? (sut/shell-props {:page/current :page/home :pwa/new-build-waiting? false}))))))
 
 
 (deftest shell-props-offers-sync-on-home-with-an-account-only
@@ -20,22 +20,15 @@
   (testing "home without an account hides it"
     (is (false? (:show-sync? (sut/shell-props {:page/current :page/home})))))
   (testing "every other page hides it, account or not"
-    (doseq [page [:page/words :page/lesson :page/collections nil]]
+    (doseq [page [:page/words :page/lesson :page/collections]]
       (is (false? (:show-sync? (sut/shell-props {:page/current   page
                                                  :app/account-id "7"})))
           (str page)))))
 
 
 (deftest shell-props-puts-the-grid-on-home-and-the-close-mark-elsewhere
-  (is (= :collections (:corner (sut/shell-props {:learner/readiness :basic :page/current :page/home}))))
+  (is (= :collections (:corner (sut/shell-props {:page/current :page/home}))))
   (doseq [page [:page/words :page/lesson :page/collections]]
-    (is (= :close (:corner (sut/shell-props {:learner/readiness :basic :page/current page}))) (str page)))
-  (testing "no page on display yet, no corner control"
-    (is (nil? (:corner (sut/shell-props {:learner/readiness :basic :page/current :page/loading}))))))
-
-
-(deftest the-splash-stands-until-the-words-and-collections-are-read
-  (let [props (sut/shell-props {:page/current :page/home})]
-    (is (nil? (:page props)) "no screen yet: the splash")
-    (is (nil? (:corner props))))
-  (is (= :page/home (:page (sut/shell-props {:learner/readiness :basic :page/current :page/home})))))
+    (is (= :close (:corner (sut/shell-props {:page/current page}))) (str page)))
+  (testing "no page set (a router that failed to start), no corner control"
+    (is (nil? (:corner (sut/shell-props {}))))))

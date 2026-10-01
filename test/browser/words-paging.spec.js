@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // The requirement counts row elements in the document, so the locator is the
 // row class rather than a role: `listitem` also matches the end-of-list

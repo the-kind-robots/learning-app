@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // GH-412: the arrows moved the active index in state and Enter picked by it,
 // but no row on screen was ever marked — the view compared a decorated item
