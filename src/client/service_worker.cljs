@@ -1,36 +1,33 @@
 (ns service-worker
-  "The worker's registration and what happens when a new build arrives
-   (ADR-0014).
+  "The worker's registration, and how a new build reaches the page
+   (ADR-0017).
 
-   One build serves the page its files. sw.js never skips waiting on its own:
-   a build that starts serving deletes the cache bucket of the build before
-   it, which open pages are still being served from (#278). So a new build is
-   announced instead — it waits, the old one keeps serving, and only when the
-   user asks does the new one serve; every page whose serving build changes
-   then reloads itself once, which is what makes the deletion safe. The ask is
-   always the user's: «Обновить» in the shell, or a tap on the build mark in a
-   development build.
+   One build runs at a time. Two builds may hold different data models, and
+   both would write to the same local databases, so a release build never
+   asks a new build to skip waiting. A new build installs and waits; the
+   browser activates it once every window of the app is closed, and the next
+   open runs it. A page opened while another is still open gets the build
+   that is already running. Nothing moves at activation, because no page is
+   open then, so no page reloads when its controller changes.
 
-   Both controls take the new build the same way: whatever waits is asked to
-   serve now, and the announcement comes back down — a control that outlived
-   its build would do nothing when tapped. The build mark's tap puts a check
-   for a new build in front of that and a plain reload behind it, so the tap
-   always ends in a page; it is registered only in a development build, which
-   is the only build that draws the mark.
+   A development build has one more way in: the build mark. A recompile
+   would otherwise never reach a tab that stays open, so a tap on the mark
+   checks for a new build, asks the waiting one to serve now and reloads
+   onto it, or reloads plainly when nothing is new. That path, and the
+   message it sends, exist only under goog/DEBUG.
 
    The registration belongs to the running system, not to this namespace:
    `start!` hands it back as a promise, `:app/render` takes it as a
    dependency, and so every effect finds it under `:service-worker` in the
-   system Nexus passes it. The announcement is the other direction — it needs
-   `dispatch`, which is render's — so it is a component of its own,
-   `announce-new-builds!`, started after both."
+   system Nexus passes it."
   (:require
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]))
 
 
 (def ^:private serve-now-request
-  "The one message sw.js answers: the worker receiving it calls skipWaiting."
+  "The message that makes the worker receiving it call skipWaiting. Only a
+   development build sends it."
   #js {:type "activate-waiting"})
 
 
@@ -58,57 +55,6 @@
       (.addEventListener worker "statechange" on-statechange))))
 
 
-(defn take-new-build!
-  "Asks whatever `reg` has waiting to serve now, and takes the announcement
-   down, which the ask has spent either way: a build that was asked for is on
-   its way in, and one that is no longer there — an announcement left over
-   from a page that never reloaded — would not answer the next tap either.
-   Answers whether there was a new build to ask."
-  [dispatch ^js reg]
-  (let [^js waiting (some-> reg .-waiting)]
-    (dispatch [[:effect/save {:pwa/new-build-waiting? false}]])
-    (when waiting
-      (ask-to-serve-now! waiting))
-    (some? waiting)))
-
-
-(defn- watch-for-arriving-builds!
-  "Every build that installs while another one is serving ends up waiting:
-   announce it once installed. With nothing serving yet, the first build
-   starts serving by itself and there is nothing to announce."
-  [announce! ^js reg ^js container]
-  (let [watched (volatile! nil)
-        watch!  (fn [^js worker]
-                  (when (and worker (not (identical? worker @watched)))
-                    (vreset! watched worker)
-                    (when-install-ends!
-                     worker
-                     (fn [state]
-                       (when (and (= "installed" state) (.-controller container))
-                         (announce!))))))]
-    (.addEventListener reg "updatefound" (fn [_] (watch! (.-installing reg))))
-    (watch! (.-installing reg))))
-
-
-(defn- reload-when-the-serving-build-changes!
-  "A page that loaded with a build serving it reloads once when another build
-   takes its place — `controllerchange` is how the browser says so — leaving
-   no page needing files the new build has deleted. A page that loaded with
-   nothing serving it is only being claimed by the first build: nothing to
-   reload, but from then on it counts as served."
-  [^js container]
-  (let [served?   (volatile! (some? (.-controller container)))
-        reloaded? (volatile! false)]
-    (.addEventListener container
-                       "controllerchange"
-                       (fn [_]
-                         (if @served?
-                           (when-not @reloaded?
-                             (vreset! reloaded? true)
-                             (js/location.reload))
-                           (vreset! served? true))))))
-
-
 (defn- check-for-new-build!
   "Asks the browser for the current sw.js, and settles either way: a check
    the browser could not answer — offline, most often — is a debug line and
@@ -122,7 +68,8 @@
 
 (defn- check-for-new-build-on-return!
   "A PWA coming back from the background makes no navigation, so the check
-   the browser ties to navigations never runs; ask on visibility."
+   the browser ties to navigations never runs; ask on visibility. A build
+   found this way installs and waits for every window to close."
   [^js reg]
   (.addEventListener js/document
                      "visibilitychange"
@@ -138,15 +85,13 @@
   []
   (if-not (js-in "serviceWorker" js/navigator)
     (js/Promise.resolve nil)
-    (let [^js container js/navigator.serviceWorker]
-      (reload-when-the-serving-build-changes! container)
-      (-> (.register container "/js/app/sw.js" #js {:scope "/"})
-          (.then (fn [^js reg]
-                   (check-for-new-build-on-return! reg)
-                   reg))
-          (.catch (fn [err]
-                    (log/warn :service-worker/register-failed {:error (str err)})
-                    nil))))))
+    (-> (.register js/navigator.serviceWorker "/js/app/sw.js" #js {:scope "/"})
+        (.then (fn [^js reg]
+                 (check-for-new-build-on-return! reg)
+                 reg))
+        (.catch (fn [err]
+                  (log/warn :service-worker/register-failed {:error (str err)})
+                  nil)))))
 
 
 (defn- registration
@@ -162,59 +107,35 @@
 (defn start!
   "Registers the worker and hands the rest of the system the one thing it
    needs from it: the registration, which arrives once and asynchronously.
-   Depends on nothing — announcing is somebody else's component — which is
-   what lets it start before render. Returns at once: the page does not wait
-   on the registration."
+   Depends on nothing, which is what lets it start before render. Returns at
+   once: the page does not wait on the registration."
   [_]
   {:registration (register!)})
 
 
-(defn announce-new-builds!
-  "Raises the flag «Обновить» reads whenever the worker says a build is
-   waiting. Its own component, and started after render, because this is the
-   half of the worker's work that needs `dispatch` — and needing dispatch is
-   what the worker itself must not do, or render could not depend on it.
-   Starting late loses nothing: the registration carries the state rather
-   than a callback, so a build that arrived while it was still settling is
-   `waiting` or `installing` when this reads it, and every later one arrives
-   on `updatefound`."
-  [{:keys [render worker]}]
-  (let [announce! (fn announce-new-build []
-                    ;; A new build is announced, never served unasked — in a
-                    ;; development build too: the watch writes one on every
-                    ;; recompile, and letting it serve would reload every open
-                    ;; page and throw away the hot reload.
-                    ((:dispatch render) [[:effect/save {:pwa/new-build-waiting? true}]]))]
-    (.then (:registration worker)
-           (fn [^js reg]
-             (when reg
-               (when (.-waiting reg)
-                 (announce!))
-               (watch-for-arriving-builds! announce! reg js/navigator.serviceWorker)))))
-  nil)
-
-
-(nxr/register-effect! :effect/take-new-build
-  (fn take-new-build [{:keys [dispatch]} system]
-    (.then (registration system)
-           (fn [^js reg]
-             (take-new-build! dispatch reg)))))
-
-
 ;; The build mark's tap, and only a development build has a mark: registered
-;; under goog/DEBUG so a release bundle carries neither. A check for a new
-;; build first, so one that landed since the page loaded gets to install;
-;; then the new build is taken the way «Обновить» takes it, and the page
-;; reloads when it starts serving; and a plain reload behind every other
-;; outcome — nothing waiting, an install gone redundant, a check the browser
-;; refused, no registration at all. The tap ends in a page either way.
+;; under goog/DEBUG so a release bundle carries neither the effect nor the
+;; message it sends. A check for a new build first, so one that landed since
+;; the page loaded gets to install; then whatever waits is asked to serve now,
+;; and the page reloads once it is activated; and a plain reload behind every
+;; other outcome — nothing waiting, an install gone redundant, a check the
+;; browser refused, no registration at all. The tap ends in a page either way.
+;; Other tabs of the origin are not reloaded: they keep the code they loaded
+;; until they are reloaded themselves.
 (when ^boolean goog/DEBUG
   (nxr/register-effect! :effect/get-newest-build
-    (fn get-newest-build [{:keys [dispatch]} system]
+    (fn get-newest-build [_ system]
       (letfn [(reload! []
                 (js/location.reload))
               (take-or-reload! [^js reg]
-                (when-not (take-new-build! dispatch reg)
+                (if-let [^js waiting (.-waiting reg)]
+                  ;; A reload while the worker is still activating can hang
+                  ;; the navigation: measured on #515, it did in 2 runs of 4.
+                  (do (.addEventListener waiting
+                                         "statechange"
+                                         #(when (= "activated" (.-state waiting))
+                                            (reload!)))
+                      (ask-to-serve-now! waiting))
                   (reload!)))]
         (-> (registration system)
             (.then (fn [^js reg]

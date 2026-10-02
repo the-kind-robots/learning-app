@@ -137,18 +137,15 @@ page reconnected forever. Seen that? Check nothing else is running a watch
 
 ## Getting the new build
 
-The service worker never activates on its own (#278): a new build waits
-until asked, and on Android a swiped-away PWA is not a closed tab, so without
-asking it would wait for the system to kill the process. The app asks for it:
+A new build waits until every window of the app is closed (ADR-0017), and on
+Android a swiped-away PWA is not a closed window: the build arrives when the
+system has killed the process.
 
-- «Обновить» appears in the top-right row when a new worker is waiting; tap
-  it. Every open tab of the origin reloads onto the new build. Same in a
-  development build: a watch writes a new worker on every recompile, and
-  taking each one would reload every open page and lose the hot reload.
 - The check for a new build runs every time the app comes back to the
-  foreground, so bring the phone back and look at the row.
-- In a development build a tap on the build mark does the same without the
-  row: it checks, activates and reloads.
+  foreground, so the build is installed and ready before the windows close.
+- In a development build a tap on the build mark takes the new build at once:
+  it checks, activates and reloads that tab. Other open tabs keep their code
+  until they reload.
 
 ## Reading the trace after a freeze
 

@@ -163,7 +163,7 @@ bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh wait-local \
   --selector '#lesson-answer'
 ```
 
-Refresh production the way a user does (a new build arrives via «Обновить»):
+Refresh production the way a user does (a new build runs only after every window of the app is closed):
 
 ```bash
 bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh refresh-prod
@@ -311,7 +311,7 @@ bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
 - The wrapper defaults to port `9333`.
 - For this repository, prefer this skill over generic browser workflows when inspecting app behavior in a real browser.
 - `refresh-local` enables Chrome's service-worker update-on-reload and reloads ignoring the cache. Force update is local-only.
-- `refresh-prod` and `start-prod` turn update-on-reload off (the flag outlives the CDP connection); `refresh-prod` then reloads plainly, so the service worker serves the page and a new build arrives via «Обновить».
+- `refresh-prod` and `start-prod` turn update-on-reload off (the flag outlives the CDP connection); `refresh-prod` then reloads plainly, so the service worker serves the page and a new build waits for every window to close.
 - Use `monitor-start -> user interacts -> read` as the primary debugging workflow.
 - For layout-stability bugs, combine event traces with visual measurements. HTMX/DOM traces can prove swap order, but they do not by themselves prove the absence of visual jerk.
 - When a transition replaces the page or destroys the JS runtime, prefer an external DevTools trace or repeated geometry snapshots that survive the swap, rather than relying only on in-page probes.
