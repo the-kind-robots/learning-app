@@ -23,16 +23,15 @@
    query and the row count the list holds: `:words/rows`, `:words/total` (the
    words in scope before the query, which is how an empty vocabulary and a
    query with no match tell apart) and `:words/more?` (whether the query
-   matched more than the rows shown). Until the reviews are in memory the
-   rows carry no retention level."
-  [state {:keys [active-id now-ms]}]
+   matched more than the rows shown)."
+  [state {:keys [active-collection learner now-ms]}]
   (let [memory (:learner/memory state)
         {:keys [matches total words]}
-        (vocabulary/rows memory
+        (vocabulary/rows learner
+                         memory
                          {:limit      (:words/limit state)
-                          :retention? (= :full (:learner/readiness state))
                           :search     (:words/search state)
-                          :collection (get-in memory [:collections active-id])}
+                          :collection active-collection}
                          now-ms)]
     {:words/more? (< (count words) matches)
      :words/rows  words
@@ -63,8 +62,8 @@
 
 (nxr/register-action! :action/show-words
   ;; The rows computed again from memory, at the row count and under the query
-  ;; the list holds: after the load reached the reviews, and after the
-  ;; reader's own edit or removal.
+  ;; the list holds: after the load, and after the reader's own edit or
+  ;; removal.
   (fn show-words [state context]
     [[:effect/save (content state context)]]))
 

@@ -6,12 +6,14 @@
    [client.support.test :refer [async-testing]])
   (:require
    [application]
+   [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is testing]]
    [clojure.string :as str]
    [nexus.registry :as nxr]
    [pages.home.actions]
    [pages.home.effects]
    [pages.home.presenter :as presenter]
+   [ports.learner :as ports]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -77,10 +79,10 @@
    unknown prefixes (including the empty one) answer [], like the adapter."
   [completions-by-prefix]
   {:store        (atom {})
-   :capabilities {:collections {:collections/active-id (fn [] nil)}
-                  :dictionary  {:dictionary/completions (fn [prefix]
-                                                          (js/Promise.resolve
-                                                           (get completions-by-prefix prefix [])))}}})
+   :capabilities {:learner    (assoc ports/reads :learner/active-collection (fn [] nil))
+                  :dictionary {:dictionary/completions (fn [prefix]
+                                                         (js/Promise.resolve
+                                                          (get completions-by-prefix prefix [])))}}})
 
 
 (defn- suggestion-items
@@ -353,21 +355,15 @@
 (defn- rename-system
   [writes]
   {:store        (atom {})
-   :capabilities {:collections
-                  {:collections/active-id (fn [] "c:kurs")
-                   :collections/get       (fn [_] (js/Promise.resolve {:id "c:kurs" :name "Kurs"}))
-                   :collections/list      (fn []
-                                            (js/Promise.resolve [{:id "c:kurs" :name "Kurs"}
-                                                                 {:id "c:gram" :name "Grammatik"}]))
-                   :collections/rename!   (fn [id name]
-                                            (swap! writes conj [id name])
-                                            (js/Promise.resolve nil))}}})
-
-
-(defn- settled
-  "Resolves once every promise the effect chained has run."
-  []
-  (js/Promise. (fn [resolve _] (js/setTimeout resolve 0))))
+   :capabilities {:learner (assoc ports/reads
+                                  :learner/active-collection (fn [] {:id "c:kurs" :name "Kurs"})
+                                  :learner/catch-up! (fn [] (js/Promise.resolve nil))
+                                  :learner/memory (fn []
+                                                    {:collections {"c:gram" {:id "c:gram" :name "Grammatik"}
+                                                                   "c:kurs" {:id "c:kurs" :name "Kurs"}}})
+                                  :learner/rename-collection! (fn [id name]
+                                                                (swap! writes conj [id name])
+                                                                (js/Promise.resolve {:id id :name name})))}})
 
 
 (deftest a-rename-writes-once-and-a-taken-name-writes-nothing
@@ -375,8 +371,8 @@
     (let [writes (atom [])
           system (rename-system writes)]
       (nxr/dispatch system {} [[:effect/rename-active-collection " Neu "]])
-      (await (settled))
+      (await (wait/settled))
       (is (= [["c:kurs" "Neu"]] @writes))
       (nxr/dispatch system {} [[:effect/rename-active-collection "grammatik"]])
-      (await (settled))
+      (await (wait/settled))
       (is (= [["c:kurs" "Neu"]] @writes)))))

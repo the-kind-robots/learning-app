@@ -6,9 +6,9 @@
 
 (defn content
   "What the themes screen shows of the learner's data in `state`."
-  [state {:keys [active-id]}]
-  (let [{:keys [items total-words]} (collections/summary (:learner/memory state))]
-    {:collections/active-id   active-id
+  [state {:keys [active-collection learner]}]
+  (let [{:keys [items total-words]} (collections/summary learner (:learner/memory state))]
+    {:collections/active-id   (:id active-collection)
      :collections/items       items
      :collections/total-words total-words}))
 

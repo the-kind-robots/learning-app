@@ -2,7 +2,7 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.examples :as sut]
+   [adapters.example-fetch :as sut]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.fetch-mocks :as fetch-mocks]
@@ -171,43 +171,6 @@
     (is (thrown-with-msg? js/Error
                           #"missing required fields"
                           (sut/save-example! nil nil "word-123" "Hund" nil example)))))
-
-
-(deftest of-word-reads-past-the-default-page
-  (async-testing "`of-word` returns every example of a word, not the first 25"
-    (with-test-db
-      (^:async fn
-       [db]
-       (let [dbs     {:device/db db}
-             collection-ids (mapv #(str "collection-" %) (range 30))
-             example {:value "Der Hund" :translation "The dog" :structure []}]
-         (doseq [collection-id collection-ids]
-           (await (sut/save-example! dbs (test-clock) "word-1" "Hund" collection-id example)))
-         (await (sut/save-example! dbs (test-clock) "word-2" "Katze" nil example))
-         (let [examples (await (sut/of-word dbs "word-1"))]
-           (is (= 30 (count examples)))
-           (is (= (set collection-ids) (set (map :collection-id examples))))))))))
-
-
-(deftest remove-deletes-existing-document
-  (async-testing "`remove!` deletes existing document"
-    (with-test-db
-      (^:async fn
-       [db]
-       (let [{:keys [id]} (await (db/insert db {:type "example" :word-id "w1"}))]
-         (await (sut/remove! {:device/db db} id))
-         (let [examples (await (db-queries/fetch-examples db))]
-           (is (empty? examples))))))))
-
-
-(deftest remove-is-noop-when-not-exists
-  (async-testing "`remove!` no-op when not found"
-    (with-test-db
-      (^:async fn
-       [db]
-       (await (sut/remove! {:device/db db} "nonexistent"))
-       (let [examples (await (db-queries/fetch-examples db))]
-         (is (empty? examples)))))))
 
 
 (deftest task-handler-fetches-and-saves-on-success

@@ -18,12 +18,6 @@
       (is (= "Нужно повторить (42%)" (:retention-title props))))))
 
 
-(deftest a-row-whose-retention-is-not-read-yet-is-grey-and-untitled
-  (let [props (sut/word-item-props {:id "word-1" :value "der Hund" :translation [] :retention-level nil})]
-    (is (= "rgb(var(--color-hare))" (:retention-color props)))
-    (is (nil? (:retention-title props)))))
-
-
 (deftest the-presenter-decides-what-is-a-phrase
   (testing "the kind is read here, so the view never compares"
     (let [phrase (sut/word-item-props

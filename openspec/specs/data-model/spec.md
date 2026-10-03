@@ -1,6 +1,8 @@
 ## Purpose
 The data model spec defines the required document shapes stored in the local database.
+
 ## Requirements
+
 ### Requirement: Vocabulary documents are stored
 The system SHALL store vocabulary documents with translations and ISO 8601 timestamps for creation and modification. A translation SHALL be stored as it was entered: the entered text becomes one `translation` entry and SHALL NOT be split on punctuation. `translation` stays a vector, so a document written before this rule keeps its several entries and is read as it is.
 
@@ -170,22 +172,15 @@ storage layer's default result limit.
 - **THEN** it completes without error and copies nothing
 
 ### Requirement: user-db carries secondary indexes
-user-db SHALL carry a secondary index on `type` and a secondary index on `type` + `word_id`. The system SHALL create both when the databases are initialised at start-up, so an installation that predates them gets them on its next start without a migration.
+user-db SHALL carry a secondary index on `type`. The system SHALL create it when the databases are initialised at start-up, so an installation that predates it gets it on its next start without a migration.
 
 #### Scenario: Indexes exist after start-up
 - **WHEN** the app has started and the databases are initialised
-- **THEN** `getIndexes()` on user-db lists an index whose fields are `["type"]` and an index whose fields are `["type", "word_id"]`, alongside `_all_docs`
+- **THEN** `getIndexes()` on user-db lists an index whose fields are `["type"]`, alongside `_all_docs`
 
 #### Scenario: An existing installation gets the indexes
 - **WHEN** an installation whose user-db has only `_all_docs` starts
-- **THEN** after start-up `getIndexes()` on user-db lists both indexes
-
-### Requirement: user-db carries a reviews view
-user-db SHALL carry a design document `_design/reviews-by-word` whose view emits, for every `review` document, the key `word_id` and the value `[created_at, retained]`. The system SHALL create it at start-up and replace it when its map function differs from the stored one. Retention levels for a list of words SHALL be computed from this view's rows, not from review documents.
-
-#### Scenario: The view answers per word
-- **WHEN** user-db holds reviews for a word
-- **THEN** querying `reviews-by-word/rows` with that word id as key returns one row per review whose value is `[created_at, retained]`
+- **THEN** after start-up `getIndexes()` on user-db lists the `type` index
 
 ### Requirement: user-db design documents are not replicated
 user-db design documents SHALL NOT replicate: a sync pass SHALL carry user documents in both directions and no document whose id begins with `_design/` in either direction.

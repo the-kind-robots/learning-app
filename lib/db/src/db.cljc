@@ -517,23 +517,13 @@
 
 
 #?(:cljs
-   (defn query
-     "Queries a mapreduce view. `view` is `\"<ddoc>/<view>\"`; `opts` are the
-      PouchDB query options (`:keys`, `:startkey`, `:endkey`, `:include-docs`,
-      ...). Returns `{:rows [{:id .. :key .. :value ..}] :total-rows n}`, where
-      `:total-rows` is the whole view's row count whatever `:limit` asked for —
-      so `{:limit 0}` counts a view without reading it."
-     [db view opts]
-     ;; Rows have a fixed shape, so they skip `couch->clj`'s per-key keyword
-     ;; work: over 9000 rows that pass cost as much as the query itself.
-     (.then (.query ^js db view (clj->couch opts))
-            (fn [result]
-              {:rows       (mapv (fn [row]
-                                   {:id    (.-id ^js row)
-                                    :key   (couch->clj (.-key ^js row))
-                                    :value (couch->clj (.-value ^js row))})
-                                 (.-rows ^js result))
-               :total-rows (.-total_rows ^js result)}))))
+   (defn conflict?
+     "Whether `err` is PouchDB's refusal of a write as a conflict: the
+      revision the write carried is not the one PouchDB holds."
+     [err]
+     ;; Every caller catches the rejection of `insert` (a PouchDB `put`), an
+     ;; error object whose `status` is 409; `client.db.pouch-test` holds it.
+     (= 409 (some-> err .-status))))
 
 
 (defn bulk-docs

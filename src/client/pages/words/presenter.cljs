@@ -25,21 +25,12 @@
     :else         "Новое слово"))
 
 
-(def ^:private unknown-retention-color
-  "The mark of a row whose retention is not read yet — the reviews load after
-   the words."
-  "rgb(var(--color-hare))")
-
-
 (defn word-item-props
   [{:keys [id kind value translation retention-level]}]
   {:id          id
    :phrase?     (= "phrase" kind)
-   :retention-color (if retention-level
-                      (utils/prozent->color retention-level)
-                      unknown-retention-color)
-   :retention-title (when retention-level
-                      (str (retention-text retention-level) " (" (int retention-level) "%)"))
+   :retention-color (utils/prozent->color retention-level)
+   :retention-title (str (retention-text retention-level) " (" (int retention-level) "%)")
    :value       value
    :translation (->> translation
                      (filter #(= "ru" (:lang %)))

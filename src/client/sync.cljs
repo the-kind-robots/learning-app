@@ -1,8 +1,8 @@
 (ns sync
   (:require
-   [adapters.examples :as examples]
+   [adapters.example-fetch :as example-fetch]
    [adapters.identity :as identity]
-   [adapters.repository :as repository]
+   [adapters.learner.documents :as documents]
    [db :as db]
    [db.pouch :as pouch]
    [domain.vocabulary :as domain]
@@ -336,9 +336,9 @@
    Asked of the schemas that own those documents, so a type renamed there is
    renamed here."
   [{:keys [task-type type]}]
-  (or (= (:type examples/schema) type)
+  (or (= (:type documents/example-schema) type)
       (and (= (:type tasks/schema) type)
-           (= examples/fetch-task-type task-type))))
+           (= example-fetch/fetch-task-type task-type))))
 
 
 (defn ^:async forget-account-data!
@@ -357,7 +357,7 @@
           theirs       (filter #(of-the-account? (:doc %)) rows)]
       (when (seq theirs)
         (log/info :sync/forgetting-account-data {:count (count theirs)})
-        (await (db/bulk-docs device-db (mapv #(repository/tombstone (:doc %)) theirs)))))
+        (await (db/bulk-docs device-db (mapv #(documents/tombstone (:doc %)) theirs)))))
     (catch :default err
       (log/warn :sync/forget-account-data-failed {:error (ex-message err)}))))
 

@@ -5,7 +5,7 @@
    [adapters.active-collection :as active-collection]
    [cljs.test :refer-macros [deftest is testing]]
    [domain.collections :as collections]
-   [ports.collections :as port]
+   [ports.learner :as learner]
    [use-cases.collections :as sut]))
 
 
@@ -19,12 +19,12 @@
 
 
 (deftest the-scope-is-the-distinct-union-of-the-collection-and-its-children
-  (is (= ["a" "b" "c" "d" "e"] (sut/scope-word-ids items "c:kurs"))
+  (is (= ["a" "b" "c" "d" "e"] (collections/scope-word-ids items "c:kurs"))
       "own words first, then the children's, b once; Kursus is not a child")
-  (is (= ["b" "c"] (sut/scope-word-ids items "c:k1"))
+  (is (= ["b" "c"] (collections/scope-word-ids items "c:k1"))
       "a child has no children of its own")
-  (is (= ["g"] (sut/scope-word-ids items "c:gram")))
-  (is (nil? (sut/scope-word-ids items "c:gone"))))
+  (is (= ["g"] (collections/scope-word-ids items "c:gram")))
+  (is (nil? (collections/scope-word-ids items "c:gone"))))
 
 
 (deftest names-are-compared-trimmed-and-case-insensitively
@@ -38,16 +38,19 @@
 
 
 (defn- port
+  "What the use cases are handed: memory holding `items`, already caught
+   up with the databases."
   ([active-id]
    (port active-id (atom [])))
   ([active-id renames]
-   {:collections {:collections/active-id (fn [] active-id)
-                  :collections/list      (fn [] (js/Promise.resolve items))
-                  :collections/get       (fn [id] (js/Promise.resolve (some #(when (= id (:id %)) %) items)))
-                  :collections/create!   (fn [name] (js/Promise.resolve {:id (str "c:" name)}))
-                  :collections/rename!   (fn [id name]
-                                           (swap! renames conj [id name])
-                                           (js/Promise.resolve nil))}}))
+   {:learner (assoc learner/reads
+                    :learner/active-collection (fn [] (some #(when (= active-id (:id %)) %) items))
+                    :learner/memory (fn [] {:collections (into {} (map (juxt :id identity)) items)})
+                    :learner/catch-up! (fn [] (js/Promise.resolve nil))
+                    :learner/create-collection! (fn [name] (js/Promise.resolve {:id (str "c:" name)}))
+                    :learner/rename-collection! (fn [id name]
+                                                  (swap! renames conj [id name])
+                                                  (js/Promise.resolve {:id id :name name})))}))
 
 
 (deftest the-summary-lists-collections-oldest-first
@@ -57,7 +60,7 @@
     (is (= {:items       [{:id "c:a" :created-at "2026-01" :name "A" :word-ids []}
                           {:id "c:b" :created-at "2026-02" :name "B" :word-ids []}]
             :total-words 1}
-           (sut/summary memory)))))
+           (sut/summary learner/reads memory)))))
 
 
 (deftest rename-refuses-a-name-another-collection-carries
@@ -93,15 +96,15 @@
       (is (= {:error :invalid-name} (await (sut/create! (port nil) "   ")))))))
 
 
-(deftest the-active-collection-is-the-one-memory-holds
-  (let [store     (atom {:learner/memory {:collections {"c:kurs" {:id "c:kurs" :name "Kurs"}}}})
-        active-id (:collections/active-id (port/start! {:store store}))]
-    (testing "the remembered id names a collection memory holds"
+(deftest the-active-collection-is-the-one-memory-has
+  (let [store  (atom {:learner/memory {:collections {"c:kurs" {:id "c:kurs" :name "Kurs"}}}})
+        active (:learner/active-collection (learner/start! {:store store}))]
+    (testing "the remembered id names a collection memory has"
       (with-redefs [active-collection/active-collection-id (constantly "c:kurs")]
-        (is (= "c:kurs" (active-id)))))
-    (testing "a remembered id memory holds nothing under — deleted here or on another device — is none"
+        (is (= {:id "c:kurs" :name "Kurs"} (active)))))
+    (testing "a remembered id memory has nothing under — deleted here or on another device — is none"
       (with-redefs [active-collection/active-collection-id (constantly "c:gone")]
-        (is (nil? (active-id)))))
+        (is (nil? (active)))))
     (testing "nothing remembered is none"
       (with-redefs [active-collection/active-collection-id (constantly nil)]
-        (is (nil? (active-id)))))))
+        (is (nil? (active)))))))

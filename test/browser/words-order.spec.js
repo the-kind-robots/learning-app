@@ -79,7 +79,7 @@ test('a page past the first continues the same order', async ({ page }) => {
 test('a word entered with an article is still the same entry', async ({ page }) => {
   await page.goto('/home');
 
-  // Through the add form, so the whole find-by-value path runs: the id did not
+  // Through the add form, so the whole duplicate check runs: the id did not
   // change, so entering the same value again must find the stored word and
   // merge into it rather than make a second row. The form clearing itself is
   // the app saying the write landed — without waiting for it the second add

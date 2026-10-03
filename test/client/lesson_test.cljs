@@ -2,16 +2,16 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.examples :as examples]
+   [adapters.learner.memory :as memory]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.db-seed :as db-seed]
+   [client.support.learner :as learner]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [domain.lesson :as domain]
-   [ports.reviews :as reviews]
-   [ports.words :as words]
+   [ports.learner :as ports]
    [use-cases.lesson :as sut]
    [use-cases.vocabulary :as vocabulary]
    [utils :as utils]))
@@ -26,7 +26,14 @@
 (use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name device-db-name]))
 
 
+(def ^:private clock
+  {:clock/now-iso time/now-iso
+   :clock/now-ms  time/now-ms})
+
+
 (defn- with-test-dbs
+  "Calls `f` with the test databases, under which `::learner` is the
+   learner port over them."
   [f]
   (db-fixtures/with-test-dbs
    [user-db-name device-db-name]
@@ -34,23 +41,21 @@
     [[user-db device-db]]
     (with-redefs [utils/now-iso time/now-iso
                   utils/now-ms  time/now-ms]
-      (await (f {:user/db user-db :device/db device-db}))))))
+      (let [dbs {:device/db device-db :user/db user-db}]
+        (await (learner/with-learner dbs clock #(f (assoc dbs ::learner (:learner %) ::store (:store %))))))))))
 
 
 (defn- test-capabilities
-  ([dbs]
-   (test-capabilities dbs (fn [_word _coll-id _coll-name] (js/Promise.resolve nil))))
-  ([dbs request!]
-   (let [clock {:clock/now-iso time/now-iso
-                :clock/now-ms  time/now-ms}]
-     {::dbs        dbs
-      :clock       clock
-      :reviews     (reviews/start! {:db dbs :clock clock})
-      :words       (words/start! {:db dbs :clock clock})
-      :collections {:collections/active-id (fn [] nil)
-                    :collections/get       (fn [_] nil)}
-      :examples    {:examples/list     (fn [word-ids] (examples/list dbs word-ids))
-                    :examples/request! request!}})))
+  [dbs]
+  {::dbs    dbs
+   :clock   clock
+   :learner (assoc (::learner dbs) :learner/active-collection (fn [] nil))})
+
+
+(defn- ^:async caught-up!
+  "Resolves once memory has what the test seeded."
+  [dbs]
+  (await (learner/caught-up dbs (::store dbs))))
 
 
 (defn- ^:async start!
@@ -58,7 +63,7 @@
   [capabilities opts]
   (let [dbs    (::dbs capabilities)
         memory (await (db-seed/memory-of (:user/db dbs) (:device/db dbs)))]
-    (sut/start memory ((get-in capabilities [:collections :collections/active-id])) opts (time/now-ms))))
+    (sut/start ports/reads memory ((get-in capabilities [:learner :learner/active-collection])) opts (time/now-ms))))
 
 
 (defn- ^:async started
@@ -67,19 +72,19 @@
   (:lesson-state (await (start! capabilities opts))))
 
 
-(defn- ^:async held-words
-  "Every word as memory would hold `dbs` now, with its retention level and
+(defn- ^:async cached-words
+  "Every word as memory would have `dbs` now, with its retention level and
    the urgency a lesson ranks it by."
   [capabilities]
   (let [dbs    (::dbs capabilities)
         memory (await (db-seed/memory-of (:user/db dbs) (:device/db dbs)))
         now    (time/now-ms)
-        levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows memory {} now)))]
+        levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows ports/reads memory {} now)))]
     {:words (mapv (fn [{:keys [word] :as card}]
                     {:id      (:id word)
                      :retention-level (levels (:id word))
                      :urgency (vocabulary/urgency-of card now)})
-                  (vocabulary/collection-cards memory nil))}))
+                  (memory/collection-cards memory nil))}))
 
 
 (deftest start-creates-lesson-when-words-available
@@ -198,8 +203,8 @@
                                        :word        "der Hund"
                                        :value       "Der Hund schlaeft."
                                        :translation "Пёс спит."}]))
-      (let [lesson          (await (started (test-capabilities dbs) {:trial-selector :first}))
-            checked         (:lesson-state (await (sut/check-answer! (test-capabilities dbs) lesson "der Hund")))
+      (let [lesson  (await (started (test-capabilities dbs) {:trial-selector :first}))
+            checked (:lesson-state (await (sut/check-answer! (test-capabilities dbs) lesson "der Hund")))
             initial-reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (await (sut/check-answer! (test-capabilities dbs) (domain/advance checked) "Der Hund schlaeft."))
         (let [final-reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
@@ -232,7 +237,8 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [info (await (sut/token-info (test-capabilities dbs) "die Seele" "душа"))]
+      (await (caught-up! dbs))
+      (let [info (sut/token-info (test-capabilities dbs) "die Seele" "душа")]
         (is (= :unknown-word (:state info)))
         (is (= "die Seele" (:dictionary-form info)))
         (is (= "душа" (:translation info))))))))
@@ -244,7 +250,8 @@
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:value "die Seele" :translation "душа"}]))
-      (let [info (await (sut/token-info (test-capabilities dbs) "die Seele" "душа"))]
+      (await (caught-up! dbs))
+      (let [info (sut/token-info (test-capabilities dbs) "die Seele" "душа")]
         (is (= :known-with-translation (:state info))))))))
 
 
@@ -254,7 +261,8 @@
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:value "die Bank" :translation "банк"}]))
-      (let [info (await (sut/token-info (test-capabilities dbs) "die Bank" "скамейка"))]
+      (await (caught-up! dbs))
+      (let [info (sut/token-info (test-capabilities dbs) "die Bank" "скамейка")]
         (is (= :known-missing-translation (:state info))))))))
 
 
@@ -294,9 +302,11 @@
                {:_id "word-2" :value "die Katze" :translation "cat"}]))
       (let [capabilities (test-capabilities dbs)
             lesson       (await (started capabilities {:trial-selector :first}))
-            check1       (:lesson-state (await (sut/check-answer! capabilities lesson (:answer (domain/current-trial lesson)))))
+            check1       (:lesson-state
+                          (await (sut/check-answer! capabilities lesson (:answer (domain/current-trial lesson)))))
             advanced     (domain/advance check1)
-            check2       (:lesson-state (await (sut/check-answer! capabilities advanced (:answer (domain/current-trial advanced)))))]
+            check2       (:lesson-state
+                          (await (sut/check-answer! capabilities advanced (:answer (domain/current-trial advanced)))))]
         (is (true? (:correct? (domain/last-result check1))))
         (is (not= (domain/current-trial lesson) (domain/current-trial advanced)))
         (is (true? (:correct? (domain/last-result check2))))
@@ -348,7 +358,7 @@
                {:id "vocab:zug" :value "der Zug" :days-ago 300}
                {:id "vocab:zurueck" :value "zurück" :days-ago 300}]))
       (let [capabilities    (test-capabilities dbs)
-            {:keys [words]} (await (held-words capabilities))
+            {:keys [words]} (await (cached-words capabilities))
             {:keys [lesson-state]}
             (await (start! capabilities
                            {:vocab-pool-size  3
@@ -391,7 +401,7 @@
               ["abend" "abfahrt" "abholen" "ankommen" "aufstehen"
                "bleiben" "bringen" "denken" "essen" "fahren"]))
       (let [capabilities (test-capabilities dbs)
-            urgencies    (->> (await (held-words capabilities))
+            urgencies    (->> (await (cached-words capabilities))
                               :words
                               (map :urgency)
                               set)

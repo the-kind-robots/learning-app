@@ -1,26 +1,12 @@
-(ns adapters.examples
-  "Client module for fetching example sentences from the backend."
-  (:refer-clojure :exclude [list])
+(ns adapters.example-fetch
+  "Fetching an example sentence from the backend, by a task in the queue,
+   and keeping it in device-db."
   (:require
-   [adapters.repository :as repository]
+   [adapters.learner.documents :as documents]
    [db.pouch :as dbs]
    [lambdaisland.glogi :as log]
    [tasks :as tasks]
    [utils :as utils]))
-
-
-(def schema
-  {:type    "example"
-   :db      :device/db
-   :indexes [{:name "by-type-word-id" :fields [:type :word-id]}
-             {:name "by-type-collection-id" :fields [:type :collection-id]}]})
-
-
-(defn doc->example
-  "Outward an example is
-   `{:id :word-id :collection-id :word :value :translation :structure :created-at}`."
-  [doc]
-  (repository/entity doc))
 
 
 (def invalid-response-message
@@ -107,57 +93,7 @@
                              :word        word
                              :word-id     word-id}
                       collection-id (assoc :collection-id collection-id))]
-    (dbs/insert dbs schema example-doc)))
-
-
-(defn ^:async list
-  "Every example this device holds for `word-ids`, whatever collection each
-   carries. Which of them answers a card is the reader's question, and it is
-   answered in one place — `use-cases.examples` — rather than restated as a
-   selector here."
-  [dbs word-ids]
-  (let [{:keys [docs]} (await (dbs/find-all dbs schema {:selector {:word-id {:$in word-ids}}}))]
-    (mapv doc->example docs)))
-
-
-(defn ^:async of-word
-  "Every example held for one word, read through the word index. The list
-   above takes `$in`, which PouchDB answers by reading the type and filtering
-   in memory; a single word is the question the hot path asks, and it has an
-   index."
-  [dbs word-id]
-  (let [{:keys [docs]} (await (dbs/find-all dbs
-                                            schema
-                                            {:selector  {:word-id word-id}
-                                             :use-index "by-type-word-id"}))]
-    (mapv doc->example docs)))
-
-
-(defn ^:async remove!
-  "Deletes an example document by its _id. No-op if document doesn't exist."
-  [dbs example-id]
-  (let [example (await (dbs/get dbs schema example-id))]
-    (when example
-      (await (dbs/remove dbs schema example)))))
-
-
-(defn ^:async purge-by-collection!
-  "Tombstones every example doc bound to `collection-id` in one atomic
-   device-db bulk write. Called when a collection is deleted to keep
-   example storage from accumulating orphans."
-  [dbs collection-id]
-  (let [{:keys [docs]} (await (dbs/find-all dbs schema {:selector {:collection-id collection-id}}))]
-    (when (seq docs)
-      (await (dbs/bulk-docs dbs schema (mapv repository/tombstone docs))))))
-
-
-(defn ^:async purge-by-word!
-  "Tombstones every example of `word-id` in one device-db bulk write. Called
-   after the word itself is gone from user-db."
-  [dbs word-id]
-  (let [{:keys [docs]} (await (dbs/find-all dbs schema {:selector {:word-id word-id}}))]
-    (when (seq docs)
-      (await (dbs/bulk-docs dbs schema (mapv repository/tombstone docs))))))
+    (dbs/insert dbs documents/example-schema example-doc)))
 
 
 (def fetch-task-type
