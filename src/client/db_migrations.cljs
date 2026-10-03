@@ -28,17 +28,6 @@
 (def ^:private migration-id "migration:local-db-split")
 
 
-(defn- conflict?
-  [err]
-  (let [status (or (.-status err)
-                   (:status err)
-                   (get-in err [:body :status]))
-        name   (or (.-name err) (:name err))]
-    (or (= status 409)
-        (= status "409")
-        (= name "conflict"))))
-
-
 (defn- strip-rev
   [doc]
   (dissoc doc :_rev))
@@ -49,7 +38,7 @@
   (try
     (await (db/insert db (strip-rev doc)))
     (catch js/Error err
-      (if (conflict? err)
+      (if (db/conflict? err)
         nil
         (throw err)))))
 

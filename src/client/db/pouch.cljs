@@ -1,15 +1,14 @@
 (ns db.pouch
-  "Storage engine over PouchDB: documents, databases, indexes, views and
-   replication. Knows no document type of its own — every call carries the
+  "Storage engine over PouchDB: documents, databases, indexes, change feeds
+   and replication. Knows no document type of its own — every call carries the
    `schema` of the aggregate it serves, a value the owning adapter declares:
 
      {:type    \"...\"            ; stored as the document's :type
       :db      :user/db          ; the database the type lives in
-      :indexes [{:name \"...\" :fields [...]}]   ; optional
-      :views   {\"name\" {:map \"function (doc) {...}\"}}}  ; optional
+      :indexes [{:name \"...\" :fields [...]}]}  ; optional
 
    `init!` takes every schema the app declares and gives each database its
-   indexes and design documents."
+   indexes."
   (:refer-clojure :exclude [get find remove])
   (:require
    [clojure.string :as str]
@@ -65,17 +64,24 @@
 
 (defn- ^:async pages
   "Reads every document of `db` with an id from `:start` to `:end`, a page
-   at a time, with a task between pages."
-  [^js db {:keys [end start]}]
+   at a time, with a task between pages. With `:types`, a set, it keeps only
+   documents whose `type` is in it, and converts no other."
+  [^js db {:keys [end start types]}]
   (loop [docs  []
          after nil]
     (let [options  (cond-> #js {:include_docs true :limit page-size}
                      start (doto (aset "startkey" start))
                      end   (doto (aset "endkey" end))
-                     after (doto (aset "startkey" after) (aset "skip" 1)))
+                     ;; The next page starts right after the last id read,
+                     ;; whether or not that document is still there.
+                     after (doto (aset "startkey" (str after "\u0000"))))
           ^js page (await (.allDocs db options))
           rows     (.-rows page)
-          docs     (into docs (map #(db/couch->clj (.-doc ^js %))) rows)]
+          docs     (into docs
+                         (comp (map #(.-doc ^js %))
+                               (filter #(or (nil? types) (contains? types (.-type ^js %))))
+                               (map db/couch->clj))
+                         rows)]
       (if (< (.-length rows) page-size)
         docs
         (do (await (next-task))
@@ -84,8 +90,8 @@
 
 (defn read-docs
   "Reads the documents of `db-key` with an id from `:start` to `:end`;
-   either bound may be left out. It reads a page at a time, with a task
-   between pages."
+   either bound may be left out. With `:types`, only documents of those
+   types. It reads a page at a time, with a task between pages."
   [dbs db-key range]
   (pages (db-key dbs) range))
 
@@ -99,27 +105,62 @@
     (.-update_seq info)))
 
 
+(defn ^:async read-changes
+  "Reads once what `db-key` stored after `since`. Resolves with `{:docs
+   [...] :position seq}`: the documents that changed, in the order stored —
+   a deleted one as `{:_id .. :_rev .. :_deleted true}` — and the feed's
+   sequence after them."
+  [dbs db-key since]
+  (let [^js answer (await (.changes ^js (db-key dbs) #js {:include_docs true :since since}))]
+    {:docs     (mapv #(db/couch->clj (.-doc ^js %)) (.-results answer))
+     :position (.-last_seq answer)}))
+
+
 (defn follow-changes
-  "Calls `f` with the documents `db-key`'s change feed brings after `since`,
-   one call per batch of changes that arrive together. A deleted document
-   arrives as `{:_id .. :_rev .. :_deleted true}`. Returns a function that
-   stops the feed."
+  "Calls `f` with the documents `db-key` stores after `since`, in the order
+   it stores them: one call per batch of changes that arrive together. A
+   deleted document arrives as `{:_id .. :_rev .. :_deleted true}`.
+
+   PouchDB can drop a change from a live feed without reporting it, and a
+   started feed reports no failure. So this also returns a way to catch up:
+   `:catch-up!` reads once what was stored after the last change handed to
+   `f`, hands it to `f`, and resolves once it has. A change handed over twice
+   is the same document twice. `:stop!` stops following."
   [dbs db-key since f]
-  (let [pending (atom [])
-        flush!  #(let [[docs _] (reset-vals! pending [])] (f docs))
-        feed    (.changes ^js (db-key dbs) #js {:include_docs true :live true :since since})]
-    (.on feed
-         "change"
-         (fn [^js change]
-           ;; A batch is what arrives before the next task: PouchDB emits the
-           ;; changes of one write, such as a replicated batch or a bulk
-           ;; write, one after another. The first change of a batch schedules
-           ;; its flush.
-           (swap! pending conj (db/couch->clj (.-doc change)))
-           (when (= 1 (count @pending))
-             (js/setTimeout flush! 0))))
-    (.on feed "error" (fn [err] (log/error :db/follow-failed {:db db-key :error (str err)})))
-    #(.cancel feed)))
+  (let [position (volatile! since)
+        batch    (volatile! [])
+        stopped? (volatile! false)
+        handed!  (fn [docs last-seq]
+                   (when (and (seq docs) (not @stopped?))
+                     ;; A catch-up can hand over changes the feed brings
+                     ;; later; the position only moves forward.
+                     (vswap! position max last-seq)
+                     (f docs)))
+        flush!   (fn []
+                   (let [changes @batch]
+                     (vreset! batch [])
+                     (when (seq changes)
+                       (handed! (mapv :doc changes) (:seq (peek changes))))))
+        feed     (doto ^js (.changes ^js (db-key dbs) #js {:include_docs true :live true :since since})
+                   (.on "change"
+                        (fn [^js change]
+                          ;; A batch is what arrives before the next task:
+                          ;; PouchDB emits the changes of one write, such as
+                          ;; a replicated batch or a bulk write, one after
+                          ;; another. The first change of a batch schedules
+                          ;; its flush.
+                          (when (empty? @batch)
+                            (js/setTimeout flush! 0))
+                          (vswap! batch conj {:doc (db/couch->clj (.-doc change)) :seq (.-seq change)})))
+                   (.on "error"
+                        (fn [err]
+                          (log/error :db/follow-failed {:db db-key :error (str err)}))))]
+    {:catch-up! (fn ^:async catch-up! []
+                  (let [{:keys [docs position]} (await (read-changes dbs db-key @position))]
+                    (handed! docs position)))
+     :stop!     (fn stop! []
+                  (vreset! stopped? true)
+                  (.cancel feed))}))
 
 
 (defn user-doc?
@@ -212,51 +253,27 @@
   ((:db schema) dbs))
 
 
-(defn listen-to-writes!
-  "Registers `f`. After every write through this namespace, once PouchDB
-   has accepted it and before the writer's promise resolves, `f` is called
-   with the documents written, each at the revision PouchDB gave it. A
-   refused write calls nothing. Each `dbs` has one listener; nil stops
-   listening."
-  [dbs f]
-  (some-> (:dbs/write-listener dbs) (reset! f)))
-
-
-(defn- report-written!
-  "Hands `docs` to the listener and passes `result` on."
-  [dbs db-key docs result]
-  (when-let [f (some-> (:dbs/write-listener dbs) deref)]
-    (when (seq docs)
-      (try
-        (f docs)
-        (catch :default err
-          (log/error :db/written-listener-failed {:db db-key :error (str err)})))))
-  result)
-
-
-(defn insert
-  "Writes doc as one of `schema`'s type into the database that holds it."
+(defn ^:async insert
+  "Writes doc as one of `schema`'s type into the database that holds it.
+   Resolves with the document as written, at the revision PouchDB gave it."
   [dbs schema doc]
-  (let [doc (assoc doc :type (:type schema))]
-    (.then (db/insert (database dbs schema) doc)
-           (fn [{:keys [id rev] :as result}]
-             (report-written! dbs (:db schema) [(assoc doc :_id id :_rev rev)] result)))))
+  (let [doc (assoc doc :type (:type schema))
+        {:keys [id rev]} (await (db/insert (database dbs schema) doc))]
+    (assoc doc :_id id :_rev rev)))
 
 
-(defn bulk-docs
-  "Writes docs atomically into `schema`'s database. The docs carry their own
+(defn ^:async bulk-docs
+  "Writes docs into `schema`'s database in one call. The docs carry their own
    :type: a bulk write moves documents that were read, tombstoned or updated,
-   and those may belong to several types of the same database."
+   and those may belong to several types of the same database. Resolves with
+   the documents PouchDB accepted, each at its new revision; PouchDB refuses
+   a document whose revision it does not hold and writes the rest."
   [dbs schema docs]
-  (.then (db/bulk-docs (database dbs schema) docs)
-         (fn [results]
-           (report-written! dbs
-                     (:db schema)
-                     (into []
-                           (keep (fn [[doc {:keys [ok id rev]}]]
-                                   (when ok (assoc doc :_id id :_rev rev))))
-                           (map vector docs results))
-                     results))))
+  (let [results (await (db/bulk-docs (database dbs schema) docs))]
+    (into []
+          (keep (fn [[doc {:keys [ok id rev]}]]
+                  (when ok (assoc doc :_id id :_rev rev))))
+          (map vector docs results))))
 
 
 (defn get
@@ -265,11 +282,39 @@
   (db/get (database dbs schema) id))
 
 
+(def ^:private ids-page
+  "How many documents a read by id converts in one task."
+  500)
+
+
+(defn ^:async read-ids
+  "The documents of `db-key` under `ids`, as PouchDB holds them now: the
+   winner of each, and for a deleted one `{:_id .. :_rev .. :_deleted
+   true}`. An id with no document is left out. It reads a page of ids at a
+   time, with a task between pages."
+  [dbs db-key ids]
+  (loop [docs  []
+         pages (partition-all ids-page ids)]
+    (if-let [[page & more] (seq pages)]
+      (let [^js answer (await (.allDocs ^js (db-key dbs) #js {:include_docs true :keys (into-array page)}))
+            docs       (into docs
+                             (keep (fn [^js row]
+                                     (cond
+                                       (.-doc row)
+                                       (db/couch->clj (.-doc row))
+
+                                       (some-> row .-value .-deleted)
+                                       {:_deleted true :_id (.-id row) :_rev (.. row -value -rev)})))
+                             (.-rows answer))]
+        (when more
+          (await (next-task)))
+        (recur docs more))
+      docs)))
+
+
 (defn remove
   [dbs schema doc]
-  (.then (db/remove (database dbs schema) doc)
-         (fn [{:keys [id rev] :as result}]
-           (report-written! dbs (:db schema) [{:_deleted true :_id id :_rev rev}] result))))
+  (db/remove (database dbs schema) doc))
 
 
 (defn- typed
@@ -290,21 +335,6 @@
   (db/find-all (database dbs schema) (typed schema query)))
 
 
-(defn view
-  "A reference to one of `schema`'s views, for `query`: the design document
-   carries the declared name and its one view is `rows`."
-  [schema view-name]
-  {:db   (:db schema)
-   :view (str view-name "/rows")})
-
-
-(defn query
-  "Rows of a view: `{:rows [{:id .. :key .. :value ..}]}`. `opts` are the
-   PouchDB query options (`:keys`, `:startkey`, `:endkey`, ...)."
-  [dbs {:keys [db view]} opts]
-  (db/query (db dbs) view opts))
-
-
 (defn- ^:async ensure-index!
   "Idempotent, so running it on every start is what gives an installation
    that predates the index its copy. A failure is logged, never raised: a
@@ -314,28 +344,6 @@
     (await (db/create-index db fields {:name index-name :ddoc index-name}))
     (catch :default err
       (log/error :db/index-error {:index index-name :error (str err)}))))
-
-
-(defn- design-doc
-  "One design document per declared view, named as declared, with its one
-   view under the fixed key `rows` — so nothing is renamed on the way in
-   or out."
-  [view-name {map-source :map}]
-  {:_id   (str "_design/" view-name)
-   :views {:rows {:map map-source}}})
-
-
-(defn- ^:async ensure-design-doc!
-  "Writes the design document when it is missing or its map function differs
-   from `ddoc`, so a changed map replaces the stored one and an unchanged one
-   costs one read. Failure is logged, never raised."
-  [db {id :_id :as ddoc}]
-  (try
-    (let [stored (await (db/get db id))]
-      (when (not= (get-in stored [:views :rows :map]) (get-in ddoc [:views :rows :map]))
-        (await (db/insert db (cond-> ddoc stored (assoc :_rev (:_rev stored)))))))
-    (catch :default err
-      (log/error :db/design-doc-error {:ddoc id :error (str err)}))))
 
 
 (def ^:private type-index
@@ -361,30 +369,41 @@
     (map #(ensure-index! db %) indexes))))
 
 
-(defn ensure-views!
-  "Every design document in `views` (the `:views` declarations of one
-   database's schemas, as `[name view]` pairs) is stored on `db` with the
-   map source it declares."
-  [db views]
-  (js/Promise.all
-   (into-array
-    (for [[view-name view] views]
-      (ensure-design-doc! db (design-doc view-name view))))))
-
-
 (defn ^:async init!
-  "Opens the databases and gives each the indexes and views of the schemas
-   that live in it. Run on every start: that is what gives an existing
-   installation a new index or view."
+  "Opens the databases and gives each the indexes of the schemas that live
+   in it. Run on every start: that is what gives an existing installation a
+   new index."
   [schemas]
   (await (db-migrations/ensure-migrated!))
   (let [dbs {:device/db (device-db)
              :user/db   (user-db)}]
     (await (js/Promise.all
             (into-array
-             (mapcat (fn [[db-key db]]
-                       (let [own (filter #(= db-key (:db %)) schemas)]
-                         [(ensure-indexes! db (indexes-of own))
-                          (ensure-views! db (mapcat :views own))]))
-              dbs))))
-    (assoc dbs :dbs/write-listener (atom nil))))
+             (map (fn [[db-key db]]
+                    (ensure-indexes! db (indexes-of (filter #(= db-key (:db %)) schemas))))
+                  dbs))))
+    dbs))
+
+
+(defn ^:async write-latest!
+  "Reads the document `id` of `schema`'s type — the winning revision — and
+   puts what `change` makes of it over that revision. `change` takes the
+   document, or nil when there is none, and returns the document to write,
+   or nil to write nothing. When the put is refused with a conflict, this
+   reads and puts once more. Resolves with `{:stored :written}`, the
+   document read and the document written, or with nil when nothing was
+   written."
+  [dbs schema id change]
+  (let [attempt (fn ^:async attempt []
+                  (let [stored (await (get dbs schema id))]
+                    (when-let [doc (change stored)]
+                      (let [doc (cond-> (-> doc (dissoc :_rev) (assoc :_id id))
+                                  stored (assoc :_rev (:_rev stored)))]
+                        {:stored  stored
+                         :written (await (insert dbs schema doc))}))))]
+    (try
+      (await (attempt))
+      (catch :default err
+        (if (db/conflict? err)
+          (await (attempt))
+          (throw err))))))

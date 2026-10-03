@@ -80,8 +80,8 @@
 
 (defn- ^:async prepared
   "A test database carries what `db.pouch/init!` gives the database it
-   stands for at start-up (the indexes and views of the schemas that live
-   there), so adapters can rely on them here as they do there."
+   stands for at start-up (the indexes of the schemas that live there), so
+   adapters can rely on them here as they do there."
   [db-name]
   (let [db  (db/use db-name)
         own (filter #(if-let [db-key (role db-name)]
@@ -89,7 +89,6 @@
                        true)
                     schemas/all)]
     (await (pouch/ensure-indexes! db (pouch/indexes-of own)))
-    (await (pouch/ensure-views! db (mapcat :views own)))
     db))
 
 

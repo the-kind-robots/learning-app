@@ -2,11 +2,12 @@
   "The word list cut from the learner's data in memory: entry, a query, the
    next page, and a change to memory while the screen is open."
   (:require
-   [adapters.memory :as memory]
+   [adapters.learner.memory :as memory]
    [application]
    [cljs.test :refer-macros [deftest is testing]]
    [nexus.registry :as nxr]
    [pages.words.actions :as sut]
+   [ports.learner :as ports]
    [pages.words.effects]))
 
 
@@ -81,8 +82,8 @@
 
 
 (def ^:private capabilities
-  {:clock       {:clock/now-ms (constantly 0)}
-   :collections {:collections/active-id (constantly nil)}})
+  {:clock   {:clock/now-ms (constantly 0)}
+   :learner (assoc ports/reads :learner/active-collection (constantly nil))})
 
 
 (defn- test-system
@@ -95,7 +96,7 @@
   "A system with the words screen just opened over `n` words, not yet
    painted."
   [n]
-  (let [system (test-system {:learner/memory (memory-of n) :learner/readiness :full})]
+  (let [system (test-system {:learner/memory (memory-of n) :learner/loaded? true})]
     (reset! painted [])
     (nxr/dispatch system {} [[:effect/enter :action/open-words]])
     system))
@@ -148,27 +149,13 @@
     (let [{:keys [store] :as system} (opened 137)]
       (nxr/dispatch system {} [[:action/show-more-words]])
       (nxr/dispatch system {} [[:action/open-word-edit {:id "vocab:wort1000"}]])
-      (nxr/dispatch system
-                    {}
-                    [[:effect/memory-changed
-                      [(assoc (word-doc 0) :_rev "2-b" :value "Wort1000!")]]])
+      (nxr/dispatch system {} [[:effect/memory-changed [(assoc (word-doc 0) :_rev "2-b" :value "Wort1000!")]]])
       (is (= "Wort1000" (:value (first (:words/rows @store)))) "the open list stays as it was")
       (testing "the reader's own edit computes it again, rows and open word kept"
         (nxr/dispatch system {} [[:effect/enter :action/refresh-page]])
         (is (= "Wort1000!" (:value (first (:words/rows @store)))))
         (is (= 100 (count (:words/rows @store))) "the reader is not sent back to the first page")
         (is (= {:id "vocab:wort1000"} (:words/editing @store)) "the open word stays open")))))
-
-
-(deftest the-rows-show-retention-once-the-reviews-are-read
-  (let [system (test-system {:learner/memory (memory-of 3) :learner/readiness :basic})
-        store  (:store system)]
-    (nxr/dispatch system {} [[:effect/enter :action/open-words]])
-    (is (= 3 (count (:words/rows @store))) "the words are listed at once")
-    (is (every? nil? (map :retention-level (:words/rows @store))) "without a retention level yet")
-    (nxr/dispatch system {} [[:effect/memory-loaded-full []]])
-    (is (= :full (:learner/readiness @store)))
-    (is (every? number? (map :retention-level (:words/rows @store))) "levels once the reviews are in")))
 
 
 (deftest saving-closes-the-open-word-and-writes-it
@@ -188,5 +175,5 @@
 
 
 (deftest content-is-pure-over-state
-  (let [state {:learner/memory (memory-of 3) :learner/readiness :full :words/limit 50 :words/search ""}]
-    (is (= (sut/content state {:now-ms 0}) (sut/content state {:now-ms 0})))))
+  (let [state {:learner/memory (memory-of 3) :learner/loaded? true :words/limit 50 :words/search ""}]
+    (is (= (sut/content state {:learner ports/reads :now-ms 0}) (sut/content state {:learner ports/reads :now-ms 0})))))

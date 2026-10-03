@@ -1,19 +1,18 @@
 (ns client.memory-test
   "The learner's data in memory as a projection of the local databases
-   (ADR-0016): loaded, following the feed, taking this app's writes only once
-   PouchDB accepted them."
+   (ADR-0016): loaded, and following the feed. How memory takes this app's
+   own writes is `client.learner-test`."
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.memory :as sut]
-   [adapters.memory-loader :as loader]
-   [adapters.reviews :as reviews]
-   [adapters.words :as words]
+   [adapters.learner.memory :as sut]
+   [adapters.learner.loader :as loader]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-seed :as db-seed]
+   [client.support.learner :as learner]
+   [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is testing use-fixtures]]
    [db :as db]
-   [db.pouch :as pouch]
    [domain.retention :as retention]))
 
 
@@ -31,9 +30,8 @@
   (db-fixtures/with-test-dbs
    [user-db-name device-db-name]
    (fn [[user-db device-db]]
-     (f {:dbs/write-listener (atom nil)
-         :device/db      device-db
-         :user/db        user-db}))))
+     (f {:device/db device-db
+         :user/db   user-db}))))
 
 
 (defn- word
@@ -45,39 +43,6 @@
 (defn- review-ids
   [memory word-id]
   (some->> (get-in memory [:slot-of word-id]) (nth (:cards memory)) :reviews :ids vec))
-
-
-(defn- until
-  "Resolves once `pred` holds, polling; rejects after a second."
-  ([pred]
-   (until pred 100))
-  ([pred tries]
-   (cond
-     (pred)        (js/Promise.resolve true)
-     (zero? tries) (js/Promise.reject (ex-info "condition never held" {}))
-     :else         (js/Promise. (fn [resolve]
-                                  (js/setTimeout #(resolve (until pred (dec tries))) 10))))))
-
-
-(defn- started
-  "Starts memory over `dbs`, with a dispatch that does what the three memory
-   effects do to an atom. Returns [memory readiness stop], `stop` a promise
-   of the function that stops following."
-  [dbs]
-  (let [memory    (atom sut/empty-memory)
-        readiness (atom nil)
-        dispatch  (fn [[[effect docs]]]
-                    (swap! memory sut/with-docs docs)
-                    (case effect
-                      :effect/memory-loaded-basic (reset! readiness :basic)
-                      :effect/memory-loaded-full  (reset! readiness :full)
-                      nil))]
-    [memory readiness (loader/start! dbs dispatch)]))
-
-
-(defn- loaded?
-  [readiness]
-  #(= :full @readiness))
 
 
 (def ^:private hund
@@ -92,7 +57,7 @@
     (is (= "der Hund" (:value (word once "vocab:der hund"))))
     (is (= "der hund\nпёс" (:search (word once "vocab:der hund")))
         "the search text is normalised once, value and translations a line each")
-    (is (identical? once twice) "the revision memory holds changes nothing")
+    (is (identical? once twice) "the revision memory has changes nothing")
     (is (nil? (word deleted "vocab:der hund")) "a deletion removes the word")
     (is (nil? (:_rev (word once "vocab:der hund"))) "no storage name reaches the entity")))
 
@@ -105,9 +70,9 @@
                   :word-id    "vocab:der hund"
                   :created-at "2026-01-01T00:00:00Z"
                   :retained   true}
-          held   (sut/with-docs sut/empty-memory [review])
-          gone   (sut/with-docs held [{:_deleted true :_id "r1" :_rev "2-b"}])]
-      (is (= ["r1"] (review-ids held "vocab:der hund")))
+          memory (sut/with-docs sut/empty-memory [review])
+          gone   (sut/with-docs memory [{:_deleted true :_id "r1" :_rev "2-b"}])]
+      (is (= ["r1"] (review-ids memory "vocab:der hund")))
       (is (empty? (review-ids gone "vocab:der hund"))))))
 
 
@@ -120,9 +85,18 @@
            {:_id "r0" :_rev "1-a" :type "review" :word-id "vocab:w" :created-at "2025-12-01T00:00:00Z" :retained true}]
           state (fn [docs]
                   (let [memory (sut/with-docs sut/empty-memory docs)]
-                    (retention/urgency (:reviews (nth (:cards memory) (get-in memory [:slot-of "vocab:w"]))) 1790000000000)))]
+                    (retention/urgency (:reviews (nth (:cards memory) (get-in memory [:slot-of "vocab:w"])))
+                                       1790000000000)))]
       (is (= (state (cons word reviews))
              (state (cons word (reverse reviews))))))))
+
+
+(deftest a-document-memory-cannot-take-is-left-out
+  (let [memory (sut/with-docs sut/empty-memory
+                              [{:_id "vocab:odd" :_rev "1-a" :type "vocab" :value 42 :translation 7}
+                               (assoc hund :_rev "1-a")])]
+    (is (nil? (sut/word memory "vocab:odd")))
+    (is (some? (sut/word memory "vocab:der hund")) "the documents after it are taken")))
 
 
 (deftest memory-loads-both-databases-and-follows-the-feed
@@ -137,85 +111,40 @@
                                        :word        "der Hund"
                                        :value       "Der Hund schläft."
                                        :translation "Пёс спит"}]))
-      (let [[memory ready? stop] (started dbs)]
-        (await (until (loaded? ready?)))
-        (is (= ["vocab:der hund"] (map :id (vals (:words @memory)))))
-        (is (= 1 (count (review-ids @memory "vocab:der hund"))))
-        (is (= ["example-1"] (keys (:examples @memory))))
+      (let [{:keys [stop store]} (await (learner/started dbs {}))
+            memory #(:learner/memory @store)]
+        (is (= ["vocab:der hund"] (map :id (sut/words (memory)))))
+        (is (= 1 (count (review-ids (memory) "vocab:der hund"))))
+        (is (= ["example-1"] (map :id (sut/examples-of (memory) ["vocab:der hund"]))))
         ;; Written past `db.pouch`, as a replication or another tab writes.
         (await (db/insert (:user/db dbs)
                           {:_id         "vocab:die katze"
                            :type        "vocab"
                            :value       "die Katze"
                            :translation [{:lang "ru" :value "кошка"}]}))
-        (await (until #(word @memory "vocab:die katze")))
+        (await (wait/until #(sut/word (memory) "vocab:die katze")))
         (let [{doc :_rev} (await (db/get (:user/db dbs) "vocab:die katze"))]
           (await (db/remove (:user/db dbs) {:_id "vocab:die katze" :_rev doc})))
-        (await (until #(nil? (word @memory "vocab:die katze"))))
-        (is (nil? (word @memory "vocab:die katze")))
-        ((await stop)))))))
+        (await (wait/until #(nil? (sut/word (memory) "vocab:die katze"))))
+        (is (nil? (sut/word (memory) "vocab:die katze")))
+        (stop))))))
 
 
-(deftest an-own-write-is-in-memory-when-the-writer-resumes
-  (async-testing "write-through: memory holds the document once PouchDB accepted it"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [[memory ready? stop] (started dbs)]
-        (await (until (loaded? ready?)))
-        (await (pouch/insert dbs words/schema (dissoc hund :type)))
-        (is (= "der Hund" (:value (word @memory "vocab:der hund")))
-            "no feed round trip: the write's own promise is enough")
-        ((await stop)))))))
-
-
-(deftest a-refused-write-leaves-memory-untouched
-  (async-testing "a conflict writes nothing, and memory takes nothing"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db/insert (:user/db dbs) hund))
-      (let [[memory ready? stop] (started dbs)]
-        (await (until (loaded? ready?)))
-        (let [before @memory
-              failed (try
-                       (await (pouch/insert dbs words/schema (assoc (dissoc hund :type) :value "der Pudel")))
-                       false
-                       (catch :default _ true))]
-          (is failed "the premise: no revision, so PouchDB refuses it")
-          (is (= before @memory)))
-        ((await stop)))))))
-
-
-(deftest a-bulk-write-reports-only-what-it-wrote
-  (async-testing "the documents of a bulk write each arrive at their new revision"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [[memory ready? stop] (started dbs)]
-        (await (until (loaded? ready?)))
-        (await (pouch/bulk-docs dbs
-                                reviews/schema
-                                [{:_id "r1" :type "review" :word-id "w" :retained true :created-at "2026-01-01"}
-                                 {:_id "r2" :type "review" :word-id "w" :retained false :created-at "2026-01-02"}]))
-        (is (= ["r1" "r2"] (review-ids @memory "w")))
-        ((await stop)))))))
-
-
-(deftest the-words-and-collections-come-first
-  (async-testing "the basic load carries what opening the app and adding a word need, and nothing else"
+(deftest memory-is-loaded-in-one-go
+  (async-testing "the load hands memory over once, with everything both databases hold"
     (with-test-dbs
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "vocab:der hund" :value "der Hund" :translation "пёс"}]))
-      (await (db/insert (:user/db dbs) {:type "collection" :name "Tiere" :word-ids ["vocab:der hund"]}))
+      (await (db/insert (:user/db dbs) {:_id "coll-tiere" :type "collection" :name "Tiere" :word-ids ["vocab:der hund"]}))
       (let [effects (atom [])
-            ;; Design documents come with the rest, as documents of no type
-            ;; memory holds.
-            stop    (loader/start! dbs (fn [[[effect docs]]] (swap! effects conj [effect (set (keep :type docs))])))]
-        (await (until #(= 2 (count @effects))))
-        (is (= [[:effect/memory-loaded-basic #{"vocab" "collection"}]
-                [:effect/memory-loaded-full #{"review" "collection"}]]
-               @effects)
-            "the rest does not read the words again")
-        ((await stop)))))))
+            stop    (await (loader/start! dbs
+                                          (atom {})
+                                          (fn [[[effect memory]]] (swap! effects conj [effect memory]))))
+            [[effect memory]] @effects]
+        (is (= 1 (count @effects)))
+        (is (= :effect/memory-loaded effect))
+        (is (some? (sut/word memory "vocab:der hund")))
+        (is (= 1 (count (review-ids memory "vocab:der hund"))))
+        (is (some? (sut/collection memory "coll-tiere")))
+        (stop))))))

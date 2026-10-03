@@ -10,34 +10,14 @@
    [utils :as utils]))
 
 
-;; One wrapper per port. They keep the double call out of the bodies below and
-;; keep the knowledge of what a port key is called to one place; the prefix
-;; says which port is being asked, so a call site needs no trip back to the
-;; signature.
-
-(defn- ^:async examples-of-word
-  [{:keys [examples]} word-id]
-  ((:examples/of-word examples) word-id))
+(defn- memory
+  [{:keys [learner]}]
+  ((:learner/memory learner)))
 
 
-(defn- ^:async examples-list
-  [{:keys [examples]} word-ids]
-  ((:examples/list examples) word-ids))
-
-
-(defn- ^:async examples-request!
-  [{:keys [examples]} requests]
-  ((:examples/request! examples) requests))
-
-
-(defn- ^:async collections-list
-  [{:keys [collections]}]
-  ((:collections/list collections)))
-
-
-(defn- ^:async words-previews
-  [{:keys [words]} word-ids]
-  ((:words/previews words) word-ids))
+(defn- examples-request!
+  [{:keys [learner]} requests]
+  ((:learner/request-examples! learner) requests))
 
 
 (defn visible-in
@@ -57,23 +37,31 @@
   (filterv #(or (nil? collection-id) (= collection-id (:collection-id %))) examples))
 
 
-(defn ^:async needs-example?
-  "Whether this device still has to fetch an example for `word-id` in
-   `collection-id`, asked of what it holds for that one entry — an indexed
-   read and the same rule a backfill applies.
+(defn ^:async request-example-if-missing!
+  "Queues a fetch of an example for `word` in `collection` when memory has
+   none that a read in that collection sees.
 
    A fetch already queued is not read for: the queue holds one task per pair
    by construction, so asking twice writes the same id twice and the second
    write is refused."
-  [capabilities word-id collection-id]
-  (empty? (visible-in (await (examples-of-word capabilities word-id)) collection-id)))
+  [{:keys [learner] :as capabilities} word {collection-id :id collection-name :name}]
+  (try
+    (when (empty? (visible-in ((:learner/examples-of learner) (memory capabilities) [(:id word)]) collection-id))
+      (await (examples-request! capabilities
+                                [{:collection-id collection-id
+                                  :collection-name collection-name
+                                  :word word}])))
+    ;; `:default` rather than `js/Error`: a rejected PouchDB call answers with
+    ;; a plain object, which `js/Error` does not catch.
+    (catch :default err
+      (log/warn :examples/request-failed {:error (ex-message err)}))))
 
 
 (defn missing-examples
-  "Every pair this device holds no example for, as
+  "Every pair this device has no example for, as
    `{:collection-id :collection-name :word}`, out of what it was handed: the
-   `:collections` it holds, the `:entries` under consideration and the
-   `:examples` it holds for them.
+   `:collections` it has, the `:entries` under consideration and the
+   `:examples` it has for them.
 
    Every entry in a named collection wants an example carrying that
    collection; an entry in no collection wants one only when it has none at
@@ -86,13 +74,13 @@
    out.
 
    Pure, so the rule is checkable without a database."
-  [{held-collections :collections held-examples :examples entries :entries}]
-  (let [by-word   (group-by :word-id held-examples)
+  [{collections :collections examples :examples entries :entries}]
+  (let [by-word   (group-by :word-id examples)
         by-id     (utils/index-by :id entries)
-        collected (into #{} (mapcat :word-ids) held-collections)
+        collected (into #{} (mapcat :word-ids) collections)
         missing?  (fn [word-id collection-id]
                     (empty? (visible-in (by-word word-id) collection-id)))
-        themed    (for [{:keys [id name word-ids]} held-collections
+        themed    (for [{:keys [id name word-ids]} collections
                         word-id word-ids
                         :when   (and (by-id word-id) (missing? word-id id))]
                     {:collection-id   id
@@ -107,7 +95,7 @@
 (defn entries-of-pass
   "The entries one replication pass put in question: the ids it wrote, plus
    every entry named by a collection among them. A collection is recognised by
-   its id matching one this device holds — no document type is named here.
+   its id matching one this device has — no document type is named here.
 
    A theme document is rewritten whole whenever an entry joins it anywhere, so
    a pass that brings one has to ask about the entries it names: that is how a
@@ -123,31 +111,50 @@
           collections)))
 
 
+(def ^:private entries-per-task
+  "How many entries the backfill weighs in one task, so that a vocabulary's
+   worth after a large pass does not hold up a keystroke."
+  500)
+
+
 (defn- ^:async request-missing!
-  "Queues a fetch for every pair without an example among the entries
-   `entries-of` names, given the collections this device holds — nil for every
-   entry it holds — and returns how many it queued. One write, however many
-   pairs: a first synchronisation is a vocabulary's worth of task documents
-   and has no business being that many inserts.
+  "Queues a fetch for every pair without an example among `entries`, given
+   `collections` and the examples memory has, and returns how many it
+   queued. It weighs the entries a chunk per task. One write, however many pairs: a first synchronisation is a
+   vocabulary's worth of task documents and has no business being that
+   many inserts."
+  [{:keys [learner] :as capabilities} collections entries]
+  (if (empty? entries)
+    0
+    (let [requests (loop [requests []
+                          chunks   (partition-all entries-per-task entries)]
+                     (if-let [[chunk & more] (seq chunks)]
+                       (let [requests (into requests
+                                            (missing-examples
+                                             {:collections collections
+                                              :entries     chunk
+                                              :examples    ((:learner/examples-of learner)
+                                                            (memory capabilities)
+                                                            (map :id chunk))}))]
+                         (await (js/Promise. (fn [resolve] (js/setTimeout resolve 0))))
+                         (recur requests more))
+                       requests))]
+      (await (examples-request! capabilities requests))
+      (when (seq requests)
+        (log/info :examples/missing-requested {:count (count requests)}))
+      (count requests))))
+
+
+(defn- ^:async contained
+  "Resolves to what `request` resolves to, or to 0 when it fails.
 
    Contained on purpose: this runs off the back of a replication pass, and a
    pass reports what it replicated whether or not this got anywhere. Queueing
    writes task documents locally and makes no request of its own, so an
    unreachable backend leaves the tasks waiting rather than failing here."
-  [capabilities entries-of]
+  [request]
   (try
-    (let [held-collections (await (collections-list capabilities))
-          entries          (await (words-previews capabilities (entries-of held-collections)))]
-      (if (empty? entries)
-        0
-        (let [requests (missing-examples
-                        {:collections held-collections
-                         :entries     entries
-                         :examples    (await (examples-list capabilities (mapv :id entries)))})]
-          (await (examples-request! capabilities requests))
-          (when (seq requests)
-            (log/info :examples/missing-requested {:count (count requests)}))
-          (count requests))))
+    (await (request))
     ;; `:default` rather than `js/Error`: a rejected PouchDB call answers with
     ;; a plain object, which `js/Error` does not catch (`db.pouch` catches the
     ;; same way for the same reason).
@@ -156,27 +163,53 @@
       0)))
 
 
-(defn request-all-missing!
-  "Asks for every example this device is missing, over every entry it holds.
-   What a start does once, and what leaves nothing over."
-  [capabilities]
-  (request-missing! capabilities (constantly nil)))
+(defn ^:async request-all-missing!
+  "Asks for every example this device is missing, over every entry memory
+   has, once memory has everything the databases held at start. What a
+   start does once, and what leaves nothing over."
+  [{:keys [learner] :as capabilities}]
+  (await ((:learner/loaded learner)))
+  (await (contained
+          (fn []
+            (let [memory (memory capabilities)]
+              (request-missing! capabilities
+                                ((:learner/collections learner) memory)
+                                (vec ((:learner/words learner) memory))))))))
 
 
-(defn request-missing-for!
+(defn ^:async request-missing-for!
   "Asks for the examples missing among the entries one replication pass
-   brought — `pulled-ids` are the ids that pass wrote here. Ids that name
-   neither a word nor a phrase fall out when the entries are read.
+   brought — `pulled-ids` are the ids that pass wrote here. The words and
+   collections among them are read from PouchDB by id: memory takes them
+   from the change feed, which may not have brought them yet. Ids that name
+   neither a word, a phrase nor a collection fall out there.
 
    A collection among them is unfolded into the entries it names
-   (`entries-of-pass`), so an entry themed on another device gets that theme's
-   example now rather than at the next start.
+   (`entries-of-pass`), so an entry themed on another device gets that
+   theme's example now rather than at the next start. An entry it names
+   that the pass did not bring is read from memory. A word or a collection
+   the pass deleted is left out, whatever memory still has of it.
 
    A pass is not a reason to read the whole vocabulary again: with a throttle
    of half a minute that is regular work proportional to how much the device
-   holds."
-  [capabilities pulled-ids]
-  (request-missing! capabilities #(vec (entries-of-pass pulled-ids %))))
+   has."
+  [{:keys [learner] :as capabilities} pulled-ids]
+  (await ((:learner/loaded learner)))
+  (await (contained
+          (fn ^:async request []
+            (let [memory  (memory capabilities)
+                  pulled  (await ((:learner/read-stored learner) pulled-ids))
+                  gone    (set (:deleted pulled))
+                  arrived (utils/index-by :id (:words pulled))
+                  colls   (vals (apply dissoc
+                                       (merge (utils/index-by :id ((:learner/collections learner) memory))
+                                              (utils/index-by :id (:collections pulled)))
+                                       gone))
+                  entries (into []
+                                (comp (remove gone)
+                                      (keep #(or (arrived %) ((:learner/word learner) memory %))))
+                                (entries-of-pass pulled-ids colls))]
+              (await (request-missing! capabilities colls entries)))))))
 
 
 (defn start!

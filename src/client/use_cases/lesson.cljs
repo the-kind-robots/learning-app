@@ -35,18 +35,19 @@
      :vocab-per-lesson  — how many words and phrases to include (default 3)
      :vocab-pool-size   — how many of the most due to draw them from (default 20)
      :trial-selector    — strategy for picking the next trial (:first or :random, default nil → random)"
-  [memory collection-id
+  [learner memory collection
    {:keys [vocab-per-lesson vocab-pool-size trial-selector]
     :or   {vocab-per-lesson domain/default-vocab-per-lesson
            vocab-pool-size  domain/default-vocab-pool-size}}
    now-ms]
   ;; Every word in scope, unranked: `pick-vocab` owns the whole selection
   ;; policy, ties included.
-  (let [cards    (vocabulary/collection-cards memory (get-in memory [:collections collection-id]))
-        selected (map :word (domain/pick-vocab cards
-                                               #(vocabulary/urgency-of % now-ms)
-                                               vocab-pool-size
-                                               vocab-per-lesson))]
+  (let [cards    ((:learner/collection-cards learner) memory collection)
+        selected (map :word
+                      (domain/pick-vocab cards
+                                         #(vocabulary/urgency-of % now-ms)
+                                         vocab-pool-size
+                                         vocab-per-lesson))]
     (if-not (seq selected)
       {:error :no-words-available}
       (let [vocab    (mapv lesson-vocab selected)
@@ -55,11 +56,8 @@
         ;; lives in `use-cases.examples`.
         {:lesson-state (domain/initial-state
                         vocab
-                        (-> (into []
-                                  (comp (mapcat #(get-in memory [:examples-by-word %]))
-                                        (map (:examples memory)))
-                                  word-ids)
-                            (examples/visible-in collection-id))
+                        (-> ((:learner/examples-of learner) memory word-ids)
+                            (examples/visible-in (:id collection)))
                         trial-selector)}))))
 
 
@@ -106,24 +104,22 @@
     :known-missing-translation))
 
 
-(defn ^:async token-info
+(defn token-info
   "Return token info for lesson answer annotation card."
   [capabilities dictionary-form translation]
-  (let [existing (await (vocabulary/find-duplicate capabilities dictionary-form))]
+  (let [existing (vocabulary/find-duplicate capabilities dictionary-form)]
     {:dictionary-form dictionary-form
      :translation translation
      :state       (token-state existing translation)}))
 
 
-(defn ^:async answer-annotations
+(defn answer-annotations
   "Vocabulary state per annotated word of the trial's answer:
    {word-index :unknown-word | :known-missing-translation | :known-with-translation}."
   [capabilities trial]
   (let [segments (filterv #(= :annotated-word (:type %))
                           (domain/answer-segments trial))
-        infos    (await (js/Promise.all
-                         (into-array
-                          (map #(token-info capabilities (:dictionary-form %) (:translation %))
-                               segments))))]
+        infos    (map #(token-info capabilities (:dictionary-form %) (:translation %))
+                      segments)]
     (zipmap (map :word-index segments)
             (map :state infos))))

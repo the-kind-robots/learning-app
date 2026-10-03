@@ -1,6 +1,6 @@
 (ns client.support.db-seed
   (:require
-   [adapters.memory :as memory]
+   [adapters.learner.memory :as memory]
    [client.support.time :as time]
    [db :as db]
    [domain.vocabulary :as vocabulary]))
@@ -67,7 +67,7 @@
 
 
 (defn ^:async memory-of
-  "The learner's data in memory as the app would hold it after loading
+  "The learner's data in memory as the app would have it after loading
    `dbs` — each a database handle — as they stand now."
   [& dbs]
   (let [answers (await (js/Promise.all

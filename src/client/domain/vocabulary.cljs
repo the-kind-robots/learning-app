@@ -33,9 +33,7 @@
 (def id-prefix
   "What every vocabulary id starts with (ADR-0008). Here because it is the
    naming rule itself, not a storage detail: whoever reads vocabulary by key
-   range asks for it rather than spelling it again. It carries no regular
-   expression metacharacter, which is what lets `adapters.words` splice it
-   into the pattern its view's JavaScript is built from."
+   range asks for it rather than spelling it again."
   "vocab:")
 
 
@@ -65,9 +63,8 @@
    The id keeps the article — it is `vocab:der zug` — because it is the
    identity two devices converge on and is frozen (ADR-0008). Ordering on it
    files every noun under its article, so the reader finds no Z for `der Zug`
-   (#438). `adapters.words` emits this key from the view's map function; the
-   JavaScript there is the same rule said again, and a test holds the two
-   together."
+   (#438). Memory keeps the word list in the order of this key
+   (`adapters.learner.memory`)."
   [id]
   [(str/replace (without-prefix id) article "") id])
 

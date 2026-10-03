@@ -2,13 +2,10 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.words :as words]
    [client.support.db-fixtures :as db-fixtures]
-   [client.support.schemas :as schemas]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [db.pouch :as sut]
-   [domain.vocabulary :as vocabulary]
    [userdb :as userdb]))
 
 
@@ -63,46 +60,26 @@
          (await (sync-pass! local remote))
          (let [local-ids  (await (ids local))
                remote-ids (await (ids remote))]
-           (is (contains? local-ids "_design/vocab-preview"))
+           (is (contains? local-ids "_design/by-type"))
            (is (contains? local-ids "vocab:katze"))
            (is (not (contains? local-ids "_design/remote-only")))
            (is (contains? remote-ids "vocab:hund"))
            (is (empty? (filter #(re-find #"^_design/" %) (disj remote-ids "_design/remote-only"))))))))))
 
 
-(deftest a-schema-gives-its-database-indexes-and-views
+(deftest a-schema-gives-its-database-indexes
   (async-testing
-    "the fixture installs every declared index and view; ensure-views! leaves an unchanged view alone and rewrites a changed map"
+    "the fixture installs the engine's index and every declared one, and no other"
     (db-fixtures/with-test-db
       local-name
       (^:async fn
        [local]
-       (let [names   (fn ^:async f []
-                       (let [{:keys [indexes]} (js->clj (await (.getIndexes ^js local)) :keywordize-keys true)]
-                         (set (map :name indexes))))
-             rev-of  (fn ^:async f [id] (:_rev (await (db/get local id))))
-             vocab   (first (filter #(= "vocab" (:type %)) schemas/all))
-             changed (assoc-in vocab [:views "vocab-preview" :map] "function (doc) { emit(doc._id); }")]
-         (is (contains? (await (names)) "by-type") "the engine's own index")
-         (is (contains? (await (names)) "by-type-word-id"))
-         (is (contains? (await (names)) "by-type-run-at-created-at"))
-         (let [rev-1 (await (rev-of "_design/vocab-preview"))]
-           (await (sut/ensure-views! local (mapcat :views schemas/all)))
-           (is (= rev-1 (await (rev-of "_design/vocab-preview"))) "an unchanged view is not rewritten")
-           (await (sut/ensure-views! local (:views changed)))
-           (is (not= rev-1 (await (rev-of "_design/vocab-preview"))) "a changed map is")))))))
-
-
-(deftest the-preview-view-answers-per-word
-  (async-testing "vocab-preview rows carry what a list shows, read by key"
-    (db-fixtures/with-test-db
-      local-name
-      (^:async fn
-       [local]
-       (let [dbs {:user/db local}]
-         (await (sut/insert dbs words/schema {:_id "vocab:a" :value "a"}))
-         (is (= [{:id "vocab:a" :kind nil :translation nil :value "a"}] (await (words/previews dbs nil))))
-         (is (= [] (await (words/previews dbs ["vocab:none"])))))))))
+       (let [{:keys [indexes]} (js->clj (await (.getIndexes ^js local)) :keywordize-keys true)
+             names (set (map :name indexes))]
+         (is (contains? names "by-type") "the engine's own index")
+         (is (contains? names "by-type-run-at-created-at") "the task queue's")
+         (is (not (contains? names "by-type-word-id"))
+             "memory answers a word's reviews and examples; no index is kept for them"))))))
 
 
 (deftest a-pass-reports-the-ids-the-pull-wrote-under-their-types
@@ -168,27 +145,42 @@
             (js/Reflect.deleteProperty js/globalThis "location"))))))))
 
 
-(def ^:private nouns-and-a-verb
-  "The issue's own six words. `aufstehen` before `das Auto`: `auf` sorts
-   before `aut`, whatever the issue's illustration says."
-  ["der Hund" "die Katze" "das Auto" "der Zug" "die Bank" "aufstehen"])
-
-
-(deftest the-preview-view-finds-a-word-by-the-id-it-is-stored-under
-  (async-testing "the view is keyed by what a word is filed under, and a keyed read still finds it (#438)"
+(deftest a-followed-feed-brings-every-change-in-order
+  (async-testing "the documents stored after `since` arrive in the order they were stored"
     (db-fixtures/with-test-db
       local-name
       (^:async fn
        [local]
-       (let [dbs {:user/db local}]
-         (await (js/Promise.all
-                 (into-array
-                  (for [value nouns-and-a-verb]
-                    (sut/insert dbs words/schema {:_id (vocabulary/vocab-id value) :value value})))))
-         (is (= ["der Zug"]
-                (mapv :value (await (words/previews dbs [(vocabulary/vocab-id "der Zug")]))))
-             "a row is still found by the id the word is stored under")
-         (is (= [] (await (words/previews dbs ["vocab:none"])))))))))
+       (await (db/insert local {:_id "before" :type "x"}))
+       (let [dbs     {:user/db local}
+             batches (atom [])
+             unwatch (sut/follow-changes dbs
+                                         :user/db
+                                         (await (sut/update-seq dbs :user/db))
+                                         #(swap! batches conj (mapv :_id %)))
+             settle  #(js/Promise. (fn [resolve] (js/setTimeout resolve 50)))]
+         (try
+           (await (db/bulk-docs local [{:_id "a" :type "x"} {:_id "b" :type "x"}]))
+           (await (settle))
+           (await (db/insert local {:_id "c" :type "x"}))
+           (await (settle))
+           (is (= ["a" "b" "c"] (apply concat @batches)) "every change, in the order stored, nothing before `since`")
+           (finally
+            ((:stop! unwatch)))))))))
+
+
+(deftest a-bulk-write-resolves-with-what-it-wrote
+  (async-testing "the documents PouchDB accepted, each at its new revision; a refused one is left out"
+    (db-fixtures/with-test-db
+      local-name
+      (^:async fn
+       [local]
+       (await (db/insert local {:_id "taken" :type "x"}))
+       (let [written (await (sut/bulk-docs {:user/db local}
+                                           {:db :user/db :type "x"}
+                                           [{:_id "new" :type "x"} {:_id "taken" :type "x"}]))]
+         (is (= ["new"] (mapv :_id written)))
+         (is (string? (:_rev (first written)))))))))
 
 
 (deftest a-read-goes-past-one-page
@@ -197,9 +189,48 @@
       local-name
       (^:async fn
        [local]
-       (await (db/bulk-docs local (vec (for [i (range 2345)]
-                                         {:_id (str (if (< i 1500) "a:" "b:") (+ 10000 i)) :type "x"}))))
+       (await (db/bulk-docs local
+                            (vec (for [i (range 2345)]
+                                   {:_id (str (if (< i 1500) "a:" "b:") (+ 10000 i)) :type "x"}))))
        (let [dbs {:user/db local}]
          ;; Design documents come too; memory keeps no document of their type.
          (is (= 2345 (count (filter #(= "x" (:type %)) (await (sut/read-docs dbs :user/db {}))))))
          (is (= 1500 (count (await (sut/read-docs dbs :user/db {:end "a:\ufff0" :start "a:"}))))))))))
+
+
+(deftest a-document-deleted-between-pages-loses-no-other
+  (async-testing "the last document of a page is deleted before the next page is read; the next one is still read"
+    (db-fixtures/with-test-db
+      local-name
+      (^:async fn
+       [local]
+       (await (db/bulk-docs local (vec (for [i (range 1005)] {:_id (str "a:" (+ 10000 i)) :type "x"}))))
+       (let [dbs       {:user/db local}
+             next-task sut/next-task
+             ;; The 1000th id, the last of the first page.
+             boundary  "a:10999"]
+         (set! sut/next-task (fn ^:async between []
+                               (await (db/remove local (await (db/get local boundary))))
+                               (await (next-task))))
+         (try
+           (let [ids (set (map :_id (await (sut/read-docs dbs :user/db {:end "a:\ufff0" :start "a:"}))))]
+             (is (contains? ids "a:11000") "the first document after the boundary")
+             (is (= 1004 (count (disj ids boundary)))))
+           (finally
+             (set! sut/next-task next-task))))))))
+
+
+(deftest a-refused-write-is-a-conflict-and-nothing-else-is
+  (async-testing "the rejection of a put over a stale revision is what conflict? recognises"
+    (db-fixtures/with-test-db
+      local-name
+      (^:async fn
+       [local]
+       (await (db/insert local {:_id "doc" :type "x"}))
+       (let [refusal (fn ^:async f [doc]
+                       (try
+                         (await (db/insert local doc))
+                         nil
+                         (catch :default err err)))]
+         (is (db/conflict? (await (refusal {:_id "doc" :type "x"}))) "a put over a stored document with no revision")
+         (is (not (db/conflict? (await (refusal {:_id "_bad" :type "x"})))) "a put refused for another reason"))))))

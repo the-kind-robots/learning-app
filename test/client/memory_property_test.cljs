@@ -6,8 +6,9 @@
    memory stays what it was; and what screens read of it agrees with the
    retention formula applied to the documents directly."
   (:require
-   [adapters.memory :as sut]
-   [use-cases.collections :as collections]
+   [adapters.learner.memory :as sut]
+   [domain.collections :as collections]
+   [ports.learner :as ports]
    [use-cases.vocabulary :as vocabulary]
    [utils :as utils]
    [cljs.test :refer-macros [deftest is]]
@@ -57,7 +58,7 @@
 
 
 (def ^:private gen-other
-  "A type memory does not hold: the lesson in progress, a task."
+  "A type memory does not have: the lesson in progress, a task."
   (gen/return {:_id "lesson" :type "lesson"}))
 
 
@@ -101,10 +102,10 @@
    numbers are left out: they follow the order ids first arrived in, which
    batching changes."
   [memory]
-  (let [plain   (fn [{:keys [ids retained seconds]}]
-                  (vec (for [i (range (count ids))]
-                         [(aget seconds i) (aget retained i) (aget ids i)])))
-        cards   (:cards memory)]
+  (let [plain (fn [{:keys [ids retained seconds]}]
+                (vec (for [i (range (count ids))]
+                       [(aget seconds i) (aget retained i) (aget ids i)])))
+        cards (:cards memory)]
     {:by-id    (into {}
                      (keep (fn [[id slot]]
                              (let [{:keys [word reviews]} (nth cards slot)]
@@ -164,27 +165,81 @@
                   (and (= (snapshot rebuilt) (snapshot incremental))
                        ;; An older memory is still what it was.
                        (every? (fn [[memory taken]] (= taken (snapshot memory))) seen)
-                       ;; A card holds the word `:slot-of` names its slot for.
+                       ;; A card has the word `:slot-of` names its slot for.
                        (every? (fn [[id slot]]
                                  (let [word (:word (nth (:cards incremental) slot))]
                                    (or (nil? word) (= id (:id word)))))
                                (:slot-of incremental))
-                       (= (vocabulary/rows rebuilt {} now) (vocabulary/rows incremental {} now))
+                       (= (vocabulary/rows ports/reads rebuilt {} now) (vocabulary/rows ports/reads incremental {} now))
                        ;; Every word's urgency is the formula over its review documents.
-                       (= (into {} (map (fn [w] [(:id w) (expected-urgency (reviews (:id w)) now)]))
+                       (= (into {}
+                                (map (fn [w] [(:id w) (expected-urgency (reviews (:id w)) now)]))
                                 (vals (:words incremental)))
-                          (into {} (map (fn [e] [(:id (:word e)) (vocabulary/urgency-of e now)]))
-                                (vocabulary/collection-cards incremental nil)))
+                          (into {}
+                                (map (fn [e] [(:id (:word e)) (vocabulary/urgency-of e now)]))
+                                (sut/collection-cards incremental nil)))
                        ;; A collection's lesson draws from its words and its children's that exist.
                        (every? (fn [collection]
                                  (= (set (filter (set (map :id (vals (:words incremental))))
                                                  (collections/scope-word-ids (vals (:collections incremental))
                                                                              (:id collection))))
                                     (set (map (comp :id :word)
-                                              (vocabulary/collection-cards incremental collection)))))
+                                              (sut/collection-cards incremental collection)))))
                                (vals (:collections incremental)))))))
 
 
 (deftest incremental-ingest-equals-a-rebuild-from-the-final-documents
   (let [result (tc/quick-check 200 incremental-equals-rebuild :max-size 60)]
     (is (:pass? result) (pr-str (select-keys result [:seed :num-tests :failing-size :shrunk])))))
+
+
+(defn- fed
+  "What the change feed reads from `docs`, the changes in the order the
+   database stored them. Read as it happens, it brings every change; read
+   later, only each document's last change, at its place."
+  [docs latest-only?]
+  (if latest-only?
+    (let [last-at (into {} (map-indexed (fn [i doc] [(:_id doc) i])) docs)]
+      (into [] (keep-indexed (fn [i doc] (when (= i (last-at (:_id doc))) doc))) docs))
+    docs))
+
+
+(def ^:private load-then-feed-equals-a-rebuild
+  (prop/for-all
+   [changes (gen/vector gen-change 0 120)
+    start (gen/choose 0 120)
+    read-at (gen/choose 0 120)
+    size (gen/choose 1 30)
+    order gen/int
+    latest-only? gen/boolean]
+   ;; The load notes the feed's position at `start`, and reads the
+   ;; documents as they stand at `read-at`, not before `start`, in pages
+   ;; taken in any order. Then the feed applies everything stored from
+   ;; `start` on, in order.
+   (let [docs    (revised changes [])
+         start   (min start (count docs))
+         read-at (min (count docs) (+ start read-at))
+         pages   (partition-all size (final-docs (take read-at docs)))
+         pages   (sort-by #(hash [order %]) pages)
+         loaded  (reduce sut/with-docs sut/empty-memory pages)
+         memory  (sut/with-docs loaded (fed (drop start docs) latest-only?))]
+     (= (snapshot (sut/with-docs sut/empty-memory (final-docs docs)))
+        (snapshot memory)))))
+
+
+(deftest the-load-then-the-feed-equal-a-rebuild
+  (let [result (tc/quick-check 200 load-then-feed-equals-a-rebuild :max-size 60)]
+    (is (:pass? result) (pr-str (select-keys result [:seed :num-tests :failing-size :shrunk])))))
+
+
+(deftest an-edit-that-wins-over-a-deletion-stays
+  ;; Device A deleted the word at generation 5, device B edited it at
+  ;; generation 3. Replication makes B's edit the winner: a document beats
+  ;; a deletion, whatever the generations. The feed brings the winner last,
+  ;; and memory keeps the word.
+  (let [word   {:_id "vocab:w1" :_rev "1-a" :type "vocab" :value "Haus" :translation [{:lang "ru" :value "дом"}]}
+        memory (sut/with-docs sut/empty-memory
+                              [word
+                               {:_id "vocab:w1" :_rev "5-b" :_deleted true}
+                               (assoc word :_rev "3-c" :value "Haus!")])]
+    (is (= "Haus!" (:value (sut/word memory "vocab:w1"))))))

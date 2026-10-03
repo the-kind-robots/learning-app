@@ -27,15 +27,21 @@
 
 
 (deftest shell-props-puts-the-grid-on-home-and-the-close-mark-elsewhere
-  (is (= :collections (:corner (sut/shell-props {:learner/readiness :basic :page/current :page/home}))))
+  (is (= :collections (:corner (sut/shell-props {:learner/loaded? true :page/current :page/home}))))
   (doseq [page [:page/words :page/lesson :page/collections]]
-    (is (= :close (:corner (sut/shell-props {:learner/readiness :basic :page/current page}))) (str page)))
+    (is (= :close (:corner (sut/shell-props {:learner/loaded? true :page/current page}))) (str page)))
   (testing "no page on display yet, no corner control"
-    (is (nil? (:corner (sut/shell-props {:learner/readiness :basic :page/current :page/loading}))))))
+    (is (nil? (:corner (sut/shell-props {:learner/loaded? true :page/current :page/loading}))))))
 
 
-(deftest the-splash-stands-until-the-words-and-collections-are-read
+(deftest the-splash-stands-until-memory-is-loaded
   (let [props (sut/shell-props {:page/current :page/home})]
     (is (nil? (:page props)) "no screen yet: the splash")
     (is (nil? (:corner props))))
-  (is (= :page/home (:page (sut/shell-props {:learner/readiness :basic :page/current :page/home})))))
+  (is (= :page/home (:page (sut/shell-props {:learner/loaded? true :page/current :page/home})))))
+
+
+(deftest the-splash-says-when-the-data-cannot-be-read
+  (is (= "Загружаем..." (:loading-message (sut/shell-props {:page/current :page/home}))))
+  (is (= "Не получается прочитать данные на устройстве. Пробуем снова…"
+         (:loading-message (sut/shell-props {:learner/read-failed? true :page/current :page/home})))))
