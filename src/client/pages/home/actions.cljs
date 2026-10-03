@@ -2,8 +2,7 @@
   (:require
    [clojure.string :as str]
    [domain.phrase :as phrase]
-   [nexus.registry :as nxr]
-   [use-cases.vocabulary :as vocabulary]))
+   [nexus.registry :as nxr]))
 
 
 (def ^:private empty-suggestions nil)
@@ -45,14 +44,13 @@
 (defn content
   "What home shows of the learner's data in `state`: the active collection's
    heading and whether there is anything to study."
-  [state {:keys [active-id]}]
-  (let [memory     (:learner/memory state)
-        collection (get-in memory [:collections active-id])]
+  [state {collection :active-collection :keys [learner]}]
+  (let [memory (:learner/memory state)]
     {:home/active-coll-id   (:id collection)
      :home/active-coll-name (:name collection)
      ;; The words present in scope, as the word list and the lesson count
      ;; them: a collection may still list a word deleted elsewhere.
-     :home/empty-vocab?     (empty? (vocabulary/collection-words memory collection))}))
+     :home/empty-vocab?     (empty? ((:learner/collection-words learner) memory collection))}))
 
 
 (def ^:private fresh-form

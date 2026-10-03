@@ -40,7 +40,7 @@ Surveyed on 2026-09-25:
 ## Decision
 
 The learner's data is held in a store of our own on ClojureScript maps,
-`adapters.memory`, kept in the app store:
+`adapters.learner.memory`, kept in the app store:
 
 - each document type is added and removed by a pair of functions; a new
   revision is the version memory held removed and the version as it now

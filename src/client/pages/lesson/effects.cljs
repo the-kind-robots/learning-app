@@ -26,13 +26,13 @@
 
 (nxr/register-action! :action/open-lesson
   ;; The lesson is drawn from memory and on screen in the task of the tap. It
-  ;; lives in app state only: leaving the screen drops it. Opened before the
-  ;; reviews are in memory, the screen waits, and the lesson is drawn when
-  ;; they arrive (`:action/refresh-page`).
-  (fn open-lesson [state {:keys [active-id now-ms]}]
+  ;; lives in app state only: leaving the screen drops it. Entered while
+  ;; memory loads, behind the splash, it is drawn once memory is in place
+  ;; (`:action/refresh-page`).
+  (fn open-lesson [state {:keys [active-collection learner now-ms]}]
     [[:effect/save
-      (shown (when (= :full (:learner/readiness state))
-               (lesson/start (:learner/memory state) active-id {} now-ms)))]]))
+      (shown (when (:learner/loaded? state)
+               (lesson/start learner (:learner/memory state) active-collection {} now-ms)))]]))
 
 
 (nxr/register-effect! :effect/check-answer
@@ -46,7 +46,7 @@
           ;; vocabulary states are looked up once here, not on every click.
           (let [trial (domain/current-trial lesson-state)]
             (when (domain/example-trial? trial)
-              (let [hints (await (lesson/answer-annotations capabilities trial))]
+              (let [hints (lesson/answer-annotations capabilities trial)]
                 (dispatch [[:action/annotate-answer lesson-state hints]]))))))
       (catch js/Error err
         (log/error :effect/check-answer {:error (str err)})))))

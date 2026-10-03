@@ -2,7 +2,9 @@
 
 ## Purpose
 Define how a collection is stored, where a word's membership of it lives, and how the active collection is remembered.
+
 ## Requirements
+
 ### Requirement: Collection documents are stored in the user database
 The system SHALL store a collection as one document of `type: "collection"` in the user database (`:user/db`), carrying a `name`, an ISO 8601 creation timestamp and an array of word ids, under a generated document id. The repository SHALL hand it outward as `{:id :name :word-ids :created-at}`, with `word-ids` an empty vector when the document carries none.
 
@@ -62,14 +64,6 @@ The system SHALL remember the id of the active collection across restarts. The a
 - **WHEN** the app starts and the remembered id names a collection the learner's data no longer holds
 - **THEN** home, the words list, a lesson, the themes screen, removing a word and adding a word all act as with «Всё подряд» active
 
-### Requirement: Deleting a collection deletes its document and its examples
-The system SHALL delete the collection document and purge the examples generated for that collection. The word documents SHALL remain: a word held only by the deleted collection stays in the vocabulary.
-
-#### Scenario: Deleted collection leaves its words
-- **WHEN** a named collection holding two words is deleted
-- **THEN** its document is gone and its examples are purged
-- **AND** both words are still in the vocabulary
-
 ### Requirement: A collection's scope is the union of its own words and its children's
 The scope of a named collection — the words a lesson on it draws from and the words its vocabulary list shows — SHALL be the distinct union of its own `word-ids` and the `word-ids` of every collection whose folder key equals the collection's name. The folder key of a name is the text before its first `/`, trimmed; the comparison is trimmed and case-insensitive. Nesting is one level: `Kurs / A / B` is a child of `Kurs`, not of `Kurs / A`. A word added to a child SHALL appear in the parent's scope with no write to the parent document. Removing a word from the parent SHALL remove it from the parent document only.
 
@@ -103,3 +97,15 @@ A collection's name SHALL be unique after trimming, case-insensitively. Creating
 #### Scenario: Rename to the own name in another case
 - **WHEN** a collection `Kurs` exists and the user renames it to `KURS`
 - **THEN** the document is renamed to `KURS`
+
+### Requirement: Deleting a collection deletes the collection only
+The system SHALL delete the collection document alone. The word documents SHALL remain: a word held only by the deleted collection stays in the vocabulary. The examples made for the collection SHALL remain stored; a collection made again has a new id, so they SHALL NOT show in it. They SHALL show in «Всё подряд», like every other example.
+
+#### Scenario: Deleted collection leaves its words and examples
+- **WHEN** a named collection holding two words is deleted
+- **THEN** its document is gone
+- **AND** both words and the examples made for it are still stored
+
+#### Scenario: A collection made again
+- **WHEN** a collection is deleted and a collection with the same name is made again
+- **THEN** the examples made for the deleted one do not show in the new one

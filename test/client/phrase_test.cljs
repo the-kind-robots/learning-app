@@ -4,10 +4,11 @@
   (:require
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
+   [client.support.learner :as learner]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
-   [ports.reviews :as reviews]
-   [ports.words :as words]
+   [db :as db]
+   [domain.vocabulary :as vocabulary]
    [use-cases.vocabulary :as sut]
    [utils :as utils]))
 
@@ -21,7 +22,14 @@
 (use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name device-db-name]))
 
 
+(def ^:private clock
+  {:clock/now-iso time/now-iso
+   :clock/now-ms  time/now-ms})
+
+
 (defn- with-test-dbs
+  "Calls `f` with the test databases, under which `::learner` is the
+   learner port over them."
   [f]
   (db-fixtures/with-test-dbs
    [user-db-name device-db-name]
@@ -29,29 +37,41 @@
     [[user-db device-db]]
     (with-redefs [utils/now-iso time/now-iso
                   utils/now-ms  time/now-ms]
-      (await (f {:user/db user-db :device/db device-db}))))))
+      (let [dbs {:device/db device-db :user/db user-db}]
+        (await (learner/with-learner dbs clock #(f (assoc dbs ::learner (:learner %) ::store (:store %))))))))))
 
 
-(defn- test-capabilities
-  ([dbs example-requests]
-   (test-capabilities dbs example-requests {}))
-  ([dbs example-requests {:keys [active-id existing-example]}]
-   (let [clock {:clock/now-iso time/now-iso
-                :clock/now-ms  time/now-ms}]
-     {:clock       clock
-      :collections {:collections/active-id (fn [] active-id)
-                    :collections/add-word! (fn [_ _] (js/Promise.resolve nil))
-                    :collections/get       (fn [id] (js/Promise.resolve {:id id :name "Поездка"}))}
-      :examples    {:examples/of-word  (fn [word-id]
-                                         (js/Promise.resolve
-                                          (if existing-example
-                                            [(assoc existing-example
-                                                    :collection-id active-id
-                                                    :word-id word-id)]
-                                            [])))
-                    :examples/request! (fn [requests] (swap! example-requests into requests) nil)}
-      :reviews     (reviews/start! {:clock clock :db dbs})
-      :words       (words/start! {:clock clock :db dbs})})))
+(def ^:private phrase-id
+  (vocabulary/vocab-id "auf jeden Fall"))
+
+
+(defn- ^:async test-capabilities
+  "What `add!` is handed: the learner port over `dbs`, with the example
+   requests recorded into `example-requests` rather than queued. With
+   `:active-id`, a
+   collection «Поездка» under that id is stored and active; with
+   `:existing-example`, an example of «auf jeden Fall» made in that
+   collection is stored. It resolves once memory has what it stored."
+  [dbs example-requests {:keys [active-id existing-example]}]
+  (when active-id
+    (await (db/insert (:user/db dbs) {:_id active-id :type "collection" :name "Поездка" :word-ids []})))
+  (when existing-example
+    (await (db/insert (:device/db dbs)
+                      {:_id           (:id existing-example)
+                       :type          "example"
+                       :collection-id active-id
+                       :word-id       phrase-id
+                       :value         "Satz"
+                       :translation   "фраза"})))
+  (await (learner/caught-up dbs (::store dbs)))
+  {:clock   clock
+   :learner (assoc (::learner dbs)
+                   :learner/active-collection
+                   (fn [] (get-in ((:learner/memory (::learner dbs))) [:collections active-id]))
+                   :learner/request-examples!
+                   (fn [requests]
+                     (swap! example-requests into requests)
+                     (js/Promise.resolve nil)))})
 
 
 (deftest add-creates-phrase-and-initial-review-and-asks-for-an-example
@@ -60,7 +80,8 @@
      (^:async fn
       [dbs]
       (let [example-requests (atom [])
-            {:keys [word-id created?]} (await (sut/add! (test-capabilities dbs example-requests)
+            capabilities     (await (test-capabilities dbs example-requests {}))
+            {:keys [word-id created?]} (await (sut/add! capabilities
                                                         "Entschuldigung, dass ich zu spät komme"
                                                         "Извини, что я опоздал."
                                                         :phrase))
@@ -86,7 +107,7 @@
      (^:async fn
       [dbs]
       (let [example-requests (atom [])
-            capabilities     (test-capabilities dbs example-requests {:active-id "collection-1"})]
+            capabilities     (await (test-capabilities dbs example-requests {:active-id "collection-1"}))]
         (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase))
         (is (= 1 (count @example-requests)))
         (let [{:keys [collection-id collection-name]} (first @example-requests)]
@@ -100,10 +121,10 @@
      (^:async fn
       [dbs]
       (let [example-requests (atom [])
-            capabilities     (test-capabilities dbs
-                                                example-requests
-                                                {:active-id        "collection-1"
-                                                 :existing-example {:id "example-1"}})]
+            capabilities     (await (test-capabilities dbs
+                                                       example-requests
+                                                       {:active-id        "collection-1"
+                                                        :existing-example {:id "example-1"}}))]
         (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase))
         (reset! example-requests [])
         (await (sut/add! capabilities "auf jeden Fall" "обязательно" :phrase))
@@ -116,7 +137,7 @@
      (^:async fn
       [dbs]
       (let [example-requests (atom [])
-            capabilities     (test-capabilities dbs example-requests)]
+            capabilities     (await (test-capabilities dbs example-requests {}))]
         (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase))
         (let [{:keys [created?]} (await (sut/add! capabilities "Auf jeden Fall" "обязательно, точно" :phrase))
               entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
@@ -134,7 +155,7 @@
      (^:async fn
       [dbs]
       (let [example-requests (atom [])
-            capabilities     (test-capabilities dbs example-requests)]
+            capabilities     (await (test-capabilities dbs example-requests {}))]
         (await (sut/add! capabilities "Guten Morgen" "доброе утро" :word))
         (let [{:keys [created?]} (await (sut/add! capabilities "guten Morgen" "доброго утра" :phrase))
               entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
@@ -152,7 +173,7 @@
      (^:async fn
       [dbs]
       (let [example-requests (atom [])
-            result (await (sut/add! (test-capabilities dbs example-requests)
+            result (await (sut/add! (await (test-capabilities dbs example-requests {}))
                                     "auf jeden Fall"
                                     "   "
                                     :phrase))]
@@ -166,7 +187,7 @@
      (^:async fn
       [dbs]
       (let [example-requests (atom [])]
-        (await (sut/add! (test-capabilities dbs example-requests)
+        (await (sut/add! (await (test-capabilities dbs example-requests {}))
                          "auf jeden Fall"
                          "во всяком\n   случае"
                          :phrase))

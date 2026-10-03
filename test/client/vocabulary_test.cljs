@@ -2,17 +2,16 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.examples :as examples]
-   [adapters.memory :as memory]
+   [adapters.learner.memory :as memory]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.db-seed :as db-seed]
+   [client.support.learner :as learner]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [domain.retention :as retention]
-   [ports.reviews :as reviews]
-   [ports.words :as words]
+   [ports.learner :as ports]
    [use-cases.vocabulary :as sut]
    [utils :as utils]))
 
@@ -26,7 +25,15 @@
 (use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name device-db-name]))
 
 
+(def ^:private clock
+  {:clock/now-iso time/now-iso
+   :clock/now-ms  time/now-ms})
+
+
 (defn- with-test-dbs
+  "Calls `f` with the test databases, under which `::capabilities` is
+   what the use cases are handed: the learner port over those databases,
+   and the main card active."
   [f]
   (db-fixtures/with-test-dbs
    [user-db-name device-db-name]
@@ -34,37 +41,34 @@
     [[user-db device-db]]
     (with-redefs [utils/now-iso time/now-iso
                   utils/now-ms  time/now-ms]
-      (await (f {:user/db user-db :device/db device-db}))))))
+      (let [dbs {:device/db device-db :user/db user-db}]
+        (await (learner/with-learner
+                dbs
+                clock
+                (fn [{learner-port :learner}]
+                  (f (assoc dbs
+                            ::capabilities
+                            {:clock   clock
+                             :learner (assoc learner-port :learner/active-collection (fn [] nil))}))))))))))
 
 
 (defn- test-capabilities
   [dbs]
-  (let [clock {:clock/now-iso time/now-iso
-               :clock/now-ms  time/now-ms}]
-    {:clock       clock
-     :reviews     (reviews/start! {:db dbs :clock clock})
-     :words       (words/start! {:db dbs :clock clock})
-     ;; Vocabulary use-case calls into collections (active-id) and examples
-     ;; (request!/list) to scope per-collection examples. Stub these as
-     ;; main-card-active no-ops so tests stay isolated.
-     :collections {:collections/active-id     (fn [] nil)
-                   :collections/get           (fn [_] nil)
-                   :collections/add-word!     (fn [_ _] (js/Promise.resolve nil))
-                   :collections/docs-without-word (fn [_] (js/Promise.resolve []))
-                   :collections/exclude-word! (fn [_ _] (js/Promise.resolve nil))}
-     :examples    {:examples/of-word        (fn [_] (js/Promise.resolve []))
-                   :examples/purge-by-word! (fn [word-id] (examples/purge-by-word! dbs word-id))
-                   :examples/request!       (fn [_ _ _] nil)}}))
+  (::capabilities dbs))
 
 
 (defn- ^:async list-of
-  "`rows` over the learner's data as memory would hold `dbs` now. `:word-ids`
+  "`rows` over the learner's data as memory would have `dbs` now. `:word-ids`
    become a collection holding them."
   [dbs {:keys [word-ids] :as opts}]
   (let [memory (cond-> (await (db-seed/memory-of (:user/db dbs)))
-                 word-ids (memory/with-docs [{:_id "collection:listed" :_rev "1-a" :type "collection"
-                                              :name "listed" :word-ids (vec word-ids)}]))]
-    (sut/rows memory
+                 word-ids (memory/with-docs [{:_id      "collection:listed"
+                                              :_rev     "1-a"
+                                              :type     "collection"
+                                              :name     "listed"
+                                              :word-ids (vec word-ids)}]))]
+    (sut/rows ports/reads
+              memory
               (cond-> (dissoc opts :word-ids)
                 word-ids (assoc :collection (get-in memory [:collections "collection:listed"])))
               (time/now-ms))))
@@ -194,21 +198,19 @@
         (is (= "лиса" (-> result :translation first :value))))))))
 
 
-(deftest delete-removes-word-related-docs
-  (async-testing "`delete!` removes word, reviews and examples"
+(deftest delete-removes-the-word-and-keeps-its-history
+  (async-testing "`delete!` removes the word; its reviews and examples stay"
     (with-test-dbs
      (^:async fn
       [dbs]
       (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))]
         (await (sut/add-review (test-capabilities dbs) word-id true "пёс"))
         (await (db/insert (:device/db dbs) {:type "example" :word-id word-id :value "Der Hund läuft"}))
-        (await (sut/delete! (test-capabilities dbs) word-id))
-        (let [vocabs   (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
-              reviews  (await (db-queries/fetch-by-type (:user/db dbs) "review"))
-              examples (await (db-queries/fetch-by-type (:device/db dbs) "example"))]
-          (is (empty? vocabs))
-          (is (empty? reviews))
-          (is (empty? examples))))))))
+        (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
+          (await (sut/delete! (test-capabilities dbs) word-id))
+          (is (empty? (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))))
+          (is (= (map :_id reviews) (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review")))))
+          (is (= 1 (count (await (db-queries/fetch-by-type (:device/db dbs) "example")))))))))))
 
 
 (deftest add-review-creates-review-document

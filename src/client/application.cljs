@@ -1,7 +1,7 @@
 (ns application
   (:require
    ["qrcode" :as QRCode]
-   [adapters.memory :as memory]
+   [adapters.learner.memory :as memory]
    [adapters.identity :as identity]
    [application.presenter :as presenter]
    [install-guide.view :as install-guide]
@@ -54,11 +54,17 @@
 
 
 (defn- page-context
-  "What a page's content needs besides app state: the stored active
-   collection and the time retention is measured at."
+  "What a page's content needs besides app state: the active collection,
+   or nil for «Всё подряд», the learner port, whose reads of memory a page
+   uses, and the time retention is measured at. The context is marked so
+   that Nexus hands it over as it is: the collection carries every word id
+   of a theme, and Nexus would otherwise walk them all for placeholders on
+   every keystroke."
   [capabilities]
-  {:active-id ((get-in capabilities [:collections :collections/active-id]))
-   :now-ms    ((get-in capabilities [:clock :clock/now-ms]))})
+  (with-meta {:active-collection ((get-in capabilities [:learner :learner/active-collection]))
+              :learner           (:learner capabilities)
+              :now-ms            ((get-in capabilities [:clock :clock/now-ms]))}
+             {:nexus/skip-interpolation true}))
 
 
 (nxr/register-effect! :effect/enter
@@ -78,50 +84,36 @@
 
 
 ;;
-;; The learner's data in memory (ADR-0016). `adapters.memory-loader` reads the
-;; databases and hands the documents to these three effects; nothing else
-;; writes memory. A screen reads memory when it is entered, and does not
-;; follow memory while it is open.
+;; The learner's data in memory (ADR-0016). `adapters.learner.loader` reads the
+;; databases and follows their change feeds, and hands what it reads to these
+;; two effects; nothing else writes memory. A screen reads memory when it is
+;; entered, and does not follow memory while it is open.
 ;;
 
 
-(defn- memorized
-  "`state` with `docs` taken into the learner's data in memory."
-  [state docs]
-  (update state :learner/memory memory/with-docs docs))
-
-
-(nxr/register-effect! :effect/memory-loaded-basic
-  ;; The words and the collections: the splash goes, and the screen under it
-  ;; is filled in.
-  (fn memory-loaded-basic [{:keys [dispatch]} {:keys [store]} docs]
-    (swap! store #(assoc (memorized % docs) :learner/readiness :basic))
-    (dispatch [[:effect/enter :action/refresh-page]])))
-
-
-(nxr/register-effect! :effect/memory-loaded-full
-  ;; Reviews and examples: retention and the lesson can be read now.
-  (fn memory-loaded-full [{:keys [dispatch]} {:keys [store]} docs]
-    (swap! store #(assoc (memorized % docs) :learner/readiness :full))
+(nxr/register-effect! :effect/memory-loaded
+  ;; Everything the databases held at start: the splash goes, and the screen
+  ;; asked for is shown.
+  (fn memory-loaded [{:keys [dispatch]} {:keys [store]} memory]
+    (swap! store assoc :learner/memory memory :learner/loaded? true)
     (dispatch [[:effect/enter :action/refresh-page]])))
 
 
 (nxr/register-effect! :effect/memory-changed
-  ;; A batch written after the load: this app's own write once PouchDB took
-  ;; it, another tab's, a replicated one. The open screen is left as it is.
+  ;; A batch the databases stored after the load: this app's own write, a
+  ;; replication, another tab. The open screen is left as it is.
   (fn memory-changed [_ {:keys [store]} docs]
-    (swap! store memorized docs)))
+    (swap! store update :learner/memory memory/with-docs docs)))
 
 
 (nxr/register-action! :action/refresh-page
-  ;; The screen on display computed again from memory: after the load
-  ;; reached a new stage, and after the reader's own change on it.
+  ;; The screen on display computed again from memory: after the load, and
+  ;; after the reader's own change on it.
   (fn refresh-page [state context]
     (case (:page/current state)
       :page/collections [[:action/show-collections context]]
       :page/home        [[:action/show-home context]]
-      :page/lesson      (when (and (= :full (:learner/readiness state))
-                                   (nil? (:lesson/state state))
+      :page/lesson      (when (and (nil? (:lesson/state state))
                                    (not (:lesson/empty? state)))
                           [[:effect/enter :action/open-lesson]])
       :page/words       [[:action/show-words context]]
@@ -577,7 +569,7 @@
 
 (defn- render
   [state]
-  (let [{:keys [build-mark corner menu-open? page pairing show-install? show-sync? show-update?]}
+  (let [{:keys [build-mark corner loading-message menu-open? page pairing show-install? show-sync? show-update?]}
         (presenter/shell-props state)]
     (list
      ;; One bar across the top holds the three slots: the word mark, the build
@@ -653,7 +645,7 @@
        :page/home        (pages.home.view/page state)
        :page/lesson      (pages.lesson.view/page state)
        :page/words       (pages.words.view/page state)
-       [:div.app-loading "Загружаем..."])
+       [:div.app-loading loading-message])
      ;; The one status line every screen announces through. Rendered empty
      ;; and always, so replicant never diffs its text and a message written
      ;; into it is announced; `:effect/announce` writes it.

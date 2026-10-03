@@ -123,18 +123,15 @@
     (await (dbs/remove dbs schema task))))
 
 
-(defn- remove-with-latest-rev!
+(defn- ^:async remove-done!
+  "Deletes `task`, which has run, at the revision PouchDB holds now. A task
+   that is gone already is left as it is. A failure is logged, and the
+   task stays in the queue."
   [dbs task]
-  (-> (dbs/remove dbs schema task)
-      (.catch (fn ^:async f [err]
-                (let [status (or (:status err) (get-in err [:body :status]))]
-                  (cond
-                    (= status 404) true
-                    (= status 409) (let [fresh (await (dbs/get dbs schema (:_id task)))]
-                                     (if fresh
-                                       (await (dbs/remove dbs schema fresh))
-                                       true))
-                    :else          true))))))
+  (try
+    (await (dbs/write-latest! dbs schema (:_id task) (fn [stored] (when stored {:_deleted true}))))
+    (catch :default err
+      (log/warn :tasks/remove-failed {:id (:_id task) :error (str err)}))))
 
 
 (def ^:private state (atom {}))
@@ -184,7 +181,7 @@
              result
              (do
                (log/debug :tasks/completed {:id (:_id task)})
-               (await (remove-with-latest-rev! dbs task)))
+               (await (remove-done! dbs task)))
 
              :else
              (do

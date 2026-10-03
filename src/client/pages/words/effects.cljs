@@ -75,10 +75,10 @@
 (nxr/register-effect! :effect/delete-word
   (fn ^:async delete-word
     [{:keys [capabilities dispatch]} _ {:keys [id value]}]
-    (let [collection-id ((:collections/active-id (:collections capabilities)))
-          prompt        (if collection-id
-                          (str "Убрать «" value "» из набора?")
-                          (str "Удалить «" value "» окончательно?"))]
+    (let [collection ((get-in capabilities [:learner :learner/active-collection]))
+          prompt     (if collection
+                       (str "Убрать «" value "» из набора?")
+                       (str "Удалить «" value "» окончательно?"))]
       (when (js/confirm prompt)
         ;; The dialog closes here rather than on the rows that follow: rows
         ;; change for reasons of their own, and declining the prompt above

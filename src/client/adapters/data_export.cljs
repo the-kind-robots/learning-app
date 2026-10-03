@@ -15,20 +15,13 @@
      :docs        (mapv #(dissoc (:doc %) :_rev) rows)}))
 
 
-(defn- conflict?
-  [err]
-  (let [status (or (.-status err) (:status err))
-        n      (or (.-name err) (:name err))]
-    (or (= status 409) (= status "409") (= n "conflict"))))
-
-
 (defn ^:async import-vocab-doc!
   "Inserts or LWW-merges a single vocab doc into user-db."
   [user-db incoming]
   (try
     (await (db/insert user-db incoming (:_id incoming)))
     (catch js/Error err
-      (if (conflict? err)
+      (if (db/conflict? err)
         (let [existing (await (db/get user-db (:_id incoming)))]
           (when (pos? (compare (or (:modified-at incoming) "")
                                (or (:modified-at existing) "")))
@@ -42,7 +35,7 @@
   (try
     (await (db/insert user-db incoming (:_id incoming)))
     (catch js/Error err
-      (when-not (conflict? err)
+      (when-not (db/conflict? err)
         (throw err)))))
 
 

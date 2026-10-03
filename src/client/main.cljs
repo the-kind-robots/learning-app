@@ -1,11 +1,8 @@
 (ns main
   (:require
-   [adapters.collections :as collections-adapter]
-   [adapters.examples :as examples-adapter]
-   [adapters.memory :as memory]
-   [adapters.memory-loader :as memory-loader]
-   [adapters.reviews :as reviews-adapter]
-   [adapters.words :as words-adapter]
+   [adapters.learner.documents :as documents]
+   [adapters.learner.loader :as loader]
+   [adapters.learner.memory :as memory]
    [application]
    [db.pouch :as pouch]
    [db.sqlite :as sqlite]
@@ -26,13 +23,10 @@
    [pages.words.effects]
    [ports.backup :as backup]
    [ports.clock :as clock]
-   [ports.collections :as collections]
    [ports.dictionary :as dictionary]
-   [ports.examples :as examples]
+   [ports.learner :as learner]
    [ports.navigation :as navigation]
-   [ports.reviews :as reviews]
    [ports.task-queue :as task-queue]
-   [ports.words :as words]
    [reitit.frontend :as rf]
    [reitit.frontend.controllers :as rfc]
    [reitit.frontend.easy :as rfe]
@@ -45,13 +39,9 @@
 
 
 (def ^:private schemas
-  "Every document type the app stores, declared by the adapter that owns it.
-   The engine learns its indexes, views and routing from this list alone."
-  [words-adapter/schema
-   reviews-adapter/schema
-   collections-adapter/schema
-   examples-adapter/schema
-   tasks/schema])
+  "Every document type the app stores: the learner's data, and the task
+   queue's. The engine learns its indexes and routing from this list alone."
+  (conj documents/schemas tasks/schema))
 
 
 (defn ^:async init
@@ -118,37 +108,25 @@
     :port/dictionary       {:requires {:db :db/sqlite}
                             :start    dictionary/start!}
 
-    :port/words            {:requires {:db    :db/pouch
-                                       :clock :port/clock}
-                            :start    words/start!}
-
-    :port/reviews          {:requires {:db    :db/pouch
-                                       :clock :port/clock}
-                            :start    reviews/start!}
+    ;; The learner's data for the use cases: memory to read, and every
+    ;; write. A write changes the document PouchDB holds and reads what it
+    ;; wrote back into memory.
+    :port/learner          {:requires {:clock :port/clock
+                                       :db    :db/pouch
+                                       :store :app/store}
+                            :start    learner/start!}
 
     :port/backup           {:requires {:db :db/pouch}
                             :start    backup/start!}
 
-    :port/examples         {:requires {:clock :port/clock
-                                       :db    :db/pouch}
-                            :start    examples/start!}
-
     :port/navigation       {:start navigation/start!}
-
-    :port/collections      {:requires {:clock :port/clock
-                                       :db    :db/pouch
-                                       :store :app/store}
-                            :start    collections/start!}
 
     :app/capabilities      {:requires {:capabilities/sync :sync/identity
                                        :backup            :port/backup
                                        :clock             :port/clock
-                                       :collections       :port/collections
                                        :dictionary        :port/dictionary
-                                       :examples          :port/examples
-                                       :navigation        :port/navigation
-                                       :reviews           :port/reviews
-                                       :words             :port/words}
+                                       :learner           :port/learner
+                                       :navigation        :port/navigation}
                             :start    identity}
 
     ;; Starting it asks for every example this device is missing, and it
@@ -164,10 +142,10 @@
                                     backfill (use-cases.examples/start! capabilities)
                                     ours     (fn [pulled-ids]
                                                (into (get pulled-ids
-                                                          (:type words-adapter/schema)
+                                                          (:type documents/vocab-schema)
                                                           #{})
                                                      (get pulled-ids
-                                                          (:type collections-adapter/schema)
+                                                          (:type documents/collection-schema)
                                                           #{})))]
                                 (listen (fn [{:keys [pulled-ids]}]
                                           (backfill {:pulled-ids (ours pulled-ids)})))))}
@@ -191,13 +169,15 @@
                                             (instrumentation/install!))
                                           {:dispatch #(dispatch {} %)}))}
 
-    ;; The learner's data, held in the store as a projection of the local
-    ;; databases (ADR-0016). Starting returns at once; the load runs on, and
-    ;; the screen on display fills in when it completes.
+    ;; The learner's data, kept in the store as a projection of the local
+    ;; databases (ADR-0016). Starting returns at once; the load runs on
+    ;; behind the splash, and the screen asked for is shown when it
+    ;; completes.
     :learner/memory        {:requires {:db     :db/pouch
-                                       :render :app/render}
-                            :start    (fn [{:keys [db render]}]
-                                        (memory-loader/start! db (:dispatch render))
+                                       :render :app/render
+                                       :store  :app/store}
+                            :start    (fn [{:keys [db render store]}]
+                                        (loader/start! db store (:dispatch render))
                                         nil)}
 
     :pwa/init              {:requires {:render :app/render}
