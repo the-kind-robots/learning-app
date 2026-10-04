@@ -346,19 +346,11 @@
       (log/error :db/index-error {:index index-name :error (str err)}))))
 
 
-(def ^:private type-index
-  "The engine's own index: `typed` puts :type into every selector, so every
-   find on a database that holds a schema goes through it. Nobody declares
-   it."
-  {:name "by-type" :fields [:type]})
-
-
 (defn indexes-of
-  "The indexes a database with `schemas` needs: the engine's type index and
-   every one the schemas declare. Nothing for a database no schema lives in."
+  "The indexes a database with `schemas` needs: every one the schemas
+   declare."
   [schemas]
-  (when (seq schemas)
-    (cons type-index (mapcat :indexes schemas))))
+  (mapcat :indexes schemas))
 
 
 (defn ensure-indexes!

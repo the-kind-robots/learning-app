@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { openHome } = require('./service-worker.shared');
 
 // GH-412: the arrows moved the active index in state and Enter picked by it,
 // but no row on screen was ever marked — the view compared a decorated item
@@ -26,14 +27,13 @@ const expectOnlyActive = async (page, index, total) => {
 };
 
 test('the arrows move the visible highlight through the suggestions', async ({ page }) => {
-  await page.goto('/home');
+  await openHome(page);
 
   const field = valueField(page);
   await expect(field).toBeVisible();
 
-  // The dictionary lives in a Worker that fetches and imports SQLite; a third
-  // suggestion appearing is the only honest signal that it is ready and that
-  // the fixture is the dictionary being served.
+  // Four suggestions are the signal that the fixture is the dictionary being
+  // served.
   await field.pressSequentially('fe');
   await expect(options(page)).toHaveCount(4);
 
@@ -52,7 +52,7 @@ test('the arrows move the visible highlight through the suggestions', async ({ p
 });
 
 test('the highlight stops at both ends of the list', async ({ page }) => {
-  await page.goto('/home');
+  await openHome(page);
 
   const field = valueField(page);
   await field.pressSequentially('fe');
@@ -68,7 +68,7 @@ test('the highlight stops at both ends of the list', async ({ page }) => {
 });
 
 test('the marked entry is the one Enter picks', async ({ page }) => {
-  await page.goto('/home');
+  await openHome(page);
 
   const field = valueField(page);
   await field.pressSequentially('fe');
@@ -82,7 +82,7 @@ test('the marked entry is the one Enter picks', async ({ page }) => {
 });
 
 test('the scroll effect can find the marked entry', async ({ page }) => {
-  await page.goto('/home');
+  await openHome(page);
 
   const field = valueField(page);
   await field.pressSequentially('fe');

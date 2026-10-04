@@ -1,5 +1,5 @@
-// Page states the service worker and metrics specs wait for. Shared by
-// service-worker-update, service-worker-cache and metrics.
+// Page states the specs wait for: the service worker, the metrics, and the
+// dictionary being ready on home.
 
 // The first load of a fresh context: the worker installs, activates and
 // claims the page. Resolves once the page is controlled — before that nothing
@@ -25,4 +25,12 @@ const dictionaryReady = (page) => page.waitForFunction(
   { timeout: 60000 }
 );
 
-module.exports = { openControlled, readMetrics, dictionaryReady };
+// Home with the dictionary ready. Home can be on screen before the dictionary
+// worker has its database, and a query asked before then is answered with an
+// empty list (#312), so a spec about suggestions types only after this.
+async function openHome(page) {
+  await page.goto('/home');
+  await dictionaryReady(page);
+}
+
+module.exports = { openControlled, readMetrics, dictionaryReady, openHome };
