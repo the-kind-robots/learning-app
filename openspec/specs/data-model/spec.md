@@ -171,17 +171,6 @@ storage layer's default result limit.
 - **WHEN** a migration runs against a source database that holds no documents
 - **THEN** it completes without error and copies nothing
 
-### Requirement: user-db carries secondary indexes
-user-db SHALL carry a secondary index on `type`. The system SHALL create it when the databases are initialised at start-up, so an installation that predates it gets it on its next start without a migration.
-
-#### Scenario: Indexes exist after start-up
-- **WHEN** the app has started and the databases are initialised
-- **THEN** `getIndexes()` on user-db lists an index whose fields are `["type"]`, alongside `_all_docs`
-
-#### Scenario: An existing installation gets the indexes
-- **WHEN** an installation whose user-db has only `_all_docs` starts
-- **THEN** after start-up `getIndexes()` on user-db lists the `type` index
-
 ### Requirement: user-db design documents are not replicated
 user-db design documents SHALL NOT replicate: a sync pass SHALL carry user documents in both directions and no document whose id begins with `_design/` in either direction.
 
@@ -189,3 +178,18 @@ user-db design documents SHALL NOT replicate: a sync pass SHALL carry user docum
 - **WHEN** a sync pass runs against the account's copy on the server
 - **THEN** the remote copy holds no `_design/` documents
 - **AND** every user document written on either side is present on the other
+
+### Requirement: The splash waits for no index
+The app SHALL create no index in user-db and SHALL bring none up to date there. It SHALL create no secondary index and bring none up to date before memory is loaded (`specs/learner-data-memory/spec.md`). device-db SHALL carry the index the task queue selects its due tasks by; the task queue SHALL create it and bring it up to date when it starts, after memory is loaded.
+
+#### Scenario: A new installation
+- **WHEN** the app starts on a device with empty databases and memory is loaded
+- **THEN** `getIndexes()` on user-db lists `_all_docs` only
+
+#### Scenario: An index an earlier build left in user-db
+- **WHEN** the app starts on a device whose user-db holds `_design/by-type` from an earlier build
+- **THEN** the app neither queries that index nor brings it up to date
+
+#### Scenario: Tasks rewritten since the last start
+- **WHEN** the task queue rewrote its tasks before the app was closed, and the app starts again
+- **THEN** memory is loaded before the task queue's index is brought up to date
