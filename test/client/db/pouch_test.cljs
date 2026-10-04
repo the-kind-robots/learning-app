@@ -68,9 +68,9 @@
            (is (empty? (filter #(re-find #"^_design/" %) (disj remote-ids "_design/remote-only"))))))))))
 
 
-(deftest a-schema-gives-its-database-indexes
+(deftest a-test-database-has-the-queue-index-only
   (async-testing
-    "the fixture installs every index a schema declares, and no other"
+    "the fixture installs the task queue's index, and no other"
     (db-fixtures/with-test-db
       local-name
       (^:async fn

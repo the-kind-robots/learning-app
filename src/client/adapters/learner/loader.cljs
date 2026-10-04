@@ -115,38 +115,59 @@
   (with-meta x {:nexus/skip-interpolation true}))
 
 
+(defn- ^:async load-once
+  "Reads memory from the databases once: it notes where each change feed
+   stands, reads both databases, and then reads what they stored
+   meanwhile. Resolves with `{:memory :since}`. A failure at any step
+   retries all of it, so that a retry starts from fresh feed positions."
+  [dbs]
+  (let [noted  (await (positions dbs))
+        memory (await (loaded (await (read-all dbs))))]
+    (await (caught-up dbs memory noted))))
+
+
+(defn ^:async read-memory
+  "Reads memory from the databases (`load-once`), and reads again from the
+   start when any step fails (`retried`). Resolves with `{:memory :since}`:
+   memory with everything stored up to then, and the feed positions it was
+   read up to. It needs no dispatch, so it can start as soon as the
+   databases are open."
+  [dbs store]
+  (when ^boolean goog/DEBUG
+    (instrumentation/memory-start!))
+  (let [read (await (retried store #(load-once dbs) retry-ms))]
+    (when ^boolean goog/DEBUG
+      (instrumentation/memory-ready!))
+    read))
+
+
 (defn ^:async start!
-  "Loads the learner's data into memory and keeps memory following the
-   databases, through two effects:
+  "Hands memory over to the app once `read` resolves, and keeps memory
+   following the databases. `read` is the promise `read-memory` returned;
+   without it, this starts the read itself. Memory reaches the app through
+   two effects:
 
    - `:effect/memory-loaded` with memory built from everything the
      databases hold;
    - `:effect/memory-changed` with each batch the databases store after
      that: this app's own writes, a replication, another tab.
 
-   It notes where each change feed stands, reads both databases, and then
-   reads what they stored meanwhile, so memory is handed over with
-   everything stored up to then. It follows each feed from there. Each time
-   the page becomes visible again it catches up (`catch-up!`), since a live
-   feed can drop a change unreported. Once loaded, resolves with a function
-   that stops following."
-  [dbs store dispatch]
-  (let [noted (await (retried store #(positions dbs) retry-ms))]
-    (when ^boolean goog/DEBUG
-      (instrumentation/memory-start!))
-    (let [{:keys [memory since]} (await (caught-up dbs
-                                                   (await (loaded (await (retried store #(read-all dbs) retry-ms))))
-                                                   noted))
-          changed!               #(dispatch [[:effect/memory-changed (skip-interpolation %)]])
-          feeds                  [(dbs/follow-changes dbs :user/db (:user/db since) changed!)
-                                  (dbs/follow-changes dbs :device/db (:device/db since) changed!)]]
-      (.set followers store (mapv :catch-up! feeds))
-      (dispatch [[:effect/memory-loaded (skip-interpolation memory)]])
-      (when ^boolean goog/DEBUG
-        (instrumentation/memory-ready!))
-      (let [stop-visible (on-visible! #(-> (catch-up! store)
-                                           (.catch (fn [err] (log/error :memory/catch-up-failed {:error (str err)})))))]
-        (fn stop []
-          (stop-visible)
-          (.delete followers store)
-          (run! #((:stop! %)) feeds))))))
+   It follows each change feed from where the read stopped. Each time the
+   page becomes visible again it catches up (`catch-up!`), since a live feed
+   can drop a change unreported. Once memory is handed over, resolves with a
+   function that stops following."
+  ([dbs store dispatch]
+   (await (start! dbs store (read-memory dbs store) dispatch)))
+  ([dbs store read dispatch]
+   (let [{:keys [memory since]} (await read)
+         changed!               #(dispatch [[:effect/memory-changed (skip-interpolation %)]])
+         feeds                  [(dbs/follow-changes dbs :user/db (:user/db since) changed!)
+                                 (dbs/follow-changes dbs :device/db (:device/db since) changed!)]]
+     (.set followers store (mapv :catch-up! feeds))
+     (dispatch [[:effect/memory-loaded (skip-interpolation memory)]])
+     (let [stop-visible (on-visible! #(-> (catch-up! store)
+                                          (.catch (fn [err] (log/error :memory/catch-up-failed {:error (str err)})))))]
+       (fn stop []
+         (stop-visible)
+         (.delete followers store)
+         (run! #((:stop! %)) feeds))))))

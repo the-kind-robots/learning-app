@@ -12,9 +12,14 @@
 
 
 (def schema
-  {:type    "task"
-   :db      :device/db
-   :indexes [{:name "by-type-run-at-created-at" :fields [:type :run-at :created-at]}]})
+  {:type "task"
+   :db   :device/db})
+
+
+(def index
+  "The index the queue selects its due tasks by. Every query of the queue
+   names it, so the queue builds it before its first query."
+  {:name "by-type-run-at-created-at" :fields [:type :run-at :created-at]})
 
 
 (def ^:private alive
@@ -85,7 +90,7 @@
                                       {:run-at :asc}
                                       {:created-at :asc}]
                           :limit     page-size
-                          :use-index "by-type-run-at-created-at"}))]
+                          :use-index (:name index)}))]
     (vec docs)))
 
 
@@ -135,6 +140,13 @@
 
 
 (def ^:private state (atom {}))
+
+
+(defn- error-text
+  "What a caught failure says. A rejected PouchDB call answers with a plain
+   object that carries a message but is no `js/Error`."
+  [err]
+  (or (.-message err) (str err)))
 
 
 (declare flush!)
@@ -228,7 +240,7 @@
                                       {:run-at :asc}
                                       {:created-at :asc}]
                           :limit     1
-                          :use-index "by-type-run-at-created-at"}))]
+                          :use-index (:name index)}))]
     (when-let [task (first docs)]
       (max 0 (- (utils/iso->ms (:run-at task)) (now-ms clock))))))
 
@@ -259,24 +271,38 @@
         (schedule-retry! (throttled-for-ms clock))
         (do
           (swap! state assoc :running? true)
-          (-> ((fn ^:async f []
-                 (try
-                   (await (run-cycle! dbs clock))
-                   (catch js/Error err
-                     (log/error :tasks/flush-error {:error (str err)}))
-                   (finally
-                    (swap! state assoc :running? false)))))
-              (.catch identity))))))
+          ((fn ^:async f []
+             (try
+               (await (run-cycle! dbs clock))
+               ;; `:default` rather than `js/Error`: a rejected PouchDB call
+               ;; answers with a plain object, which `js/Error` does not catch.
+               (catch :default err
+                 (log/error :tasks/flush-error {:error (error-text err)}))
+               (finally
+                (swap! state assoc :running? false)))))))))
   nil)
 
 
-(defn start!
-  "Start the task runner. The index it queries by is part of `schema`, which
-   the engine installs at start-up."
-  [dbs clock]
-  (reset! state {:enabled? true :dbs dbs :clock clock})
-  (log/info :tasks/starting config)
-  (flush!))
+(defn ^:async start!
+  "Starts the task runner once `loaded` resolves. It first brings the index
+   it selects tasks by up to date, and then runs the tasks that are due. A
+   `stop!` that comes before the runner has started keeps it stopped. When
+   the index cannot be built, the failure is logged and the runner stays
+   stopped: every query of the queue names that index."
+  [dbs clock loaded]
+  (let [starting (js/Object.)
+        current? #(identical? starting (:starting @state))]
+    (reset! state {:starting starting})
+    (try
+      (await loaded)
+      (when (current?)
+        (await (dbs/ensure-index! dbs schema index))
+        (when (current?)
+          (reset! state {:enabled? true :dbs dbs :clock clock})
+          (log/info :tasks/starting config)
+          (flush!)))
+      (catch :default err
+        (log/error :tasks/start-failed {:error (error-text err)})))))
 
 
 (defn stop!

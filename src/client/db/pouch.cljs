@@ -3,12 +3,11 @@
    and replication. Knows no document type of its own — every call carries the
    `schema` of the aggregate it serves, a value the owning adapter declares:
 
-     {:type    \"...\"            ; stored as the document's :type
-      :db      :user/db          ; the database the type lives in
-      :indexes [{:name \"...\" :fields [...]}]}  ; optional
+     {:type \"...\"     ; stored as the document's :type
+      :db   :user/db}  ; the database the type lives in
 
-   `init!` takes every schema the app declares and gives each database its
-   indexes."
+   `init!` opens the databases and builds no index. The code that queries
+   an index builds it with `ensure-index!`."
   (:refer-clojure :exclude [get find remove])
   (:require
    [clojure.string :as str]
@@ -335,46 +334,24 @@
   (db/find-all (database dbs schema) (typed schema query)))
 
 
-(defn- ^:async ensure-index!
-  "Idempotent, so running it on every start is what gives an installation
-   that predates the index its copy. A failure is logged, never raised: a
-   missing index slows queries down, it does not break them."
-  [db {:keys [fields] index-name :name}]
-  (try
-    (await (db/create-index db fields {:name index-name :ddoc index-name}))
-    (catch :default err
-      (log/error :db/index-error {:index index-name :error (str err)}))))
-
-
-(defn indexes-of
-  "The indexes a database with `schemas` needs: every one the schemas
-   declare."
-  [schemas]
-  (mapcat :indexes schemas))
-
-
-(defn ensure-indexes!
-  "Every index in `indexes` (see `indexes-of`) exists on `db`."
-  [db indexes]
-  (js/Promise.all
-   (into-array
-    (map #(ensure-index! db %) indexes))))
+(defn ensure-index!
+  "Creates `index`, `{:name :fields}`, in the database `schema`'s documents
+   live in, or brings it up to date with the documents written since it was
+   last used. That reads every such document, so the caller decides when the
+   cost is paid. The promise rejects when the index cannot be built, because
+   a query that names a missing index fails."
+  [dbs schema {:keys [fields] index-name :name}]
+  (db/create-index (database dbs schema) fields {:name index-name :ddoc index-name}))
 
 
 (defn ^:async init!
-  "Opens the databases and gives each the indexes of the schemas that live
-   in it. Run on every start: that is what gives an existing installation a
-   new index."
-  [schemas]
+  "Opens the databases once their migrations have run. It builds no index:
+   bringing an index up to date reads every document written since it was
+   last used, and memory waits for the databases."
+  []
   (await (db-migrations/ensure-migrated!))
-  (let [dbs {:device/db (device-db)
-             :user/db   (user-db)}]
-    (await (js/Promise.all
-            (into-array
-             (map (fn [[db-key db]]
-                    (ensure-indexes! db (indexes-of (filter #(= db-key (:db %)) schemas))))
-                  dbs))))
-    dbs))
+  {:device/db (device-db)
+   :user/db   (user-db)})
 
 
 (defn ^:async write-latest!

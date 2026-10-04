@@ -1,9 +1,9 @@
 (ns client.support.db-fixtures
   (:require
-   [client.support.schemas :as schemas]
    [clojure.string :as str]
    [db :as db]
-   [db.pouch :as pouch])
+   [db.pouch :as pouch]
+   [tasks :as tasks])
   (:require-macros
    [cljs.test :refer [async]]))
 
@@ -79,16 +79,13 @@
 
 
 (defn- ^:async prepared
-  "A test database carries what `db.pouch/init!` gives the database it
-   stands for at start-up (the indexes of the schemas that live there), so
-   adapters can rely on them here as they do there."
+  "A test database. One that stands for device-db, or for both databases,
+   carries the task queue's index, as device-db has it once the queue has
+   started, so a test can run the queue without starting it."
   [db-name]
-  (let [db  (db/use db-name)
-        own (filter #(if-let [db-key (role db-name)]
-                       (= db-key (:db %))
-                       true)
-                    schemas/all)]
-    (await (pouch/ensure-indexes! db (pouch/indexes-of own)))
+  (let [db (db/use db-name)]
+    (when-not (= :user/db (role db-name))
+      (await (pouch/ensure-index! {:device/db db} tasks/schema tasks/index)))
     db))
 
 
