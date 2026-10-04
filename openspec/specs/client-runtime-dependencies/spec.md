@@ -59,7 +59,8 @@ The client runtime MUST start dependencies in declared order and stop them in re
 
 #### Scenario: Router starts after runtime dependencies
 - **WHEN** the frontend router starts
-- **THEN** app store, migrated PouchDB handle, task runner, dictionary port handle, app capabilities, Nexus dispatch, and rendering are already initialized
+- **THEN** app store, migrated PouchDB handle, the task runner component, dictionary port handle, app capabilities, Nexus dispatch, and rendering are already initialized
+- **AND** the task loop itself begins only once memory is loaded (`specs/task-runner/spec.md`)
 - **AND** route controller effects can read capabilities safely during the first page transition
 
 #### Scenario: Startup failure cleans up partial system

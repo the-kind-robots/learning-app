@@ -34,14 +34,7 @@
    [runtime.system :as system]
    [service-worker]
    [sync]
-   [tasks]
    [use-cases.examples]))
-
-
-(def ^:private schemas
-  "Every document type the app stores: the learner's data, and the task
-   queue's. The engine learns its indexes and routing from this list alone."
-  (conj documents/schemas tasks/schema))
 
 
 (defn ^:async init
@@ -82,7 +75,17 @@
     :identity/incoming     {:start sync/check-incoming-auth!}
 
     :db/pouch              {:after [:identity/incoming]
-                            :start (fn [_] (pouch/init! schemas))}
+                            :start (fn [_] (pouch/init!))}
+
+    ;; The learner's data is read into memory as soon as the databases are
+    ;; open: the read needs no dispatch, and the splash waits for it. The
+    ;; value holds the read's promise under :loaded, for :learner/memory to
+    ;; hand over. A promise returned bare would make every later component
+    ;; wait for the read.
+    :learner/read          {:requires {:db    :db/pouch
+                                       :store :app/store}
+                            :start    (fn [{:keys [db store]}]
+                                        {:loaded (loader/read-memory db store)})}
 
     ;; Starting it asks for every example this device is missing and hands back
     ;; the hook the engine calls when a pass is home, knowing nothing else about
@@ -98,10 +101,12 @@
     ;; After :sync/identity, not beside it: that component writes the auth
     ;; cookie, and the first task off the queue may be an example fetch, which
     ;; the backend answers 401 without it. Same layer meant that race was a
-    ;; coin toss on every boot.
+    ;; coin toss on every boot. The runner itself starts once memory is
+    ;; loaded, so that the queue's queries do not compete with the load.
     :worker/task-runner    {:after    [:sync/identity]
-                            :requires {:db    :db/pouch
-                                       :clock :port/clock}
+                            :requires {:clock   :port/clock
+                                       :db      :db/pouch
+                                       :learner :port/learner}
                             :start    task-queue/start!
                             :stop     task-queue/stop!}
 
@@ -170,14 +175,14 @@
                                           {:dispatch #(dispatch {} %)}))}
 
     ;; The learner's data, kept in the store as a projection of the local
-    ;; databases (ADR-0016). Starting returns at once; the load runs on
-    ;; behind the splash, and the screen asked for is shown when it
-    ;; completes.
+    ;; databases (ADR-0016). Starting returns at once. When the read
+    ;; completes, memory is handed over and the screen asked for is shown.
     :learner/memory        {:requires {:db     :db/pouch
+                                       :read   :learner/read
                                        :render :app/render
                                        :store  :app/store}
-                            :start    (fn [{:keys [db render store]}]
-                                        (loader/start! db store (:dispatch render))
+                            :start    (fn [{:keys [db read render store]}]
+                                        (loader/start! db store (:loaded read) (:dispatch render))
                                         nil)}
 
     :pwa/init              {:requires {:render :app/render}

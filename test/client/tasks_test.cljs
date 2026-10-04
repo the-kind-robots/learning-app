@@ -3,8 +3,13 @@
    [client.support.test :refer [async-testing]])
   (:require
    [client.support.db-fixtures :as db-fixtures]
+   [client.support.db-queries :as db-queries]
+   [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
+   [db-migrations :as db-migrations]
+   [db.pouch :as pouch]
+   [ports.task-queue :as task-queue]
    [tasks :as sut]
    [utils :as utils]))
 
@@ -12,9 +17,19 @@
 (def test-db-name (db-fixtures/db-name "client.tasks-test"))
 
 
+(def user-db-name
+  "user-db for the tests that open the databases the way the app does."
+  (db-fixtures/db-name "client.tasks-test.app-user"))
+
+
+(def device-db-name
+  "device-db for the tests that open the databases the way the app does."
+  (db-fixtures/db-name "client.tasks-test.app-device"))
+
+
 (use-fixtures
  :each
- (db-fixtures/db-fixture test-db-name)
+ (db-fixtures/db-fixture-multi [test-db-name user-db-name device-db-name])
  {:before (fn [] (reset! @#'sut/state {:enabled? true}))
   :after  sut/stop!})
 
@@ -322,3 +337,129 @@
          (is (= 12 (count @throttled-runs))
              "after the wait the queue resumes on its own and runs everything, the throttled task included")
          (is (empty? (await (get-tasks-by-type device-db "throttle-once-task")))))))))
+
+
+(defn- deferred
+  "A promise and the function that resolves it."
+  []
+  (let [resolve (atom nil)]
+    {:promise (js/Promise. #(reset! resolve %))
+     :resolve #(@resolve nil)}))
+
+
+(defn- ^:async with-app-dbs
+  "Calls `f` with a user-db and a device-db of their own, the runner
+   stopped, and the browser reporting that it is online."
+  [f]
+  (reset! @#'sut/state {})
+  (with-redefs [sut/online? (constantly true)]
+    (await (f {:device/db (db/use device-db-name)
+               :user/db   (db/use user-db-name)}))))
+
+
+(defn- start-runner!
+  "Starts the runner as the app does, with memory loaded once `loaded`
+   resolves."
+  [dbs loaded]
+  (task-queue/start! {:clock   (test-clock)
+                      :db      dbs
+                      :learner {:learner/loaded (constantly loaded)}}))
+
+
+(deftest the-queue-index-is-built-once-memory-is-loaded
+  (async-testing "start builds no index; the runner builds its own once memory is loaded, in device-db only"
+    (await
+     (with-app-dbs
+      (^:async fn
+       [{device :device/db user :user/db}]
+       (with-redefs [db/use #(case %
+                               "user-db"   user
+                               "device-db" device)
+                     db-migrations/ensure-migrated! #(js/Promise.resolve nil)]
+         (let [dbs (await (pouch/init!))
+               {:keys [promise resolve]} (deferred)]
+           (is (empty? (await (db-queries/index-names user))) "user-db has no index after start")
+           (is (empty? (await (db-queries/index-names device))) "device-db has no index after start")
+           (start-runner! dbs promise)
+           ;; Nothing is expected to happen here, so there is nothing to wait
+           ;; for but time.
+           (await (sleep 200))
+           (is (empty? (await (db-queries/index-names device))) "no index while memory loads")
+           (is (not (:enabled? @@#'sut/state)) "the runner waits while memory loads")
+           (resolve)
+           (await (wait/until #(:enabled? @@#'sut/state)))
+           (is (= #{"by-type-run-at-created-at"} (await (db-queries/index-names device))))
+           (is (empty? (await (db-queries/index-names user))) "user-db still has no index"))))))))
+
+
+(deftest a-due-task-waits-until-memory-is-loaded
+  (async-testing "the runner starts a due task only once memory is loaded"
+    (await
+     (with-app-dbs
+      (^:async fn
+       [{device :device/db :as dbs}]
+       (reset! handled-tasks [])
+       (await (sut/create-tasks! dbs (test-clock) "tracking-task" [{:id "tracking-task:due" :data {}}]))
+       (let [{:keys [promise resolve]} (deferred)]
+         (start-runner! dbs promise)
+         ;; Nothing is expected to happen here either.
+         (await (sleep 200))
+         (is (empty? @handled-tasks) "no task runs while memory loads")
+         (resolve)
+         (await (wait/until #(and (seq @handled-tasks) (not (:running? @@#'sut/state)))))
+         (is (= ["tracking-task:due"] @handled-tasks))
+         (is (empty? (await (get-docs device))) "the task ran and is gone")))))))
+
+
+(deftest a-stop-before-the-runner-has-started-keeps-it-stopped
+  (async-testing "a stop while memory loads, or while the index is built: the runner stays stopped"
+    (await
+     (with-app-dbs
+      (^:async fn
+       [dbs]
+       (loop [cases [{:label "while memory loads" :loaded-before-stop? false}
+                     {:label "while the index is built" :loaded-before-stop? true}]]
+         (when-let [[{:keys [label loaded-before-stop?]} & more] (seq cases)]
+           (let [memory (deferred)
+                 index  (deferred)
+                 asked  (atom 0)]
+             (with-redefs [pouch/ensure-index! (fn [_dbs _schema _index]
+                                                 (swap! asked inc)
+                                                 (:promise index))]
+               (start-runner! dbs (:promise memory))
+               (when loaded-before-stop?
+                 ((:resolve memory))
+                 (await (wait/until #(pos? @asked))))
+               (sut/stop!)
+               ((:resolve memory))
+               ((:resolve index))
+               (await (wait/settled))
+               (is (not (:enabled? @@#'sut/state)) label)
+               (when-not loaded-before-stop?
+                 (is (zero? @asked) (str label ": no index is built")))))
+           (recur more))))))))
+
+
+(deftest a-failed-index-build-keeps-the-runner-stopped
+  (async-testing "the index cannot be built: the runner stays stopped"
+    (await
+     (with-app-dbs
+      (^:async fn
+       [dbs]
+       (with-redefs [pouch/ensure-index! (fn [_dbs _schema _index] (js/Promise.reject (js/Error. "quota")))]
+         (start-runner! dbs (js/Promise.resolve nil))
+         (await (wait/settled)))
+       (is (not (:enabled? @@#'sut/state))))))))
+
+
+(deftest a-flush-survives-a-rejection-that-is-not-an-error
+  (async-testing "a query that rejects with a plain object ends the cycle, and the queue can run again"
+    (await
+     (with-app-dbs
+      (^:async fn
+       [dbs]
+       (reset! @#'sut/state {:enabled? true :dbs dbs :clock (test-clock)})
+       (with-redefs [sut/fetch-due-tasks (fn [& _] (js/Promise.reject #js {:error "no_usable_index"}))]
+         (sut/flush!)
+         (await (wait/until #(not (:running? @@#'sut/state)))))
+       (is (:enabled? @@#'sut/state)))))))

@@ -3,6 +3,7 @@
    [client.support.test :refer [async-testing]])
   (:require
    [client.support.db-fixtures :as db-fixtures]
+   [client.support.db-queries :as db-queries]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [db.pouch :as sut]
@@ -60,23 +61,22 @@
          (await (sync-pass! local remote))
          (let [local-ids  (await (ids local))
                remote-ids (await (ids remote))]
-           (is (contains? local-ids "_design/by-type"))
+           (is (contains? local-ids "_design/by-type-run-at-created-at"))
            (is (contains? local-ids "vocab:katze"))
            (is (not (contains? local-ids "_design/remote-only")))
            (is (contains? remote-ids "vocab:hund"))
            (is (empty? (filter #(re-find #"^_design/" %) (disj remote-ids "_design/remote-only"))))))))))
 
 
-(deftest a-schema-gives-its-database-indexes
+(deftest a-test-database-has-the-queue-index-only
   (async-testing
-    "the fixture installs the engine's index and every declared one, and no other"
+    "the fixture installs the task queue's index, and no other"
     (db-fixtures/with-test-db
       local-name
       (^:async fn
        [local]
-       (let [{:keys [indexes]} (js->clj (await (.getIndexes ^js local)) :keywordize-keys true)
-             names (set (map :name indexes))]
-         (is (contains? names "by-type") "the engine's own index")
+       (let [names (await (db-queries/index-names local))]
+         (is (not (contains? names "by-type")) "the engine adds no index of its own")
          (is (contains? names "by-type-run-at-created-at") "the task queue's")
          (is (not (contains? names "by-type-word-id"))
              "memory answers a word's reviews and examples; no index is kept for them"))))))

@@ -333,30 +333,39 @@
             (set! pouch/read-docs read)))))))))
 
 
+(defn- failing-once
+  "`f`, except that its first call rejects as a locked database would."
+  [f]
+  (let [failed? (atom false)]
+    (fn [& args]
+      (if @failed?
+        (apply f args)
+        (do (reset! failed? true)
+            (js/Promise.reject (js/Error. "locked")))))))
+
+
 (deftest a-failed-read-at-start-says-so-and-is-tried-again
-  (async-testing "the first read fails: the splash says so, and the load goes on once the read succeeds"
+  (async-testing "a step of the read fails once: the splash says so, and the whole read runs again"
     (await
      (with-dbs
       (^:async fn
        [dbs]
        (await (db/insert (:user/db dbs) hund))
-       (let [store   (atom {})
-             seq-of  pouch/update-seq
-             failed? (atom false)]
-         (set! pouch/update-seq
-               (fn [dbs db-key]
-                 (if @failed?
-                   (seq-of dbs db-key)
-                   (do (reset! failed? true)
-                       (js/Promise.reject (js/Error. "locked"))))))
-         (try
-           (let [stop (await (loader/start! dbs store (learner/store-dispatch store)))]
-             (is (true? (:learner/read-failed? @store)))
-             (is (true? (:learner/loaded? @store)))
-             (is (some? (stored-word store "vocab:der hund")))
-             (stop))
-           (finally
-            (set! pouch/update-seq seq-of)))))))))
+       (loop [steps
+              [{:step "the feed positions" :original pouch/update-seq :stub! #(set! pouch/update-seq %)}
+               {:step "what was stored meanwhile" :original pouch/read-changes :stub! #(set! pouch/read-changes %)}]]
+         (when-let [[{:keys [step original stub!]} & more] (seq steps)]
+           (let [store (atom {})]
+             (stub! (failing-once original))
+             (try
+               (let [stop (await (loader/start! dbs store (learner/store-dispatch store)))]
+                 (is (true? (:learner/read-failed? @store)) step)
+                 (is (true? (:learner/loaded? @store)) step)
+                 (is (some? (stored-word store "vocab:der hund")) step)
+                 (stop))
+               (finally
+                (stub! original))))
+           (recur more))))))))
 
 
 (deftest a-write-does-not-wait-for-the-feed

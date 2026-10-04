@@ -39,8 +39,7 @@ async function seedVocabulary(page) {
 }
 
 // Memory is loaded when the metrics say so (a development build). The first
-// start after the seed builds PouchDB's indexes over every document, which
-// takes tens of seconds on its own.
+// start after the seed reads every document the seed wrote.
 const memoryReady = (page) => page.waitForFunction(
   () => typeof window.__metrics === 'function' && window.__metrics().memory['ready-ms'],
   null,

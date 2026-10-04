@@ -154,9 +154,10 @@
 
 
 (defn memory-ready!
-  "Closes it: `:memory {:load-ms :ready-ms}`, the load itself and how long
-   after navigation start memory was ready — the moment a screen opened
-   before it fills in."
+  "Closes it: `:memory {:load-ms :ready-ms}`. `:load-ms` is how long the
+   read took, retries included, and `:ready-ms` is how long after
+   navigation start memory was built. The wait for the screens to exist
+   before memory is handed over counts in neither."
   []
   (let [^js measure (try
                       (.measure js/performance "memory-ready" "memory-start")

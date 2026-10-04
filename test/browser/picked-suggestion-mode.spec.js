@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { openHome } = require('./service-worker.shared');
 
 // GH-358: picking a suggestion used to freeze the mode for the rest of the
 // edit, so a phrase typed onto a picked word was saved as a word. The pick
@@ -22,13 +23,11 @@ const valueField = (page) => page.locator('#new-word-value');
 const panelTitle = (page, name) => page.getByRole('heading', { name });
 
 test('typing on from a picked suggestion switches the form to phrase mode', async ({ page }) => {
-  await page.goto('/home');
+  await openHome(page);
 
   const field = valueField(page);
   await expect(field).toBeVisible();
 
-  // The dictionary lives in a Worker that fetches and imports SQLite; a
-  // suggestion appearing is the only honest signal that it is ready.
   await field.pressSequentially('Haus');
   const picked = options(page).filter({ hasText: 'das Haus' }).first();
   await expect(picked).toBeVisible();

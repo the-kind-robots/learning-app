@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { openHome } = require('./service-worker.shared');
 
 // The phone half of the add-form stability specs (GH-289), rewritten for the
 // list in flow (GH-373). Runs in the `mobile` project only: at 390x844 the
@@ -133,7 +134,7 @@ const flushObservers = (page) =>
   );
 
 test('the suggestion list fits its rows and pushes the form no further', async ({ page }) => {
-  await page.goto('/home');
+  await openHome(page);
 
   const field = valueField(page);
 
@@ -148,11 +149,9 @@ test('the suggestion list fits its rows and pushes the form no further', async (
 
   const restingSubmitY = await topOf(submitButton(page));
 
-  // The dictionary lives in a Worker that fetches and imports SQLite, and the
-  // only honest signal that it finished is a suggestion appearing. Warm up on
-  // another word, then wait for the list to fold back — the submit button
-  // returning to its resting y is the end of the collapse — so the measured
-  // window starts with the page genuinely at rest.
+  // Warm up on another word, then wait for the list to fold back — the
+  // submit button returning to its resting y is the end of the collapse — so
+  // the measured window starts with the page genuinely at rest.
   //
   // Deliberately no reload in between: it costs a fresh worker and another
   // trip through the pool lock for nothing this spec measures. (It used to
