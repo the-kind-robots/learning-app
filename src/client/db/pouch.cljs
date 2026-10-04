@@ -95,71 +95,153 @@
   (pages (db-key dbs) range))
 
 
-(defn ^:async update-seq
-  "Where the change feed of `db-key` stands now. When this is read before
-   the documents, a feed followed from here misses nothing written in
+(defn- js-change->position
+  "The feed position of a change PouchDB reports: `{:id :rev :seq}`, its
+   sequence and the id and winning revision of its document. The id and
+   revision tell this change apart from another one that a database stores
+   at the same sequence after it lost its last writes."
+  [^js change]
+  {:id (.-id change) :rev (.-rev (aget (.-changes change) 0)) :seq (.-seq change)})
+
+
+(defn ^:async feed-position
+  "Where the change feed of `db-key` stands now: the position of its last
+   change, or `{:seq 0}` when it has none. When this is read before the
+   documents, a feed followed from here misses nothing written in
    between."
   [dbs db-key]
-  (let [^js info (await (.info ^js (db-key dbs)))]
-    (.-update_seq info)))
+  (let [^js answer (await (.changes ^js (db-key dbs) #js {:descending true :limit 1}))]
+    (if-let [change (aget (.-results answer) 0)]
+      (js-change->position change)
+      {:seq 0})))
+
+
+(defn ^:async holds-position?
+  "Whether `db-key` still holds the change at `position`. When a change sits
+   at that sequence, it must be the same document at the same revision.
+   When none does any more, because a later change of the document
+   replaced it, the database must still know that revision. A database
+   that lost its last writes and stored other changes under their
+   sequences fails both."
+  [dbs db-key {:keys [id rev seq] :as position}]
+  (let [^js db (db-key dbs)]
+    (or (zero? seq)
+        (let [^js change (aget (.-results (await (.changes db #js {:limit 1 :since (dec seq)}))) 0)]
+          (if (and change (= seq (.-seq change)))
+            (= position (js-change->position change))
+            (empty? (js-keys (await (.revsDiff db (js-obj id #js [rev]))))))))))
+
+
+(defn- js-change->change
+  "A change PouchDB reports with its document, as `{:doc :position}`."
+  [^js change]
+  {:doc (db/couch->clj (.-doc change)) :position (js-change->position change)})
 
 
 (defn ^:async read-changes
-  "Reads once what `db-key` stored after `since`. Resolves with `{:docs
-   [...] :position seq}`: the documents that changed, in the order stored —
-   a deleted one as `{:_id .. :_rev .. :_deleted true}` — and the feed's
-   sequence after them."
-  [dbs db-key since]
-  (let [^js answer (await (.changes ^js (db-key dbs) #js {:include_docs true :since since}))]
-    {:docs     (mapv #(db/couch->clj (.-doc ^js %)) (.-results answer))
-     :position (.-last_seq answer)}))
+  "Reads what `db-key` stored after the sequence `since`: at most `limit`
+   changes, or all of them when `limit` is nil. Resolves with each change
+   in the order stored, as `{:doc :position}`: its document — a deleted one
+   as `{:_id .. :_rev .. :_deleted true}` — and its feed position."
+  [dbs db-key since limit]
+  (let [options    (cond-> #js {:include_docs true :since since}
+                     limit (doto (aset "limit" limit)))
+        ^js answer (await (.changes ^js (db-key dbs) options))]
+    (mapv js-change->change (.-results answer))))
 
 
 (defn follow-changes
-  "Calls `f` with the documents `db-key` stores after `since`, in the order
-   it stores them: one call per batch of changes that arrive together. A
-   deleted document arrives as `{:_id .. :_rev .. :_deleted true}`.
+  "Calls `f` with the documents `db-key` stores after the sequence `since`,
+   in the order it stores them, and the position of the last of them: one
+   call per batch of changes that arrive together. A deleted document
+   arrives as `{:_id .. :_rev .. :_deleted true}`.
 
    PouchDB can drop a change from a live feed without reporting it, and a
    started feed reports no failure. So this also returns a way to catch up:
    `:catch-up!` reads once what was stored after the last change handed to
-   `f`, hands it to `f`, and resolves once it has. A change handed over twice
-   is the same document twice. `:stop!` stops following."
+   `f`, hands it to `f`, and resolves once it has. Calls made while a
+   catch-up reads share one more read after it, which starts once that one
+   is done. `:stop!` stops following.
+
+   Only changes after the last change handed over reach `f`. A catch-up and
+   the live feed read the same log apart, and either can answer first; a
+   change at or below that sequence is one `f` has had, or one a later
+   change of the same document has replaced."
   [dbs db-key since f]
-  (let [position (volatile! since)
-        batch    (volatile! [])
-        stopped? (volatile! false)
-        handed!  (fn [docs last-seq]
-                   (when (and (seq docs) (not @stopped?))
-                     ;; A catch-up can hand over changes the feed brings
-                     ;; later; the position only moves forward.
-                     (vswap! position max last-seq)
-                     (f docs)))
-        flush!   (fn []
-                   (let [changes @batch]
-                     (vreset! batch [])
-                     (when (seq changes)
-                       (handed! (mapv :doc changes) (:seq (peek changes))))))
-        feed     (doto ^js (.changes ^js (db-key dbs) #js {:include_docs true :live true :since since})
-                   (.on "change"
-                        (fn [^js change]
-                          ;; A batch is what arrives before the next task:
-                          ;; PouchDB emits the changes of one write, such as
-                          ;; a replicated batch or a bulk write, one after
-                          ;; another. The first change of a batch schedules
-                          ;; its flush.
-                          (when (empty? @batch)
-                            (js/setTimeout flush! 0))
-                          (vswap! batch conj {:doc (db/couch->clj (.-doc change)) :seq (.-seq change)})))
-                   (.on "error"
-                        (fn [err]
-                          (log/error :db/follow-failed {:db db-key :error (str err)}))))]
-    {:catch-up! (fn ^:async catch-up! []
-                  (let [{:keys [docs position]} (await (read-changes dbs db-key @position))]
-                    (handed! docs position)))
+  (let [handed-seq (volatile! since)
+        batch      (volatile! [])
+        stopped?   (volatile! false)
+        reading    (volatile! nil)
+        next-read  (volatile! nil)
+        handed!    (fn [changes]
+                     (let [fresh (filterv #(> (:seq (:position %)) @handed-seq) changes)]
+                       (when (and (seq fresh) (not @stopped?))
+                         (vreset! handed-seq (:seq (:position (peek fresh))))
+                         (f (mapv :doc fresh) (:position (peek fresh))))))
+        flush!     (fn []
+                     (let [changes @batch]
+                       (vreset! batch [])
+                       (handed! changes)))
+        read!      (fn []
+                     (vreset! reading
+                              (-> (read-changes dbs db-key @handed-seq nil)
+                                  (.then handed!)
+                                  (.finally #(vreset! reading nil)))))
+        catch-up!  (fn catch-up! []
+                     (cond
+                       @next-read @next-read
+                       @reading   (vreset! next-read
+                                           (-> @reading
+                                               (.catch (fn [_]))
+                                               (.then (fn []
+                                                        (vreset! next-read nil)
+                                                        (read!)))))
+                       :else      (read!)))
+        feed       (doto ^js (.changes ^js (db-key dbs) #js {:include_docs true :live true :since since})
+                     (.on "change"
+                          (fn [^js change]
+                            ;; A batch is what arrives before the next task:
+                            ;; PouchDB emits the changes of one write, such as
+                            ;; a replicated batch or a bulk write, one after
+                            ;; another. The first change of a batch schedules
+                            ;; its flush. A change already handed over is not
+                            ;; converted at all.
+                            (when (> (.-seq change) @handed-seq)
+                              (when (empty? @batch)
+                                (js/setTimeout flush! 0))
+                              (vswap! batch conj (js-change->change change)))))
+                     (.on "error"
+                          (fn [err]
+                            (log/error :db/follow-failed {:db db-key :error (str err)}))))]
+    {:catch-up! catch-up!
      :stop!     (fn stop! []
                   (vreset! stopped? true)
                   (.cancel feed))}))
+
+
+(def marker-id
+  "The local document that holds a database's marker. Local documents do
+   not replicate and do not move the change feed."
+  "_local/database-marker")
+
+
+(defn ^:async marker
+  "The marker of `db-key`: a random id that tells this database apart from
+   one that was re-created or cleared under the same name. It is created
+   the first time it is asked for. When another tab creates it at the same
+   moment, the one stored first is the marker."
+  [dbs db-key]
+  (let [db   (db-key dbs)
+        read (fn ^:async read [] (:marker (await (db/get db marker-id))))]
+    (or (await (read))
+        (let [made (str (random-uuid))]
+          (try
+            (await (db/insert db {:_id marker-id :marker made}))
+            made
+            (catch :default err
+              (if (db/conflict? err)
+                (await (read))
+                (throw err))))))))
 
 
 (defn user-doc?

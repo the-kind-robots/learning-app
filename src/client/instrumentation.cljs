@@ -154,18 +154,21 @@
 
 
 (defn memory-ready!
-  "Closes it: `:memory {:load-ms :ready-ms}`. `:load-ms` is how long the
-   read took, retries included, and `:ready-ms` is how long after
-   navigation start memory was built. The wait for the screens to exist
-   before memory is handed over counts in neither."
-  []
+  "Closes it: `:memory {:from :load-ms :ready-ms}`. `:from` is where memory
+   came from, `:snapshot` or `:databases` (ADR-0018). `:load-ms` is how long
+   the read took from the snapshot check on, retries and a dropped
+   snapshot included, and `:ready-ms` is how long after navigation start
+   memory was built. The wait for the screens to exist before memory is
+   handed over counts in neither."
+  [from]
   (let [^js measure (try
                       (.measure js/performance "memory-ready" "memory-start")
                       (catch :default _ nil))]
     (when measure
       (swap! metrics assoc
         :memory
-        {:load-ms  (.-duration measure)
+        {:from     from
+         :load-ms  (.-duration measure)
          :ready-ms (.now js/performance)}))))
 
 

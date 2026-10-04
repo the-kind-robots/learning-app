@@ -22,7 +22,7 @@ test('an asset that failed once is fetched again, not served from cache', async 
   // Precached at install, so it has to leave the bucket before the worker
   // will go to the network for it.
   await page.evaluate(async (path) => {
-    const [bucket] = await caches.keys();
+    const bucket = (await caches.keys()).find((key) => key.startsWith('shell-'));
     await (await caches.open(bucket)).delete(path);
   }, ASSET);
 

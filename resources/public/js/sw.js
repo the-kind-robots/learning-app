@@ -3,9 +3,10 @@
 //   const SW_VERSION="abcd1234";
 //   const PRECACHE_URLS=["/","/css/styles.css", ...];
 //
-// SW_VERSION doubles as the cache bucket name. Each deploy gets a fresh bucket;
-// the activate handler deletes every bucket whose name isn't SW_VERSION, so
-// stale assets from old deployments are evicted automatically.
+// SW_VERSION names the cache bucket, BUCKET below. Each deploy gets a fresh
+// bucket; the activate handler deletes the worker's other buckets, so stale
+// assets from old deployments are evicted automatically. Caches the page
+// keeps for itself are not the worker's, and stay.
 //
 // PRECACHE_URLS is the static app shell, derived from the files under
 // resources/public rather than typed out here: whole directories that hold
@@ -53,9 +54,15 @@ function dictionaryManifestRequest(request, url) {
     && url.pathname === DICTIONARY_MANIFEST_URL;
 }
 
+// Every bucket this worker creates carries BUCKET_PREFIX. Builds before the
+// prefix named their bucket by the bare version, eight hex digits.
+const BUCKET_PREFIX = "shell-";
+const BUCKET = BUCKET_PREFIX + SW_VERSION;
+const workerBucket = key => key.startsWith(BUCKET_PREFIX) || /^[0-9a-f]{8}$/.test(key);
+
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(SW_VERSION).then(cache =>
+    caches.open(BUCKET).then(cache =>
       // { cache: "reload" } bypasses the HTTP cache so precached assets are
       // always fresh at install time, not served from a stale browser cache.
       cache.addAll(PRECACHE_URLS.map(url => new Request(url, { cache: "reload" })))
@@ -80,7 +87,9 @@ self.addEventListener("message", event => {
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== SW_VERSION).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys
+        .filter(k => workerBucket(k) && k !== BUCKET)
+        .map(k => caches.delete(k))))
       // claim() takes control of already-open tabs immediately, without waiting
       // for them to reload — so they get the new SW's fetch handler right away.
       .then(() => self.clients.claim())
@@ -96,7 +105,7 @@ async function keep(key, response) {
   // Clone now, before the first await: a body is read once, and the original
   // goes to the page, which may start reading it while the cache opens.
   const copy = response.clone();
-  const cache = await caches.open(SW_VERSION);
+  const cache = await caches.open(BUCKET);
   await cache.put(key, copy);
 }
 

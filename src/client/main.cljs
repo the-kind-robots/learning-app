@@ -78,22 +78,25 @@
                             :start (fn [_] (pouch/init!))}
 
     ;; The learner's data is read into memory as soon as the databases are
-    ;; open: the read needs no dispatch, and the splash waits for it. The
-    ;; value holds the read's promise under :loaded, for :learner/memory to
-    ;; hand over. A promise returned bare would make every later component
-    ;; wait for the read.
+    ;; open: the read needs no dispatch, and the splash waits for it;
+    ;; :learner/memory hands it over. The value holds, under :checked, a
+    ;; promise of the snapshot check (ADR-0018), which resolves with nil. A
+    ;; promise returned bare would make every later component wait for it.
     :learner/read          {:requires {:db    :db/pouch
                                        :store :app/store}
                             :start    (fn [{:keys [db store]}]
-                                        {:loaded (loader/read-memory db store)})}
+                                        {:checked (loader/start-reading! db store)})}
 
     ;; Starting it asks for every example this device is missing and hands back
     ;; the hook the engine calls when a pass is home, knowing nothing else about
     ;; it. A component of its own, with its ports named again rather than taken
     ;; from :app/capabilities, because that one already depends on
-    ;; :sync/identity — which is what needs the hook.
-    :sync/identity         {:requires {:db :db/pouch}
-                            :start    sync/start!
+    ;; :sync/identity — which is what needs the hook. Its passes wait for the
+    ;; snapshot check (ADR-0018); the components after it do not.
+    :sync/identity         {:requires {:db   :db/pouch
+                                       :read :learner/read}
+                            :start    (fn [{:keys [db read]}]
+                                        (sync/start! {:db db :passes-wait-for (:checked read)}))
                             :stop     sync/stop!}
 
     :port/clock            {:start clock/start!}
@@ -114,8 +117,8 @@
                             :start    dictionary/start!}
 
     ;; The learner's data for the use cases: memory to read, and every
-    ;; write. A write changes the document PouchDB holds and reads what it
-    ;; wrote back into memory.
+    ;; write. A write changes the document PouchDB holds and catches memory
+    ;; up with user-db's change log (ADR-0019).
     :port/learner          {:requires {:clock :port/clock
                                        :db    :db/pouch
                                        :store :app/store}
@@ -177,12 +180,12 @@
     ;; The learner's data, kept in the store as a projection of the local
     ;; databases (ADR-0016). Starting returns at once. When the read
     ;; completes, memory is handed over and the screen asked for is shown.
-    :learner/memory        {:requires {:db     :db/pouch
-                                       :read   :learner/read
+    :learner/memory        {:after    [:learner/read]
+                            :requires {:db     :db/pouch
                                        :render :app/render
                                        :store  :app/store}
-                            :start    (fn [{:keys [db read render store]}]
-                                        (loader/start! db store (:loaded read) (:dispatch render))
+                            :start    (fn [{:keys [db render store]}]
+                                        (loader/start! db store (:dispatch render))
                                         nil)}
 
     :pwa/init              {:requires {:render :app/render}

@@ -9,6 +9,7 @@
    [adapters.learner.memory :as memory]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
+   [client.support.document :as document]
    [client.support.learner :as learner]
    [client.support.time :as time]
    [client.support.wait :as wait]
@@ -95,7 +96,12 @@
         (await (db/insert (:user/db dbs) (assoc stored :value "der Pudel"))))
       (let [written (await ((:learner/update-word! learner) "vocab:der hund" #(update % :value str "!")))]
         (is (= "der Pudel!" (:value written) (:value (await (db/get (:user/db dbs) "vocab:der hund")))))
-        (is (= "der Pudel!" (:value (stored-word store "vocab:der hund")))))))))
+        (is (= "der Pudel!" (:value (stored-word store "vocab:der hund"))))
+        ;; The feed's batch with "der Pudel", read before the write, comes
+        ;; after it and changes nothing.
+        (await (wait/settled))
+        (is (= "der Pudel!" (:value (stored-word store "vocab:der hund")))
+            "the older revision does not come back"))))))
 
 
 (deftest a-write-goes-to-the-winner-of-a-conflict
@@ -352,7 +358,7 @@
        [dbs]
        (await (db/insert (:user/db dbs) hund))
        (loop [steps
-              [{:step "the feed positions" :original pouch/update-seq :stub! #(set! pouch/update-seq %)}
+              [{:step "the feed positions" :original pouch/feed-position :stub! #(set! pouch/feed-position %)}
                {:step "what was stored meanwhile" :original pouch/read-changes :stub! #(set! pouch/read-changes %)}]]
          (when-let [[{:keys [step original stub!]} & more] (seq steps)]
            (let [store (atom {})]
@@ -368,15 +374,67 @@
            (recur more))))))))
 
 
-(deftest a-write-does-not-wait-for-the-feed
-  (async-testing "with the change feeds stopped, a write resolves and memory has it"
+(defn- catch-up-only-feeds
+  "A stand-in for `db.pouch/follow-changes` whose live feed reports
+   nothing, so a change reaches memory only through a catch-up: it reads
+   the change log and hands on what it read."
+  [dbs db-key since f]
+  (let [handed-seq (volatile! since)]
+    {:catch-up! (fn ^:async catch-up! []
+                  (when-let [changes (seq (await (pouch/read-changes dbs db-key @handed-seq nil)))]
+                    (let [position (:position (last changes))]
+                      (vreset! handed-seq (:seq position))
+                      (f (mapv :doc changes) position))))
+     :stop!     (fn [])}))
+
+
+(defn- ^:async with-catch-up-only-feeds
+  "Calls `f` with the change feeds replaced by `catch-up-only-feeds` for
+   the time of the promise `f` returns."
+  [f]
+  (let [follow pouch/follow-changes]
+    (set! pouch/follow-changes catch-up-only-feeds)
+    (try
+      (await (f))
+      (finally
+       (set! pouch/follow-changes follow)))))
+
+
+(deftest every-write-is-in-memory-when-it-resolves
+  (async-testing "with live feeds that report nothing, no write waits for them, and its own catch-up puts it in memory"
+    (with-catch-up-only-feeds
+     #(with-learner
+       [hund tiere]
+       (^:async fn
+        [{:keys [learner store]}]
+        (let [memory (fn [] (:learner/memory @store))]
+          (await ((:learner/update-word! learner) "vocab:der hund" (fn [word] (assoc word :value "der Hund!"))))
+          (is (= "der Hund!" (:value (memory/word (memory) "vocab:der hund"))) "an edited word")
+          (await ((:learner/add-word! learner)
+                  {:id "vocab:die katze" :kind :word :translation [{:lang "ru" :value "кошка"}] :value "die Katze"}))
+          (is (some? (memory/word (memory) "vocab:die katze")) "an added word")
+          (await ((:learner/add-review! learner) "vocab:die katze" true "кошка"))
+          (is (= 1 (count (:ids (memory/review-history (memory) "vocab:die katze")))) "a review")
+          (let [{:keys [id]} (await ((:learner/create-collection! learner) "Haus"))]
+            (is (= "Haus" (:name (memory/collection (memory) id))) "a new collection, so its name is taken"))
+          (await ((:learner/delete-collection! learner) "coll-tiere"))
+          (is (nil? (memory/collection (memory) "coll-tiere")) "a deleted collection")
+          (await ((:learner/delete-word! learner) "vocab:der hund"))
+          (is (nil? (memory/word (memory) "vocab:der hund")) "a deleted word")))))))
+
+
+(deftest a-write-does-not-depend-on-device-db
+  (async-testing "with device-db's change log failing, a word is added and memory has it"
     (with-learner
      [hund]
      (^:async fn
-      [{:keys [learner stop store]}]
-      (stop)
-      (await ((:learner/update-word! learner) "vocab:der hund" #(assoc % :value "der Hund!")))
-      (is (= "der Hund!" (:value (stored-word store "vocab:der hund"))))))))
+      [{:keys [dbs learner store]}]
+      (set! (.-changes ^js (:device/db dbs)) (fn [& _] (js/Promise.reject (js/Error. "aborted"))))
+      (let [{:keys [created?]} (await ((:learner/add-word! learner)
+                                       {:id "vocab:die katze" :kind :word :translation [{:lang "ru" :value "кошка"}] :value "die Katze"}))]
+        (is (true? created?))
+        (is (some? (stored-word store "vocab:die katze"))))
+      (js/Reflect.deleteProperty (:device/db dbs) "changes")))))
 
 
 (deftest a-delete-refused-twice-leaves-the-word-as-it-was
@@ -399,34 +457,20 @@
 
 (deftest a-change-the-feed-dropped-is-caught-when-the-page-is-shown-again
   (async-testing "a write no feed reported is in memory once the page becomes visible"
-    (let [document (doto (js/EventTarget.) (aset "visibilityState" "visible"))
-          follow   pouch/follow-changes]
-      ;; A page with a document, and change feeds that report nothing; only
-      ;; catching up reads.
-      (set! (.-document js/globalThis) document)
-      (set! pouch/follow-changes
-            (fn [dbs db-key since f]
-              (let [position (volatile! since)]
-                {:catch-up! (fn ^:async catch-up! []
-                              (let [{:keys [docs] read-to :position} (await (pouch/read-changes dbs db-key @position))]
-                                (vreset! position read-to)
-                                (when (seq docs) (f docs))))
-                 :stop!     (fn [])})))
-      (try
-        (await
-         (with-learner
-          []
-          (^:async fn
-           [{:keys [dbs store]}]
-           (await (db/insert (:user/db dbs) hund))
-           (await (wait/settled))
-           (is (nil? (stored-word store "vocab:der hund")) "the premise: nothing brought it")
-           (.dispatchEvent document (js/Event. "visibilitychange"))
-           (await (wait/until #(stored-word store "vocab:der hund")))
-           (is (some? (stored-word store "vocab:der hund"))))))
-        (finally
-          (set! pouch/follow-changes follow)
-          (js/Reflect.deleteProperty js/globalThis "document"))))))
+    (document/with-document
+     (fn [document]
+       (with-catch-up-only-feeds
+        (fn []
+          (with-learner
+           []
+           (^:async fn
+            [{:keys [dbs store]}]
+            (await (db/insert (:user/db dbs) hund))
+            (await (wait/settled))
+            (is (nil? (stored-word store "vocab:der hund")) "the premise: nothing brought it")
+            (.dispatchEvent document (js/Event. "visibilitychange"))
+            (await (wait/until #(stored-word store "vocab:der hund")))
+            (is (some? (stored-word store "vocab:der hund")))))))))))
 
 
 (deftest stopping-stops-following

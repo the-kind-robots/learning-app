@@ -100,10 +100,11 @@
 
 
 (nxr/register-effect! :effect/memory-changed
-  ;; A batch the databases stored after the load: this app's own write, a
-  ;; replication, another tab. The open screen is left as it is.
-  (fn memory-changed [_ {:keys [store]} docs]
-    (swap! store update :learner/memory memory/with-docs docs)))
+  ;; A batch the database `db-key` stored after the load — this app's own
+  ;; write, a replication, another tab — and the feed position after it.
+  ;; The open screen is left as it is.
+  (fn memory-changed [_ {:keys [store]} db-key docs position]
+    (swap! store update :learner/memory memory/with-changes db-key docs position)))
 
 
 (nxr/register-action! :action/refresh-page

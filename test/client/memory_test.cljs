@@ -99,6 +99,30 @@
     (is (some? (sut/word memory "vocab:der hund")) "the documents after it are taken")))
 
 
+(deftest a-revision-memory-cannot-take-removes-the-one-it-held
+  (let [odd    {:_id "vocab:der hund" :_rev "2-b" :type "vocab" :value 42 :translation 7}
+        memory (sut/with-docs sut/empty-memory [(assoc hund :_rev "1-a") odd])]
+    (is (nil? (sut/word memory "vocab:der hund")) "the older revision is not kept in its place")
+    (is (= (sut/entries (sut/with-docs sut/empty-memory [odd])) (sut/entries memory))
+        "memory holds what a full read gives")))
+
+
+(deftest a-batch-of-nothing-memory-keeps-leaves-memory-as-it-was
+  (let [memory (sut/with-changes sut/empty-memory
+                                 :user/db
+                                 [(assoc hund :_rev "1-a")]
+                                 {:id "vocab:der hund" :rev "1-a" :seq 1})]
+    (is
+     (identical?
+      memory
+      (sut/with-changes memory :device/db [{:_id "task-1" :_rev "1-a" :type "task"}] {:id "task-1" :rev "1-a" :seq 7}))
+     "a batch of tasks gives no new memory, so nothing renders and no snapshot is written")
+    (is (identical?
+         memory
+         (sut/with-changes memory :user/db [(assoc hund :_rev "1-a")] {:id "vocab:der hund" :rev "1-a" :seq 2}))
+        "nor does a revision memory holds already")))
+
+
 (deftest memory-loads-both-databases-and-follows-the-feed
   (async-testing "load, then documents written by anything else arrive through the feed"
     (with-test-dbs
