@@ -4,9 +4,12 @@
    however they are cut into batches, memory ends up equal to the one built
    in a single batch from the documents as they finally stand; every older
    memory stays what it was; and what screens read of it agrees with the
-   retention formula applied to the documents directly."
+   retention formula applied to the documents directly. A snapshot of memory,
+   taken again, is the same memory; and with what was stored after it, the
+   same as a rebuild."
   (:require
    [adapters.learner.memory :as sut]
+   [adapters.learner.snapshot :as snapshot]
    [domain.collections :as collections]
    [ports.learner :as ports]
    [use-cases.vocabulary :as vocabulary]
@@ -243,3 +246,49 @@
                                {:_id "vocab:w1" :_rev "5-b" :_deleted true}
                                (assoc word :_rev "3-c" :value "Haus!")])]
     (is (= "Haus!" (:value (sut/word memory "vocab:w1"))))))
+
+
+(defn- taken-again
+  "The memory a start takes from the snapshot of `memory`: encoded, read
+   back, and its entries added to an empty memory."
+  [memory]
+  (let [stored (snapshot/parsed (snapshot/encode memory {:device/db "d" :user/db "u"}))]
+    (sut/with-positions (sut/with-entries sut/empty-memory (snapshot/decoded stored))
+                        (snapshot/positions (:header stored)))))
+
+
+(def ^:private taken-again-equals-memory
+  (prop/for-all [changes (gen/vector gen-change 0 150)
+                 sizes (gen/not-empty (gen/vector (gen/choose 1 120) 1 5))]
+                (let [memory (first (peek (history (revised changes []) sizes)))
+                      memory (sut/with-positions memory {:device/db 3 :user/db (count changes)})
+                      again  (taken-again memory)]
+                  (and (= (snapshot memory) (snapshot again))
+                       (= (set (sut/entries memory)) (set (sut/entries again)))
+                       (= (sut/positions memory) (sut/positions again))))))
+
+
+(deftest a-snapshot-taken-again-is-the-same-memory
+  (let [result (tc/quick-check 200 taken-again-equals-memory :max-size 60)]
+    (is (:pass? result) (pr-str (select-keys result [:seed :num-tests :failing-size :shrunk])))))
+
+
+(def ^:private snapshot-then-catch-up-equals-a-rebuild
+  (prop/for-all
+   [changes (gen/vector gen-change 0 120)
+    taken-at (gen/choose 0 120)
+    latest-only? gen/boolean]
+   ;; Memory holds everything stored up to `taken-at` when its snapshot is
+   ;; written. A later start takes the snapshot and catches up with what
+   ;; was stored after it, read as the feed reads it.
+   (let [docs     (revised changes [])
+         taken-at (min taken-at (count docs))
+         memory   (sut/with-changes sut/empty-memory :user/db (take taken-at docs) taken-at)
+         started  (sut/with-changes (taken-again memory) :user/db (fed (drop taken-at docs) latest-only?) (count docs))]
+     (= (snapshot (sut/with-docs sut/empty-memory (final-docs docs)))
+        (snapshot started)))))
+
+
+(deftest a-snapshot-then-a-catch-up-equal-a-rebuild
+  (let [result (tc/quick-check 200 snapshot-then-catch-up-equals-a-rebuild :max-size 60)]
+    (is (:pass? result) (pr-str (select-keys result [:seed :num-tests :failing-size :shrunk])))))

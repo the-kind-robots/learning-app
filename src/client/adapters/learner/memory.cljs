@@ -21,7 +21,13 @@
    version and adds the new one. Under `::entries` memory keeps what it took
    from each document. So when the same revision arrives twice, the second
    one changes nothing, and when a deletion arrives with only an id, memory
-   still knows what to remove."
+   still knows what to remove. The same entries rebuild memory from a
+   snapshot (`adapters.learner.snapshot`).
+
+   Under `::positions` memory keeps, for each database, the feed position
+   of the last change that changed it (`db.pouch/change-position`). A batch
+   and its position arrive together (`with-changes`), so a memory value and
+   its positions never part."
   (:require
    [adapters.learner.documents :as documents]
    [domain.collections :as domain-collections]
@@ -37,7 +43,8 @@
    :examples-by-word {}
    :slot-of          {}
    :words            (sorted-map)
-   ::entries         {}})
+   ::entries         {}
+   ::positions       {}})
 
 
 (defn- sort-key
@@ -162,30 +169,78 @@
 
 
 (defn- with-taken-doc
-  "Memory after `doc` arrives, or memory as it was when it cannot take
-   `doc` — a document whose shape it does not expect. That one is logged
-   and left out, so one odd document does not stop the rest."
+  "Memory after `doc` arrives. When memory cannot take `doc` — a document
+   whose shape it does not expect — it logs it and removes the version of
+   it that it held, so that memory holds what a full read of the databases
+   gives. One odd document does not stop the rest. A build that starts to
+   take such a document must change `adapters.learner.snapshot/format-version`:
+   an older snapshot lacks it."
   [memory doc]
   (try
     (with-doc memory doc)
     (catch :default err
       (log/error :memory/document-skipped {:error (str err) :id (:_id doc)})
-      memory)))
+      (removed memory (get-in memory [::entries (:_id doc)])))))
 
 
 (defn with-docs
   "Memory after `docs` arrive, one after another. If memory already has a
    document's revision, that document changes nothing. A deletion removes
    the document. Memory ignores documents of a type it does not keep, and
-   leaves out, logged, one it cannot take.
+   leaves out, logged, one it cannot take. When no document changes
+   memory, this returns the same memory.
 
-   Every document reaches memory through this function: the load, the
-   change feed's batches, and the documents a write of this app reads back.
-   The feed brings changes in the order the database stored them, so the
-   last document memory takes for an id is the one the database holds as
-   the winner."
+   Every document reaches memory through this function: the load, and the
+   change feed's batches and catch-ups, which also bring this app's own
+   writes. The feed brings changes in the order the database stored them,
+   so the last document memory takes for an id is the one the database
+   holds as the winner."
   [memory docs]
   (reduce with-taken-doc memory docs))
+
+
+(defn with-changes
+  "Memory after the batch `docs` of the database `db-key` arrives
+   (`with-docs`), with `position`, the position of the batch's last change,
+   as the position of that database. When the batch changes nothing memory
+   keeps, such as a batch of tasks, this returns the same memory: its
+   position stays, and still marks a change memory took with nothing it
+   keeps stored after it."
+  [memory db-key docs position]
+  (let [taken (with-docs memory docs)]
+    (if (identical? taken memory)
+      memory
+      (assoc-in taken [::positions db-key] position))))
+
+
+(defn positions
+  "For each database, the feed position memory has taken its changes up
+   to: `{db-key {:id :rev :seq}}`."
+  [memory]
+  (::positions memory))
+
+
+(defn entries
+  "What memory took from each document, one entry per document:
+   `{:kind :entity :rev}`, in no particular order."
+  [memory]
+  (vals (::entries memory)))
+
+
+(defn with-entries
+  "Memory with `entries` added, as `entries` returns them. Each entry goes
+   through the same path as the entry of a document that arrives. An entry
+   memory cannot take throws: entries come from a snapshot, and a snapshot
+   with one bad entry is not used at all."
+  [memory entries]
+  (reduce added memory entries))
+
+
+(defn with-positions
+  "Memory with `positions`, `{db-key {:id :rev :seq}}`, as the feed
+   positions it has taken changes up to."
+  [memory positions]
+  (assoc memory ::positions positions))
 
 
 ;;

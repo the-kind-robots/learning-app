@@ -191,8 +191,15 @@
    revisions, so it does ask — that pass is what pushes it.
 
    `:sync/on-pass` is where a listener registers to hear what each completed
-   pass brought; see `sync-once!`."
-  [{dbs :db}]
+   pass brought; see `sync-once!`.
+
+   `passes-wait-for`, a promise or nil, holds back every pass of this tab
+   until it resolves. The start of the learner's memory checks its snapshot
+   against the databases; a pass before that check could bring back the
+   change at the snapshot's position after the database lost others below
+   it, and the check would take a snapshot holding documents the database
+   no longer has (ADR-0018)."
+  [{dbs :db passes-wait-for :passes-wait-for}]
   (try
     (if-let [{:keys [id] :as identity} (await (identity/load-identity!))]
       (do
@@ -217,7 +224,7 @@
                   ;; `wanted` is cleared a microtask later, as the pass
                   ;; starts, so requests made in the same turn as the one
                   ;; that started the run are in this pass, not after it.
-                  (-> (js/Promise.resolve)
+                  (-> (js/Promise.resolve passes-wait-for)
                       (.then (fn []
                                (reset! wanted false)
                                (sync-once! dbs id)))

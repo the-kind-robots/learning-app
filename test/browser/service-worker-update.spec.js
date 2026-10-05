@@ -40,8 +40,10 @@ async function recordWorkerStates(page) {
   });
 }
 
+// The worker's build buckets, by their prefix; the page keeps caches of its
+// own beside them.
 async function cacheBuckets(page) {
-  return page.evaluate(() => caches.keys());
+  return page.evaluate(async () => (await caches.keys()).filter((key) => key.startsWith('shell-')));
 }
 
 // A development build has the metrics globals; a release build has none.
@@ -57,11 +59,14 @@ test('a changed worker waits, and the page reloads once onto it after the tap', 
 
   // The first worker claimed a page that started uncontrolled: no reload.
   expect(await page.evaluate(() => window.__firstLoad)).toBe(true);
-  expect(await cacheBuckets(page)).toEqual(['test-v1']);
+  expect(await cacheBuckets(page)).toEqual(['shell-test-v1']);
+  // The snapshot of memory, written once memory is loaded.
+  await expect.poll(() => page.evaluate(async () => !!(await (await caches.open('learner-memory')).match('/learner-memory/snapshot')))).toBe(true);
 
   await recordWorkerStates(page);
-  // Which build ran is part of the evidence; the update path no longer
-  // differs between them, so nothing below branches on it.
+  // Which build ran is part of the evidence. The update path does not differ
+  // between them; only the check of where memory came from after the reload
+  // needs the development build's metrics.
   const dev = await developmentBuild(page);
   console.log(`service-worker-update: ${dev ? 'development' : 'release'} build`);
 
@@ -83,7 +88,12 @@ test('a changed worker waits, and the page reloads once onto it after the tap', 
 
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
   await expect.poll(async () => (await cacheBuckets(page)).length).toBe(1);
-  expect(await cacheBuckets(page)).not.toEqual(['test-v1']);
+  expect(await cacheBuckets(page)).not.toEqual(['shell-test-v1']);
+  // The page after the reload started from the snapshot: activation kept it.
+  if (dev) {
+    await page.waitForFunction(() => typeof window.__metrics === 'function' && window.__metrics().memory['ready-ms']);
+    expect(await page.evaluate(() => window.__metrics().memory.from)).toBe('snapshot');
+  }
   const states = await page.evaluate(() => JSON.parse(localStorage.getItem('sw-states')));
   expect(states).toEqual(['installed', 'activating', 'activated']);
   expect(await page.evaluate(() => window.__firstLoad)).toBeUndefined();
@@ -110,7 +120,7 @@ test('a tap on the build mark reloads onto a new build', async ({ context, page 
 
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
   await expect.poll(async () => (await cacheBuckets(page)).length).toBe(1);
-  expect(await cacheBuckets(page)).not.toEqual(['test-v1']);
+  expect(await cacheBuckets(page)).not.toEqual(['shell-test-v1']);
   expect(await page.evaluate(() => window.__firstLoad)).toBeUndefined();
 });
 

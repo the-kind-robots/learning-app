@@ -4,12 +4,13 @@
 
    A write reads the document it changes from PouchDB by id — the winner —
    makes its change to that, and writes it (`db.pouch/write-latest!`). Then
-   it reads the documents it wrote back from PouchDB by id and applies them
-   to memory, so the screen that asked for it can show it at once; the
-   change feed (`adapters.learner.loader`) brings the same documents later,
-   and they change nothing then. A decision that needs every collection —
-   whether a name is taken, which collections list a word — reads memory
-   once it has caught up with the databases. A write queries no index.
+   it catches memory up with user-db's change log (`catch-up!`), so the
+   screen that asked for it can show it at once. Memory takes the write the
+   way it takes every other change: in the order the database stored it,
+   through the change feed's catch-up (ADR-0019). A decision that
+   needs every collection — whether a name is taken, which collections
+   list a word — reads memory once it has caught up with the databases. A
+   write queries no index.
 
    Deleting a word removes the word and its place in every collection. Its
    reviews and its examples stay, and come back with the word when it is
@@ -67,26 +68,21 @@
 
 
 (defn ^:async catch-up!
-  "Resolves once memory has whatever the databases stored that the change
-   feeds have not brought yet (`adapters.learner.loader/catch-up!`)."
+  "Resolves once memory has whatever user-db stored that its change feed
+   has not brought yet (`adapters.learner.loader/catch-up!`). Every
+   document a write of the learner's data makes, and every document a
+   decision here reads, lives in user-db. After a write, this is how memory
+   takes it."
   [{:keys [store]}]
-  (await (loader/catch-up! store)))
-
-
-(defn- ^:async read-back!
-  "Reads the documents `ids` from user-db — the winners — and applies them
-   to memory."
-  [{:keys [dbs store]} ids]
-  (let [docs (await (dbs/read-ids dbs :user/db ids))]
-    (swap! store update :learner/memory memory/with-docs docs)))
+  (await (loader/catch-up! store :user/db)))
 
 
 (defn- ^:async persist!
-  "Writes the new document `doc` of `schema`'s type to PouchDB, and reads it
-   back into memory. Resolves with the entity written."
+  "Writes the new document `doc` of `schema`'s type to PouchDB, and catches
+   memory up with it. Resolves with the entity written."
   [learner schema doc]
   (let [written (await (dbs/insert (:dbs learner) schema doc))]
-    (await (read-back! learner [(:_id written)]))
+    (await (catch-up! learner))
     (documents/entity written)))
 
 
@@ -105,18 +101,18 @@
 
 (defn- ^:async update!
   "Writes the entity `id`, of `kind`, as `change` makes it out of the
-   version PouchDB holds as the winner (`db.pouch/write-latest!`), and reads
-   it back into memory. `change` takes that entity, or nil when there is
-   none, and returns the entity to write, or nil to write nothing. Resolves
-   with `{:stored :written}`: the entity the change was made to, and the
-   entity written; nil when nothing was written."
+   version PouchDB holds as the winner (`db.pouch/write-latest!`), and
+   catches memory up with it. `change` takes that entity, or nil when there
+   is none, and returns the entity to write, or nil to write nothing.
+   Resolves with `{:stored :written}`: the entity the change was made to,
+   and the entity written; nil when nothing was written."
   [learner {:keys [from-doc schema]} id change]
   (when-let [{:keys [stored written]}
              (await (dbs/write-latest! (:dbs learner)
                                        schema
                                        id
                                        #(some-> (change (some-> % from-doc)) documents/doc)))]
-    (await (read-back! learner [id]))
+    (await (catch-up! learner))
     {:stored  (some-> stored from-doc)
      :written (documents/entity written)}))
 
@@ -253,13 +249,13 @@
 
 
 (defn- ^:async attempt-word-deletion!
-  "Writes the deletion of the word `word-id` once, and reads what it wrote
-   back into memory. Resolves with `{:docs :written}`: the documents it
+  "Writes the deletion of the word `word-id` once, and catches memory up
+   with what it wrote. Resolves with `{:docs :written}`: the documents it
    meant to write and those PouchDB accepted."
   [{:keys [dbs] :as learner} word-id]
   (let [docs    (await (word-deletion learner word-id))
         written (await (dbs/bulk-docs dbs documents/vocab-schema docs))]
-    (await (read-back! learner (map :_id docs)))
+    (await (catch-up! learner))
     {:docs docs :written written}))
 
 
@@ -305,7 +301,7 @@
                                   documents/collection-schema
                                   collection-id
                                   #(when % {:_deleted true})))
-    (await (read-back! learner [collection-id]))))
+    (await (catch-up! learner))))
 
 
 (defn ^:async read-stored

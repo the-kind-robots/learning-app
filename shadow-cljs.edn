@@ -2,6 +2,8 @@
  [[binaryage/devtools "1.0.7"]
   [cheshire/cheshire "6.2.0"]
   [cider/cider-nrepl "0.62.2"]
+  ;; The snapshot of memory (`adapters.learner.snapshot`).
+  [com.cognitect/transit-cljs "0.8.280"]
   [com.lambdaisland/glogi "1.4.177"]
   [metosin/reitit "0.10.1"]
   [no.cjohansen/dataspex "2026.06.3"]

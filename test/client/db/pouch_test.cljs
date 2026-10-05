@@ -4,6 +4,7 @@
   (:require
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
+   [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [db.pouch :as sut]
@@ -156,8 +157,8 @@
              batches (atom [])
              unwatch (sut/follow-changes dbs
                                          :user/db
-                                         (await (sut/update-seq dbs :user/db))
-                                         #(swap! batches conj (mapv :_id %)))
+                                         (:seq (await (sut/feed-position dbs :user/db)))
+                                         (fn [docs _position] (swap! batches conj (mapv :_id docs))))
              settle  #(js/Promise. (fn [resolve] (js/setTimeout resolve 50)))]
          (try
            (await (db/bulk-docs local [{:_id "a" :type "x"} {:_id "b" :type "x"}]))
@@ -167,6 +168,62 @@
            (is (= ["a" "b" "c"] (apply concat @batches)) "every change, in the order stored, nothing before `since`")
            (finally
             ((:stop! unwatch)))))))))
+
+
+(deftest a-catch-up-answered-after-the-feed-hands-over-nothing-older
+  (async-testing "a catch-up read before the feed brought a newer revision, answered after it, brings nothing"
+    (db-fixtures/with-test-db
+      local-name
+      (^:async fn
+       [local]
+       (let [dbs      {:user/db local}
+             since    (:seq (await (sut/feed-position dbs :user/db)))
+             _ (await (db/insert local {:_id "a" :type "x" :n 1}))
+             ;; What a catch-up reads now, answered only later.
+             stale    (await (sut/read-changes dbs :user/db since nil))
+             handed   (atom [])
+             original sut/read-changes
+             feed     (sut/follow-changes dbs
+                                          :user/db
+                                          since
+                                          (fn [docs position] (swap! handed conj [(mapv :n docs) position])))]
+         (try
+           (await (wait/until #(= 1 (count @handed))))
+           (let [a (await (db/get local "a"))]
+             (await (db/insert local (assoc a :n 2))))
+           (await (wait/until #(= 2 (count @handed))))
+           (set! sut/read-changes (fn [& _] (js/Promise.resolve stale)))
+           (await ((:catch-up! feed)))
+           (is (= [[1] [2]] (mapv first @handed)) "the stale answer hands nothing over")
+           (is (apply < (map (comp :seq second) @handed)) "each batch comes with a later position")
+           (finally
+            (set! sut/read-changes original)
+            ((:stop! feed)))))))))
+
+
+(deftest a-database-holds-the-change-at-a-position
+  (async-testing "the change at a position is there, or its revision is known once a later change replaced it"
+    (db-fixtures/with-test-db
+      local-name
+      (^:async fn
+       [local]
+       (let [dbs   {:user/db local}
+             _ (await (db/insert local {:_id "a" :type "x"}))
+             at-a  (await (sut/feed-position dbs :user/db))
+             _ (await (db/insert local {:_id "b" :type "x"}))
+             at-b  (await (sut/feed-position dbs :user/db))]
+         (is (= "b" (:id at-b)))
+         (is (true? (await (sut/holds-position? dbs :user/db at-a))))
+         (is (true? (await (sut/holds-position? dbs :user/db at-b))))
+         (is (true? (await (sut/holds-position? dbs :user/db {:seq 0}))))
+         (let [b (await (db/get local "b"))]
+           (await (db/insert local (assoc b :n 2))))
+         (is (true? (await (sut/holds-position? dbs :user/db at-b)))
+             "a later change of b replaced the change at its position; the revision is known")
+         (is (false? (await (sut/holds-position? dbs :user/db (assoc at-a :id "c"))))
+             "another document at that sequence")
+         (is (false? (await (sut/holds-position? dbs :user/db (assoc at-b :rev "1-unknown"))))
+             "a revision the database does not know"))))))
 
 
 (deftest a-bulk-write-resolves-with-what-it-wrote
@@ -209,15 +266,16 @@
              next-task sut/next-task
              ;; The 1000th id, the last of the first page.
              boundary  "a:10999"]
-         (set! sut/next-task (fn ^:async between []
-                               (await (db/remove local (await (db/get local boundary))))
-                               (await (next-task))))
+         (set! sut/next-task
+               (fn ^:async between []
+                 (await (db/remove local (await (db/get local boundary))))
+                 (await (next-task))))
          (try
            (let [ids (set (map :_id (await (sut/read-docs dbs :user/db {:end "a:\ufff0" :start "a:"}))))]
              (is (contains? ids "a:11000") "the first document after the boundary")
              (is (= 1004 (count (disj ids boundary)))))
            (finally
-             (set! sut/next-task next-task))))))))
+            (set! sut/next-task next-task))))))))
 
 
 (deftest a-refused-write-is-a-conflict-and-nothing-else-is
