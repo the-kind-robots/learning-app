@@ -8,8 +8,15 @@ Define how a device catches up on example sentences it is missing for its vocabu
 ### Requirement: A replication pass queues the example fetches the device owes
 
 After a completed replication pass the device SHALL count what is missing over what that pass
-brought home, and SHALL NOT read the rest of the vocabulary. Examples live in `device-db` and never
-replicate, so a document that arrived by replication can leave a pair without an example here.
+brought home, and SHALL NOT read the rest of the vocabulary. It SHALL count once memory holds every
+document the pass stored (`specs/learner-data-memory/spec.md`), and SHALL count from memory alone:
+examples replicate with the words they belong to, so an example the pass brought answers its pair,
+and a word or collection the pass deleted is gone from memory and asks for nothing.
+
+A word often arrives a pass ahead of its example: the device that added it fetches the example and
+pushes it a push window later. A fetch a pass queues SHALL therefore not be due before two of the sync
+engine's push windows after the pass. A pass that brings an example SHALL delete the queued fetch of
+the pair that example was made for, so a fetch whose example arrives while it waits is never sent.
 
 What is missing is counted over vocabulary entries, and a phrase is one: words and phrases are the
 same document type and ask for an example alike (`specs/examples/spec.md`). Nothing in this
@@ -35,7 +42,19 @@ single pair when an entry is added to a collection by hand, so both answers agre
 
 - **WHEN** a replication pass brings a word document
 - **AND** that word has no example document
-- **THEN** an example-fetch task is queued for it
+- **THEN** an example-fetch task is queued for it, due two push windows after the pass
+
+#### Scenario: A word arrived by replication with its example
+
+- **WHEN** a replication pass brings a word document and the example another device fetched for it
+- **THEN** no example-fetch task is queued for it
+- **AND** no example request is sent for it
+
+#### Scenario: A word's example arrives one pass after the word
+
+- **WHEN** a replication pass brings a word without its example, and a fetch is queued for it
+- **AND** a later pass brings the example before the fetch is due
+- **THEN** that pass deletes the fetch, and no example request is sent
 
 #### Scenario: A phrase arrived by replication without its example
 
@@ -53,6 +72,11 @@ single pair when an entry is added to a collection by hand, so both answers agre
 - **WHEN** a replication pass brings a collection document naming entry W
 - **AND** no example carries W and that collection
 - **THEN** an example-fetch task is queued for the pair (W, that collection)
+
+#### Scenario: A collection the pass deleted
+
+- **WHEN** a replication pass deletes a collection naming entry W
+- **THEN** no task is queued for the pair (W, that collection)
 
 #### Scenario: A word the pass did not bring
 
@@ -117,6 +141,12 @@ On start the device SHALL count what is missing over every vocabulary entry it h
 phrases alike — and queue all of it. This is the one full reading: it closes whatever earlier runs
 left, whatever the reason — a device that was offline, a failure, an entry themed on another device.
 
+The backfill SHALL count only once memory is loaded, the examples kept on the device have moved to
+`user-db` (`specs/data-model/spec.md`), and this session's first replication pass has completed. A
+device without an account runs no pass, and counts once the move is done. So an example the move
+brings, or one the account already holds on another device, answers its pair before anything is
+counted. A pass that completes before then SHALL count after it too.
+
 #### Scenario: A device starts holding entries without examples
 
 - **WHEN** the application starts
@@ -127,6 +157,24 @@ left, whatever the reason — a device that was offline, a failure, an entry the
 
 - **WHEN** the application starts and every pair already has its example or its queued task
 - **THEN** no task is queued
+
+#### Scenario: A device starts with examples kept on the device
+
+- **WHEN** the application starts on a device whose `device-db` holds the example of a word
+- **THEN** no example-fetch task is queued for that word's pair
+
+#### Scenario: A device with an account starts
+
+- **WHEN** a device with an account starts holding entries whose examples the account holds on
+  another device
+- **THEN** nothing is counted before the first pass of the session has completed
+- **AND** no example-fetch task is queued for those entries
+
+#### Scenario: The first pass completes before the backfill starts listening
+
+- **WHEN** a device with an account completes its first pass before the backfill has started
+- **THEN** the backfill counts once the examples kept on the device have moved, without waiting for
+  another pass
 
 ### Requirement: A backfill queues every missing pair, and one pair is one task
 
@@ -196,3 +244,31 @@ is due.
 - **WHEN** the Retry-After delay has passed
 - **THEN** the queue resumes without any further trigger and sends every due fetch, the refused one
   included
+
+### Requirement: A fetch whose pair is answered sends no request
+
+An example-fetch task SHALL NOT run before the backfill may count (Requirement: A start queues the
+example fetches the device already owes). It SHALL then ask whether its pair is answered, by the
+rule the backfill counts by: `user-db` holds an example of the entry that a read in the pair's
+collection sees (`specs/examples-schema/spec.md`). When it holds one — it arrived by replication,
+was moved from `device-db`, or was written by another tab after the task was queued — the task SHALL
+complete without sending an example request and SHALL write nothing. The task queue itself is not
+held: other tasks run once memory is loaded (`specs/task-runner/spec.md`).
+
+#### Scenario: The example arrived after the task was queued
+
+- **WHEN** an example-fetch task is queued for a pair
+- **AND** a replication pass then brings an example of that pair
+- **AND** the task runs
+- **THEN** no example request is sent and the task completes
+
+#### Scenario: A fetch before the device is ready
+
+- **WHEN** an example-fetch task is due while the examples kept on the device are still moving
+- **THEN** it sends nothing until the move is done, and then only when its pair is still unanswered
+
+#### Scenario: An example of another collection
+
+- **WHEN** an example-fetch task for entry W in collection T runs
+- **AND** `user-db` holds an example of W in another collection only
+- **THEN** the example request is sent

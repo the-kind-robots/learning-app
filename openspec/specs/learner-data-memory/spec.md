@@ -6,9 +6,9 @@ Define how the learner's data is held in memory as a projection of PouchDB, and 
 ## Requirements
 
 ### Requirement: The learner's data is held in memory as a projection of PouchDB
-The client SHALL hold in app state what the screens show of the learner's data: every word and phrase with its search text normalised once, the reviews of each word, the collections, and the examples this device holds. PouchDB SHALL remain the only source of that data, and memory SHALL hold nothing PouchDB lacks, so that losing memory — a reload, a frozen tab — loses nothing: it is rebuilt from PouchDB.
+The client SHALL hold in app state what the screens show of the learner's data: every word and phrase with its search text normalised once, the reviews of each word, the collections, and the account's examples. Every one of them lives in user-db, so memory SHALL be a projection of user-db alone, and SHALL neither read nor follow device-db. PouchDB SHALL remain the only source of that data, and memory SHALL hold nothing PouchDB lacks, so that losing memory — a reload, a frozen tab — loses nothing: it is rebuilt from PouchDB.
 
-Memory SHALL be loaded at start in one go, from a snapshot when one passes its checks (Requirement: A repeat start reads memory from a snapshot). Otherwise the client SHALL note where each database's change feed stands, read every document of both databases, then read what they stored meanwhile, and only then put memory in place. From there it SHALL follow each database's change feed and take every change in the order the database stored it — this app's own writes, another tab's and a synchronisation's alike. Because a live feed can drop a change without reporting it, memory SHALL catch up each time the page becomes visible again, and before a decision that needs every collection: it SHALL read what the databases stored after the last change it took. For each database, memory SHALL record the feed position of the last change that changed it: the change's sequence and its document's id and revision. A change that the feed or a catch-up brings at or below that sequence SHALL change nothing, and a batch that changes nothing memory keeps, such as the task queue's documents, SHALL leave memory as it was, so that nothing renders for it. For each id, memory SHALL hold the last document the database stored, which is the winner replication picked. Memory SHALL be the same whatever order the load's documents arrive in and however they are grouped: a document whose revision memory already holds SHALL change nothing, a deleted document SHALL leave memory, a review MAY arrive before its word, and a document memory cannot take SHALL be left out and logged without stopping the rest, and the version of it that memory held SHALL leave memory, so that memory holds what a full read gives.
+Memory SHALL be loaded at start in one go, from a snapshot when one passes its checks (Requirement: A repeat start reads memory from a snapshot). Otherwise the client SHALL note where user-db's change feed stands, read every document of user-db, then read what it stored meanwhile, and only then put memory in place. From there it SHALL follow user-db's change feed and take every change in the order the database stored it — this app's own writes, another tab's and a synchronisation's alike. Because a live feed can drop a change without reporting it, memory SHALL catch up each time the page becomes visible again, before a decision that needs every collection, and before the example backfill counts what a replication pass brought: it SHALL read what the database stored after the last change it took. Memory SHALL record the feed position of the last change that changed it: the change's sequence and its document's id and revision. A change that the feed or a catch-up brings at or below that sequence SHALL change nothing, and a batch that changes nothing memory keeps, such as a pairing receipt, SHALL leave memory as it was, so that nothing renders for it. For each id, memory SHALL hold the last document the database stored, which is the winner replication picked. Memory SHALL be the same whatever order the load's documents arrive in and however they are grouped: a document whose revision memory already holds SHALL change nothing, a deleted document SHALL leave memory, a review MAY arrive before its word, and a document memory cannot take SHALL be left out and logged without stopping the rest, and the version of it that memory held SHALL leave memory, so that memory holds what a full read gives.
 
 #### Scenario: Loaded at start
 - **WHEN** the app starts on a device holding words, reviews, collections and examples
@@ -38,6 +38,10 @@ Memory SHALL be loaded at start in one go, from a snapshot when one passes its c
 - **WHEN** the change feed brings a batch of documents memory does not keep
 - **THEN** memory stays the same value, and nothing renders for it
 
+#### Scenario: The task queue writes
+- **WHEN** the task queue writes to device-db
+- **THEN** memory reads nothing for it and stays the same value
+
 #### Scenario: The same revision twice
 - **WHEN** the feed delivers a document at the revision memory already holds
 - **THEN** memory is unchanged
@@ -51,7 +55,7 @@ Memory SHALL be loaded at start in one go, from a snapshot when one passes its c
 - **THEN** memory equals the memory built from the final documents at once
 
 ### Requirement: Memory takes a write only after PouchDB accepted it
-A write made by this app SHALL go to PouchDB first. A write PouchDB refuses SHALL leave memory untouched, so a screen never shows data that will not replicate. Once PouchDB has accepted it, the write SHALL catch memory up with the change log of the database it wrote, from memory's feed position for that database, before the write completes, so that memory takes the write in the order the database stored it, as it takes every other change, and the screen that asked for it can show it at once. The write SHALL NOT apply the documents it wrote to memory by any other path, SHALL NOT wait for the live change feed, and SHALL NOT fail because another database's change log cannot be read.
+A write made by this app SHALL go to PouchDB first. A write PouchDB refuses SHALL leave memory untouched, so a screen never shows data that will not replicate. Once PouchDB has accepted it, the write SHALL catch memory up with user-db's change log, from memory's feed position, before the write completes, so that memory takes the write in the order the database stored it, as it takes every other change, and the screen that asked for it can show it at once. The write SHALL NOT apply the documents it wrote to memory by any other path, SHALL NOT wait for the live change feed, and SHALL NOT wait for device-db or fail because device-db cannot be read or written: device-db holds none of the learner's data.
 
 A write SHALL read the document it changes from PouchDB by id — the winning revision — and SHALL put its change over that revision, whichever revision memory holds. When the put is refused as a conflict, the write SHALL read the document again and put once more. A change SHALL NOT overwrite what the stored version holds: adding a word that is already stored SHALL keep every translation of the stored word and add the new ones, and a change to a collection SHALL be made to the stored collection. Writes SHALL NOT wait for one another.
 
@@ -72,7 +76,7 @@ A write SHALL read the document it changes from PouchDB by id — the winning re
 - **THEN** memory holds the edited word when the edit completes, and still holds it after the feed hands its batch over
 
 #### Scenario: device-db cannot be read
-- **WHEN** device-db's change log cannot be read and the learner adds a word
+- **WHEN** device-db can be neither read nor written and the learner adds a word
 - **THEN** the add completes and memory holds the word
 
 #### Scenario: A word with two branches
@@ -138,7 +142,7 @@ Once the learner has left a screen, nothing finishing later — a write, a pull,
 - **THEN** home stays on display and the words screen does not return
 
 ### Requirement: The app opens on a splash until memory is loaded
-The app SHALL show a splash, and no screen, until memory holds everything the databases held at start; then the screen asked for SHALL be shown, with every word's retention. When the learner's data cannot be read, the splash SHALL say so, and the app SHALL keep trying to read it.
+The app SHALL show a splash, and no screen, until memory holds everything user-db held at start; then the screen asked for SHALL be shown, with every word's retention. When the learner's data cannot be read, the splash SHALL say so, and the app SHALL keep trying to read it.
 
 #### Scenario: Opening the app
 - **WHEN** the app is opened
@@ -174,16 +178,16 @@ Deleting a word SHALL NOT delete its reviews or its examples (a collection keeps
 - **THEN** those reviews and the earlier ones are kept, on this start and on every later one
 
 ### Requirement: A repeat start reads memory from a snapshot
-The client SHALL keep a snapshot of memory in the Cache API, as one entry: what memory took from each document, a format version, a checksum of that content, and for each database the feed position memory had taken changes up to — the sequence, and the id and revision of the change at it — and the database's marker. Each database SHALL carry a marker, a random id kept in a local document of that database and created when it is missing, so that a database that was re-created or cleared is told apart from the one the snapshot came from.
+The client SHALL keep a snapshot of memory in the Cache API, as one entry: what memory took from each document, a format version, a checksum of that content, the feed position of user-db that memory had taken changes up to — the sequence, and the id and revision of the change at it — and user-db's marker. user-db SHALL carry a marker, a random id kept in a local document of user-db and created when it is missing, so that a database that was re-created or cleared is told apart from the one the snapshot came from.
 
-At start the client SHALL check the snapshot before this tab's synchronisation writes to either database; screens, routing and the other start-up work SHALL NOT wait for the check. A write that lands before the check from anywhere else — a credential link, another tab — SHALL NOT make the check take a snapshot whose stored change the database no longer holds. The client SHALL use the snapshot only when its format version is the current one, its checksum matches its content, each database's marker equals the stored one, each stored sequence is at or below where that database's feed stands, and each database still holds the stored change: the same document at the same revision at that sequence, or, when a later change of that document replaced it there, a database that knows that revision. Memory SHALL then be the snapshot's content, taken again through the same path documents take, together with what each database stored after the stored position; no document SHALL be read in full. When any check fails, or anything fails while the snapshot is read or taken, the client SHALL delete the snapshot and load memory by reading every document. A failed check on markers, sequences or stored changes SHALL delete the snapshot before this tab's synchronisation writes.
+At start the client SHALL check the snapshot before this tab's synchronisation writes to user-db; screens, routing and the other start-up work SHALL NOT wait for the check. A write that lands before the check from anywhere else — a credential link, another tab — SHALL NOT make the check take a snapshot whose stored change user-db no longer holds. The client SHALL use the snapshot only when its format version is the current one, its checksum matches its content, user-db's marker equals the stored one, the stored sequence is at or below where user-db's feed stands, and user-db still holds the stored change: the same document at the same revision at that sequence, or, when a later change of that document replaced it there, a database that knows that revision. Memory SHALL then be the snapshot's content, taken again through the same path documents take, together with what user-db stored after the stored position; no document SHALL be read in full. When any check fails, or anything fails while the snapshot is read or taken, the client SHALL delete the snapshot and load memory by reading every document. A failed check on the marker, the sequence or the stored change SHALL delete the snapshot before this tab's synchronisation writes.
 
-The snapshot SHALL be a cache only: writes SHALL keep going to PouchDB alone, and the snapshot SHALL NOT be migrated — a change to what memory takes from a document, including a document an earlier build could not take, SHALL change the format version. The client SHALL write the snapshot once memory is loaded and each time the page goes to the background, and SHALL NOT write it when memory's feed positions equal those of the snapshot last written or read. The memory written and its feed positions SHALL be taken from one memory value. A write that does not finish SHALL leave the previous snapshot in place. A new build of the service worker SHALL keep the snapshot.
+The snapshot SHALL be a cache only: writes SHALL keep going to PouchDB alone, and the snapshot SHALL NOT be migrated — a change to what memory takes from a document, including a document an earlier build could not take, SHALL change the format version. The client SHALL write the snapshot once memory is loaded and each time the page goes to the background, and SHALL NOT write it when memory's feed position equals that of the snapshot last written or read. The memory written and its feed position SHALL be taken from one memory value. A write that does not finish SHALL leave the previous snapshot in place. A new build of the service worker SHALL keep the snapshot.
 
 #### Scenario: A repeat start
 - **WHEN** the app starts with a snapshot that passes its checks
 - **THEN** memory equals the memory a full read gives
-- **AND** no document of either database is read in full
+- **AND** no document of user-db is read in full
 
 #### Scenario: Stored since the snapshot
 - **WHEN** words are added, edited and deleted after the snapshot was written, and the app starts again
@@ -203,24 +207,24 @@ The snapshot SHALL be a cache only: writes SHALL keep going to PouchDB alone, an
 - **THEN** it is deleted and memory is loaded by reading every document
 
 #### Scenario: A re-created database
-- **WHEN** a database's marker differs from the one the snapshot stored
+- **WHEN** user-db's marker differs from the one the snapshot stored
 - **THEN** the snapshot is deleted before synchronisation starts, and memory is loaded by reading every document
 
 #### Scenario: A database that lost its last writes and stored others
-- **WHEN** a database lost the change at the stored position, and another change now sits at that sequence
+- **WHEN** user-db lost the change at the stored position, and another change now sits at that sequence
 - **THEN** the snapshot is deleted before synchronisation starts, and memory is loaded by reading every document
 
 #### Scenario: The lost change brought back
-- **WHEN** a database lost the change at the stored position, and before the start a replication from elsewhere brought the same revision back under that sequence
+- **WHEN** user-db lost the change at the stored position, and before the start a replication from elsewhere brought the same revision back under that sequence
 - **THEN** the snapshot is taken, and memory equals the memory a full read gives
 
 #### Scenario: A database behind the snapshot
-- **WHEN** a stored feed position is ahead of where that database's feed stands, as when the database lost its last writes
+- **WHEN** the stored feed position is ahead of where user-db's feed stands, as when the database lost its last writes
 - **THEN** the snapshot is deleted before synchronisation starts, and memory is loaded by reading every document
 
 #### Scenario: Going to the background
 - **WHEN** memory has taken changes since the snapshot was written and the page goes to the background
-- **THEN** a snapshot of the memory at that moment, with its feed positions, replaces the previous one
+- **THEN** a snapshot of the memory at that moment, with its feed position, replaces the previous one
 
 #### Scenario: A new build
 - **WHEN** a new build of the service worker activates
