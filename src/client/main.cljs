@@ -49,8 +49,7 @@
 
   (system/start!
    {:app/store             {:start (fn [_]
-                                     (atom {:learner/memory memory/empty-memory
-                                            :page/current   :page/loading}))}
+                                     (atom {:learner/memory memory/empty-memory}))}
 
     ;; Ask the browser to exempt our storage (device-db, the durable home of the
     ;; account token) from automatic eviction. The auth cookie is rebuilt from
@@ -172,12 +171,18 @@
                                           (nxr/register-system->state! #(-> % :store deref))
                                           (r/set-dispatch! dispatch)
                                           (application/guard-double-clicks! store)
+                                          ;; Nothing is rendered until memory is loaded, so the
+                                          ;; server's splash stays until the first screen
+                                          ;; replaces it. When the start read fails, the shell
+                                          ;; is rendered in its place to ask for a reload.
                                           (application/install-render!
                                            store
-                                           (if ^boolean goog/DEBUG
-                                             (fn [state]
-                                               (instrumentation/render! application/render! state))
-                                             application/render!))
+                                           (fn [state]
+                                             (when (or (:learner/loaded? state)
+                                                       (:learner/unreadable? state))
+                                               (if ^boolean goog/DEBUG
+                                                 (instrumentation/render! application/render! state)
+                                                 (application/render! state)))))
                                           (when ^boolean goog/DEBUG
                                             (instrumentation/install!))
                                           {:dispatch #(dispatch {} %)}))}

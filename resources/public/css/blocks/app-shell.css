@@ -13,6 +13,28 @@
   z-index: -1;
 }
 
+/* The message shown in place of a screen when the learner's data could not
+   be read at start: one sentence, centered where a screen would be, in the
+   shell's face and the body text color. The width cap and balanced wrapping
+   keep its lines even and readable on a phone. */
+.app-shell__read-error {
+  align-items: center;
+  color: rgb(var(--color-black-text));
+  display: flex;
+  font-family: Nunito, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  justify-content: center;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 520px;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 64px 16px;
+  text-align: center;
+  text-wrap: balance;
+}
+
 .app-shell__loader-list {
   align-items: center;
   animation: 10s steps(var(--items-count)) 0s infinite normal app-shell-loader-slide;

@@ -93,8 +93,11 @@
 
 
 (nxr/register-effect! :effect/memory-loaded
-  ;; Everything user-db held at start: the splash goes, and the screen
-  ;; asked for is shown.
+  ;; Everything user-db held at start. Nothing is rendered before this
+  ;; write, so the server's splash is still on display. The write renders
+  ;; the screen from the slice its route entry computed from empty memory,
+  ;; and the refresh renders it again from memory. Both renders run in this
+  ;; task, so only the second is painted, in place of the splash.
   (fn memory-loaded [{:keys [dispatch]} {:keys [store]} memory]
     (swap! store assoc :learner/memory memory :learner/loaded? true)
     (dispatch [[:effect/enter :action/refresh-page]])))
@@ -566,7 +569,7 @@
 
 (defn- render
   [state]
-  (let [{:keys [build-mark corner loading-message menu-open? page pairing show-install? show-sync? show-update?]}
+  (let [{:keys [build-mark corner menu-open? page pairing read-error show-install? show-sync? show-update?]}
         (presenter/shell-props state)]
     (list
      ;; One bar across the top holds the three slots: the word mark, the build
@@ -642,7 +645,8 @@
        :page/home        (pages.home.view/page state)
        :page/lesson      (pages.lesson.view/page state)
        :page/words       (pages.words.view/page state)
-       [:div.app-loading loading-message])
+       (when read-error
+         [:div.app-shell__read-error read-error]))
      shell/status-region)))
 
 

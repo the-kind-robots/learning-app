@@ -354,8 +354,8 @@
             (js/Promise.reject (js/Error. "locked")))))))
 
 
-(deftest a-failed-read-at-start-says-so-and-is-tried-again
-  (async-testing "a step of the read fails once: the splash says so, and the whole read runs again"
+(deftest a-failed-read-at-start-asks-for-a-reload-and-is-not-tried-again
+  (async-testing "a step of the read fails once: the store is marked unreadable, and nothing reads again"
     (await
      (with-dbs
       (^:async fn
@@ -366,13 +366,15 @@
                {:step "what was stored meanwhile" :original pouch/read-changes :stub! #(set! pouch/read-changes %)}]]
          (when-let [[{:keys [step original stub!]} & more] (seq steps)]
            (let [store (atom {})]
+             ;; A second try would succeed, so a read that tried again would
+             ;; hand memory over.
              (stub! (failing-once original))
              (try
                (let [stop (await (loader/start! dbs store (learner/store-dispatch store)))]
-                 (is (true? (:learner/read-failed? @store)) step)
-                 (is (true? (:learner/loaded? @store)) step)
-                 (is (some? (stored-word store "vocab:der hund")) step)
-                 (stop))
+                 (is (nil? stop) step)
+                 (is (true? (:learner/unreadable? @store)) step)
+                 (is (not (:learner/loaded? @store)) step)
+                 (is (nil? (stored-word store "vocab:der hund")) step))
                (finally
                 (stub! original))))
            (recur more))))))))

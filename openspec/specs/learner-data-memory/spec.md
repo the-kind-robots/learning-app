@@ -142,17 +142,17 @@ Once the learner has left a screen, nothing finishing later — a write, a pull,
 - **THEN** home stays on display and the words screen does not return
 
 ### Requirement: The app opens on a splash until memory is loaded
-The app SHALL show a splash, and no screen, until memory holds everything user-db held at start; then the screen asked for SHALL be shown, with every word's retention. When the learner's data cannot be read, the splash SHALL say so, and the app SHALL keep trying to read it.
+The app SHALL show the server's splash, and nothing else, until memory holds everything user-db held at start; then the screen asked for SHALL replace it, with every word's retention, and nothing SHALL be shown between the splash and that screen. When reading the learner's data at start fails, the app SHALL say so in place of the splash and ask for a reload, and SHALL NOT read it again.
 
 #### Scenario: Opening the app
 - **WHEN** the app is opened
-- **THEN** a splash is on display until memory is loaded
-- **AND** the screen asked for is shown then, retention included
+- **THEN** the server's splash is on display until memory is loaded
+- **AND** the screen asked for replaces it then, retention included, with nothing shown in between
 
 #### Scenario: The data cannot be read
 - **WHEN** reading the learner's data fails at start
-- **THEN** the splash says «Не получается прочитать данные на устройстве. Пробуем снова…»
-- **AND** the screen asked for is shown once a read succeeds
+- **THEN** «Не получается прочитать данные на устройстве. Перезагрузите страницу.» is shown in place of the splash
+- **AND** nothing reads the data again until the page is reloaded
 
 ### Requirement: Deleting a word keeps its reviews and examples
 Deleting a word SHALL delete the word document and take its id out of collections as `specs/collections-data-model/spec.md` states. Which collections list it SHALL be asked of memory once it has caught up. When PouchDB refuses any document of that write, the delete SHALL read them again and write once more; refused again, the delete SHALL fail: it SHALL be reported, and a word that still exists SHALL be listed in every collection that listed it.

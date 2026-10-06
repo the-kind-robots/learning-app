@@ -30,8 +30,8 @@
   (is (= :collections (:corner (sut/shell-props {:learner/loaded? true :page/current :page/home}))))
   (doseq [page [:page/words :page/lesson :page/collections]]
     (is (= :close (:corner (sut/shell-props {:learner/loaded? true :page/current page}))) (str page)))
-  (testing "no page on display yet, no corner control"
-    (is (nil? (:corner (sut/shell-props {:learner/loaded? true :page/current :page/loading}))))))
+  (testing "no page set (a router that failed to start), no corner control"
+    (is (nil? (:corner (sut/shell-props {:learner/loaded? true}))))))
 
 
 (deftest the-splash-stands-until-memory-is-loaded
@@ -41,7 +41,9 @@
   (is (= :page/home (:page (sut/shell-props {:learner/loaded? true :page/current :page/home})))))
 
 
-(deftest the-splash-says-when-the-data-cannot-be-read
-  (is (= "Загружаем..." (:loading-message (sut/shell-props {:page/current :page/home}))))
-  (is (= "Не получается прочитать данные на устройстве. Пробуем снова…"
-         (:loading-message (sut/shell-props {:learner/read-failed? true :page/current :page/home})))))
+(deftest the-shell-asks-for-a-reload-when-the-data-cannot-be-read
+  (is (nil? (:read-error (sut/shell-props {:page/current :page/home}))))
+  (let [props (sut/shell-props {:learner/unreadable? true :page/current :page/home})]
+    (is (= "Не получается прочитать данные на устройстве. Перезагрузите страницу."
+           (:read-error props)))
+    (is (nil? (:page props)) "no screen: memory was never loaded")))
