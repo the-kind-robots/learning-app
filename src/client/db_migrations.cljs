@@ -28,27 +28,12 @@
 (def ^:private migration-id "migration:local-db-split")
 
 
-(defn- strip-rev
-  [doc]
-  (dissoc doc :_rev))
-
-
-(defn ^:async copy-doc!
-  [db doc]
-  (try
-    (await (db/insert db (strip-rev doc)))
-    (catch js/Error err
-      (if (db/conflict? err)
-        nil
-        (throw err)))))
-
-
 (defn ^:async copy-type!
   [local-db dest-db doc-type]
   (let [{:keys [docs]} (await (db/find-all local-db {:selector {:type doc-type}}))]
     (when (seq docs)
       (log/info :db-migrations/copy-type {:type doc-type :count (count docs)}))
-    (await (js/Promise.all (into-array (map #(copy-doc! dest-db %) docs))))))
+    (await (js/Promise.all (into-array (map #(db/insert-if-absent dest-db (dissoc % :_rev)) docs))))))
 
 
 (defn ^:async run-local-db-split!

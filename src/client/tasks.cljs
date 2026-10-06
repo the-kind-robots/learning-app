@@ -16,6 +16,12 @@
    :db   :device/db})
 
 
+(def id-prefix
+  "What every task id begins with. Whoever queues a task composes its id
+   from the work and puts it under this prefix (`create-task`)."
+  "task:")
+
+
 (def index
   "The index the queue selects its due tasks by. Every query of the queue
    names it, so the queue builds it before its first query."
@@ -40,9 +46,10 @@
 
 
 (defn create-task
-  "A task document under `id`, which the caller composes from the work itself.
-   Two requests that mean the same work carry the same id, so the second is a
-   write conflict the database refuses rather than a duplicate nobody notices."
+  "A task document under `id`, which the caller composes from the work itself
+   under `id-prefix`. Two requests that mean the same work carry the same id,
+   so the second is a write conflict the database refuses rather than a
+   duplicate nobody notices."
   [id task-type data now-iso]
   {:_id        id
    :task-type  task-type
@@ -318,8 +325,9 @@
 
 
 (defn ^:async create-tasks!
-  "Writes one task per entry of `tasks` — `{:id :data}` — in a single bulk
-   write, then runs the queue. A device catching up on a whole vocabulary
+  "Writes one task per entry of `tasks` — `{:id :data :delay-ms}` — in a
+   single bulk write, then runs the queue. A task is due `:delay-ms` from
+   now, or now when it has none. A device catching up on a whole vocabulary
    queues that many at once, and they have no reason to be that many inserts;
    one that queues a single task takes the same road.
 
@@ -331,9 +339,11 @@
     (let [now-iso (now-iso clock)]
       (await (dbs/bulk-docs dbs
                             schema
-                            (mapv (fn [{:keys [data id]}]
-                                    (assoc (create-task id task-type data now-iso)
-                                           :type
-                                           (:type schema)))
+                            (mapv (fn [{:keys [data delay-ms id]}]
+                                    (cond-> (assoc (create-task id task-type data now-iso)
+                                                   :type
+                                                   (:type schema))
+                                      (pos? (or delay-ms 0))
+                                      (assoc :run-at (utils/ms->iso (+ (now-ms clock) delay-ms)))))
                                   tasks)))
       (flush!))))

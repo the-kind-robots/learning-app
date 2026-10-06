@@ -1,7 +1,7 @@
 (ns client.memory-snapshot-test
   "A start from a snapshot of memory (ADR-0018): the snapshot is written
    once memory is loaded and when the page goes to the background, a start
-   takes it and catches up from its feed positions, and a snapshot that
+   takes it and catches up from its feed position, and a snapshot that
    fails a check is deleted and every document is read."
   (:require-macros
    [client.support.test :refer [async-testing]])
@@ -63,7 +63,7 @@
                                    [{:_id "vocab:der hund" :translation "пёс" :value "der Hund"}
                                     {:_id "vocab:die katze" :translation "кошка" :value "die Katze"}]))
   (await (db/insert (:user/db dbs) {:_id "coll-tiere" :type "collection" :name "Tiere" :word-ids ["vocab:der hund"]}))
-  (await (db-seed/seed-examples! (:device/db dbs)
+  (await (db-seed/seed-examples! (:user/db dbs)
                                  [{:_id         "example-1"
                                    :translation "Пёс спит"
                                    :value       "Der Hund schläft."
@@ -72,9 +72,9 @@
 
 
 (defn- full-read
-  "The memory a full read of user-db `user` and device-db gives."
-  [user dbs]
-  (db-seed/memory-of user (:device/db dbs)))
+  "The memory a full read of user-db `user` gives."
+  [user]
+  (db-seed/memory-of user))
 
 
 (defn- ^:async reads-during
@@ -123,9 +123,9 @@
   (.set entries (first (es6-iterator-seq (.keys entries))) (snapshot/joined snapshot)))
 
 
-(defn- stored-positions
+(defn- stored-position
   [entries]
-  (snapshot/positions (:header (stored entries))))
+  (:position (:header (stored entries))))
 
 
 (defn- ^:async lost-tail!
@@ -165,10 +165,9 @@
     :type        "review"
     :word-id     "vocab:der hund"}
    {:_id "coll-tiere" :_rev "1-c" :created-at "2026-01-01" :name "Tiere" :type "collection"}
-   {:_id           "example-1"
+   {:_id           "example:vocab:der hund:coll-tiere:0123456789ab"
     :_rev          "1-d"
     :collection-id "coll-tiere"
-    :created-at    "2026-01-04"
     :structure     []
     :translation   "Пёс спит"
     :type          "example"
@@ -184,9 +183,8 @@
   [{:entity {:id "coll-tiere" :created-at "2026-01-01" :name "Tiere" :word-ids []}
     :kind   :collection
     :rev    "1-c"}
-   {:entity {:id            "example-1"
+   {:entity {:id            "example:vocab:der hund:coll-tiere:0123456789ab"
              :collection-id "coll-tiere"
-             :created-at    "2026-01-04"
              :structure     []
              :translation   "Пёс спит"
              :value         "Der Hund schläft."
@@ -208,7 +206,7 @@
 
 (deftest the-snapshot-format-is-the-one-its-version-names
   (let [memory  (memory/with-docs memory/empty-memory format-docs)
-        entries (snapshot/decoded (snapshot/parsed (snapshot/encode memory {})))]
+        entries (snapshot/decoded (snapshot/parsed (snapshot/encode memory nil)))]
     (is (= format-entries (sort-by (comp :id :entity) entries))
         (str "What memory takes from a document changed. Change adapters.learner.snapshot/format-version, "
              "so that snapshots of the old format are dropped, and update format-entries here."))))
@@ -225,10 +223,10 @@
          [dbs]
          (await (seeded! dbs))
          (let [first-start (await (session! dbs puts))]
-           (is (= 2 (get-in first-start [:reads :full])) "the first start reads each database in full")
-           (is (= (memory/positions (:memory first-start)) (stored-positions entries))
-               "the snapshot carries the positions of the memory it holds"))
-         (let [positions (stored-positions entries)]
+           (is (= 1 (get-in first-start [:reads :full])) "the first start reads user-db in full, and device-db not at all")
+           (is (= (memory/position (:memory first-start)) (stored-position entries))
+               "the snapshot carries the position of the memory it holds"))
+         (let [position (stored-position entries)]
            ;; Changed past the app, as a replication or another tab does.
            (await (db/insert (:user/db dbs) haus))
            (await (db/remove (:user/db dbs) (await (db/get (:user/db dbs) "vocab:die katze"))))
@@ -238,15 +236,15 @@
                  restored (:learner/memory @store)]
              (stop)
              (is (zero? (:full reads)) "no document is read in full")
-             (is (= (update-vals positions :seq) (:since reads)) "each change log is read from the stored position")
-             (is (= (projection (await (full-read (:user/db dbs) dbs))) (projection restored))
+             (is (= {:user/db (:seq position)} (:since reads)) "the change log is read from the stored position")
+             (is (= (projection (await (full-read (:user/db dbs)))) (projection restored))
                  "memory equals a full read")
              (is (= "Tiere!" (:name (memory/collection restored "coll-tiere"))))
              (is (nil? (memory/word restored "vocab:die katze"))))))))))))
 
 
 (deftest a-start-with-nothing-new-writes-no-snapshot
-  (async-testing "memory's positions equal the snapshot's: the writer does not write"
+  (async-testing "memory's position equals the snapshot's: the writer does not write"
     (caches/with-cache-api
      (^:async fn
       [{:keys [puts]}]
@@ -290,8 +288,8 @@
         (await (session! dbs puts))
         (await (spoil! dbs entries))
         (let [{:keys [memory reads]} (await (session! dbs puts))]
-          (is (= 2 (:full reads)) (str label ": each database is read in full"))
-          (is (= (projection (await (full-read (:user/db dbs) dbs))) (projection memory))
+          (is (= 1 (:full reads)) (str label ": user-db is read in full"))
+          (is (= (projection (await (full-read (:user/db dbs)))) (projection memory))
               (str label ": memory equals a full read"))
           (is (= snapshot/format-version (:version (:header (stored entries))))
               (str label ": a new snapshot is written"))))))))))
@@ -321,7 +319,7 @@
     (dropped-on "position"
                 (fn [_ entries]
                   (restore! entries
-                            (assoc-in (stored entries) [:header :databases :user/db :position :seq] 1000000))))))
+                            (assoc-in (stored entries) [:header :position :seq] 1000000))))))
 
 
 (defn- ^:async after-lost-tail
@@ -345,7 +343,7 @@
         (let [lost (assoc dbs :user/db (:other/db dbs))
               [{:keys [stop store]} reads] (await (reads-during #(learner/started lost {})))]
           (stop)
-          {:full-read (await (full-read (:other/db dbs) dbs))
+          {:full-read (await (full-read (:other/db dbs)))
            :memory    (:learner/memory @store)
            :reads     reads}))))))))
 
@@ -356,7 +354,7 @@
           (await (after-lost-tail 1
                                   (fn [other _]
                                     (db/insert other {:_id "vocab:der fremde" :type "vocab" :value "der Fremde"}))))]
-      (is (= 2 (:full reads)) "each database is read in full")
+      (is (= 1 (:full reads)) "user-db is read in full")
       (is (= (projection full-read) (projection memory)) "memory equals a full read"))))
 
 
@@ -379,7 +377,7 @@
          [dbs]
          (await (seeded! dbs))
          (await (session! dbs puts))
-         (restore! entries (assoc-in (stored entries) [:header :databases :device/db :position :seq] 1000000))
+         (restore! entries (assoc-in (stored entries) [:header :position :seq] 1000000))
          (is (nil? (await (loader/checked-snapshot dbs))))
          (is (zero? (.-size entries)) "the snapshot is gone"))))))))
 
@@ -407,4 +405,4 @@
               (await (wait/until #(= 2 @puts)))
               (stop)
               (is (some #(= "vocab:das haus" (get-in % [:entity :id])) (snapshot/decoded (stored entries))))
-              (is (= (memory/positions (:learner/memory @store)) (stored-positions entries))))))))))))))
+              (is (= (memory/position (:learner/memory @store)) (stored-position entries))))))))))))))

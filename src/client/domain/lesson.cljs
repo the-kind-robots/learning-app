@@ -126,9 +126,17 @@
 
 
 (defn generate-trials
+  "The trials of a lesson over `vocab`, its words and phrases, and
+   `examples`, the examples a read in the lesson's collection sees: one
+   trial per word or phrase, and one example trial per word or phrase that
+   has examples. A word may have several examples; until the lesson can
+   show more than one, it takes the example with the smallest id, so the
+   same one every time."
   [vocab examples]
-  (into (mapv vocab->trial vocab)
-        (map example->trial examples)))
+  (let [example-of (update-vals (group-by :word-id examples) #(first (sort-by :id %)))]
+    (into (mapv vocab->trial vocab)
+          (comp (map :word-id) (distinct) (map example-of) (map example->trial))
+          examples)))
 
 
 (defn trial-id

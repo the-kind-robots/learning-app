@@ -47,8 +47,7 @@
            :word        word
            :value       value
            :translation translation
-           :structure   []
-           :created-at  time/test-now-iso}
+           :structure   []}
     collection-id (assoc :collection-id collection-id)))
 
 

@@ -1,9 +1,4 @@
-# example-backfill Specification
-
-## Purpose
-Define how a device catches up on example sentences it is missing for its vocabulary, after replication and on start, without letting that work disturb sync.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: A replication pass queues the example fetches the device owes
 
@@ -112,29 +107,6 @@ single pair when an entry is added to a collection by hand, so both answers agre
 - **AND** no example carries that word and that collection
 - **THEN** an example-fetch task is queued for that pair, as a backfill pass would queue it
 
-### Requirement: Backfill never fails the replication pass
-
-The backfill SHALL be contained: a failure while deciding or queueing SHALL be logged and SHALL NOT
-change what the pass reports to its caller. A pass SHALL NOT wait for the backfill either: what the
-pass reports is what it replicated, and the screen and the pass throttle follow the replication, not
-the queueing that comes after it. Queueing writes task documents locally and issues no network
-request of its own, so an unreachable backend delays the fetches, it does not break the pass.
-
-#### Scenario: The backfill throws
-
-- **WHEN** reading local data or writing a task fails during backfill
-- **THEN** the pass still reports what it replicated
-
-#### Scenario: The backfill is still running
-
-- **WHEN** a replication pass completes and the backfill it starts has not finished
-- **THEN** the pass reports what it replicated without waiting for it
-
-#### Scenario: The device is offline
-
-- **WHEN** a pass completes and the backend is unreachable
-- **THEN** the tasks are queued and wait, and the pass is unaffected
-
 ### Requirement: A start queues the example fetches the device already owes
 
 On start the device SHALL count what is missing over every vocabulary entry it holds — words and
@@ -176,74 +148,7 @@ counted. A pass that completes before then SHALL count after it too.
 - **THEN** the backfill counts once the examples kept on the device have moved, without waiting for
   another pass
 
-### Requirement: A backfill queues every missing pair, and one pair is one task
-
-A backfill SHALL queue a task for every pair it finds missing, with no cap. Queueing writes task
-documents and generates nothing: the pace belongs to the task queue, which runs a few fetches at a
-time and backs off on the provider's terms, so a cap here would only leave a remainder nobody is
-responsible for.
-
-A fetch task's identity SHALL be the pair it is for. Asking for a pair that is already queued SHALL
-therefore write nothing and SHALL NOT be an error — no reader has to know what the queue holds, and
-two backfills may run at once.
-
-A task that was dead-lettered SHALL NOT hold the identity of the pair, so the pair can be asked for
-again; the failure SHALL be kept under an identity of its own for reading.
-
-The tasks of one backfill SHALL be written together rather than one at a time — a device catching up
-on a whole vocabulary queues as many as it is missing.
-
-#### Scenario: A device is missing more pairs than any cap would allow
-
-- **WHEN** a start finds a hundred and twenty missing pairs
-- **THEN** a hundred and twenty example-fetch tasks are queued
-- **AND** nothing is left for a later pass to pick up
-
-#### Scenario: A pass repeated before the queue drains
-
-- **WHEN** a backfill runs while example-fetch tasks are still queued
-- **THEN** the pairs those tasks carry are named again and no second task is written for them
-
-#### Scenario: Two askers, one pair
-
-- **WHEN** a backfill queues the fetch for a pair
-- **AND** the reader adds that same entry to that same collection by hand
-- **THEN** the queue holds one task for the pair
-
-#### Scenario: A fetch that was dead-lettered
-
-- **WHEN** an example-fetch task has been dead-lettered for a pair
-- **AND** a backfill runs
-- **THEN** the pair counts as missing and a task is queued for it
-- **AND** the dead-lettered task is still there to read
-
-### Requirement: A throttled answer pauses the whole example-fetch queue
-
-When the examples endpoint answers that the device is throttled and names a Retry-After delay, the
-task queue SHALL start no further example fetch until that delay has passed. Fetches already in
-flight SHALL be allowed to finish. The refused fetch SHALL be queued again for the end of the delay;
-the other queued fetches SHALL keep their schedule.
-
-A trigger that arrives before the delay has passed — a newly queued fetch, a resume, a flush — SHALL
-NOT start a fetch. When the delay has passed, the queue SHALL resume on its own and SHALL drain what
-is due.
-
-#### Scenario: The endpoint throttles a queue of many fetches
-
-- **WHEN** ten fetches are due and the first answer is a throttle with a Retry-After delay
-- **THEN** only the fetches already in flight are sent
-- **AND** no further fetch is sent until the delay has passed
-
-#### Scenario: A new fetch is queued during the pause
-
-- **WHEN** a fetch is queued while the queue is paused by a throttle
-- **THEN** it is not sent before the Retry-After delay has passed
-
-#### Scenario: The delay passes
-
-- **WHEN** the Retry-After delay has passed
-- **THEN** the queue resumes without any further trigger and sends every due fetch, the refused one
-  included
+## ADDED Requirements
 
 ### Requirement: A fetch whose pair is answered sends no request
 

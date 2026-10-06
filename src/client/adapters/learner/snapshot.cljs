@@ -7,13 +7,13 @@
    transit. The body is what memory took from each document
    (`adapters.learner.memory/entries`). The header is
 
-     {:version   format-version
-      :checksum  checksum of the body
-      :databases {db-key {:marker   database marker
-                          :position {:id :rev :seq}}}}
+     {:version  format-version
+      :checksum checksum of the body
+      :marker   user-db's marker
+      :position {:id :rev :seq}}
 
-   The positions are those of the memory the body was taken from
-   (`adapters.learner.memory/positions`). A snapshot read from the cache is
+   The position is that of the memory the body was taken from
+   (`adapters.learner.memory/position`). A snapshot read from the cache is
    kept as `{:header :body}`: the header read once, the body as text until
    it is decoded."
   (:require
@@ -29,8 +29,12 @@
    now can. A snapshot of another version is dropped, and the start reads
    every document once; a snapshot is never migrated. The test
    `client.memory-snapshot-test/the-snapshot-format-is-the-one-its-version-names`
-   fails when the format changes."
-  1)
+   fails when the format changes.
+
+   Version 2: memory is read from user-db alone, and examples live there
+   (ADR-0020). A version-1 snapshot holds device-db's examples and a
+   position per database, which memory no longer keeps."
+  2)
 
 
 (def ^:private cache-name
@@ -71,57 +75,39 @@
 
 
 (defn encode
-  "The snapshot of `memory`, as text. `markers` is `{db-key marker}`, the
-   marker of each database memory was read from."
-  [memory markers]
+  "The snapshot of `memory`, as text. `marker` is the marker of user-db,
+   which memory was read from."
+  [memory marker]
   (let [body (transit/write (transit/writer :json) (memory/entries memory))]
     (joined {:body   body
-             :header {:checksum  (checksum body)
-                      :databases (into {}
-                                       (map (fn [[db-key position]]
-                                              [db-key {:marker (markers db-key) :position position}]))
-                                       (memory/positions memory))
-                      :version   format-version}})))
-
-
-(defn positions
-  "The feed positions the snapshot's `header` stored, `{db-key {:id :rev
-   :seq}}`."
-  [header]
-  (update-vals (:databases header) :position))
+             :header {:checksum (checksum body)
+                      :marker   marker
+                      :position (memory/position memory)
+                      :version  format-version}})))
 
 
 (defn refusal
-  "Why the snapshot with `header` cannot start memory from the databases as
-   they stand, or nil when it can. `at` is where each database's change
-   feed stands now (`db.pouch/feed-position`), `marked` the marker of each
-   database, and `held` whether each database still holds the change at
-   the stored position (`db.pouch/holds-position?`). The reasons are:
+  "Why the snapshot with `header` cannot start memory from user-db as it
+   stands, or nil when it can. `at` is where user-db's change feed
+   stands now (`db.pouch/feed-position`), `marked` user-db's marker, and
+   `held` whether user-db still holds the change at the stored position
+   (`db.pouch/holds-position?`). The reasons are:
 
    - `:version` — the snapshot is of another format version;
-   - `:marker` — a database is not the one the snapshot was taken from;
-   - `:position` — a database's feed stands behind the stored position, as
+   - `:marker` — user-db is not the database the snapshot was taken from;
+   - `:position` — user-db's feed stands behind the stored position, as
      when the database lost its last writes;
-   - `:change` — a database no longer holds the change at the stored
+   - `:change` — user-db no longer holds the change at the stored
      position, as when it lost its last writes and stored others under
      their sequences.
 
    The body is checked when it is decoded (`decoded`)."
-  [{:keys [databases version]} at marked held]
+  [{:keys [marker position version]} at marked held]
   (cond
-    (not= format-version version)
-    :version
-
-    (not-every? (fn [[db-key marker]] (= marker (get-in databases [db-key :marker]))) marked)
-    :marker
-
-    (not-every? (fn [[db-key position]]
-                  (some-> (get-in databases [db-key :position :seq]) (<= (:seq position))))
-                at)
-    :position
-
-    (not-every? true? (vals held))
-    :change))
+    (not= format-version version)                  :version
+    (not= marker marked)                           :marker
+    (not (some-> (:seq position) (<= (:seq at))))  :position
+    (not held)                                     :change))
 
 
 (defn decoded
@@ -157,10 +143,10 @@
   "Stores the snapshot of `memory` (`encode`) in place of the one stored.
    The Cache API replaces an entry whole: a write that does not finish
    leaves the old one."
-  [memory markers]
+  [memory marker]
   (when (cache-api?)
     (let [cache (await (.open js/caches cache-name))]
-      (await (.put cache snapshot-key (js/Response. (encode memory markers)))))))
+      (await (.put cache snapshot-key (js/Response. (encode memory marker)))))))
 
 
 (defn ^:async delete!

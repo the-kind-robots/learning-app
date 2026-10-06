@@ -59,7 +59,7 @@ async function storedExampleValues(page) {
   return page.evaluate(async () => {
     const kw = cljs.core.keyword;
     const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
-    const found = await db.find(db.use('device-db'), toClj({ selector: { type: 'example' } }));
+    const found = await db.find(db.use('user-db'), toClj({ selector: { type: 'example' } }));
     const docs = cljs.core.get(found, kw('docs'));
     return cljs.core.clj__GT_js(cljs.core.mapv((d) => cljs.core.get(d, kw('value')), docs));
   });

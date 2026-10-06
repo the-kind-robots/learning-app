@@ -5,15 +5,19 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [adapters.learner :as adapter]
+   [adapters.learner.documents :as documents]
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
+   [client.support.db-seed :as db-seed]
    [client.support.document :as document]
    [client.support.learner :as learner]
    [client.support.time :as time]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is testing use-fixtures]]
+   [clojure.string :as str]
    [db :as db]
    [db.pouch :as pouch]
    [use-cases.examples :as examples]
@@ -43,8 +47,8 @@
 
 
 (defn- ^:async with-learner
-  "Seeds `docs` into their databases — an `:example` goes to device-db, any
-   other to user-db — then calls `f` with the learner port over them, the
+  "Seeds `docs` into user-db, where every type of the learner's data lives,
+   then calls `f` with the learner port over the databases, the
    store that keeps memory, and the function that stops following the
    feeds."
   [docs f]
@@ -53,7 +57,7 @@
     (^:async fn
      [dbs]
      (doseq [doc docs]
-       (await (db/insert ((if (= "example" (:type doc)) :device/db :user/db) dbs) doc)))
+       (await (db/insert (:user/db dbs) doc)))
      (await (learner/with-learner dbs clock #(f (assoc % :dbs dbs))))))))
 
 
@@ -197,7 +201,7 @@
           "no collection lists the word, the one memory had not seen included")
       (is (= ["vocab:die katze"] (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "vocab")))))
       (is (= ["review-1"] (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review")))))
-      (is (= ["example-1"] (map :_id (await (db-queries/fetch-by-type (:device/db dbs) "example")))))
+      (is (= ["example-1"] (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "example")))))
       (is (nil? (stored-word store "vocab:der hund")))
       (is (= [] (get-in @store [:learner/memory :collections "coll-tiere" :word-ids])))
       (is (nil? (await ((:learner/delete-word! learner) "vocab:der hund")))
@@ -236,7 +240,7 @@
       (is (empty? (await (db-queries/fetch-by-type (:user/db dbs) "collection"))))
       (is (nil? (get-in @store [:learner/memory :collections "coll-tiere"])))
       (is (= 1 (count (await (db-queries/fetch-by-type (:user/db dbs) "vocab")))))
-      (is (= #{"example-1" "example-2"} (set (map :_id (await (db-queries/fetch-by-type (:device/db dbs) "example"))))))
+      (is (= #{"example-1" "example-2"} (set (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "example"))))))
       (let [{:keys [id]} (await ((:learner/create-collection! learner) "Tiere"))
             memory       (:learner/memory @store)]
         (is (empty? (examples/visible-in (memory/examples-of memory ["vocab:der hund"]) id))
@@ -423,18 +427,31 @@
           (is (nil? (memory/word (memory) "vocab:der hund")) "a deleted word")))))))
 
 
-(deftest a-write-does-not-depend-on-device-db
-  (async-testing "with device-db's change log failing, a word is added and memory has it"
+(deftest an-add-does-not-wait-on-device-db
+  (async-testing "device-db can be neither read nor written: the word is added and memory has it"
     (with-learner
      [hund]
      (^:async fn
       [{:keys [dbs learner store]}]
-      (set! (.-changes ^js (:device/db dbs)) (fn [& _] (js/Promise.reject (js/Error. "aborted"))))
-      (let [{:keys [created?]} (await ((:learner/add-word! learner)
-                                       {:id "vocab:die katze" :kind :word :translation [{:lang "ru" :value "кошка"}] :value "die Katze"}))]
-        (is (true? created?))
-        (is (some? (stored-word store "vocab:die katze"))))
-      (js/Reflect.deleteProperty (:device/db dbs) "changes")))))
+      ;; PouchDB 9 binds these on the instance, so the originals are kept
+      ;; and put back.
+      (let [device    ^js (:device/db dbs)
+            refused   (fn [& _] (js/Promise.reject (js/Error. "device-db unavailable")))
+            methods   ["allDocs" "bulkDocs" "changes" "get" "put"]
+            originals (into {} (map (juxt identity #(aget device %))) methods)]
+        (doseq [method methods]
+          (aset device method refused))
+        (try
+          (let [{:keys [created?]} (await (vocabulary/add! {:learner
+                                                            (assoc learner :learner/active-collection (constantly nil))}
+                                                           "die Katze"
+                                                           "кошка"
+                                                           :word))]
+            (is (true? created?))
+            (is (some? (stored-word store "vocab:die katze"))))
+          (finally
+           (doseq [[method original] originals]
+             (aset device method original)))))))))
 
 
 (deftest a-delete-refused-twice-leaves-the-word-as-it-was
@@ -452,7 +469,7 @@
           (is (= ["vocab:der hund"] (:word-ids (await (db/get (:user/db dbs) "coll-tiere"))))
               "and is in its collection again")
           (finally
-            (set! pouch/bulk-docs bulk))))))))
+           (set! pouch/bulk-docs bulk))))))))
 
 
 (deftest a-change-the-feed-dropped-is-caught-when-the-page-is-shown-again
@@ -484,3 +501,182 @@
       (await (wait/settled))
       (await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
       (is (nil? (stored-word store "vocab:der hund")))))))
+
+
+;;
+;; Examples an earlier build kept in device-db move to user-db (#528)
+;;
+
+
+(def ^:private kept-on-device
+  "Examples as an earlier build kept them in device-db, under generated ids:
+   two different ones of one pair, the second of them twice, one of the
+   pair in Tiere, one of a word deleted since, and one of a collection
+   deleted since."
+  [{:_id "1A2B" :translation "перевод" :value "älter" :word "der Hund" :word-id "vocab:der hund"}
+   {:_id "9F8E" :translation "перевод" :value "neuer" :word "der Hund" :word-id "vocab:der hund"}
+   {:_id "9F8F" :translation "перевод" :value "neuer" :word "der Hund" :word-id "vocab:der hund"}
+   {:_id           "5C5C"
+    :collection-id "coll-tiere"
+    :translation   "перевод"
+    :value         "Tiere"
+    :word          "der Hund"
+    :word-id       "vocab:der hund"}
+   {:_id "6D6D" :translation "перевод" :value "fremd" :word "die Katze" :word-id "vocab:die katze"}
+   {:_id           "7E7E"
+    :collection-id "coll-gone"
+    :translation   "перевод"
+    :value         "gelöscht"
+    :word          "der Hund"
+    :word-id       "vocab:der hund"}])
+
+
+(defn- ^:async seed-device!
+  "Seeds `examples` into device-db, beside a queued fetch and the device's
+   identity."
+  [dbs examples]
+  (await (db-seed/seed-examples! (:device/db dbs) examples))
+  (await (db/insert (:device/db dbs) {:_id "task:example-fetch:vocab:die katze:" :task-type "example-fetch" :type "task"}))
+  (await (db/insert (:device/db dbs) {:_id "identity" :type "identity"})))
+
+
+(defn- ^:async stored-by-value
+  "The example documents of `db`, by their sentence."
+  [db]
+  (into {} (map (juxt :value identity)) (await (db-queries/fetch-examples db))))
+
+
+(defn- adapter
+  "The learner adapter over `dbs` and `store`, as the port runs it."
+  [dbs store]
+  {:clock clock :dbs dbs :store store})
+
+
+(defn- ^:async with-insert-all
+  "Calls `f` while `db.pouch/insert-all-if-absent` is `stub`, which is
+   handed the real one, and puts the real one back after."
+  [stub f]
+  (let [real pouch/insert-all-if-absent]
+    (set! pouch/insert-all-if-absent (stub real))
+    (try
+      (await (f))
+      (finally
+        (set! pouch/insert-all-if-absent real)))))
+
+
+(deftest the-device-s-examples-move-to-user-db
+  (async-testing "every distinct example moves, those of deleted words and collections included; device-db keeps no example"
+    (with-learner
+     [hund tiere]
+     (^:async fn
+      [{:keys [dbs store]}]
+      (await (seed-device! dbs kept-on-device))
+      (is (= 6 (await (adapter/move-device-examples! (adapter dbs store)))) "every device-db example is deleted")
+      (let [moved (await (stored-by-value (:user/db dbs)))]
+        (is (= #{"älter" "neuer" "Tiere" "fremd" "gelöscht"} (set (keys moved)))
+            "both examples of one pair are kept, the same one twice is one, and a deleted word's or collection's are kept too")
+        (is (= (documents/example-doc "vocab:der hund" "der Hund" "coll-tiere" (moved "Tiere"))
+               (dissoc (moved "Tiere") :_rev))
+            "a moved example is the document a fetch of it would have written"))
+      (is (empty? (await (db-queries/fetch-examples (:device/db dbs)))) "device-db holds no example")
+      (is (= #{"task:example-fetch:vocab:die katze:" "identity"}
+             (set (remove #(str/starts-with? % "_design/") (map :id (:rows (await (db/all-docs (:device/db dbs))))))))
+          "the queue and the identity stay")
+      (is (= #{"älter" "neuer" "Tiere" "gelöscht"}
+             (set (map :value (memory/examples-of (:learner/memory @store) ["vocab:der hund"]))))
+          "memory has the moved examples when the move resolves")))))
+
+
+(deftest a-move-run-again-writes-nothing
+  (async-testing "a second move finds nothing to move and leaves user-db as it was"
+    (with-learner
+     [hund tiere]
+     (^:async fn
+      [{:keys [dbs store]}]
+      (await (seed-device! dbs kept-on-device))
+      (await (adapter/move-device-examples! (adapter dbs store)))
+      (let [before (await (stored-by-value (:user/db dbs)))]
+        (is (zero? (await (adapter/move-device-examples! (adapter dbs store)))))
+        (is (= before (await (stored-by-value (:user/db dbs)))) "no revision changed"))))))
+
+
+(deftest an-interrupted-move-finishes-on-the-next-run
+  (async-testing "one example was written and no device-db copy was deleted: the next run finishes"
+    (with-learner
+     [hund tiere]
+     (^:async fn
+      [{:keys [dbs store]}]
+      (await (seed-device! dbs kept-on-device))
+      ;; What the interrupted run wrote before it stopped.
+      (let [doc     (documents/example-doc "vocab:der hund" "der Hund" nil (second kept-on-device))
+            written (:rev (await (db/insert (:user/db dbs) doc)))]
+        (is (= 6 (await (adapter/move-device-examples! (adapter dbs store)))))
+        (is (empty? (await (db-queries/fetch-examples (:device/db dbs)))))
+        (is (= written (:_rev (await (db/get (:user/db dbs) (:_id doc)))))
+            "the example written before is not written again")
+        (is (= #{"älter" "neuer" "Tiere" "fremd" "gelöscht"} (set (keys (await (stored-by-value (:user/db dbs))))))
+            "the examples the interrupted run had not written are moved now"))))))
+
+
+(deftest an-example-not-written-stays-on-the-device
+  (async-testing "user-db refuses the write: the device-db example stays for the next run"
+    (with-learner
+     [hund]
+     (^:async fn
+      [{:keys [dbs store]}]
+      (await (seed-device! dbs [(second kept-on-device)]))
+      (await (with-insert-all
+              (fn [_real] (fn [& _] (js/Promise.reject (js/Error. "quota"))))
+              (^:async fn []
+               (try
+                 (await (adapter/move-device-examples! (adapter dbs store)))
+                 (is false "the move rejects")
+                 (catch :default err
+                   (is (= "quota" (ex-message err))))))))
+      (is (= ["9F8E"] (map :_id (await (db-queries/fetch-examples (:device/db dbs))))))
+      (is (= 1 (await (adapter/move-device-examples! (adapter dbs store)))) "the next run moves it")))))
+
+
+(deftest the-move-goes-a-page-at-a-time
+  (async-testing "more examples than one page: each page is one write to user-db"
+    (with-learner
+     [hund]
+     (^:async fn
+      [{:keys [dbs store]}]
+      (await (db-seed/seed-examples! (:device/db dbs)
+                                     (mapv #(assoc (second kept-on-device) :_id (str "ID" (+ 1000 %)) :value (str "Satz " %))
+                                           (range 501))))
+      (let [writes (atom [])]
+        (await (with-insert-all
+                (fn [real]
+                  (fn [dbs schema docs]
+                    (swap! writes conj (count docs))
+                    (real dbs schema docs)))
+                (^:async fn []
+                 (is (= 501 (await (adapter/move-device-examples! (adapter dbs store))))))))
+        (is (= [100 100 100 100 100 1] @writes))
+        (is (= 501 (count (filter #(= "example" (get-in % [:doc :type]))
+                                  (:rows (await (db/all-docs (:user/db dbs) {:include-docs true})))))))
+        (is (empty? (await (db-queries/fetch-examples (:device/db dbs))))))))))
+
+
+(deftest a-failed-move-is-run-again
+  (async-testing "the move fails once; the port's move runs it again and resolves once it succeeds"
+    (with-learner
+     [hund]
+     (^:async fn
+      [{:keys [dbs learner]}]
+      (await (seed-device! dbs [(second kept-on-device)]))
+      (let [attempts (atom 0)]
+        (await (with-insert-all
+                (fn [real]
+                  (fn [& args]
+                    (if (= 1 (swap! attempts inc))
+                      (js/Promise.reject (js/Error. "quota"))
+                      (apply real args))))
+                #((:learner/examples-moved learner))))
+        (is (= 2 @attempts) "the second run succeeded")
+        (is (identical? ((:learner/examples-moved learner)) ((:learner/examples-moved learner)))
+            "one move per port, whoever asks")
+        (is (empty? (await (db-queries/fetch-examples (:device/db dbs)))))
+        (is (= ["neuer"] (map :value (await (db-queries/fetch-examples (:user/db dbs)))))))))))

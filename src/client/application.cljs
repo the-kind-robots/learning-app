@@ -92,7 +92,7 @@
 
 
 (nxr/register-effect! :effect/memory-loaded
-  ;; Everything the databases held at start: the splash goes, and the screen
+  ;; Everything user-db held at start: the splash goes, and the screen
   ;; asked for is shown.
   (fn memory-loaded [{:keys [dispatch]} {:keys [store]} memory]
     (swap! store assoc :learner/memory memory :learner/loaded? true)
@@ -100,11 +100,11 @@
 
 
 (nxr/register-effect! :effect/memory-changed
-  ;; A batch the database `db-key` stored after the load — this app's own
-  ;; write, a replication, another tab — and the feed position after it.
-  ;; The open screen is left as it is.
-  (fn memory-changed [_ {:keys [store]} db-key docs position]
-    (swap! store update :learner/memory memory/with-changes db-key docs position)))
+  ;; A batch user-db stored after the load — this app's own write, a
+  ;; replication, another tab — and the feed position after it. The open
+  ;; screen is left as it is.
+  (fn memory-changed [_ {:keys [store]} docs position]
+    (swap! store update :learner/memory memory/with-changes docs position)))
 
 
 (nxr/register-action! :action/refresh-page

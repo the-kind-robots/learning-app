@@ -85,21 +85,22 @@
 (defonce ^:private pass-listeners (atom #{}))
 
 
+(defn- announce-pass!
+  "Calls each of `listeners` with `result`, each inside a guard."
+  [listeners result]
+  (doseq [listener listeners]
+    (try
+      (listener result)
+      (catch :default err
+        (log/warn :sync/pass-listener-failed {:error (ex-message err)})))))
+
+
 (defn on-pass!
   "Registers `listener`, called with each completed pass's own result. Returns
    a function that unregisters it."
   [listener]
   (swap! pass-listeners conj listener)
   #(swap! pass-listeners disj listener))
-
-
-(defn- announce-pass!
-  [result]
-  (doseq [listener @pass-listeners]
-    (try
-      (listener result)
-      (catch :default err
-        (log/warn :sync/pass-listener-failed {:error (ex-message err)})))))
 
 
 (defn ^:async sync-once!
@@ -120,7 +121,7 @@
   (when-let [{:keys [pulled] :as result} (await (pouch/sync-once! dbs :user/db account-id))]
     (when (pos? pulled)
       (await (resolve-vocab-conflicts! (:user/db dbs))))
-    (announce-pass! result)
+    (announce-pass! @pass-listeners result)
     result))
 
 
@@ -136,6 +137,15 @@
    reviews) goes out in a few passes rather than one per write. Placeholder;
    tune via battery todo."
   3000)
+
+
+(def no-account
+  "What `start!` returns for a device without an account. Such a device runs
+   no pass, so there is nothing to hear: the subscription is inert, like the
+   pull beside it."
+  {:sync/account-id nil
+   :sync/on-pass    (constantly nil)
+   :sync/pull!      (constantly nil)})
 
 
 (defn- merged-passes
@@ -191,7 +201,13 @@
    revisions, so it does ask — that pass is what pushes it.
 
    `:sync/on-pass` is where a listener registers to hear what each completed
-   pass brought; see `sync-once!`.
+   pass brought; see `sync-once!`. A listener that subscribes after a pass
+   of this start has completed is called once at once with `{}`: it learns
+   that a pass has happened, and nothing that pass brought is delivered
+   again. A pass of an earlier start does not count, so a sync started again
+   for another account is not taken to have replicated anything yet.
+   `:sync/push-interval-ms` is how long a local write waits, at most, before
+   a pass pushes it.
 
    `passes-wait-for`, a promise or nil, holds back every pass of this tab
    until it resolves. The start of the learner's memory checks its snapshot
@@ -206,6 +222,8 @@
         (identity/use-identity! identity)
         (let [wanted (atom false)
               running (atom nil)
+              ;; Whether a pass of this start has completed.
+              passed? (atom false)
               ;; `[id rev]` the passes pulled / the change feed reported.
               pulled (atom #{})
               written (atom #{})
@@ -232,6 +250,8 @@
                                 (log/warn :sync/pass-failed {:error (ex-message err)})
                                 nil))
                       (.then (fn [result]
+                               (when result
+                                 (reset! passed? true))
                                (swap! pulled into (:pulled-revs result))
                                (when (local-writes?)
                                  (reset! wanted true))
@@ -253,23 +273,22 @@
                                          (swap! written conj (pouch/change-revision change))
                                          (push!)))]
           (log/info :sync/ready {:user-id id})
-          {:sync/account-id id
-           :sync/on-pass    on-pass!
+          {:sync/account-id        id
+           :sync/on-pass           (fn [listener]
+                                     (let [unsubscribe (on-pass! listener)]
+                                       (when @passed?
+                                         (announce-pass! [listener] {}))
+                                       unsubscribe))
            :sync/pairing-confirmed! #(pairing-confirmed! dbs %)
-           :sync/pull!      request!
-           :sync/unwatch    unwatch}))
+           :sync/pull!             request!
+           :sync/push-interval-ms  push-interval-ms
+           :sync/unwatch           unwatch}))
       (do
         (log/info :sync/local-only {})
-        ;; A device with no account runs no pass, so there is nothing to hear:
-        ;; the subscription is inert, like the pull beside it.
-        {:sync/account-id nil
-         :sync/on-pass    (constantly nil)
-         :sync/pull!      (constantly nil)}))
+        no-account))
     (catch js/Error err
       (log/warn :sync/start-failed {:error (ex-message err)})
-      {:sync/account-id nil
-       :sync/on-pass    (constantly nil)
-       :sync/pull!      (constantly nil)})))
+      no-account)))
 
 
 (defonce ^:private push-socket (atom nil))
@@ -336,9 +355,11 @@
 
 (defn- of-the-account?
   "Whether a device-db document was held on behalf of the account, rather than
-   on behalf of this device. The examples the device fetched and the fetches
-   still queued belong to the account; the stored identity and the migration
-   records belong to the device and outlive any account it carries.
+   on behalf of this device. The fetches still queued belong to the account,
+   and so do the examples an earlier build kept here that have not moved to
+   user-db yet (`adapters.learner/move-device-examples!`). The stored
+   identity and the migration records belong to the device and outlive any
+   account it carries.
 
    Asked of the schemas that own those documents, so a type renamed there is
    renamed here."
@@ -349,12 +370,14 @@
 
 
 (defn ^:async forget-account-data!
-  "Deletes what device-db held for the account that was here.
+  "Deletes what device-db held for the account that was here. The account's
+   examples in user-db go when user-db is destroyed.
 
-   Vocabulary ids are content-addressed (ADR-0008), so without this the next
-   account is shown the previous one's sentences — generated under its theme
-   names — and the backfill, finding those pairs answered, never asks for any
-   of its own. Queued fetches would go out under the new session too.
+   Queued fetches would otherwise go out under the new session and write the
+   previous account's sentences, generated under its theme names, into the
+   new account's user-db. Vocabulary ids are content-addressed (ADR-0008), so
+   an example not moved yet would move into the new account the same way, and
+   the backfill, finding those pairs answered, would never ask for its own.
 
    Addressed rather than destroyed: device-db is also where the identity this
    device is about to store lives."

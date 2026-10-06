@@ -25,7 +25,9 @@
   [{:keys [clock db store]}]
   (let [learner {:clock clock
                  :dbs   db
-                 :store store}]
+                 :store store}
+        ;; One move per port, started by whoever asks first.
+        moved   (delay (learner/examples-moved! learner))]
     (merge
      reads
      {:learner/memory (fn memory
@@ -43,9 +45,6 @@
       :learner/catch-up! (fn catch-up!
                            []
                            (learner/catch-up! learner))
-      :learner/read-stored (fn read-stored
-                             [ids]
-                             (learner/read-stored learner ids))
       :learner/add-word! (fn add-word!
                            [entry]
                            (learner/add-word! learner entry))
@@ -73,6 +72,15 @@
       :learner/remove-from-collection! (fn remove-from-collection!
                                          [word-id collection-id]
                                          (learner/remove-from-collection! learner word-id collection-id))
+      :learner/examples-moved (fn examples-moved
+                                []
+                                @moved)
+      :learner/hold-fetches-until! (fn hold-fetches-until!
+                                     [ready]
+                                     (learner/hold-fetches-until! learner ready))
+      :learner/cancel-answered-fetches! (fn cancel-answered-fetches!
+                                          [example-ids]
+                                          (learner/cancel-answered-fetches! learner example-ids))
       :learner/request-examples! (fn request-examples!
                                    [requests]
                                    (learner/request-examples! learner requests))})))

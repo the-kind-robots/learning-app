@@ -102,13 +102,18 @@ await page.evaluate(async () => {
   const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
   const found = await db.find(db.use('user-db'), toClj({ selector: { type: 'vocab' } }));
   const wordId = cljs.core.get(cljs.core.first(cljs.core.get(found, kw('docs'))), kw('_id'));
-  await db.insert(db.use('device-db'), toClj({ type: 'example', 'word-id': wordId, /* ... */ }));
+  await db.insert(db.use('user-db'), toClj({ type: 'review', 'word-id': wordId, /* ... */ }));
 });
 ```
 
+An example is the exception: build it with the app's pure
+`adapters.learner.documents.example_doc(wordId, word, collectionId,
+toClj({ value, translation, structure }))`, so it has the id and body the app
+writes.
+
 Two things to know. A raw document carries its own `type` and lives in the
-database that owns that type (`user-db`: vocab, review, collection;
-`device-db`: example, lesson, task — the adapters' `schema` values are the
+database that owns that type (`user-db`: vocab, review, collection,
+example; `device-db`: lesson, task — the adapters' `schema` values are the
 list). And keys go through `clj->couch`, which snake-cases them: write
 `'word-id'` and it is stored as `word_id`, exactly as the app stores it.
 

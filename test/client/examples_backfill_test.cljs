@@ -2,18 +2,25 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [client.support.db-fixtures :as db-fixtures]
+   [adapters.learner.documents :as documents]
    [adapters.learner.memory :as memory]
+   [client.support.db-fixtures :as db-fixtures]
+   [client.support.db-queries :as db-queries]
    [client.support.db-seed :as db-seed]
    [client.support.learner :as learner]
+   [client.support.replication :as replication]
    [client.support.time :as time]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is testing use-fixtures]]
+   [clojure.string :as str]
    [db :as db]
    [domain.vocabulary :as vocabulary]
    [ports.learner :as ports]
+   [sync :as sync]
+   [tasks :as tasks]
    [use-cases.examples :as sut]
-   [use-cases.vocabulary :as vocabulary-use-case]))
+   [use-cases.vocabulary :as vocabulary-use-case]
+   [utils :as utils]))
 
 
 (def device-db-name (db-fixtures/db-name "client.examples-backfill-test.device"))
@@ -22,7 +29,10 @@
 (def user-db-name (db-fixtures/db-name "client.examples-backfill-test.user"))
 
 
-(use-fixtures :each (db-fixtures/db-fixture-multi [device-db-name user-db-name]))
+(def other-device-db-name (db-fixtures/db-name "client.examples-backfill-test.other-device.user"))
+
+
+(use-fixtures :each (db-fixtures/db-fixture-multi [device-db-name user-db-name other-device-db-name]))
 
 
 ;;
@@ -110,11 +120,12 @@
 
 (defn- ^:async capabilities
   "What the use cases are handed: the learner port over the test databases,
-   and the main card active. It resolves once memory has what the test
-   seeded."
+   the main card active, and no account. It resolves once memory has what
+   the test seeded."
   [dbs]
   (await (learner/caught-up dbs (::store dbs)))
-  {:learner (assoc (::learner dbs) :learner/active-collection (fn [] nil))})
+  {:capabilities/sync sync/no-account
+   :learner (assoc (::learner dbs) :learner/active-collection (fn [] nil))})
 
 
 (defn- ^:async capabilities-adding-into
@@ -174,7 +185,7 @@
        (await (db-seed/seed-vocabulary! (:user/db dbs)
                                         [{:value "Hund" :translation "собака"}
                                          {:value "Katze" :translation "кошка"}]))
-       (await (db-seed/seed-examples! (:device/db dbs)
+       (await (db-seed/seed-examples! (:user/db dbs)
                                       [{:_id         "example-hund"
                                         :word-id     (vocabulary/vocab-id "Hund")
                                         :word        "Hund"
@@ -328,7 +339,7 @@
       (^:async fn
        [dbs]
        (await (seed-phrase! dbs))
-       (await (db-seed/seed-examples! (:device/db dbs)
+       (await (db-seed/seed-examples! (:user/db dbs)
                                       [{:_id         "example-auf-jeden-fall"
                                         :word-id     phrase-id
                                         :word        "auf jeden Fall"
@@ -345,7 +356,7 @@
       (^:async fn
        [dbs]
        (await (seed-phrase! dbs))
-       (await (db-seed/seed-examples! (:device/db dbs)
+       (await (db-seed/seed-examples! (:user/db dbs)
                                       [{:_id         "example-auf-jeden-fall"
                                         :word-id     phrase-id
                                         :word        "auf jeden Fall"
@@ -360,7 +371,7 @@
                 :word-id       phrase-id}]
               (await (queued-tasks dbs))))
        (testing "and nothing once that theme has its own"
-         (await (db-seed/seed-examples! (:device/db dbs)
+         (await (db-seed/seed-examples! (:user/db dbs)
                                         [{:_id           "example-auf-jeden-fall-reise"
                                           :collection-id "coll-reise"
                                           :word-id       phrase-id
@@ -398,7 +409,7 @@
       (^:async fn
        [dbs]
        (await (db-seed/seed-vocabulary! (:user/db dbs) [{:value "Hund" :translation "собака"}]))
-       (await (db-seed/seed-examples! (:device/db dbs)
+       (await (db-seed/seed-examples! (:user/db dbs)
                                       [{:_id         "example-hund"
                                         :word-id     (vocabulary/vocab-id "Hund")
                                         :word        "Hund"
@@ -416,7 +427,7 @@
               (await (queued-fetches dbs)))
            "the main card's example does not answer a named collection")
        (testing "and the same word in a theme that already has its example asks for nothing"
-         (await (db-seed/seed-examples! (:device/db dbs)
+         (await (db-seed/seed-examples! (:user/db dbs)
                                         [{:_id           "example-hund-tiere"
                                           :collection-id "coll-tiere"
                                           :word-id       (vocabulary/vocab-id "Hund")
@@ -445,51 +456,154 @@
    {:_id "vocab:katze" :_rev "1-a" :type "vocab" :value "Katze"}])
 
 
+(def ^:private an-account
+  "The sync capability of a device with an account, as far as the backfill
+   reads it."
+  {:sync/account-id       "account"
+   :sync/push-interval-ms 3000})
+
+
 (defn- recording-capabilities
-  "Memory holding two words and no example, a wait for the load and a read
-   by id that record each time they are asked, and a request that records
-   what it was asked to queue."
+  "A device with an account whose memory holds two words and no example,
+   and whose move, holding of the fetches, catch-up, cancelling and
+   requests record each time they are asked. A request records what it was
+   asked to queue and the delay it was asked to queue it with."
   [asked]
-  {:learner (assoc ports/reads
-                   :learner/loaded            (fn []
-                                                (swap! asked conj :loaded)
-                                                (js/Promise.resolve nil))
-                   :learner/memory            (fn [] (memory/with-docs memory/empty-memory two-words))
-                   :learner/read-stored       (fn [ids]
-                                                (swap! asked conj [:read ids])
-                                                (js/Promise.resolve
-                                                 {:collections []
-                                                  :words       (filterv #(some #{(:id %)} ids)
-                                                                        [{:id "vocab:hund" :value "Hund"}
-                                                                         {:id "vocab:katze" :value "Katze"}])}))
-                   :learner/request-examples! (fn [requests]
-                                                (swap! asked conj (mapv (comp :id :word) requests))
-                                                (js/Promise.resolve nil)))})
+  (let [recorded (fn [step] (fn [& _] (swap! asked conj step) (js/Promise.resolve nil)))]
+    {:capabilities/sync an-account
+     :learner           (assoc ports/reads
+                               :learner/cancel-answered-fetches! (fn [ids]
+                                                                   (swap! asked conj [:cancel ids])
+                                                                   (js/Promise.resolve 0))
+                               :learner/catch-up!                (recorded :catch-up)
+                               :learner/examples-moved           (recorded :moved)
+                               :learner/hold-fetches-until!      (recorded :held)
+                               :learner/memory                   (fn [] (memory/with-docs memory/empty-memory two-words))
+                               :learner/request-examples!        (fn [requests]
+                                                                   (swap! asked
+                                                                     conj
+                                                                     [(mapv (comp :id :word) requests)
+                                                                      (:delay-ms (first requests))])
+                                                                   (js/Promise.resolve nil)))}))
 
 
 (deftest a-start-reads-the-whole-vocabulary-and-a-push-only-pass-reads-nothing
-  (async-testing "the full pass belongs to the start, not to every replication pass"
+  (async-testing "the full read belongs to the start, after the first pass; a pass reads what it brought"
     (await
      ((^:async fn
        []
        (let [asked       (atom [])
              after-pass! (sut/start! (recording-capabilities asked))]
-         (await (wait/until #(= 2 (count @asked))))
-         (is (= [:loaded ["vocab:hund" "vocab:katze"]] @asked)
-             "starting asks over the whole vocabulary")
+         (await (wait/settled))
+         (is (= [:moved :held] @asked) "the fetches are held, and nothing counts before the first pass")
          (is (nil? (after-pass! {:pulled 0 :pushed 3 :pulled-ids []}))
              "the hook answers at once, whatever it leaves running")
-         (await (wait/settled))
-         (is (= [:loaded ["vocab:hund" "vocab:katze"]] @asked)
-             "a pass that pulled nothing reads nothing")
+         (await (wait/until #(= 3 (count @asked))))
+         (is (= [["vocab:hund" "vocab:katze"] nil] (peek @asked))
+             "the first pass, though it pulled nothing, lets the start ask over the whole vocabulary, due now")
          (after-pass! {:pulled 1 :pushed 0 :pulled-ids ["vocab:hund"]})
          (await (wait/until #(= 5 (count @asked))))
-         (is (= [:loaded ["vocab:hund" "vocab:katze"] :loaded [:read ["vocab:hund"]] ["vocab:hund"]] @asked)
-             "a pass that pulled reads by id only what it brought, and asks only about that")))))))
+         (is (= [:catch-up [["vocab:hund"] 6000]] (subvec @asked 3))
+             "a pass that pulled catches memory up, asks only about what it brought, and its fetches wait two push windows")
+         (after-pass! {:pulled 1 :pushed 0 :pulled-examples #{"example:vocab:hund::0123456789ab"} :pulled-ids []})
+         (await (wait/until #(= 6 (count @asked))))
+         (is (= [:cancel #{"example:vocab:hund::0123456789ab"}] (peek @asked))
+             "a pass that brought examples cancels the fetches they answer")))))))
+
+
+(deftest a-pass-waits-until-the-backfill-is-ready
+  (async-testing "nothing counts before the move is done, and the first pass is what makes a device with an account ready"
+    (await
+     ((^:async fn
+       []
+       (let [asked        (atom [])
+             release-move (atom nil)
+             capabilities (assoc-in (recording-capabilities asked)
+                           [:learner :learner/examples-moved]
+                           (fn []
+                             (swap! asked conj :moved)
+                             (js/Promise. (fn [resolve] (reset! release-move resolve)))))
+             after-pass!  (sut/start! capabilities)]
+         (after-pass! {:pulled 1 :pushed 0 :pulled-ids ["vocab:hund"]})
+         (await (wait/settled))
+         (is (= [:moved :held] @asked) "a pass has completed, and nothing counts while the move runs")
+         (@release-move nil)
+         (await (wait/until #(= 2 (count (filter vector? @asked)))))
+         (is (= #{["vocab:hund" "vocab:katze"] ["vocab:hund"]} (set (map first (filter vector? @asked))))
+             "both count once the move is done")))))))
+
+
+(deftest a-first-pass-before-the-backfill-listens-makes-it-ready
+  (async-testing "sync tells a late listener with {} that a pass has happened; no second pass is waited for"
+    (await
+     ((^:async fn
+       []
+       (let [asked    (atom [])
+             listener (sut/start! (recording-capabilities asked))]
+         (listener {})
+         (await (wait/until #(= 3 (count @asked))))
+         (is (= [["vocab:hund" "vocab:katze"] nil] (peek @asked)) "the start counts")))))))
+
+
+(deftest a-device-without-an-account-is-ready-once-the-move-is-done
+  (async-testing "no pass will come, so none is waited for"
+    (await
+     ((^:async fn
+       []
+       (let [asked (atom [])]
+         (sut/start! (assoc (recording-capabilities asked) :capabilities/sync sync/no-account))
+         (await (wait/until #(= 3 (count @asked))))
+         (is (= [["vocab:hund" "vocab:katze"] nil] (peek @asked)))))))))
+
+
+(deftest an-example-one-pass-behind-its-word-is-not-fetched
+  (async-testing
+    "a pass brings a word alone and its fetch waits; the pass that brings the example cancels it"
+    (await
+     (with-dbs
+      (^:async fn
+       [dbs]
+       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:value "Hund" :translation "собака"}]))
+       (let [capabilities   (assoc (await (capabilities dbs)) :capabilities/sync an-account)
+             hund-id        (vocabulary/vocab-id "Hund")
+             requested      (atom [])
+             original-fetch js/fetch]
+         (is (= 1 (await (sut/request-missing-for! capabilities [hund-id]))))
+         (let [{[task] :docs} (await (db/find (:device/db dbs) {:selector {:type "task"}}))
+               example        (documents/example-doc hund-id "Hund" nil {:translation "Собака лает." :value "Der Hund bellt."})]
+           (is (= (utils/ms->iso (+ (time/now-ms) 6000)) (:run-at task))
+               "the fetch is due two push windows after the pass")
+           (await (db/insert (:user/db dbs) example))
+           (is (= 1 (await ((get-in capabilities [:learner :learner/cancel-answered-fetches!]) [(:_id example)]))))
+           (is (empty? (await (queued-fetches dbs))) "the pass that brought the example cancelled the fetch")
+           (set! js/fetch (fn [url] (swap! requested conj url) (js/Promise.reject (js/Error. "no network"))))
+           (try
+             (is (true? (await (tasks/execute-task task {:clock clock :dbs dbs}))))
+             (finally
+              (set! js/fetch original-fetch)))
+           (is (empty? @requested) "had the fetch run anyway, it would have found its pair answered"))))))))
+
+
+(deftest a-fetch-asks-the-backfill-s-question
+  (testing "the ids a fetch looks for are the examples `visible-in` sees, in a theme and outside every theme"
+    ;; Collection ids as the app makes them, with a colon of their own, one
+    ;; of them the start of another.
+    (let [examples [{:collection-id "collection:1-87155332" :word-id "vocab:hund"}
+                    {:collection-id "collection:1-871553329" :word-id "vocab:hund"}
+                    {:collection-id nil :word-id "vocab:hund"}
+                    {:collection-id nil :word-id "vocab:hund x"}
+                    {:collection-id "collection:1-87155332" :word-id "vocab:hund x"}]
+          id-of    (fn [{:keys [collection-id word-id] :as example}]
+                     (:_id (documents/example-doc word-id "w" collection-id (assoc example :translation "t" :value (str word-id collection-id)))))]
+      (doseq [collection-id [nil "collection:1-87155332" "collection:1-871553329" "collection:3-1"]]
+        (let [prefix (documents/example-id-prefix "vocab:hund" collection-id)]
+          (is (= (set (map id-of (sut/visible-in (filter #(= "vocab:hund" (:word-id %)) examples) collection-id)))
+                 (set (filter #(str/starts-with? % prefix) (map id-of examples))))
+              (str "collection " (pr-str collection-id))))))))
 
 
 (deftest a-theme-a-pass-deleted-asks-for-nothing
-  (async-testing "memory may still have the theme; the pass deleted it, so its words get no theme example"
+  (async-testing "memory has not taken the deletion when the pass is announced; the catch-up takes it"
     (await
      (with-dbs
       (^:async fn
@@ -500,3 +614,71 @@
          (await (db/remove (:user/db dbs) (await (db/get (:user/db dbs) "coll-tiere"))))
          (is (zero? (await (sut/request-missing-for! capabilities ["coll-tiere"]))))
          (is (empty? (await (queued-fetches dbs))))))))))
+
+
+;;
+;; Examples replicate with the words they belong to (#528)
+;;
+
+
+(deftest an-example-a-pass-brings-answers-its-pair
+  (async-testing "a word and its example arrive in one pass: nothing is queued, though memory had neither"
+    (await
+     (db-fixtures/with-test-db
+       other-device-db-name
+       (^:async fn
+        [other-device]
+        (await
+         (with-dbs
+          (^:async fn
+           [dbs]
+           ;; Another device of the account added two words and fetched one
+           ;; example.
+           (await (db-seed/seed-vocabulary! other-device
+                                            [{:value "Hund" :translation "собака"}
+                                             {:value "Katze" :translation "кошка"}]))
+           (await (db-seed/seed-examples! other-device
+                                          [{:_id         (str "example:" (vocabulary/vocab-id "Hund") "::0123456789ab")
+                                            :word-id     (vocabulary/vocab-id "Hund")
+                                            :word        "Hund"
+                                            :value       "Der Hund bellt."
+                                            :translation "Собака лает."}]))
+           (is (= 5 (await (replication/replicated! other-device (:user/db dbs)))))
+           ;; Announced straight after the pass, before memory took anything
+           ;; of it: the backfill catches memory up itself.
+           (is (= 1
+                  (await (sut/request-missing-for!
+                          {:capabilities/sync sync/no-account
+                           :learner (assoc (::learner dbs) :learner/active-collection (fn [] nil))}
+                          [(vocabulary/vocab-id "Hund") (vocabulary/vocab-id "Katze")]))))
+           (is (= #{[(vocabulary/vocab-id "Katze") nil]} (await (queued-fetches dbs)))
+               "only the word that came without an example is queued")))))))))
+
+
+(deftest a-start-counts-after-the-device-s-examples-moved
+  (async-testing "an example an earlier build kept in device-db answers its pair at start"
+    (await
+     (with-dbs
+      (^:async fn
+       [dbs]
+       (await (db-seed/seed-vocabulary! (:user/db dbs)
+                                        [{:value "Hund" :translation "собака"}
+                                         {:value "Katze" :translation "кошка"}]))
+       (await (db-seed/seed-examples! (:device/db dbs)
+                                      [{:_id         "3F2B9C1A"
+                                        :word-id     (vocabulary/vocab-id "Hund")
+                                        :word        "Hund"
+                                        :value       "Der Hund bellt."
+                                        :translation "Собака лает."}]))
+       (let [requested    (atom nil)
+             capabilities (assoc-in (await (capabilities dbs))
+                           [:learner :learner/request-examples!]
+                           (fn [requests]
+                             (reset! requested (mapv (comp :id :word) requests))
+                             (js/Promise.resolve nil)))]
+         (sut/start! capabilities)
+         (await (wait/until #(some? @requested)))
+         (is (= [(vocabulary/vocab-id "Katze")] @requested)
+             "the moved example answers Hund; only Katze is asked for")
+         (is (empty? (await (db-queries/fetch-examples (:device/db dbs))))
+             "device-db holds no example")))))))

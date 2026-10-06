@@ -10,9 +10,15 @@
      review      {:id :word-id :retained :created-at}
      collection  {:id :name :word-ids :created-at}
      example     {:id :word-id :collection-id :word :value :translation
-                  :structure :created-at}
+                  :structure}
 
-   Words and phrases are one document type that differ by `:kind`.")
+   Words and phrases are one document type that differ by `:kind`. Every
+   type lives in user-db and replicates with the account."
+  (:require
+   [clojure.walk :as walk]
+   [goog.crypt :as crypt])
+  (:import
+   [goog.crypt Sha1]))
 
 
 (def vocab-schema
@@ -32,7 +38,80 @@
 
 (def example-schema
   {:type "example"
-   :db   :device/db})
+   :db   :user/db})
+
+
+(defn pair-key
+  "The entry `word-id` and the collection `collection-id` as one string, as
+   an id carries them: the two joined by a colon. For an example made
+   outside every collection, the collection id is nil and nothing follows
+   the colon. A collection id may carry colons of its own, as in
+   `collection:1-87155332`; nothing splits a key back into its parts."
+  [word-id collection-id]
+  (str word-id ":" collection-id))
+
+
+(defn- sorted-keys
+  "`x` with every map in it sorted by key. Two maps with the same entries
+   then print and serialise alike, in whatever order they were built."
+  [x]
+  (walk/postwalk #(if (map? %) (into (sorted-map) %) %) x))
+
+
+(defn- content-hash
+  "A short hash of what makes an example itself: its sentence, its
+   translation and its structure, whose maps are sorted by key
+   (`sorted-keys`). The hash is taken of the three as JSON, so it depends
+   on nothing but the content. Two examples with the same content have the
+   same hash on any device."
+  [value translation structure]
+  (let [sha (Sha1.)]
+    (.update sha (crypt/stringToUtf8ByteArray (js/JSON.stringify (clj->js [value translation structure]))))
+    (subs (crypt/byteArrayToHex (.digest sha)) 0 12)))
+
+
+(defn example-doc
+  "The document that stores `example`, a fetched example `{:value
+   :translation :structure}`, for the entry `word-id`, whose text is
+   `word`, in the collection `collection-id`. The collection id is nil for
+   an example made outside every collection, and the document then has no
+   `:collection-id`.
+
+   The id is `example:`, the pair (`pair-key`), a colon and a hash of the
+   example's content. Different examples of one pair get different ids, and
+   all of them are kept. The same example gets the same id on every device.
+   The document holds nothing that depends on the device or on the time,
+   and its keys come in one order. So two devices that store the same
+   example write the same document, PouchDB gives both the same revision,
+   and replication leaves one document without a conflict."
+  [word-id word collection-id example]
+  (let [{:keys [translation value]} example
+        structure                 (sorted-keys (:structure example))]
+    (cond-> {:_id         (str "example:" (pair-key word-id collection-id) ":" (content-hash value translation structure))
+             :structure   structure
+             :translation translation
+             :type        (:type example-schema)
+             :value       value
+             :word        word
+             :word-id     word-id}
+      collection-id (assoc :collection-id collection-id))))
+
+
+(defn example-id-prefix
+  "What the ids begin with of every example of the entry `word-id` that a
+   read in the collection `collection-id` sees: in a collection, the
+   examples made in it; outside every collection, all of the entry's
+   examples. It is the lookup rule of `use-cases.examples/visible-in`,
+   asked of ids. A word id carries no colon after its `vocab:` prefix, so
+   the prefix outside every collection takes no other entry's examples. In
+   a collection, the prefix ends with the colon after the whole collection
+   id, so it takes no other collection's examples, though a collection id
+   carries colons of its own; no collection id is another one followed by
+   a colon."
+  [word-id collection-id]
+  (if collection-id
+    (str "example:" (pair-key word-id collection-id) ":")
+    (str "example:" word-id ":")))
 
 
 (def schemas
@@ -58,9 +137,9 @@
 
 
 (defn tombstone
-  "The deletion of `doc`."
+  "The deletion of `doc`: its id, revision and type, marked deleted."
   [doc]
-  (assoc doc :_deleted true))
+  (assoc (select-keys doc [:_id :_rev :type]) :_deleted true))
 
 
 (defn doc->word

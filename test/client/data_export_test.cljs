@@ -3,22 +3,32 @@
    [client.support.test :refer [async-testing]])
   (:require
    [adapters.data-export :as sut]
+   [adapters.learner.documents :as documents]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [client.support.db-fixtures :as db-fixtures]
+   [client.support.replication :as replication]
    [db :as db]))
 
 
 (def user-db-name (db-fixtures/db-name "client.data-export-test.user"))
 
 
-(use-fixtures :each (db-fixtures/db-fixture user-db-name))
+(def other-user-db-name (db-fixtures/db-name "client.data-export-test.other-user"))
+
+
+(use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name other-user-db-name]))
+
+
+(def ^:private example
+  "An example as the app stores it."
+  (documents/example-doc "vocab:hund" "Hund" nil {:structure [] :translation "Пёс спит" :value "Der Hund schläft"}))
 
 
 (def ^:private seed-docs
   [{:_id "vocab:hund" :type "vocab" :value "Hund" :translation ["собака"] :modified-at "2026-01-01"}
    {:_id "review:1" :type "review" :word-id "vocab:hund" :retained true}
    {:_id "collection:travel" :type "collection" :name "Travel"}
-   {:_id "example:1" :type "example" :word-id "vocab:hund" :value "Der Hund schläft"}])
+   example])
 
 
 (defn- with-seeded-db
@@ -52,7 +62,7 @@
          (is (contains? ids "vocab:hund"))
          (is (contains? ids "review:1"))
          (is (contains? ids "collection:travel") "the type a hand-kept list forgot")
-         (is (contains? ids "example:1"))
+         (is (contains? ids (:_id example)))
          (is (every? #(nil? (:_rev %)) docs) "revisions belong to a database, not to a backup")))))))
 
 
@@ -68,6 +78,27 @@
            (await (db/remove (:user/db dbs) (await (db/get (:user/db dbs) id)))))
          (await (sut/import-data! dbs payload))
          (is (= before (await (stored-docs dbs))))))))))
+
+
+(deftest an-imported-example-is-the-document-the-app-stores
+  (async-testing "export, then import into another database: the same id and revision, and no conflict between the two"
+    (await
+     (with-seeded-db
+      (^:async fn
+       [dbs]
+       (let [payload (await (sut/export-data! dbs))]
+         (await
+          (db-fixtures/with-test-db
+            other-user-db-name
+            (^:async fn
+             [other]
+             (await (sut/import-data! {:user/db other} payload))
+             (let [here  (await (db/get (:user/db dbs) (:_id example)))
+                   there (await (db/get other (:_id example)))]
+               (is (= (:_rev here) (:_rev there)) "the same revision")
+               (await (replication/replicated! other (:user/db dbs)))
+               (is (empty? (:_conflicts (await (db/get (:user/db dbs) (:_id example) {:conflicts true}))))
+                   "and no conflict after replication")))))))))))
 
 
 (deftest importing-the-same-payload-twice-changes-nothing

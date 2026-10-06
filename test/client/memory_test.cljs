@@ -109,37 +109,47 @@
 
 (deftest a-batch-of-nothing-memory-keeps-leaves-memory-as-it-was
   (let [memory (sut/with-changes sut/empty-memory
-                                 :user/db
                                  [(assoc hund :_rev "1-a")]
                                  {:id "vocab:der hund" :rev "1-a" :seq 1})]
     (is
      (identical?
       memory
-      (sut/with-changes memory :device/db [{:_id "task-1" :_rev "1-a" :type "task"}] {:id "task-1" :rev "1-a" :seq 7}))
-     "a batch of tasks gives no new memory, so nothing renders and no snapshot is written")
+      (sut/with-changes memory
+                        [{:_id "pairing:n1" :_rev "1-a" :type "pairing"}]
+                        {:id "pairing:n1" :rev "1-a" :seq 7}))
+     "a pairing receipt gives no new memory, so nothing renders and no snapshot is written")
     (is (identical?
          memory
-         (sut/with-changes memory :user/db [(assoc hund :_rev "1-a")] {:id "vocab:der hund" :rev "1-a" :seq 2}))
+         (sut/with-changes memory [(assoc hund :_rev "1-a")] {:id "vocab:der hund" :rev "1-a" :seq 2}))
         "nor does a revision memory holds already")))
 
 
-(deftest memory-loads-both-databases-and-follows-the-feed
-  (async-testing "load, then documents written by anything else arrive through the feed"
+(deftest memory-loads-user-db-and-follows-the-feed
+  (async-testing "load, then documents written by anything else arrive through the feed; device-db is not read"
     (with-test-dbs
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "vocab:der hund" :value "der Hund" :translation "пёс"}]))
-      (await (db-seed/seed-examples! (:device/db dbs)
+      (await (db-seed/seed-examples! (:user/db dbs)
                                      [{:_id         "example-1"
                                        :word-id     "vocab:der hund"
                                        :word        "der Hund"
                                        :value       "Der Hund schläft."
                                        :translation "Пёс спит"}]))
+      ;; Where an earlier build kept examples. Memory does not read it; the
+      ;; move brings such an example to user-db.
+      (await (db-seed/seed-examples! (:device/db dbs)
+                                     [{:_id         "example-on-device"
+                                       :word-id     "vocab:der hund"
+                                       :word        "der Hund"
+                                       :value       "Der Hund bellt."
+                                       :translation "Пёс лает"}]))
       (let [{:keys [stop store]} (await (learner/started dbs {}))
             memory #(:learner/memory @store)]
         (is (= ["vocab:der hund"] (map :id (sut/words (memory)))))
         (is (= 1 (count (review-ids (memory) "vocab:der hund"))))
-        (is (= ["example-1"] (map :id (sut/examples-of (memory) ["vocab:der hund"]))))
+        (is (= ["example-1"] (map :id (sut/examples-of (memory) ["vocab:der hund"])))
+            "the example in device-db is not in memory")
         ;; Written past `db.pouch`, as a replication or another tab writes.
         (await (db/insert (:user/db dbs)
                           {:_id         "vocab:die katze"
@@ -155,7 +165,7 @@
 
 
 (deftest memory-is-loaded-in-one-go
-  (async-testing "the load hands memory over once, with everything both databases hold"
+  (async-testing "the load hands memory over once, with everything user-db holds"
     (with-test-dbs
      (^:async fn
       [dbs]
