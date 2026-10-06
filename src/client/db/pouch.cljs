@@ -61,6 +61,36 @@
   (await (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
 
 
+(def ^:private retry-ms
+  "How long `retried` waits before it tries again: each wait is the next
+   one here, and after the last the last is repeated."
+  [1000 2000 4000 8000 16000 30000])
+
+
+(defn- ^:async retried-after
+  [operation failed waits]
+  (let [[wait & more] waits
+        result        (try
+                        {:value (await (operation))}
+                        (catch :default err
+                          {:error err}))]
+    (if (contains? result :value)
+      (:value result)
+      (do (failed (:error result) wait)
+          (await (js/Promise. (fn [resolve] (js/setTimeout resolve wait))))
+          (await (retried-after operation failed (or more [wait])))))))
+
+
+(defn retried
+  "Resolves with what `operation`, a function returning a promise, resolves
+   with. When the promise rejects — a locked or evicted database, a quota
+   error — this calls `failed` with the error and the wait before the next
+   try, waits, and calls `operation` again, until it succeeds. The waits
+   grow as `retry-ms` says. It never rejects."
+  [operation failed]
+  (retried-after operation failed retry-ms))
+
+
 (defn- ^:async pages
   "Reads every document of `db` with an id from `:start` to `:end`, a page
    at a time, with a task between pages. With `:types`, a set, it keeps only
@@ -85,6 +115,27 @@
         docs
         (do (await (next-task))
             (recur docs (.-id ^js (aget rows (dec (.-length rows))))))))))
+
+
+(defn ^:async read-page
+  "One page of the documents of `db-key` with an id after `:after`, or from
+   the first when it is nil, up to `:end`: `{:docs :next}`. The page reads
+   `:limit` ids. `:docs` are the documents among them, only those of the
+   types in `:types` when it is given. `:next` is the id to read the next
+   page after, or nil when this page was the last."
+  [dbs db-key {:keys [after end limit types]}]
+  (let [options  (cond-> #js {:include_docs true :limit limit}
+                   end   (doto (aset "endkey" end))
+                   after (doto (aset "startkey" (str after "\u0000"))))
+        ^js page (await (.allDocs ^js (db-key dbs) options))
+        rows     (.-rows page)]
+    {:docs (into []
+                 (comp (map #(.-doc ^js %))
+                       (filter #(or (nil? types) (contains? types (.-type ^js %))))
+                       (map db/couch->clj))
+                 rows)
+     :next (when (= limit (.-length rows))
+             (.-id ^js (aget rows (dec limit))))}))
 
 
 (defn read-docs
@@ -235,13 +286,9 @@
         read (fn ^:async read [] (:marker (await (db/get db marker-id))))]
     (or (await (read))
         (let [made (str (random-uuid))]
-          (try
-            (await (db/insert db {:_id marker-id :marker made}))
+          (if (await (db/insert-if-absent db {:_id marker-id :marker made}))
             made
-            (catch :default err
-              (if (db/conflict? err)
-                (await (read))
-                (throw err))))))))
+            (await (read)))))))
 
 
 (defn user-doc?
@@ -341,6 +388,49 @@
   (let [doc (assoc doc :type (:type schema))
         {:keys [id rev]} (await (db/insert (database dbs schema) doc))]
     (assoc doc :_id id :_rev rev)))
+
+
+(defn ^:async insert-if-absent
+  "Writes `doc` as one of `schema`'s type under its `:_id`, unless the
+   database holds a document under that id. Resolves with the document as
+   written, or with nil when one was there. A document deleted earlier is
+   not there."
+  [dbs schema doc]
+  (let [doc (assoc doc :type (:type schema))]
+    (when-let [{:keys [id rev]} (await (db/insert-if-absent (database dbs schema) doc))]
+      (assoc doc :_id id :_rev rev))))
+
+
+(defn ^:async id-with-prefix?
+  "Whether the database of `schema` holds a document whose id begins with
+   `prefix`. One read of ids, no document; a deleted document is not
+   held."
+  ;; Only a stored example fetch asks this: it re-checks, when it runs, a
+  ;; decision made when it was queued. It goes when example fetching runs
+  ;; from memory instead of a stored queue (#523, client part).
+  [dbs schema prefix]
+  (let [^js answer (await (.allDocs ^js (database dbs schema)
+                                    #js {:endkey (str prefix "\uffff") :limit 1 :startkey prefix}))]
+    (pos? (.-length (.-rows answer)))))
+
+
+(defn ^:async insert-all-if-absent
+  "Writes each of `docs` as one of `schema`'s type under its `:_id`, in one
+   bulk write, unless the database holds a document under that id. Resolves
+   with the set of ids among them that the database holds afterwards: the
+   ones written and the ones it held already. An id whose write failed for
+   any other reason is not in it."
+  [dbs schema docs]
+  (let [results (await (db/bulk-docs (database dbs schema)
+                                     (mapv #(assoc % :type (:type schema)) docs)))]
+    (into #{}
+          ;; A refused document comes back as PouchDB's error object, which
+          ;; the conversion to Clojure leaves as it is.
+          (keep (fn [row]
+                  (cond
+                    (map? row) (when (:ok row) (:id row))
+                    (db/conflict? row) (.-id ^js row))))
+          results)))
 
 
 (defn ^:async bulk-docs

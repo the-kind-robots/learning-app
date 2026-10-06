@@ -1,5 +1,6 @@
 (ns adapters.data-export
   (:require
+   [adapters.learner.documents :as documents]
    [db :as db]
    [lambdaisland.glogi :as log]
    [utils :as utils]))
@@ -29,16 +30,6 @@
         (throw err)))))
 
 
-(defn ^:async import-doc!
-  "Inserts a doc; skips if the _id already exists (idempotent union)."
-  [user-db incoming]
-  (try
-    (await (db/insert user-db incoming (:_id incoming)))
-    (catch js/Error err
-      (when-not (db/conflict? err)
-        (throw err)))))
-
-
 (defn- payload-docs
   "Returns the docs of an export payload, accepting schema 1
    ({:vocab [...] :review [...]}) and schema 2 ({:docs [...]})."
@@ -50,16 +41,24 @@
 
 
 (defn ^:async import-data!
-  "Merges an export payload into user-db by doc type:
-   vocab LWW by :modified-at, anything else insert-if-absent."
+  "Merges an export payload into user-db by doc type: vocab LWW by
+   :modified-at, anything else insert-if-absent. An example is written as
+   the app writes it (`documents/example-doc`), so it gets the id and the
+   revision it has on every device, whatever build exported it."
   [db-map payload]
   (let [user-db (:user/db db-map)
         docs    (payload-docs payload)]
     (log/info :data-export/importing {:count (count docs)})
     (await (js/Promise.all
             (into-array
-             (map #(if (= "vocab" (:type %))
+             (map #(condp = (:type %)
+                     "vocab"
                      (import-vocab-doc! user-db %)
-                     (import-doc! user-db %))
+
+                     (:type documents/example-schema)
+                     (db/insert-if-absent user-db
+                                          (documents/example-doc (:word-id %) (:word %) (:collection-id %) %))
+
+                     (db/insert-if-absent user-db %))
                   docs))))
     (log/info :data-export/import-done {:count (count docs)})))

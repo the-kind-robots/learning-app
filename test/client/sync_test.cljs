@@ -287,9 +287,10 @@
 
 
 (defn- ^:async seed-device-db!
-  "What a device holds after a while on one account: examples it fetched, a
-   fetch still queued, one that was dead-lettered, and the two documents that
-   belong to the device rather than to the account."
+  "What a device holds after a while on one account: an example an earlier
+   build kept here and the move has not taken to user-db yet, a fetch still
+   queued, one that was dead-lettered, and the two documents that belong to
+   the device rather than to the account."
   [device-db]
   (await (db/insert device-db {:_id "example-hund" :type "example" :word-id "vocab:hund"}))
   (await (db/insert device-db {:_id "task-queued" :type "task" :task-type "example-fetch"
@@ -317,7 +318,7 @@
 
 
 (deftest a-key-of-another-account-takes-the-old-account-s-examples-with-it
-  (async-testing "examples and queued fetches are the account's; the identity is the device's"
+  (async-testing "examples not moved yet and queued fetches are the account's; the identity is the device's"
     (await
      (db-fixtures/with-test-dbs
       [user-db-name device-db-name]
@@ -327,7 +328,7 @@
        (await (adopt-key! device-db user-db 2))
        (let [ids (await (device-doc-ids device-db))]
          (is (not (contains? ids "example-hund"))
-             "content-addressed ids would show the next account this sentence")
+             "the move would carry it into the next account, under a content-addressed id")
          (is (not (contains? ids "task-queued")))
          (is (not (contains? ids "task-dead")))
          (testing "and what belongs to the device stays"

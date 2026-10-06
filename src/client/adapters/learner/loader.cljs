@@ -1,8 +1,8 @@
 (ns adapters.learner.loader
-  "Loads the learner's data from the local databases into memory, and keeps
-   memory following their change feeds (ADR-0016, ADR-0017). A start takes
+  "Loads the learner's data from user-db into memory, and keeps memory
+   following its change feed (ADR-0016, ADR-0017, ADR-0020). A start takes
    memory from a snapshot when one passes its checks, and catches up from
-   its feed positions (ADR-0018). What memory is, and how documents change
+   its feed position (ADR-0018). What memory is, and how documents change
    it, is `adapters.learner.memory`; the snapshot's format is
    `adapters.learner.snapshot`."
   (:require
@@ -14,65 +14,24 @@
    [lambdaisland.glogi :as log]))
 
 
-(def ^:private retry-ms
-  "How long to wait before a failed read is tried again: each wait is the
-   next one here, and after the last the last is repeated."
-  [1000 2000 4000 8000 16000 30000])
+(def ^:private db-key
+  "The database memory is read from. Every document type memory keeps
+   lives in user-db (`adapters.learner.documents`); device-db holds the
+   task queue, the identity and the migration records, and memory neither
+   reads nor follows it (ADR-0020)."
+  :user/db)
 
 
-(defn- ^:async retried
-  "Resolves to what `read` resolves to. When `read` fails — a locked or
-   evicted database, a quota error — this logs it as an error, marks the
-   store so the splash says so, waits and tries again, so memory does not
-   stay unloaded for the life of the page."
-  [store read waits]
-  (try
-    (await (read))
-    (catch :default err
-      (let [[wait & more] waits]
-        (log/error :memory/read-failed {:error (str err) :retry-ms wait})
-        (swap! store assoc :learner/read-failed? true)
-        (await (js/Promise. (fn [resolve] (js/setTimeout resolve wait))))
-        (await (retried store read (or more [wait])))))))
-
-
-(def ^:private db-keys
-  "The databases memory is read from, in the order memory takes them."
-  [:user/db :device/db])
-
-
-(defn- ^:async in-both-dbs
-  "What `f` resolves with for each database, `{db-key value}`. The
-   databases are asked at once."
-  [f]
-  (zipmap db-keys (await (js/Promise.all (into-array (map f db-keys))))))
-
-
-(defn- positions
-  "Where the change feed of each database stands now
-   (`db.pouch/feed-position`)."
-  [dbs]
-  (in-both-dbs #(dbs/feed-position dbs %)))
-
-
-(defn- markers
-  "The marker of each database (`db.pouch/marker`)."
-  [dbs]
-  (in-both-dbs #(dbs/marker dbs %)))
-
-
-(defn- held
-  "Whether each database still holds the change at its position in
-   `stored`, `{db-key boolean}`. A database whose feed stands at the stored
-   position holds it; one whose feed stands behind it does not; any other
-   is asked (`db.pouch/holds-position?`)."
+(defn- held?
+  "Whether user-db still holds the change at `stored`, the position a
+   snapshot stored, given `at`, where its feed stands now. A feed that
+   stands at the stored position holds it; one that stands behind it does
+   not; otherwise user-db is asked (`db.pouch/holds-position?`)."
   [dbs stored at]
-  (in-both-dbs (fn [db-key]
-                 (let [position (stored db-key)]
-                   (cond
-                     (= position (at db-key)) true
-                     (and position (<= (:seq position) (:seq (at db-key)))) (dbs/holds-position? dbs db-key position)
-                     :else false)))))
+  (cond
+    (= stored at)                             (js/Promise.resolve true)
+    (and stored (<= (:seq stored) (:seq at))) (dbs/holds-position? dbs db-key stored)
+    :else                                     (js/Promise.resolve false)))
 
 
 (def ^:private kept-types
@@ -80,10 +39,10 @@
   (set (map :type documents/schemas)))
 
 
-(defn- ^:async read-all
-  "Reads every document of both databases that memory keeps."
+(defn- read-all
+  "Reads every document of user-db that memory keeps."
   [dbs]
-  (into [] cat (vals (await (in-both-dbs #(dbs/read-docs dbs % {:types kept-types}))))))
+  (dbs/read-docs dbs db-key {:types kept-types}))
 
 
 (def ^:private ingest-page
@@ -106,53 +65,35 @@
       memory)))
 
 
-(defn- ^:async caught-up-with
-  "`memory` with `changes`, the first page of what the database `db-key`
-   stored after memory's position for it, and with the pages after it. A
-   full page means there may be more; the next one is read in a task of
-   its own."
-  [dbs memory db-key changes]
-  (loop [memory  memory
-         changes changes]
+(defn- ^:async caught-up
+  "`memory`, built from what user-db held at the feed position `since`,
+   with what it stored after it, a page at a time, and with the position
+   after that. A full page means there may be more; the next one is read
+   in a task of its own."
+  [dbs memory since]
+  (loop [memory  (memory/with-position memory since)
+         changes (await (dbs/read-changes dbs db-key (:seq since) ingest-page))]
     (let [last-position (:position (peek changes))
           memory        (cond-> memory
-                          (seq changes) (memory/with-changes db-key (mapv :doc changes) last-position))]
+                          (seq changes) (memory/with-changes (mapv :doc changes) last-position))]
       (if (< (count changes) ingest-page)
         memory
         (do (await (dbs/next-task))
             (recur memory (await (dbs/read-changes dbs db-key (:seq last-position) ingest-page))))))))
 
 
-(defn- ^:async caught-up
-  "`memory`, built from what the databases held at the feed positions
-   `since`, with what they stored after them, and with the positions after
-   that. The first page of each database is read at once; memory takes
-   user-db's changes, then device-db's."
-  [dbs memory since]
-  (let [first-pages (await (in-both-dbs #(dbs/read-changes dbs % (get-in since [% :seq]) ingest-page)))]
-    (loop [memory (memory/with-positions memory since)
-           keys   db-keys]
-      (if-let [[db-key & more] (seq keys)]
-        (recur (await (caught-up-with dbs memory db-key (first-pages db-key))) more)
-        memory))))
-
-
 (defonce ^:private followers
-  ;; For each store, the catch-up of each change feed memory follows, by
-  ;; database.
+  ;; For each store, the catch-up of the change feed memory follows.
   (js/WeakMap.))
 
 
 (defn ^:async catch-up!
-  "Applies to the memory in `store` whatever the database `db-key`, or
-   every database when it is left out, stored that its change feed has not
-   brought: one read per database. Resolves once memory has it; at once
-   when memory is not loaded yet."
-  ([store]
-   (await (js/Promise.all (into-array (map #(catch-up! store %) db-keys)))))
-  ([store db-key]
-   (when-let [catch-up (some-> (.get followers store) db-key)]
-     (await (catch-up)))))
+  "Applies to the memory in `store` whatever user-db stored that its
+   change feed has not brought: one read. Resolves once memory has it; at
+   once when memory is not loaded yet."
+  [store]
+  (when-let [catch-up (.get followers store)]
+    (await (catch-up))))
 
 
 (defn- on-visibility!
@@ -175,24 +116,24 @@
 
 
 (defn- ^:async load-once
-  "Reads memory from the databases once: it notes where each change feed
-   stands, reads both databases, and then reads what they stored
-   meanwhile. Resolves with that memory. A failure at any step retries all
-   of it, so that a retry starts from fresh feed positions."
+  "Reads memory from user-db once: it notes where the change feed stands,
+   reads every document, and then reads what user-db stored meanwhile.
+   Resolves with that memory. A failure at any step retries all of it, so
+   that a retry starts from a fresh feed position."
   [dbs]
-  (let [noted  (await (positions dbs))
+  (let [noted  (await (dbs/feed-position dbs db-key))
         memory (await (loaded memory/with-docs (await (read-all dbs))))]
     (await (caught-up dbs memory noted))))
 
 
 (defn- ^:async restored
   "Memory from the snapshot `{:header :body}`: its entries, taken again,
-   with what the databases stored after its feed positions. Resolves with
-   `{:memory :stored}`, that memory and the snapshot's feed positions.
+   with what user-db stored after its feed position. Resolves with
+   `{:memory :stored}`, that memory and the snapshot's feed position.
    Rejects when the snapshot does not match its checksum, or when any step
    fails."
   [dbs snapshot]
-  (let [stored (snapshot/positions (:header snapshot))
+  (let [stored (:position (:header snapshot))
         memory (await (loaded memory/with-entries (snapshot/decoded snapshot)))]
     {:memory (await (caught-up dbs memory stored))
      :stored stored}))
@@ -212,8 +153,8 @@
 
 
 (defn ^:async checked-snapshot
-  "The snapshot, `{:header :body}`, when it can start memory from the
-   databases as they stand now, or nil. A snapshot that cannot is deleted
+  "The snapshot, `{:header :body}`, when it can start memory from user-db
+   as it stands now, or nil. A snapshot that cannot is deleted
    (`adapters.learner.snapshot/refusal`). It never rejects; a failure is
    logged, the snapshot is deleted, and it resolves nil. The interval the
    development build reports as `:memory :load-ms` starts here."
@@ -222,9 +163,8 @@
     (instrumentation/memory-start!))
   (try
     (when-let [{:keys [header] :as snapshot} (await (snapshot/read!))]
-      (let [stored      (snapshot/positions header)
-            [at marked] (await (js/Promise.all #js [(positions dbs) (markers dbs)]))]
-        (if-let [reason (snapshot/refusal header at marked (await (held dbs stored at)))]
+      (let [[at marked] (await (js/Promise.all #js [(dbs/feed-position dbs db-key) (dbs/marker dbs db-key)]))]
+        (if-let [reason (snapshot/refusal header at marked (await (held? dbs (:position header) at)))]
           (await (dropped! reason {}))
           snapshot)))
     (catch :default err
@@ -247,13 +187,19 @@
 (defn- ^:async read-memory
   "Reads memory from `snapshot`, the one `checked-snapshot` resolved with,
    when there is one and it can be taken. Otherwise it reads memory from
-   the databases (`load-once`), and reads again from the start when any
-   step fails (`retried`). Resolves with `{:memory :stored}`: memory with
-   everything stored up to then, its feed positions included, and the feed
-   positions of the snapshot the cache holds, or nil."
+   user-db (`load-once`), and reads again from the start when any step
+   fails (`db.pouch/retried`), marking the store so the splash says so. Resolves with `{:memory :stored}`: memory with everything stored
+   up to then, its feed position included, and the feed position of the
+   snapshot the cache holds, or nil."
   [dbs store snapshot]
   (let [read (or (when snapshot (await (from-snapshot dbs snapshot)))
-                 {:memory (await (retried store #(load-once dbs) retry-ms)) :stored nil})]
+                 {:memory (await (dbs/retried #(load-once dbs)
+                                              (fn [err wait]
+                                                ;; The splash says so while
+                                                ;; memory stays unloaded.
+                                                (log/error :memory/read-failed {:error (str err) :retry-ms wait})
+                                                (swap! store assoc :learner/read-failed? true))))
+                  :stored nil})]
     (when ^boolean goog/DEBUG
       (instrumentation/memory-ready! (if (:stored read) :snapshot :databases)))
     read))
@@ -266,9 +212,9 @@
 
 
 (defn start-reading!
-  "Starts reading memory for `store` from the databases `dbs`: it checks
+  "Starts reading memory for `store` from user-db, in `dbs`: it checks
    the snapshot (`checked-snapshot`), then reads memory from the snapshot
-   or from the databases. It needs no dispatch, so it can start as soon as
+   or from user-db. It needs no dispatch, so it can start as soon as
    the databases are open; `start!` hands what it reads over. Returns a
    promise that resolves with nil once the snapshot check is done."
   [dbs store]
@@ -278,9 +224,9 @@
 
 
 (defn- snapshot-writer
-  "A function that writes the memory in `store` as the snapshot, with the
-   markers of the databases, which it reads once. It writes nothing when
-   memory's feed positions are those of the snapshot last written or read,
+  "A function that writes the memory in `store` as the snapshot, with
+   user-db's marker, which it reads once. It writes nothing when memory's
+   feed position is that of the snapshot last written or read,
    `stored` at first, or once `stopped?` holds true. Writes run one after
    another, so an older memory is never stored over a newer one. A failed
    write is logged."
@@ -290,11 +236,11 @@
         queue       (volatile! (js/Promise.resolve))
         write       (fn ^:async write []
                       (let [memory (:learner/memory @store)
-                            at     (memory/positions memory)]
+                            at     (memory/position memory)]
                         (when-not (or @stopped? (= at @last-stored))
                           (try
                             (when-not @marked
-                              (vreset! marked (await (markers dbs))))
+                              (vreset! marked (await (dbs/marker dbs db-key))))
                             (when-not @stopped?
                               (await (snapshot/write! memory @marked))
                               (vreset! last-stored at))
@@ -306,17 +252,17 @@
 
 (defn ^:async start!
   "Hands memory over to the app once the read `start-reading!` began for
-   `store` resolves, and keeps memory following the databases. Without such
+   `store` resolves, and keeps memory following user-db. Without such
    a read, it begins one. The read is taken, so it is not kept for the
    life of the page. Memory reaches the app through two effects:
 
-   - `:effect/memory-loaded` with memory built from everything the
-     databases hold;
-   - `:effect/memory-changed` with each batch a database stores after
-     that — this app's own writes, a replication, another tab — and the
-     position of its last change.
+   - `:effect/memory-loaded` with memory built from everything user-db
+     holds;
+   - `:effect/memory-changed` with each batch user-db stores after that —
+     this app's own writes, a replication, another tab — and the position
+     of its last change.
 
-   It follows each change feed from memory's own positions. Each time the
+   It follows the change feed from memory's own position. Each time the
    page becomes visible again it catches up (`catch-up!`), since a live feed
    can drop a change unreported. It writes the snapshot once memory is
    handed over, in a task of its own, and each time the page goes to the
@@ -328,17 +274,14 @@
   (let [read     (.get reads store)
         _ (.delete reads store)
         {:keys [memory stored]} (await read)
-        since    (memory/positions memory)
-        changed! (fn [db-key]
-                   (fn [docs position]
-                     (dispatch [[:effect/memory-changed db-key (skip-interpolation docs) position]])))
-        feeds    (into {}
-                       (map (fn [db-key]
-                              [db-key (dbs/follow-changes dbs db-key (get-in since [db-key :seq]) (changed! db-key))]))
-                       db-keys)
+        feed     (dbs/follow-changes dbs
+                                     db-key
+                                     (:seq (memory/position memory))
+                                     (fn [docs position]
+                                       (dispatch [[:effect/memory-changed (skip-interpolation docs) position]])))
         stopped? (volatile! false)
         write!   (snapshot-writer dbs store stored stopped?)]
-    (.set followers store (update-vals feeds :catch-up!))
+    (.set followers store (:catch-up! feed))
     (dispatch [[:effect/memory-loaded (skip-interpolation memory)]])
     (.then (dbs/next-task) write!)
     (let [stop-visibility (on-visibility! #(-> (catch-up! store)
@@ -349,4 +292,4 @@
         (vreset! stopped? true)
         (stop-visibility)
         (.delete followers store)
-        (run! #((:stop! %)) (vals feeds))))))
+        ((:stop! feed))))))

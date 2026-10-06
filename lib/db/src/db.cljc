@@ -526,6 +526,18 @@
      (= 409 (some-> err .-status))))
 
 
+#?(:cljs
+   (defn insert-if-absent
+     "Writes `doc` under its `:_id`, unless `db` holds a document under that
+      id. Resolves with what `insert` resolves with, or with nil when a
+      document was there. A document deleted earlier is not there."
+     [db doc]
+     (.catch (insert db doc)
+             (fn [err]
+               (when-not (conflict? err)
+                 (throw err))))))
+
+
 (defn bulk-docs
   "Create, update or delete multiple documents. The `docs` argument is an array of documents.
 

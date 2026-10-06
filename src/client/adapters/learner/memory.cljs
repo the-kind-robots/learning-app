@@ -24,10 +24,10 @@
    still knows what to remove. The same entries rebuild memory from a
    snapshot (`adapters.learner.snapshot`).
 
-   Under `::positions` memory keeps, for each database, the feed position
-   of the last change that changed it (`db.pouch/change-position`). A batch
-   and its position arrive together (`with-changes`), so a memory value and
-   its positions never part."
+   Under `::position` memory keeps the feed position of user-db's last
+   change that changed it (`db.pouch/change-position`). A batch and its
+   position arrive together (`with-changes`), so a memory value and its
+   position never part."
   (:require
    [adapters.learner.documents :as documents]
    [domain.collections :as domain-collections]
@@ -44,7 +44,7 @@
    :slot-of          {}
    :words            (sorted-map)
    ::entries         {}
-   ::positions       {}})
+   ::position        nil})
 
 
 (defn- sort-key
@@ -171,7 +171,7 @@
 (defn- with-taken-doc
   "Memory after `doc` arrives. When memory cannot take `doc` — a document
    whose shape it does not expect — it logs it and removes the version of
-   it that it held, so that memory holds what a full read of the databases
+   it that it held, so that memory holds what a full read of user-db
    gives. One odd document does not stop the rest. A build that starts to
    take such a document must change `adapters.learner.snapshot/format-version`:
    an older snapshot lacks it."
@@ -200,24 +200,23 @@
 
 
 (defn with-changes
-  "Memory after the batch `docs` of the database `db-key` arrives
-   (`with-docs`), with `position`, the position of the batch's last change,
-   as the position of that database. When the batch changes nothing memory
-   keeps, such as a batch of tasks, this returns the same memory: its
-   position stays, and still marks a change memory took with nothing it
-   keeps stored after it."
-  [memory db-key docs position]
+  "Memory after the batch `docs` of user-db arrives (`with-docs`), with
+   `position`, the position of the batch's last change, as its position.
+   When the batch changes nothing memory keeps, such as a pairing receipt,
+   this returns the same memory: its position stays, and still marks a
+   change memory took with nothing it keeps stored after it."
+  [memory docs position]
   (let [taken (with-docs memory docs)]
     (if (identical? taken memory)
       memory
-      (assoc-in taken [::positions db-key] position))))
+      (assoc taken ::position position))))
 
 
-(defn positions
-  "For each database, the feed position memory has taken its changes up
-   to: `{db-key {:id :rev :seq}}`."
+(defn position
+  "The feed position of user-db that memory has taken its changes up to,
+   `{:id :rev :seq}`, or nil before memory has taken any."
   [memory]
-  (::positions memory))
+  (::position memory))
 
 
 (defn entries
@@ -236,11 +235,11 @@
   (reduce added memory entries))
 
 
-(defn with-positions
-  "Memory with `positions`, `{db-key {:id :rev :seq}}`, as the feed
-   positions it has taken changes up to."
-  [memory positions]
-  (assoc memory ::positions positions))
+(defn with-position
+  "Memory with `position`, `{:id :rev :seq}`, as the feed position of
+   user-db it has taken changes up to."
+  [memory position]
+  (assoc memory ::position position))
 
 
 ;;

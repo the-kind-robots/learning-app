@@ -205,12 +205,12 @@
       [dbs]
       (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))]
         (await (sut/add-review (test-capabilities dbs) word-id true "пёс"))
-        (await (db/insert (:device/db dbs) {:type "example" :word-id word-id :value "Der Hund läuft"}))
+        (await (db/insert (:user/db dbs) {:type "example" :word-id word-id :value "Der Hund läuft"}))
         (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
           (await (sut/delete! (test-capabilities dbs) word-id))
           (is (empty? (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))))
           (is (= (map :_id reviews) (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review")))))
-          (is (= 1 (count (await (db-queries/fetch-by-type (:device/db dbs) "example")))))))))))
+          (is (= 1 (count (await (db-queries/fetch-by-type (:user/db dbs) "example")))))))))))
 
 
 (deftest add-review-creates-review-document

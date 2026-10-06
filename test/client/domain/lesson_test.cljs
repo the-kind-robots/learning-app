@@ -31,6 +31,14 @@
       (is (= fixtures/all-expected-trials trials)))))
 
 
+(deftest a-word-with-two-examples-gets-one-example-trial
+  (testing "of a word's examples, the one with the smallest id makes its trial, in whatever order they come"
+    (let [one    {:id "example:word-1::aaaa" :word-id "word-1" :translation "Пёс спит" :value "Der Hund schlaeft."}
+          other  {:id "example:word-1::bbbb" :word-id "word-1" :translation "Пёс лает" :value "Der Hund bellt."}
+          trials (sut/generate-trials [] [other one])]
+      (is (= ["Der Hund schlaeft."] (map :answer trials))))))
+
+
 (deftest generate-trials-handles-empty-inputs
   (testing "empty words and examples produces empty trials"
     (is (= [] (sut/generate-trials [] [])))))

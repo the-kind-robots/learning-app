@@ -3,7 +3,7 @@ const { expect } = require('@playwright/test');
 // Lesson setup shared by the desktop and the phone answer specs.
 //
 // The examples backend needs an external API, so the example document is
-// seeded straight into the app's device-db through the dev-build globals —
+// seeded straight into the app's user-db through the dev-build globals —
 // the same layer the app itself uses (see test/browser/README.md).
 
 async function addWord(page, value, translation) {
@@ -13,28 +13,25 @@ async function addWord(page, value, translation) {
   await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
 }
 
-// Seeds at the engine level (`db`, the PouchDB wrapper): a raw document into
-// the database that holds examples. The app's own layers (`db.pouch` and the
-// adapters) need the `dbs` map that only `init!` in `main` builds, so a spec
-// does not reach for them — see test/browser/README.md.
+// Seeds at the engine level (`db`, the PouchDB wrapper) a document into the
+// database that holds examples. The document itself is built by the app's
+// pure `example-doc`, so it has the id and body the app writes; the app's
+// stateful layers need the `dbs` map that only `init!` in `main` builds, so a
+// spec does not reach for them — see test/browser/README.md.
 async function seedExample(page) {
   await page.evaluate(async () => {
     const kw = cljs.core.keyword;
     const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
     const found = await db.find(db.use('user-db'), toClj({ selector: { type: 'vocab' } }));
     const wordId = cljs.core.get(cljs.core.first(cljs.core.get(found, kw('docs'))), kw('_id'));
-    await db.insert(db.use('device-db'), toClj({
-      'type': 'example',
-      'word-id': wordId,
-      'word': 'der Hund',
+    await db.insert(db.use('user-db'), adapters.learner.documents.example_doc(wordId, 'der Hund', null, toClj({
       'value': 'Der Hund schläft im Garten.',
       'translation': 'Пёс спит в саду.',
-      'created-at': new Date().toISOString(),
       'structure': [
         { usedForm: 'Hund', dictionaryForm: 'der Hund', translation: 'пёс', wordIndex: 1 },
         { usedForm: 'Garten', dictionaryForm: 'der Garten', translation: 'сад', wordIndex: 4 },
       ],
-    }));
+    })));
   });
 }
 

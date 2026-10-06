@@ -87,12 +87,12 @@
                             :start    (fn [{:keys [db store]}]
                                         {:checked (loader/start-reading! db store)})}
 
-    ;; Starting it asks for every example this device is missing and hands back
-    ;; the hook the engine calls when a pass is home, knowing nothing else about
-    ;; it. A component of its own, with its ports named again rather than taken
-    ;; from :app/capabilities, because that one already depends on
-    ;; :sync/identity — which is what needs the hook. Its passes wait for the
-    ;; snapshot check (ADR-0018); the components after it do not.
+    ;; Starting it loads the stored identity and, when the device has an
+    ;; account, drives replication: it hands back the pull a route entry or a
+    ;; poke asks for, and `:sync/on-pass`, where a listener such as
+    ;; :examples/backfill registers to hear what each completed pass brought.
+    ;; Its passes wait for the snapshot check (ADR-0018); the components after
+    ;; it do not.
     :sync/identity         {:requires {:db   :db/pouch
                                        :read :learner/read}
                             :start    (fn [{:keys [db read]}]
@@ -137,11 +137,13 @@
                                        :navigation        :port/navigation}
                             :start    identity}
 
-    ;; Starting it asks for every example this device is missing, and it
-    ;; subscribes for what each later pass brings. The engine publishes ids
-    ;; grouped by document type and interprets none of them (#432); the two
-    ;; types the backfill has anything to say about are named here, by the
-    ;; schemas that own them.
+    ;; Starting it asks for every example this device is still missing, once
+    ;; the backfill may count, and it subscribes for what each later pass
+    ;; brings. The engine publishes ids grouped by document type and
+    ;; interprets none of them (#432); the types the backfill has anything to
+    ;; say about are named here, by the schemas that own them: the entries
+    ;; and collections it counts over, and the examples that answer queued
+    ;; fetches.
     :examples/backfill     {:requires {:capabilities :app/capabilities}
                             :start
                             (fn [{:keys [capabilities]}]
@@ -156,7 +158,10 @@
                                                           (:type documents/collection-schema)
                                                           #{})))]
                                 (listen (fn [{:keys [pulled-ids]}]
-                                          (backfill {:pulled-ids (ours pulled-ids)})))))}
+                                          (backfill {:pulled-examples (get pulled-ids
+                                                                           (:type documents/example-schema)
+                                                                           #{})
+                                                     :pulled-ids      (ours pulled-ids)})))))}
 
     :app/render            {:requires {:capabilities   :app/capabilities
                                        :service-worker :worker/service-worker

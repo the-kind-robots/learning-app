@@ -252,20 +252,20 @@
   "The memory a start takes from the snapshot of `memory`: encoded, read
    back, and its entries added to an empty memory."
   [memory]
-  (let [stored (snapshot/parsed (snapshot/encode memory {:device/db "d" :user/db "u"}))]
-    (sut/with-positions (sut/with-entries sut/empty-memory (snapshot/decoded stored))
-                        (snapshot/positions (:header stored)))))
+  (let [stored (snapshot/parsed (snapshot/encode memory "u"))]
+    (sut/with-position (sut/with-entries sut/empty-memory (snapshot/decoded stored))
+                       (:position (:header stored)))))
 
 
 (def ^:private taken-again-equals-memory
   (prop/for-all [changes (gen/vector gen-change 0 150)
                  sizes (gen/not-empty (gen/vector (gen/choose 1 120) 1 5))]
                 (let [memory (first (peek (history (revised changes []) sizes)))
-                      memory (sut/with-positions memory {:device/db 3 :user/db (count changes)})
+                      memory (sut/with-position memory (count changes))
                       again  (taken-again memory)]
                   (and (= (snapshot memory) (snapshot again))
                        (= (set (sut/entries memory)) (set (sut/entries again)))
-                       (= (sut/positions memory) (sut/positions again))))))
+                       (= (sut/position memory) (sut/position again))))))
 
 
 (deftest a-snapshot-taken-again-is-the-same-memory
@@ -283,8 +283,8 @@
    ;; was stored after it, read as the feed reads it.
    (let [docs     (revised changes [])
          taken-at (min taken-at (count docs))
-         memory   (sut/with-changes sut/empty-memory :user/db (take taken-at docs) taken-at)
-         started  (sut/with-changes (taken-again memory) :user/db (fed (drop taken-at docs) latest-only?) (count docs))]
+         memory   (sut/with-changes sut/empty-memory (take taken-at docs) taken-at)
+         started  (sut/with-changes (taken-again memory) (fed (drop taken-at docs) latest-only?) (count docs))]
      (= (snapshot (sut/with-docs sut/empty-memory (final-docs docs)))
         (snapshot started)))))
 

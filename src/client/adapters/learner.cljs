@@ -9,12 +9,15 @@
    way it takes every other change: in the order the database stored it,
    through the change feed's catch-up (ADR-0019). A decision that
    needs every collection — whether a name is taken, which collections
-   list a word — reads memory once it has caught up with the databases. A
+   list a word — reads memory once it has caught up with user-db. A
    write queries no index.
 
    Deleting a word removes the word and its place in every collection. Its
    reviews and its examples stay, and come back with the word when it is
    added again. Deleting a collection removes the collection only.
+
+   Examples an earlier build kept in device-db move to user-db
+   (`examples-moved!`).
 
    `learner` is `{:clock :dbs :store}`: the clock, the databases, and the
    app store that keeps memory under `:learner/memory`."
@@ -26,7 +29,8 @@
    [adapters.learner.memory :as memory]
    [db.pouch :as dbs]
    [domain.vocabulary :as vocabulary]
-   [lambdaisland.glogi :as log]))
+   [lambdaisland.glogi :as log]
+   [tasks :as tasks]))
 
 
 (defn current-memory
@@ -52,7 +56,7 @@
 
 
 (defn loaded
-  "Resolves once memory has everything the databases held at start."
+  "Resolves once memory has everything user-db held at start."
   [{:keys [store]}]
   (js/Promise.
    (fn [resolve]
@@ -74,7 +78,7 @@
    decision here reads, lives in user-db. After a write, this is how memory
    takes it."
   [{:keys [store]}]
-  (await (loader/catch-up! store :user/db)))
+  (await (loader/catch-up! store)))
 
 
 (defn- ^:async persist!
@@ -245,7 +249,7 @@
                           (when (and (not _deleted) (some #{word-id} word-ids))
                             (assoc doc :word-ids (filterv #(not= word-id %) word-ids)))))
                   stored)
-      word (conj (documents/tombstone (select-keys word [:_id :_rev :type]))))))
+      word (conj (documents/tombstone word)))))
 
 
 (defn- ^:async attempt-word-deletion!
@@ -304,17 +308,84 @@
     (await (catch-up! learner))))
 
 
-(defn ^:async read-stored
-  "What PouchDB holds under `ids`, read by id: `{:collections [...] :words
-   [...] :deleted #{id}}`, the words and the collections among them, and
-   the ids of those deleted."
-  [{:keys [dbs]} ids]
-  (let [docs (await (dbs/read-ids dbs :user/db ids))
-        of   (fn [schema from-doc]
-               (into [] (comp (filter #(= (:type schema) (:type %))) (map from-doc)) docs))]
-    {:collections (of documents/collection-schema documents/doc->collection)
-     :deleted     (into #{} (comp (filter :_deleted) (map :_id)) docs)
-     :words       (of documents/vocab-schema documents/doc->word)}))
+(def ^:private device-example-schema
+  "Where an earlier build kept examples: the example type, in device-db.
+   Only the move reads it."
+  (assoc documents/example-schema :db :device/db))
+
+
+(def ^:private move-page-size
+  "How many device-db examples the move reads, writes and deletes in one
+   task."
+  100)
+
+
+(defn- ^:async move-page!
+  "Moves one page of device-db examples, `docs`. It writes each of them to
+   user-db under the id its content gives it, in one bulk write; an example
+   user-db holds already is not written again. Then it deletes, in one
+   bulk write, every example of the page that user-db now holds. Resolves
+   with how many it deleted."
+  [dbs docs]
+  (let [moved (into {}
+                    (map (juxt :_id #(documents/example-doc (:word-id %) (:word %) (:collection-id %) %)))
+                    docs)
+        held  (await (dbs/insert-all-if-absent dbs documents/example-schema (vals moved)))]
+    (count (await (dbs/bulk-docs dbs
+                                 device-example-schema
+                                 (into [] (comp (filter #(held (:_id (moved (:_id %))))) (map documents/tombstone)) docs))))))
+
+
+(defn ^:async move-device-examples!
+  "Moves the examples an earlier build kept in device-db to user-db, where
+   they replicate: every one of them, including the examples of a word or
+   a collection deleted since, which come back with it or show outside
+   every collection. Every distinct example of a pair is kept; identical
+   examples become one document. It reads, writes and deletes a page at a
+   time (`move-page!`), with a task between pages. When it moved anything,
+   it then catches memory up, so that memory holds what was moved.
+
+   It reads device-db only up to the ids of the task queue
+   (`tasks/id-prefix`). The examples an earlier build kept there have
+   generated ids, which sort before them, so the move does not page
+   through the queue.
+
+   It is safe to run again and to interrupt. A run after an interrupted one
+   writes nothing that user-db holds and deletes the copies left behind. A
+   device-db example that could not be written stays for the next run.
+   Resolves with how many device-db examples it deleted."
+  [{:keys [dbs] :as learner}]
+  (let [deleted (loop [after   nil
+                       deleted 0]
+                  (let [{:keys [docs next]} (await (dbs/read-page dbs
+                                                                  (:db device-example-schema)
+                                                                  {:after after
+                                                                   :end   tasks/id-prefix
+                                                                   :limit move-page-size
+                                                                   :types #{(:type device-example-schema)}}))
+                        deleted             (+ deleted (if (seq docs) (await (move-page! dbs docs)) 0))]
+                    (if next
+                      (do (await (dbs/next-task))
+                          (recur next deleted))
+                      deleted)))]
+    (when (pos? deleted)
+      (await (catch-up! learner))
+      (log/info :learner/examples-moved {:deleted deleted}))
+    deleted))
+
+
+(defn ^:async examples-moved!
+  "Waits for memory to load, and then moves the examples an earlier build
+   kept in device-db to user-db (`move-device-examples!`). A failed move is
+   logged and run again after a wait, until one succeeds
+   (`db.pouch/retried`). Resolves nil
+   once one has."
+  [learner]
+  (await (loaded learner))
+  (await (dbs/retried #(move-device-examples! learner)
+                      (fn [err wait]
+                        (log/warn :learner/examples-move-failed {:error (str err) :retry-ms wait}))))
+  nil)
 
 
 (defn request-examples!
@@ -322,3 +393,17 @@
    `adapters.example-fetch/request!`."
   [{:keys [clock dbs]} requests]
   (example-fetch/request! dbs clock requests))
+
+
+(defn hold-fetches-until!
+  "Holds every example fetch back until the promise `ready` resolves; see
+   `adapters.example-fetch/hold-until!`."
+  [_learner ready]
+  (example-fetch/hold-until! ready))
+
+
+(defn cancel-answered-fetches!
+  "Deletes the queued fetches of the pairs the examples `example-ids`
+   answer; see `adapters.example-fetch/cancel-answered!`."
+  [{:keys [dbs]} example-ids]
+  (example-fetch/cancel-answered! dbs example-ids))

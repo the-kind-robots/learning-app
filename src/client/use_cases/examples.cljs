@@ -1,10 +1,16 @@
 (ns use-cases.examples
-  "Filling in the examples a device did not generate itself.
+  "Filling in the examples the account has none for.
 
-   An example is generated on the device that added the word and is never
-   replicated, so a word that arrived by replication has none until this device
-   asks for one. Adding a word is the only other trigger, and a replicated word
-   was never added here."
+   An example is generated on the device that added the word, and it
+   replicates with the word. So a word that arrived by replication usually
+   brings its example, and this device asks only for the pairs memory still
+   has no example for once it has taken what arrived. Such a pair is one whose
+   example was never fetched anywhere, or a word themed on a device that has
+   not fetched for the theme yet. Adding a word is the only other trigger.
+
+   No backfill counts, and no fetch runs, before the examples an earlier
+   build kept in device-db have moved to user-db, so that a moved example
+   answers its pair (`backfill-ready`)."
   (:require
    [lambdaisland.glogi :as log]
    [utils :as utils]))
@@ -40,6 +46,11 @@
 (defn ^:async request-example-if-missing!
   "Queues a fetch of an example for `word` in `collection` when memory has
    none that a read in that collection sees.
+
+   It does not wait for the examples an earlier build kept in device-db to
+   move: adding a word must not wait on device-db. The fetch it queues
+   waits for the move, and finds its pair answered when the move brought
+   an example for it (`start!`).
 
    A fetch already queued is not read for: the queue holds one task per pair
    by construction, so asking twice writes the same id twice and the second
@@ -120,10 +131,11 @@
 (defn- ^:async request-missing!
   "Queues a fetch for every pair without an example among `entries`, given
    `collections` and the examples memory has, and returns how many it
-   queued. It weighs the entries a chunk per task. One write, however many pairs: a first synchronisation is a
-   vocabulary's worth of task documents and has no business being that
-   many inserts."
-  [{:keys [learner] :as capabilities} collections entries]
+   queued. With `delay-ms`, the fetches become due that long from now. It
+   weighs the entries a chunk per task. One write, however many pairs: a
+   first synchronisation is a vocabulary's worth of task documents and has
+   no business being that many inserts."
+  [{:keys [learner] :as capabilities} collections entries & [delay-ms]]
   (if (empty? entries)
     0
     (let [requests (loop [requests []
@@ -139,7 +151,9 @@
                          (await (js/Promise. (fn [resolve] (js/setTimeout resolve 0))))
                          (recur requests more))
                        requests))]
-      (await (examples-request! capabilities requests))
+      (await (examples-request! capabilities
+                                (cond->> requests
+                                  delay-ms (mapv #(assoc % :delay-ms delay-ms)))))
       (when (seq requests)
         (log/info :examples/missing-requested {:count (count requests)}))
       (count requests))))
@@ -165,10 +179,8 @@
 
 (defn ^:async request-all-missing!
   "Asks for every example this device is missing, over every entry memory
-   has, once memory has everything the databases held at start. What a
-   start does once, and what leaves nothing over."
+   has. What a start does once, and what leaves nothing over."
   [{:keys [learner] :as capabilities}]
-  (await ((:learner/loaded learner)))
   (await (contained
           (fn []
             (let [memory (memory capabilities)]
@@ -177,45 +189,73 @@
                                 (vec ((:learner/words learner) memory))))))))
 
 
+(defn- pass-fetch-delay-ms
+  "How long a fetch that a pass queued waits before it runs: two of the
+   sync engine's push windows. A word often arrives a pass ahead of its
+   example: the device that added it pushes the word, fetches the example
+   and pushes that a push window later, and the poke brings it here within
+   another. The pass that brings the example deletes the waiting fetch
+   (`start!`). Without a push window, as for a device with no account, the
+   fetch does not wait."
+  [{:capabilities/keys [sync]}]
+  (some-> (:sync/push-interval-ms sync) (* 2)))
+
+
 (defn ^:async request-missing-for!
   "Asks for the examples missing among the entries one replication pass
-   brought — `pulled-ids` are the ids that pass wrote here. The words and
-   collections among them are read from PouchDB by id: memory takes them
-   from the change feed, which may not have brought them yet. Ids that name
-   neither a word, a phrase nor a collection fall out there.
+   brought — `pulled-ids` are the ids that pass wrote here. It first catches
+   memory up with user-db, which then holds every document the pass stored:
+   the words, the collections, and the examples that came with them. So an
+   example the pass brought answers its pair, and a word or a collection the
+   pass deleted is gone from memory and asks for nothing. Everything after
+   that is read from memory. Ids that name neither a word, a phrase nor a
+   collection in memory fall out. The fetches it queues wait
+   `pass-fetch-delay-ms` before they run.
 
    A collection among them is unfolded into the entries it names
    (`entries-of-pass`), so an entry themed on another device gets that
-   theme's example now rather than at the next start. An entry it names
-   that the pass did not bring is read from memory. A word or a collection
-   the pass deleted is left out, whatever memory still has of it.
+   theme's example now rather than at the next start.
 
    A pass is not a reason to read the whole vocabulary again: with a throttle
    of half a minute that is regular work proportional to how much the device
    has."
   [{:keys [learner] :as capabilities} pulled-ids]
-  (await ((:learner/loaded learner)))
   (await (contained
           (fn ^:async request []
-            (let [memory  (memory capabilities)
-                  pulled  (await ((:learner/read-stored learner) pulled-ids))
-                  gone    (set (:deleted pulled))
-                  arrived (utils/index-by :id (:words pulled))
-                  colls   (vals (apply dissoc
-                                       (merge (utils/index-by :id ((:learner/collections learner) memory))
-                                              (utils/index-by :id (:collections pulled)))
-                                       gone))
-                  entries (into []
-                                (comp (remove gone)
-                                      (keep #(or (arrived %) ((:learner/word learner) memory %))))
-                                (entries-of-pass pulled-ids colls))]
-              (await (request-missing! capabilities colls entries)))))))
+            (await ((:learner/catch-up! learner)))
+            (let [memory (memory capabilities)
+                  colls  ((:learner/collections learner) memory)]
+              (await (request-missing! capabilities
+                                       colls
+                                       (into []
+                                             (keep #((:learner/word learner) memory %))
+                                             (entries-of-pass pulled-ids colls))
+                                       (pass-fetch-delay-ms capabilities))))))))
+
+
+(defn- ^:async backfill-ready
+  "Resolves once the backfill may count, and the fetches may run: the
+   examples an earlier build kept in device-db have moved to user-db, which
+   waits for memory to load, and `first-pass`, a promise of this session's
+   first completed replication pass, has resolved."
+  [{:keys [learner]} first-pass]
+  (await ((:learner/examples-moved learner)))
+  (await first-pass))
 
 
 (defn start!
-  "Asks for everything this device is missing and returns the listener a
-   completed replication pass calls with what it brought home. A pass that
-   wrote nothing here reads nothing.
+  "Asks for everything this device is missing once the backfill is ready
+   (`backfill-ready`), holds the example fetches back until then, and
+   returns the listener a completed replication pass calls with what it
+   brought home: `:pulled-ids`, the entries and collections it wrote here,
+   and `:pulled-examples`, the examples it wrote here.
+
+   The first pass is the first call of that listener. A device without an
+   account runs no pass, and is ready once the move is done.
+
+   A pass deletes the queued fetches of the pairs its examples answer, at
+   once, and counts what its entries are missing once the backfill is
+   ready. A pass that wrote no entry counts nothing.
 
    The listener answers at once and leaves the work running: a pass is what the
    screen and the throttle wait for, and it is over when the replication is,
@@ -223,9 +263,19 @@
 
    Two of them may run at once. A pair is one task id, so the second write for
    it is refused by the database rather than by anything this has to remember."
-  [capabilities]
-  (request-all-missing! capabilities)
-  (fn [{:keys [pulled-ids]}]
-    (when (seq pulled-ids)
-      (request-missing-for! capabilities pulled-ids))
-    nil))
+  [{:keys [learner] :capabilities/keys [sync] :as capabilities}]
+  (let [passed     (atom nil)
+        first-pass (if (:sync/account-id sync)
+                     (js/Promise. (fn [resolve] (reset! passed resolve)))
+                     (js/Promise.resolve nil))
+        ready      (backfill-ready capabilities first-pass)]
+    ((:learner/hold-fetches-until! learner) ready)
+    (.then ready #(request-all-missing! capabilities))
+    (fn [{:keys [pulled-examples pulled-ids]}]
+      (when-let [resolve @passed]
+        (resolve nil))
+      (when (seq pulled-examples)
+        (contained #((:learner/cancel-answered-fetches! learner) pulled-examples)))
+      (when (seq pulled-ids)
+        (.then ready #(request-missing-for! capabilities pulled-ids)))
+      nil)))

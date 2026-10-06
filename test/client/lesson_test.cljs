@@ -62,7 +62,7 @@
   "What entering the lesson does: draw it from memory loaded off `dbs`."
   [capabilities opts]
   (let [dbs    (::dbs capabilities)
-        memory (await (db-seed/memory-of (:user/db dbs) (:device/db dbs)))]
+        memory (await (db-seed/memory-of (:user/db dbs)))]
     (sut/start ports/reads memory ((get-in capabilities [:learner :learner/active-collection])) opts (time/now-ms))))
 
 
@@ -77,7 +77,7 @@
    the urgency a lesson ranks it by."
   [capabilities]
   (let [dbs    (::dbs capabilities)
-        memory (await (db-seed/memory-of (:user/db dbs) (:device/db dbs)))
+        memory (await (db-seed/memory-of (:user/db dbs)))
         now    (time/now-ms)
         levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows ports/reads memory {} now)))]
     {:words (mapv (fn [{:keys [word] :as card}]
@@ -121,7 +121,7 @@
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (await (db-seed/seed-examples! (:device/db dbs)
+      (await (db-seed/seed-examples! (:user/db dbs)
                                      [{:_id         "example-1"
                                        :word-id     "word-1"
                                        :word        "der Hund"
@@ -197,7 +197,7 @@
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (await (db-seed/seed-examples! (:device/db dbs)
+      (await (db-seed/seed-examples! (:user/db dbs)
                                      [{:_id         "example-1"
                                        :word-id     "word-1"
                                        :word        "der Hund"
@@ -217,7 +217,7 @@
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (await (db-seed/seed-examples! (:device/db dbs)
+      (await (db-seed/seed-examples! (:user/db dbs)
                                      [{:_id         "example-1"
                                        :word-id     "word-1"
                                        :word        "der Hund"

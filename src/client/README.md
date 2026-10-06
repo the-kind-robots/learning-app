@@ -48,8 +48,8 @@ src/client/
 ├── adapters/                 # Speak domain outward over storage and the backend
 │   ├── learner.cljs          # The learner's data for use cases: memory to read, every write
 │   ├── learner/
-│   │   ├── memory.cljs       # The learner's data in memory, a projection of both databases
-│   │   ├── loader.cljs       # Loads memory and follows both databases' changes
+│   │   ├── memory.cljs       # The learner's data in memory, a projection of user-db
+│   │   ├── loader.cljs       # Loads memory and follows user-db's changes
 │   │   └── documents.cljs    # Document types (schemas) and doc ↔ entity
 │   ├── example_fetch.cljs    # Fetches an example from the backend, by a queued task
 │   ├── dictionary.cljs       # SQL through the worker proxy
@@ -85,10 +85,10 @@ Every tab has a worker, but the dictionary belongs to the tab being typed into: 
 
 **User data** — PouchDB, split in two databases. Each schema in `adapters/learner/documents.cljs` names its database:
 
-- `user-db` — words, reviews, collections. What follows the learner across devices: replicated to the account's CouchDB database `userdb-N` through `/db/` (ADR-0006). `sync.cljs` pushes on local changes (throttled) and pulls on data-page entry; vocab conflicts resolve last-writer-wins by `:modified-at`. A device without an account is local-only and makes no network call.
-- `device-db` — examples, tasks, the device identity. Never replicated.
+- `user-db` — words, reviews, collections, examples. What follows the learner across devices: replicated to the account's CouchDB database `userdb-N` through `/db/` (ADR-0006). `sync.cljs` pushes on local changes (throttled) and pulls on data-page entry; vocab conflicts resolve last-writer-wins by `:modified-at`. A device without an account is local-only and makes no network call.
+- `device-db` — tasks, the device identity, migration records. Never replicated. Examples lived here until ADR-0020; a start moves any an earlier build left to user-db (`adapters.learner/move-device-examples!`).
 
-**Learner's data in memory** — what screens show of the learner's data is kept in the app store under `:learner/memory`, a projection of both databases kept by `adapters/learner/memory.cljs` — the value, documents in and memory out — and loaded by `adapters/learner/loader.cljs` (ADR-0016, ADR-0017, ADR-0019). What it guarantees is in `openspec/specs/learner-data-memory/spec.md`. The loader notes where each change feed stands, reads both databases behind the splash, reads what was stored meanwhile and hands memory over once (`:effect/memory-loaded`); from then on it follows both change feeds and hands each batch to `:effect/memory-changed`, and catches up by one read (`catch-up!`) when the page is shown again. A write catches memory up with user-db's change log once PouchDB has accepted it (ADR-0019); nothing else writes memory. A repeat start takes memory from a snapshot in the Cache API (`adapters/learner/snapshot.cljs`, ADR-0018) and catches up from the feed positions memory keeps; what the snapshot must pass and when it is written is in the same spec.
+**Learner's data in memory** — what screens show of the learner's data is kept in the app store under `:learner/memory`, a projection of user-db kept by `adapters/learner/memory.cljs` — the value, documents in and memory out — and loaded by `adapters/learner/loader.cljs` (ADR-0016, ADR-0017, ADR-0019, ADR-0020). What it guarantees is in `openspec/specs/learner-data-memory/spec.md`. The loader notes where user-db's change feed stands, reads it behind the splash, reads what was stored meanwhile and hands memory over once (`:effect/memory-loaded`); from then on it follows the change feed and hands each batch to `:effect/memory-changed`, and catches up by one read (`catch-up!`) when the page is shown again. A write catches memory up with user-db's change log once PouchDB has accepted it (ADR-0019); nothing else writes memory. A repeat start takes memory from a snapshot in the Cache API (`adapters/learner/snapshot.cljs`, ADR-0018) and catches up from the feed position memory keeps; what the snapshot must pass and when it is written is in the same spec.
 
 **The learner port** — use cases reach the learner's data through one port, `ports/learner.cljs` over `adapters/learner.cljs`: memory to read, every write, and the active collection. A write reads the document it changes from PouchDB by id, as the winner, puts its change over it (`db.pouch/write-latest!`) and catches memory up with user-db's change log. It queries no index.
 

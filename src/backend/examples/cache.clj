@@ -4,9 +4,9 @@
    word, the confirmed Russian glosses, the optional collection context — so
    one row answers every later device and account that asks the same question.
 
-   Examples live in the client's device-db, which has no copy on the server;
-   without this table every device pays the provider for a sentence another
-   device already has.
+   Examples replicate between one account's devices (ADR-0020), but never
+   between accounts; without this table every account pays the provider for a
+   sentence another account already has.
 
    Nothing here refuses a request. The question arrives normalized
    (`examples/question`) and the example arrives already generated and already

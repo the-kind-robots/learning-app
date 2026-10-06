@@ -56,7 +56,7 @@
   (when active-id
     (await (db/insert (:user/db dbs) {:_id active-id :type "collection" :name "Поездка" :word-ids []})))
   (when existing-example
-    (await (db/insert (:device/db dbs)
+    (await (db/insert (:user/db dbs)
                       {:_id           (:id existing-example)
                        :type          "example"
                        :collection-id active-id

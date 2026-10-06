@@ -151,7 +151,7 @@
       (nxr/dispatch system {} [[:action/open-word-edit {:id "vocab:wort1000"}]])
       (nxr/dispatch system
                     {}
-                    [[:effect/memory-changed :user/db [(assoc (word-doc 0) :_rev "2-b" :value "Wort1000!")] 2]])
+                    [[:effect/memory-changed [(assoc (word-doc 0) :_rev "2-b" :value "Wort1000!")] 2]])
       (is (= "Wort1000" (:value (first (:words/rows @store)))) "the open list stays as it was")
       (testing "the reader's own edit computes it again, rows and open word kept"
         (nxr/dispatch system {} [[:effect/enter :action/refresh-page]])
