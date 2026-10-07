@@ -1,5 +1,5 @@
 const { test, expect } = require('./fixtures');
-const { addWord } = require('./lesson-answer.shared');
+const { addWord } = require('./add-form.shared');
 
 // A screen that is on display stays on display when animation frames run late
 // (#515).

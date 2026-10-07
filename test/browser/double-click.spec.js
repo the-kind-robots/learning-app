@@ -1,17 +1,11 @@
 const { test, expect } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
 
 // A screen renders in the task of the tap that opened it (#494), so the
 // second click of a double click lands on the new screen. It must not act
 // there: a double click is one activation of the control it started on.
 
 const homeHeading = (page) => page.getByRole('heading', { name: 'Главная' });
-
-async function addWord(page, value, translation) {
-  await page.getByLabel('Слово (немецкий)').fill(value);
-  await page.getByLabel('Перевод (русский)').fill(translation);
-  await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
-  await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
-}
 
 // Read at the engine level, as test/browser/README.md prescribes.
 async function reviewCount(page) {

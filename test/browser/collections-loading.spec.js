@@ -1,4 +1,5 @@
 const { test, expect } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
 
 // Watches the document from before the app boots and notes the first loading
 // state and the first tile that enter the DOM. Either may live for
@@ -21,13 +22,6 @@ const watchSwitcher = `
     attributes: true, characterData: true, childList: true, subtree: true,
   });
 `;
-
-async function addWord(page, value, translation) {
-  await page.getByLabel('Слово (немецкий)').fill(value);
-  await page.getByLabel('Перевод (русский)').fill(translation);
-  await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
-  await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
-}
 
 // Enough words and reviews that loading them into memory takes longer than a
 // frame. Seeded at the engine level (see README, "Seeding from a spec").

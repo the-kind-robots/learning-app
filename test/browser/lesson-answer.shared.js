@@ -1,17 +1,11 @@
 const { expect } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
 
 // Lesson setup shared by the desktop and the phone answer specs.
 //
 // The examples backend needs an external API, so the example document is
 // seeded straight into the app's user-db through the dev-build globals —
 // the same layer the app itself uses (see test/browser/README.md).
-
-async function addWord(page, value, translation) {
-  await page.getByLabel('Слово (немецкий)').fill(value);
-  await page.getByLabel('Перевод (русский)').fill(translation);
-  await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
-  await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
-}
 
 // Seeds at the engine level (`db`, the PouchDB wrapper) a document into the
 // database that holds examples. The document itself is built by the app's
@@ -94,4 +88,4 @@ async function expectHintedAnswerAsWideAsPlainText(page) {
   expect(Math.abs(open.hinted - open.plain)).toBeLessThanOrEqual(0.5);
 }
 
-module.exports = { addWord, setUpLesson, token, expectHintedAnswerAsWideAsPlainText };
+module.exports = { setUpLesson, token, expectHintedAnswerAsWideAsPlainText };

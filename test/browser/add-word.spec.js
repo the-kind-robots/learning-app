@@ -1,14 +1,11 @@
 const { test, expect } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
 
 test('adding a word persists it to the words list', async ({ page }) => {
   await page.goto('/home');
 
-  await page.getByLabel('Слово (немецкий)').fill('Haus');
-  await page.getByLabel('Перевод (русский)').fill('дом');
-  await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
+  await addWord(page, 'Haus', 'дом');
 
-  // The button is hidden while the vocabulary is empty, so its appearance
-  // already proves the write landed.
   await page.getByRole('button', { name: 'Список слов' }).click();
   await expect(page.getByRole('heading', { name: 'Мои слова' })).toBeVisible();
   const item = page.getByRole('listitem').filter({ hasText: 'Haus' });
