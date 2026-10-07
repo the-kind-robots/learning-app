@@ -23,6 +23,20 @@
              (get result "machen"))))))
 
 
+(deftest spellings-of-one-key-keep-the-best-rank
+  (testing "the umlaut spelling and its transliteration share a key; the key carries the better rank (#357)"
+    (let [path   (temp-file "word\tcount\nRücken\t73.59\nStraße\t20.0\nruecken\t0.08\n")
+          result (frequency/read-frequency-file path)]
+      (is (= {:source "frequency-file" :rank 1 :count 73.59}
+             (get result "ruecken"))
+          "the rarest spelling used to win because it came last")
+      (is (= 2 (get-in result ["strasse" :rank])))))
+  (testing "with a rank column the file order does not decide"
+    (let [path   (temp-file "word\tcount\trank\nruecken\t0.08\t127765\nRücken\t73.59\t1117\n")
+          result (frequency/read-frequency-file path)]
+      (is (= 1117 (get-in result ["ruecken" :rank]))))))
+
+
 (deftest read-frequency-file-minimal-tsv
   (testing "loads word/count without header"
     (let [path   (temp-file "Hund\t5.0\nKatze\t10.5\n")
