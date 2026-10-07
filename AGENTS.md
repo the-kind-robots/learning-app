@@ -45,6 +45,19 @@ The guards read command text and the working directory, so they stop accidents, 
 
 **Verify the symptom where it appeared.** A fix proven on a fixture is not proven on the stand it was for. When the report came from a phone, the tunnel or the live nginx, the verification goes there before the work is called done.
 
+# Writing
+
+All prose in this repository follows the six rules of George Orwell's "Politics and the English Language" (https://www.orwellfoundation.com/the-orwell-foundation/orwell/essays-and-other-works/politics-and-the-english-language/): code comments, docstrings, commit messages, issues, pull requests, review replies, specs, ADRs and README files. The rules hold in Russian as in English.
+
+1. Never use a metaphor, simile or other figure of speech you are used to seeing in print.
+2. Never use a long word where a short one will do.
+3. If it is possible to cut a word out, cut it out.
+4. Never use the passive where you can use the active.
+5. Never use a foreign phrase, a scientific word or a jargon word if you can think of an everyday equivalent.
+6. Break any of these rules sooner than say anything outright barbarous.
+
+Rule 5 does not reach names the code or the domain owns. An identifier, a library name, or a term the product defines (lemma, OPFS, change feed) is the everyday word here; a paraphrase would send the reader looking for a second thing.
+
 # Clojure REPL Evaluation
 
 The command `clj-nrepl-eval` is installed on your path for evaluating Clojure code via nREPL.
