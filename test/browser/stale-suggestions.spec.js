@@ -2,7 +2,7 @@ const { test, expect } = require('./fixtures');
 const { openHome } = require('./service-worker.shared');
 
 // Suggestions kept across keystrokes drop the rows the typed text has left behind.
-// `der Rücken` is the only fixture lemma under `rück`.
+// `der Rücken` and `das Rückenmark` are the only fixture lemmas under `rück`.
 
 const options = (page) => page.getByRole('option');
 
@@ -24,12 +24,12 @@ test.describe('Подсказки слов при вводе', () => {
     let lastRow;
     let rowsAfterKeystroke;
 
-    await test.step('Дано подсказка «der Rücken» на «Rücken» и перевод «спина» в поле', async () => {
+    await test.step('Дано подсказки «der Rücken» и «das Rückenmark» на «Rücken» и перевод «спина» в поле', async () => {
       await openHome(page);
       await field.pressSequentially('Rücken');
-      await expect(options(page)).toHaveText(['der Rücken']);
+      await expect(options(page)).toHaveText(['der Rücken', 'das Rückenmark']);
       await expect(translationField(page)).toHaveValue('спина');
-      lastRow = await options(page).last().boundingBox();
+      lastRow = await options(page).first().boundingBox();
     });
 
     await test.step('Когда он печатает «k»', async () => {
