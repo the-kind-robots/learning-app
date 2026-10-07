@@ -1,5 +1,5 @@
 const path = require('path');
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // A repeat start takes memory from a snapshot in the Cache API and catches up
 // from its feed positions (#508, ADR-0018). A snapshot that fails a check is

@@ -1,4 +1,4 @@
-const { expect } = require('@playwright/test');
+const { expect } = require('./fixtures');
 
 // Lesson setup shared by the desktop and the phone answer specs.
 //

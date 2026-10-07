@@ -1,24 +1,21 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
-// Watches the document from before the app boots and notes the first moment
-// the splash, a loading state and the first tile are in the DOM. The
-// splash may live for milliseconds on a small vocabulary, so a polling
-// assertion could miss it; a MutationObserver cannot. Attributes are watched
-// too: the renderer morphs nodes in place, so a block can appear as a class
-// change on an existing element without any node being inserted. The observer
-// is attached to `document`: an init script runs before the document has an
-// element, so `document.documentElement` is still null here.
+// Watches the document from before the app boots and notes the first loading
+// state and the first tile that enter the DOM. Either may live for
+// milliseconds, so a polling assertion could miss it; a MutationObserver
+// cannot. Attributes are watched too: the renderer morphs nodes in place, so
+// a block can appear as a class change on an existing element without any
+// node being inserted. The observer is attached to `document`: an init script
+// runs before the document has an element, so `document.documentElement` is
+// still null here.
 const watchSwitcher = `
   window.__seen = {};
   new MutationObserver(() => {
     if (!window.__seen.loading && document.querySelector('.switcher__loading')) {
       window.__seen.loading = performance.now();
     }
-    if (!window.__seen.splash && document.querySelector('.app-loading')) {
-      window.__seen.splash = performance.now();
-    }
     if (!window.__seen.tile && document.querySelector('.tile')) {
-      window.__seen.tile = performance.now();
+      window.__seen.tile = document.querySelector('.tile').textContent;
     }
   }).observe(document, {
     attributes: true, characterData: true, childList: true, subtree: true,
@@ -48,10 +45,11 @@ async function seedVocabulary(page, words) {
   }, words);
 }
 
-// The themes screen has no loading state of its own: the app opens on a
-// splash until the words and collections are read (#494), and the tiles are
-// there when the screen is.
-test('the themes screen opened at start shows the splash, then its tiles, never a loading state', async ({ page }) => {
+// The themes screen has no loading state of its own: the app opens on the
+// server's splash until memory is loaded (#494, #515), and the first tile
+// shown already counts every word. A tile shown from empty memory would count
+// none.
+test('the themes screen opened at start shows its tiles counted, never a loading state', async ({ page }) => {
   await page.addInitScript(watchSwitcher);
   await page.goto('/');
   await addWord(page, 'der Hund', 'пёс');
@@ -63,8 +61,6 @@ test('the themes screen opened at start shows the splash, then its tiles, never 
   await expect(page.getByRole('button', { name: 'Всё подряд 201', exact: true })).toBeVisible({ timeout: 30000 });
 
   const seen = await page.evaluate(() => window.__seen);
-  expect(seen.splash, 'the splash entered the DOM').toBeDefined();
-  expect(seen.tile, 'a tile entered the DOM').toBeDefined();
-  expect(seen.splash).toBeLessThan(seen.tile);
+  expect(seen.tile, 'the first tile counts every word').toContain('201');
   expect(seen.loading, 'no loading state of its own').toBeUndefined();
 });

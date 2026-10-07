@@ -30,6 +30,11 @@
 
 (deftest a-delete-announces-itself-and-keeps-no-state-for-it
   (let [show-deleted       (get-in (nxr/get-registry) [:nexus/actions :action/show-deleted])
-        [_ focus announce] (show-deleted {} {:learner ports/reads} {:name "Solo" :focus-id "collection:travel"})]
+        [_ focus announce] (show-deleted {}
+                                         {:learner ports/reads}
+                                         {:name          "Solo"
+                                          :focus-id      "collection:travel"
+                                          :status-region "the-status-line"})]
     (is (= [:effect/focus-collection "collection:travel"] focus))
-    (is (= [:effect/announce "Набор «Solo» удалён"] announce))))
+    (is (= [:effect/announce "the-status-line" "Набор «Solo» удалён"] announce)
+        "announced in the status line the delete control named")))

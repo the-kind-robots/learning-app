@@ -199,12 +199,15 @@
 
 (nxr/register-effect! :effect/delete-collection
   (fn ^:async delete-collection!
-    [{:keys [capabilities dispatch]} _ {:keys [id name]}]
+    [{:keys [capabilities dispatch]} _ {:keys [id name status-region]}]
     ;; Picked before the delete: afterwards the deleted target is gone.
     (let [focus-id (neighbour (target-ids) id)]
       (try
         (await (collections/delete! capabilities id))
-        (dispatch [[:effect/enter :action/show-deleted {:name name :focus-id focus-id}]])
+        (dispatch [[:effect/enter :action/show-deleted
+                    {:name          name
+                     :focus-id      focus-id
+                     :status-region status-region}]])
         (catch js/Error err
           (log/error :effect/delete-collection {:error (str err)}))))))
 

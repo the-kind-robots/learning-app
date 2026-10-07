@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // The dictionary belongs to the tab being typed into (GH-351).
 //

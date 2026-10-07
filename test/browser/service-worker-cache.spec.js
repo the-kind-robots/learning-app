@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const { openControlled, readMetrics, dictionaryReady } = require('./service-worker.shared');
 
 // What the worker's cache keeps and what it hands back (#315, #299). Every

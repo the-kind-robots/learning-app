@@ -1,4 +1,4 @@
-const { expect } = require('@playwright/test');
+const { expect } = require('./fixtures');
 
 // The words search field sits in the bottom tray, directly above the lesson
 // button and as wide as it; the rows start under the shell bar with air

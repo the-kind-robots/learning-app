@@ -118,8 +118,7 @@
 (defn- ^:async load-once
   "Reads memory from user-db once: it notes where the change feed stands,
    reads every document, and then reads what user-db stored meanwhile.
-   Resolves with that memory. A failure at any step retries all of it, so
-   that a retry starts from a fresh feed position."
+   Resolves with that memory, and rejects when any step fails."
   [dbs]
   (let [noted  (await (dbs/feed-position dbs db-key))
         memory (await (loaded memory/with-docs (await (read-all dbs))))]
@@ -187,20 +186,22 @@
 (defn- ^:async read-memory
   "Reads memory from `snapshot`, the one `checked-snapshot` resolved with,
    when there is one and it can be taken. Otherwise it reads memory from
-   user-db (`load-once`), and reads again from the start when any step
-   fails (`db.pouch/retried`), marking the store so the splash says so. Resolves with `{:memory :stored}`: memory with everything stored
-   up to then, its feed position included, and the feed position of the
-   snapshot the cache holds, or nil."
+   user-db (`load-once`), once. Resolves with `{:memory :stored}`: memory
+   with everything stored up to then, its feed position included, and the
+   feed position of the snapshot the cache holds, or nil. When the read
+   from user-db fails, it logs the failure, marks the store
+   `:learner/unreadable?`, so that the shell asks for a reload, and
+   resolves nil. Nothing reads again: a reload starts the read anew."
   [dbs store snapshot]
   (let [read (or (when snapshot (await (from-snapshot dbs snapshot)))
-                 {:memory (await (dbs/retried #(load-once dbs)
-                                              (fn [err wait]
-                                                ;; The splash says so while
-                                                ;; memory stays unloaded.
-                                                (log/error :memory/read-failed {:error (str err) :retry-ms wait})
-                                                (swap! store assoc :learner/read-failed? true))))
-                  :stored nil})]
-    (when ^boolean goog/DEBUG
+                 (try
+                   {:memory (await (load-once dbs))
+                    :stored nil}
+                   (catch :default err
+                     (log/error :memory/read-failed {:error (str err)})
+                     (swap! store assoc :learner/unreadable? true)
+                     nil)))]
+    (when (and read ^boolean goog/DEBUG)
       (instrumentation/memory-ready! (if (:stored read) :snapshot :databases)))
     read))
 
@@ -267,29 +268,30 @@
    can drop a change unreported. It writes the snapshot once memory is
    handed over, in a task of its own, and each time the page goes to the
    background. Once memory is handed over, resolves with a function that
-   stops following."
+   stops following. When the read failed (`read-memory`), it hands nothing
+   over, follows nothing and resolves nil."
   [dbs store dispatch]
   (when-not (.has reads store)
     (start-reading! dbs store))
-  (let [read     (.get reads store)
-        _ (.delete reads store)
-        {:keys [memory stored]} (await read)
-        feed     (dbs/follow-changes dbs
-                                     db-key
-                                     (:seq (memory/position memory))
-                                     (fn [docs position]
-                                       (dispatch [[:effect/memory-changed (skip-interpolation docs) position]])))
-        stopped? (volatile! false)
-        write!   (snapshot-writer dbs store stored stopped?)]
-    (.set followers store (:catch-up! feed))
-    (dispatch [[:effect/memory-loaded (skip-interpolation memory)]])
-    (.then (dbs/next-task) write!)
-    (let [stop-visibility (on-visibility! #(-> (catch-up! store)
-                                               (.catch (fn [err]
-                                                         (log/error :memory/catch-up-failed {:error (str err)}))))
-                                          write!)]
-      (fn stop []
-        (vreset! stopped? true)
-        (stop-visibility)
-        (.delete followers store)
-        ((:stop! feed))))))
+  (let [read (.get reads store)
+        _ (.delete reads store)]
+    (when-let [{:keys [memory stored]} (await read)]
+      (let [feed     (dbs/follow-changes dbs
+                                         db-key
+                                         (:seq (memory/position memory))
+                                         (fn [docs position]
+                                           (dispatch [[:effect/memory-changed (skip-interpolation docs) position]])))
+            stopped? (volatile! false)
+            write!   (snapshot-writer dbs store stored stopped?)]
+        (.set followers store (:catch-up! feed))
+        (dispatch [[:effect/memory-loaded (skip-interpolation memory)]])
+        (.then (dbs/next-task) write!)
+        (let [stop-visibility (on-visibility! #(-> (catch-up! store)
+                                                   (.catch (fn [err]
+                                                             (log/error :memory/catch-up-failed {:error (str err)}))))
+                                              write!)]
+          (fn stop []
+            (vreset! stopped? true)
+            (stop-visibility)
+            (.delete followers store)
+            ((:stop! feed))))))))

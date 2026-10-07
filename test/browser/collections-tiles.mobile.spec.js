@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // The issue's phone: 384 × 800. The mobile project's 390 × 844 is close,
 // but the acceptance names this size.

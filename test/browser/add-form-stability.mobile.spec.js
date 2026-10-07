@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const { openHome } = require('./service-worker.shared');
 
 // The phone half of the add-form stability specs (GH-289), rewritten for the

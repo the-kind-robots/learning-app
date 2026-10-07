@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const { openHome } = require('./service-worker.shared');
 
 // GH-412: the arrows moved the active index in state and Enter picked by it,

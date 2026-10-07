@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const { openHome } = require('./service-worker.shared');
 
 // GH-358: picking a suggestion used to freeze the mode for the rest of the
