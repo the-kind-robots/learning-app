@@ -2,20 +2,78 @@
   (:require
    [cheshire.core :as cheshire]
    [clojure.string :as str]
+   [examples.cache :as cache]
    [examples.dictionary :as dictionary]
    [examples.provider :as provider]
    [malli.core :as m]
    [malli.error :as me]
    [malli.json-schema :as mjs]
    [malli.util :as mu]
+   [single-flight :as single-flight]
    [taoensso.telemere :as t]
    [utils :as utils]))
 
 
-(defn- example-generation-timeout-ms
-  []
-  (some-> (or (System/getenv "EXAMPLE_GENERATION_TIMEOUT_MS") "30000")
-          parse-long))
+(def ^:private default-generation-timeout-ms 30000)
+
+
+(def ^:private max-generation-attempts 3)
+
+
+(def ^:private proxy-wait-ms
+  "How long nginx waits for `/api/examples` (`proxy_read_timeout`), in
+   production and in development."
+  100000)
+
+
+(def ^:private attempt-margin-ms
+  "Time kept free under the proxy's wait for the dictionary read, the cache
+   and the answer."
+  5000)
+
+
+(def ^:private longest-attempt-timeout-ms
+  "The longest one attempt may wait, so that every attempt fits under the
+   proxy's wait."
+  (quot (- proxy-wait-ms attempt-margin-ms) max-generation-attempts))
+
+
+(defn- generation-timeout-ms-from
+  "The per-attempt timeout that the raw EXAMPLE_GENERATION_TIMEOUT_MS `value`
+   sets. An unreadable value gives the default and a too-long one gives
+   `longest-attempt-timeout-ms`; both are logged."
+  [value]
+  (let [parsed (some-> value str/trim parse-long)
+        asked  (cond
+                 (nil? value)
+                 default-generation-timeout-ms
+
+                 (and parsed (pos? parsed))
+                 parsed
+
+                 :else
+                 (do
+                   (t/log!
+                    {:level :warn
+                     :id    ::generation-timeout-unreadable
+                     :data  {:value value :default default-generation-timeout-ms}}
+                    "EXAMPLE_GENERATION_TIMEOUT_MS is not a positive number of milliseconds; the default applies")
+                   default-generation-timeout-ms))]
+    (if (<= asked longest-attempt-timeout-ms)
+      asked
+      (do
+        (t/log!
+         {:level :warn
+          :id    ::generation-timeout-clamped
+          :data  {:value asked :clamped-to longest-attempt-timeout-ms}}
+         "EXAMPLE_GENERATION_TIMEOUT_MS would outlast the proxy over three attempts; the clamped timeout applies")
+        longest-attempt-timeout-ms))))
+
+
+(def ^:private generation-timeout-ms
+  "How long one attempt may wait for the provider, read from the environment
+   once."
+  (delay (generation-timeout-ms-from (System/getenv "EXAMPLE_GENERATION_TIMEOUT_MS"))))
 
 
 (defn- example-max-tokens
@@ -165,11 +223,13 @@
 
 
 (defn- strip-word-indexes
+  "The example without its structure items' `wordIndex`. A candidate of any
+   other shape is returned unchanged for the schema to reject."
   [example]
-  (update example
-          :structure
-          (fn [structure]
-            (mapv #(dissoc % :wordIndex) (or structure [])))))
+  (let [structure (when (map? example) (:structure example))]
+    (if (and (sequential? structure) (every? map? structure))
+      (assoc example :structure (mapv #(dissoc % :wordIndex) structure))
+      example)))
 
 
 (defn- same-word?
@@ -225,7 +285,7 @@
 
 
 (defn- glosses
-  "The Russian glosses of a question, from a string, a collection of strings or
+  "The Russian glosses of a subject, from a string, a collection of strings or
    nil: trimmed, blanks and duplicates dropped, order kept."
   [translation]
   (->> (cond
@@ -238,36 +298,19 @@
        vec))
 
 
-(defn question
-  "What a caller is asking for, normalized: the German word, the Russian
-   glosses they confirmed, and the collection they are learning the word in.
-
-   Normalized once, here, before anyone reads it. The sentence a question
-   produces and the row it is cached under have to be built from the same
-   glosses — `\" собака \"` and `\"собака\"` are one question and must
-   not be two prompts — and the way to have that is one value, passed on as
-   it is, not two normalizations that happen to agree.
-
-   The glosses are sorted: the order a device sends them in follows the order
-   its own translations were merged in and means nothing to anyone else, so
-   the same set asked in another order is the same question — and the prompt
-   is none the worse for reading them in a fixed one.
-
-   The word keeps its case: German case carries meaning, and `Essen` is not
-   `essen`. A blank context is no context."
+(defn subject
+  "What an example is generated for: the trimmed German word, its sorted
+   Russian glosses and the collection context. The cache key and the prompt
+   are both built from this one value."
   [{:keys [context translation word]}]
   {:context      (utils/non-blank (some-> context str/trim))
    :translations (vec (sort (glosses translation)))
    :word         (utils/non-blank (some-> word str/trim))})
 
 
-(def question-schema
-  "What `question` answers with, and what everything downstream of it accepts.
-   Closed: a map carrying `:translation` — the caller's own key, one letter
-   away — would be read as a question with no glosses at all.
-
-   The word is never blank: the endpoint answers `400` before building a
-   question, so one without a word does not exist."
+(def subject-schema
+  "What `subject` returns and everything downstream accepts. It is closed, so
+   a raw request map with `:translation` does not pass for a subject."
   [:map {:closed true}
    [:context [:maybe [:string {:min 1}]]]
    [:translations [:vector [:string {:min 1}]]]
@@ -356,12 +399,6 @@
       {:issue :target-lemma-missing})))
 
 
-(defn- retry-after-ms
-  [response]
-  (when-let [f (:retry-after-ms (provider/config))]
-    (f response)))
-
-
 (defn generation-failure?
   [result]
   (= ::generation-failure (::type result)))
@@ -441,20 +478,25 @@
 
 
 (defn word-meta
-  "What the dictionary says about the question's word: part of speech and
-   level, or nil when it says nothing. Read once per question — the prompt
-   carries it and the cache key covers it, and those have to be the same
-   reading."
+  "What the dictionary says about the subject's word: part of speech and
+   level, or nil when it has no entry. A dictionary that cannot be read gives
+   a generation failure that is not retried."
   [{:keys [translations word]}]
-  (dictionary/lookup-word-meta word translations))
+  (try
+    (dictionary/lookup-word-meta word translations)
+    (catch Exception error
+      (let [failure {::type      ::generation-failure
+                     :retryable? false
+                     :word       word
+                     :error      (ex-message error)
+                     :context    :failure/dictionary}]
+        (log-generation-failure! failure)
+        failure))))
 
 
 (defn- generation-version
-  "What a generated sentence depends on besides the question itself: the prompt
-   it was asked with, the models configured to answer it, and what the
-   dictionary said about the word — the part of speech and the level go into
-   the prompt, and `nil` when the dictionary answered nothing is as much a part
-   of the sentence as a part of speech is."
+  "What a generated sentence depends on besides its subject: the prompt, the
+   models and the dictionary's reading of the word."
   [word-meta]
   (let [{:keys [model models]} (provider/config)]
     {:models    (or models [model])
@@ -471,16 +513,17 @@
 
 
 (defn generation-digest
-  "The digest of the generation a question would be answered by. Part of what a
-   cached answer is keyed by, so editing the prompt, moving to another model or
-   the word arriving in the dictionary is an ordinary miss — the stored rows
-   simply stop being found, and there is nothing to invalidate by hand.
+  "The digest of the generation that would produce an example under the
+   dictionary's `word-meta`. A new prompt, model or dictionary entry changes
+   it, so old rows simply stop being found."
+  [word-meta]
+  (digested (generation-version word-meta)))
 
-   A sentence generated while the dictionary was away is keyed under that
-   absence and kept: every device would otherwise pay for the same answer,
-   which is when the saving is needed most."
-  [question]
-  (digested (generation-version (word-meta question))))
+
+(defn subject-key
+  "The cache key of `subject` under the dictionary's `word-meta`."
+  [subject word-meta]
+  (cache/digest subject (generation-digest word-meta)))
 
 
 (defn- previous-issue-payload
@@ -527,106 +570,247 @@
   [word translations context word-meta retry-context]
   (provider/request
    (request-body word translations context word-meta retry-context)
-   (example-generation-timeout-ms)))
+   @generation-timeout-ms))
 
 
-(defn- parse-generated-example
+(defn- parsed-body
+  "The response body as a JSON object, or nil when it is not one."
+  [body]
+  (let [parsed (try
+                 (cheshire/parse-string (str body) true)
+                 (catch Exception _
+                   nil))]
+    (when (map? parsed)
+      parsed)))
+
+
+(defn- first-choice
+  "The first choice of a parsed 200 body, or nil when the body carries an
+   error or no choices."
+  [body]
+  (let [choices (when (nil? (:error body)) (:choices body))
+        choice  (when (sequential? choices) (first choices))]
+    (when (map? choice)
+      choice)))
+
+
+(defn- choice-text
+  "The text the model wrote in `choice`, or nil when it wrote none."
+  [choice]
+  (let [content (:content (:message choice))
+        text    (cond
+                  (string? content)
+                  content
+
+                  (sequential? content)
+                  (->> content
+                       (filter #(and (map? %) (= "text" (:type %)) (string? (:text %))))
+                       (map :text)
+                       (apply str)))]
+    (when-not (str/blank? text)
+      text)))
+
+
+(defn- candidate
+  "The example the model wrote in `content`, parsed. Text that is not JSON is
+   returned as it is, for the checks to reject."
+  [content]
+  (try
+    (cheshire/parse-string content true)
+    (catch Exception _
+      content)))
+
+
+(defn- moderated?
+  "Whether moderation or the model refused the input, so asking again would
+   be refused too."
+  [status body choice]
+  (if (= 403 status)
+    (boolean (seq (get-in body [:error :metadata :reasons])))
+    (boolean
+     (and choice
+          (or (= "content_filter" (:finish_reason choice))
+              (not (str/blank? (str (:refusal (:message choice))))))))))
+
+
+(defn- failed-at-provider
+  "The failure of a provider that answered with an error status or did not
+   answer."
   [response word]
-  (if (= 200 (:status response))
+  ;; A 4xx other than 408 fails the same way when asked again.
+  (let [status  (:status response)
+        hard?   (and (int? status) (<= 400 status 499) (not= 408 status))
+        failure (merge
+                 (select-keys response [:status :error :body])
+                 {::type          ::generation-failure
+                  :retryable?     (not hard?)
+                  :word           word
+                  :retry-after-ms (provider/retry-after-ms response)})]
+    (log-generation-failure! failure)
+    failure))
+
+
+;; The shapes read here follow https://openrouter.ai/openapi.json and
+;; https://openrouter.ai/docs/api/reference/errors-and-debugging.
+(defn- parse-generated-example
+  "What one provider response gives: the model's candidate, a generation
+   failure, or a moderated marker when the input was refused."
+  [response word]
+  (let [status (:status response)
+        body   (parsed-body (:body response))
+        choice (when (= 200 status) (first-choice body))
+        text   (when choice (choice-text choice))]
+    (cond
+      (moderated? status body choice)
+      (let [moderated {::type ::moderated
+                       :word  word
+                       :body  (:body response)}]
+        (log-generation-failure! (assoc moderated :error "Moderation refused the input"))
+        moderated)
+
+      text
+      (candidate text)
+
+      (= 200 status)
+      ;; No completion. Only an empty answer cut off at the token limit is
+      ;; not asked again.
+      (let [failure {::type      ::generation-failure
+                     :retryable? (not= "length" (:finish_reason choice))
+                     :word       word
+                     :error      "No completion in the provider's answer"
+                     :body       (:body response)}]
+        (log-generation-failure! failure)
+        failure)
+
+      :else
+      (failed-at-provider response word))))
+
+
+(defn- generate-attempt!
+  "One request to the provider, waited for at most the per-attempt timeout.
+   An interrupted wait gives a failure that is not retried."
+  [word translations context word-meta retry-context]
+  (let [timeout-ms @generation-timeout-ms]
     (try
-      (-> response :body (cheshire/parse-string true) :choices first :message :content (cheshire/parse-string true))
+      (-> (example-api-request word translations context word-meta retry-context)
+          (deref timeout-ms {:error (str "No answer within " timeout-ms " ms")})
+          (parse-generated-example word))
+      (catch InterruptedException error
+        (.interrupt (Thread/currentThread))
+        (let [failure {::type      ::generation-failure
+                       :retryable? false
+                       :word       word
+                       :error      (.getMessage error)
+                       :context    :failure/interrupted}]
+          (log-generation-failure! failure)
+          failure))
       (catch Exception error
         (let [failure {::type      ::generation-failure
                        :retryable? true
                        :word       word
                        :error      (.getMessage error)
-                       :body       (:body response)}]
+                       :context    :failure/transport
+                       :cause      (some-> error ex-data)}]
           (log-generation-failure! failure)
-          failure)))
-    (let [hard?   (contains? #{401 403 429} (:status response))
-          failure (merge
-                   (select-keys response [:status :error :body])
-                   {::type      ::generation-failure
-                    :retryable? (not hard?)
-                    :word       word
-                    :retry-after-ms (retry-after-ms response)})]
-      (log-generation-failure! failure)
-      failure)))
-
-
-(defn- generate-attempt!
-  [word translations context word-meta retry-context]
-  (try
-    (-> @(example-api-request word translations context word-meta retry-context)
-        (parse-generated-example word))
-    (catch Exception error
-      (let [failure {::type      ::generation-failure
-                     :retryable? true
-                     :word       word
-                     :error      (.getMessage error)
-                     :context    :transport
-                     :cause      (some-> error ex-data)}]
-        (log-generation-failure! failure)
-        failure))))
+          failure)))))
 
 
 (defn generate-one!
-  "Generates a German example sentence for a `question` — `{:context
-   :translations :word}` as `question` answers with. Every gloss is passed
-   through to the prompt and to validation, so any of them can be the sense
-   the sentence takes.
+  "An example sentence generated for `subject` under the dictionary's
+   `word-meta`, in up to `max-generation-attempts` attempts. A provider
+   failure gives a generation failure; a rejected last candidate or a refused
+   input gives nil."
+  ([subject word-meta]
+   (generate-one! subject word-meta max-generation-attempts))
+  ([{:keys [context translations word]} word-meta max-attempts]
+   (loop [attempt       1
+          retry-context nil]
+     (let [example  (generate-attempt! word translations context word-meta retry-context)
+           failure? (generation-failure? example)
+           refused? (= ::moderated (::type example))
+           result   (when-not (or failure? refused?) (example-issue word example))
+           issue    (:issue result)]
+       (cond
+         ;; The same input would be refused again.
+         refused?
+         nil
 
-  Takes the question as it is and normalizes nothing: the glosses it generates
-  from are the glosses the answer is keyed by, which is only true while there
-  is one normalization and one value.
+         (and failure? (not (:retryable? example)))
+         example
 
-  Returns one of:
-  * success — map with keys :value, :translation, :structure
-    (a vector of maps with :usedForm, :dictionaryForm, :translation);
-  * generation-failure map on a hard error (e.g. 429);
-  * nil when all attempts are exhausted."
-  ([question]
-   (generate-one! question 3))
-  ([{:keys [context translations word] :as question} max-attempts]
-   (let [word-meta (word-meta question)]
-     (loop [attempt       1
-            retry-context nil]
-       (let [example  (generate-attempt! word translations context word-meta retry-context)
-             failure? (generation-failure? example)
-             result   (when-not failure? (example-issue word example))
-             issue    (:issue result)]
-         (cond
-           (and failure? (not (:retryable? example)))
-           example
+         (and (not failure?) (nil? issue))
+         (add-word-indexes example)
 
-           (and (not failure?) (nil? issue))
-           (add-word-indexes example)
+         (< attempt max-attempts)
+         (let [retry-ctx (when (and (not failure?) issue)
+                           (cond-> {:example (strip-word-indexes example)
+                                    :issue   issue}
+                             (seq (:details result)) (assoc :details (:details result))))]
+           (when retry-ctx
+             (log-generation-failure!
+              {:words   [word]
+               :attempt attempt
+               :error   "Rejected generated example candidate"
+               :issue   issue
+               :example example}))
+           (recur (inc attempt) retry-ctx))
 
-           (< attempt max-attempts)
-           (let [retry-ctx (when (and (not failure?) issue)
-                             (cond-> {:example (strip-word-indexes example)
-                                      :issue   issue}
-                               (seq (:details result)) (assoc :details (:details result))))]
-             (when retry-ctx
-               (log-generation-failure!
-                {:words   [word]
-                 :attempt attempt
-                 :error   "Rejected generated example candidate"
-                 :issue   issue
-                 :example example}))
-             (recur (inc attempt) retry-ctx))
+         ;; The last attempt decides whose failure it is.
+         failure?
+         example
 
-           :else
-           (do
-             (when (and (not failure?) issue)
-               (log-generation-failure!
-                {:words   [word]
-                 :attempt attempt
-                 :error   "Exhausted example generation attempts"
-                 :issue   issue
-                 :example example}))
-             nil)))))))
+         :else
+         (do
+           (log-generation-failure!
+            {:words   [word]
+             :attempt attempt
+             :error   "Exhausted example generation attempts"
+             :issue   issue
+             :example example})
+           nil))))))
+
+
+(defn outcome
+  "The kind of result `get!` returned, for the endpoint to pick its status:
+   `:outcome/success`, `:outcome/rejected`, `:outcome/throttled` or
+   `:outcome/unavailable`."
+  [result]
+  (cond
+    (valid-example? result)            :outcome/success
+    (not (generation-failure? result)) :outcome/rejected
+    (= 429 (:status result))           :outcome/throttled
+    :else                              :outcome/unavailable))
+
+
+(defn get!
+  "The example for `subject`: the stored one, or one generated now and
+   stored. Otherwise the generation's failure, or nil when no candidate
+   passed."
+  [db subject]
+  (let [word-meta (word-meta subject)]
+    (if (generation-failure? word-meta)
+      word-meta
+      (let [cache-key (subject-key subject word-meta)]
+        (try
+          (single-flight/run
+           cache-key
+           (fn []
+             (or (cache/lookup db cache-key)
+                 (let [result (generate-one! subject word-meta)]
+                   (if (and (valid-example? result)
+                            (false? (cache/store! db cache-key subject result)))
+                     (or (cache/lookup db cache-key) result)
+                     result)))))
+          (catch java.util.concurrent.TimeoutException error
+            (let [failure {::type      ::generation-failure
+                           :retryable? false
+                           :word       (:word subject)
+                           :error      (ex-message error)
+                           :context    :failure/joined-run}]
+              (log-generation-failure! failure)
+              failure)))))))
 
 
 (comment
-  (generate-one! (question {:word "das Entsetzen" :translation ["ужас" "испуг"]})))
+  (let [asked (subject {:word "das Entsetzen" :translation ["ужас" "испуг"]})]
+    (generate-one! asked (word-meta asked))))

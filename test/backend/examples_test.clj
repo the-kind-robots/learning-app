@@ -1,5 +1,6 @@
 (ns backend.examples-test
   (:require
+   [backend.support.generation :as support.generation]
    [cheshire.core :as cheshire]
    [clojure.test :refer [deftest is testing]]
    [db :as db]
@@ -7,7 +8,8 @@
    [examples.dictionary :as dictionary]
    [examples.provider :as provider]
    [malli.core :as m]
-   [org.httpkit.client :as client]))
+   [org.httpkit.client :as client]
+   [taoensso.telemere :as t]))
 
 
 (deftest example-api-request-uses-openrouter-defaults
@@ -207,9 +209,9 @@
                         :dictionaryForm "aufstehen"
                         :translation    "to stand up"}]})}}]})]
       (with-redefs [sut/example-api-request (fn [_word _translation _context _word-meta _retry-context]
-                                              (delay {:status 200 :body body}))
+                                              (support.generation/answered {:status 200 :body body}))
                     dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (sut/generate-one! (sut/question {:word "aufstehen" :translation "вставать"}))))))))
+        (is (nil? (sut/generate-one! (sut/subject {:word "aufstehen" :translation "вставать"}) nil)))))))
 
 
 (deftest deterministic-example-issues-stop-at-structural-invalidity
@@ -660,7 +662,7 @@
                                               next-example))
                     dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= (#'sut/add-word-indexes good-example)
-               (sut/generate-one! (sut/question {:word "Leiter" :translation "лестница"}) 2)))
+               (sut/generate-one! (sut/subject {:word "Leiter" :translation "лестница"}) nil 2)))
         (is (= [nil
                 {:example bad-example
                  :details {:max 12 :min 3}
@@ -680,10 +682,10 @@
                                             example)
                     dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= (#'sut/add-word-indexes example)
-               (sut/generate-one! (sut/question {:word "Leiter" :translation "лестница"}) 1)))))))
+               (sut/generate-one! (sut/subject {:word "Leiter" :translation "лестница"}) nil 1)))))))
 
 
-(deftest every-shape-of-question-is-a-question
+(deftest every-shape-of-subject-is-a-subject
   (testing "each branch of what a caller may send normalizes into one shape"
     (doseq [asked [{:word "Hund"}
                    {:word "Hund" :translation "собака"}
@@ -691,26 +693,26 @@
                    {:word "Hund" :translation ["  собака " "   "]}
                    {:word " Hund " :translation nil :context "   "}
                    {:word "Hund" :translation [] :context "Tiere"}]]
-      (is (m/validate sut/question-schema (sut/question asked))
-          (str "not a question: " (pr-str asked))))))
+      (is (m/validate sut/subject-schema (sut/subject asked))
+          (str "not a subject: " (pr-str asked))))))
 
 
-(deftest a-question-reads-what-the-caller-sent
+(deftest a-subject-reads-what-the-caller-sent
   (testing "one gloss as a bare string"
-    (is (= ["собака"] (:translations (sut/question {:word "Hund" :translation "собака"})))))
+    (is (= ["собака"] (:translations (sut/subject {:word "Hund" :translation "собака"})))))
   (testing "several as a collection, sorted — their order is this device's, not anyone's"
     (is (= ["пёс" "собака"]
-           (:translations (sut/question {:word "Hund" :translation ["собака" "пёс"]})))))
+           (:translations (sut/subject {:word "Hund" :translation ["собака" "пёс"]})))))
   (testing "none at all"
-    (is (= [] (:translations (sut/question {:word "Hund"})))))
+    (is (= [] (:translations (sut/subject {:word "Hund"})))))
   (testing "blanks and duplicates are not glosses"
     (is (= ["собака"]
-           (:translations (sut/question {:word "Hund" :translation [" собака " "   " "собака"]})))))
+           (:translations (sut/subject {:word "Hund" :translation [" собака " "   " "собака"]})))))
   (testing "the word keeps its case and loses its spacing"
-    (is (= "Hund" (:word (sut/question {:word " Hund "})))))
+    (is (= "Hund" (:word (sut/subject {:word " Hund "})))))
   (testing "a blank context is no context"
-    (is (nil? (:context (sut/question {:word "Hund" :context "   "}))))
-    (is (= "Tiere" (:context (sut/question {:word "Hund" :context " Tiere "}))))))
+    (is (nil? (:context (sut/subject {:word "Hund" :context "   "}))))
+    (is (= "Tiere" (:context (sut/subject {:word "Hund" :context " Tiere "}))))))
 
 
 (deftest lookup-dictionary-entries-uses-live-dictionary-db
@@ -769,15 +771,15 @@
 
 
 (deftest generate-one-logs-transport-errors
-  (testing "transport exceptions are logged and returned as nil"
+  (testing "transport exceptions are logged and returned as the provider's failure"
     (let [logged (atom nil)]
       (with-redefs [sut/example-api-request     (fn [_word _translation _context _word-meta _retry-context]
-                                                  (delay (throw (ex-info "network down" {:status 0}))))
+                                                  (throw (ex-info "network down" {:status 0})))
                     sut/log-generation-failure! (fn [data]
                                                   (swap! logged conj data))]
-        (is (nil? (sut/generate-one! (sut/question {:word "Hund" :translation "собака"}) 1)))
+        (is (sut/generation-failure? (sut/generate-one! (sut/subject {:word "Hund" :translation "собака"}) nil 1)))
         (is (some #(= "Hund" (:word %)) @logged))
-        (is (some #(= :transport (:context %)) @logged))
+        (is (some #(= :failure/transport (:context %)) @logged))
         (is (some #(= "network down" (:error %)) @logged))))))
 
 
@@ -789,13 +791,13 @@
         [sut/example-api-request
          (fn [_word _translation _context _word-meta _retry-context]
            (swap! calls inc)
-           (delay
+           (support.generation/answered
             {:status 429
              :body
              "{\"error\":{\"message\":\"Rate limit exceeded\",\"type\":\"tokens\",\"code\":\"rate_limit_exceeded\"}}"}))
          sut/log-generation-failure! (fn [data]
                                        (swap! logged conj data))]
-        (is (sut/generation-failure? (sut/generate-one! (sut/question {:word "Leiter" :translation "лестница"}) 3)))
+        (is (sut/generation-failure? (sut/generate-one! (sut/subject {:word "Leiter" :translation "лестница"}) nil 3)))
         (is (= 1 @calls))
         (is (= 1 (count @logged)))
         (let [entry (first @logged)]
@@ -867,6 +869,236 @@
                     sut/example-api-request
                     (fn [_word _translation _context word-meta _retry-context]
                       (reset! captured word-meta)
-                      (delay {:status 500 :body "{}"}))]
-        (sut/generate-one! (sut/question {:word "das Haus" :translation "дом"}) 1)
+                      (support.generation/answered {:status 500 :body "{}"}))]
+        (let [asked (sut/subject {:word "das Haus" :translation "дом"})]
+          (sut/generate-one! asked (sut/word-meta asked) 1))
         (is (= {:partOfSpeech "noun" :cefrLevel "a1"} @captured))))))
+
+
+(defn- generated-for
+  "What generation answers for Hund/собака when the provider answers its
+   attempts with `responses`, and how many attempts it made."
+  [responses]
+  (let [calls (atom 0)]
+    (with-redefs [sut/example-api-request (support.generation/provider-answering-in-turn calls responses)]
+      (let [result (sut/generate-one! (sut/subject {:word "Hund" :translation "собака"}) nil)]
+        {:attempts @calls
+         :result   result}))))
+
+
+(deftest the-provider-retry-after-reaches-the-failure
+  (testing "http-kit names headers with keywords, and the delay is read from there"
+    (let [{:keys [attempts result]} (generated-for [{:status 429 :headers {:retry-after "7"}}])]
+      (is (sut/generation-failure? result))
+      (is (= 429 (:status result)))
+      (is (= 7000 (:retry-after-ms result)))
+      (is (= 1 attempts)))))
+
+
+(deftest a-4xx-a-retry-cannot-fix-is-not-asked-again
+  (doseq [status [400 401 402 403 404 413 422]]
+    (testing status
+      (let [{:keys [attempts result]} (generated-for [{:status status :body "{}"}])]
+        (is (sut/generation-failure? result))
+        (is (= status (:status result)))
+        (is (= 1 attempts)))))
+  (testing "a request timeout is asked again"
+    (is (= 3 (:attempts (generated-for [{:status 408 :body "{}"}]))))))
+
+
+(deftest no-completion-is-the-provider-s-failure
+  (doseq [[response reason] [[{:status 200 :body "{\"error\":{\"code\":502,\"message\":\"upstream\"}}"}
+                              "an error object with a 200"]
+                             [{:status 200 :body "{\"choices\":[]}"} "no choices"]
+                             [(support.generation/completion {:content nil}) "null content"]
+                             [(support.generation/completion {:content "   "}) "blank content"]
+                             [{:status 200 :body "not json"} "a body that is not JSON"]
+                             [(support.generation/completion {:content nil} "error")
+                              "a choice that ended in an error"]]]
+    (testing reason
+      (let [{:keys [attempts result]} (generated-for [response])]
+        (is (sut/generation-failure? result))
+        (is (= 3 attempts) "asked again: the next answer may carry a completion"))))
+  (testing "an empty answer cut off at the token limit is not asked again"
+    (let [{:keys [attempts result]} (generated-for [(support.generation/completion {:content ""} "length")])]
+      (is (sut/generation-failure? result))
+      (is (= 1 attempts)))))
+
+
+(deftest content-that-is-no-example-is-a-rejected-candidate
+  (doseq [[content reason] [["{\"value\":\"Der Hund" "JSON cut off at the token limit"]
+                            ["Here is your example: Der Hund bellt." "prose"]
+                            ["[\"Der Hund bellt.\"]" "JSON that is not an object"]
+                            ["\"Der Hund bellt.\"" "a JSON string"]
+                            [(cheshire/generate-string {:value       "Der Hund bellt."
+                                                        :translation "Собака лает."
+                                                        :structure   ["Hund" "bellt"]})
+                             "structure items that are not objects"]
+                            [(cheshire/generate-string {:value       "Der Hund bellt."
+                                                        :translation "Собака лает."
+                                                        :structure   "Hund"})
+                             "a structure that is not a list"]]]
+    (testing reason
+      (let [{:keys [attempts result]} (generated-for [(support.generation/completion {:content content} "length")])]
+        (is (nil? result) "nil: the pair's failure, not the provider's")
+        (is (= 3 attempts))))))
+
+
+(deftest text-parts-of-a-content-list-are-the-candidate
+  (let [example {:value       "Die Leiter steht neben der Wand."
+                 :translation "Лестница стоит у стены."
+                 :structure   [{:usedForm "Leiter" :dictionaryForm "die Leiter" :translation "лестница"}
+                               {:usedForm "steht" :dictionaryForm "stehen" :translation "стоять"}
+                               {:usedForm "Wand" :dictionaryForm "die Wand" :translation "стена"}]}
+        text    (cheshire/generate-string example)
+        calls   (atom 0)]
+    (with-redefs [sut/example-api-request (support.generation/provider-answering-in-turn
+                                           calls
+                                           [(support.generation/completion {:content
+                                                                            [{:type "text" :text (subs text 0 10)}
+                                                                             {:type "text" :text (subs text 10)}]})])]
+      (is (= "Die Leiter steht neben der Wand."
+             (:value (sut/generate-one! (sut/subject {:word "Leiter" :translation "лестница"}) nil)))))))
+
+
+(deftest a-refused-input-is-the-pair-s-failure
+  (doseq [[response reason]
+          [[{:status 403
+             :body   (cheshire/generate-string
+                      {:error {:code     403
+                               :message  "Input flagged"
+                               :metadata {:reasons       ["violence"]
+                                          :flagged_input "Hund"
+                                          :provider_name "x"
+                                          :model_slug    "y"}}})}
+            "the provider's moderation flags the input"]
+           [(support.generation/completion {:content nil} "content_filter") "the model's output is filtered"]
+           [(support.generation/completion {:content nil :refusal "I can't help with that."}) "the model refuses"]]]
+    (testing reason
+      (let [{:keys [attempts result]} (generated-for [response])]
+        (is (nil? result))
+        (is (= 1 attempts) "the same input is refused again, so it is not asked again")))))
+
+
+(deftest a-403-without-moderation-reasons-is-the-provider-s-failure
+  (let [{:keys [result]} (generated-for [{:status 403
+                                          :body   "{\"error\":{\"code\":403,\"message\":\"Key disabled\"}}"}])]
+    (is (sut/generation-failure? result))))
+
+
+(deftest the-last-attempt-decides-whose-failure-it-is
+  (testing "candidates rejected, then the provider fails: the provider's failure"
+    (let [{:keys [attempts result]} (generated-for [support.generation/rejected-candidate
+                                                    support.generation/rejected-candidate
+                                                    {:status 500 :body "{}"}])]
+      (is (sut/generation-failure? result))
+      (is (= 500 (:status result)))
+      (is (= 3 attempts))))
+  (testing "the provider fails, then candidates are rejected: the pair's failure"
+    (let [{:keys [attempts result]} (generated-for [{:status 500 :body "{}"}
+                                                    {:status 500 :body "{}"}
+                                                    support.generation/rejected-candidate])]
+      (is (nil? result))
+      (is (= 3 attempts)))))
+
+
+(deftest an-attempt-waits-for-its-timeout-and-no-longer
+  (let [calls (atom 0)]
+    (with-redefs-fn {#'sut/generation-timeout-ms (delay 100)
+                     #'sut/example-api-request   (fn [& _] (swap! calls inc) (promise))}
+      (fn []
+        (let [started (System/nanoTime)
+              result  (sut/generate-one! (sut/subject {:word "Hund" :translation "собака"}) nil)
+              took-ms (quot (- (System/nanoTime) started) 1000000)]
+          (is (sut/generation-failure? result))
+          (is (= 3 @calls) "every attempt is made")
+          (is (<= 300 took-ms 2000) (str "took " took-ms " ms")))))))
+
+
+(deftest an-interrupted-wait-starts-no-new-attempt
+  (let [calls   (atom 0)
+        asked   (promise)
+        outcome (promise)
+        worker  (Thread. (fn []
+                           (let [result (sut/generate-one! (sut/subject {:word "Hund" :translation "собака"}) nil)]
+                             (deliver outcome
+                                      {:interrupted? (Thread/interrupted)
+                                       :result       result}))))]
+    (with-redefs [sut/example-api-request (fn [& _]
+                                            (swap! calls inc)
+                                            (deliver asked true)
+                                            (promise))]
+      (.start worker)
+      (is (true? (deref asked 2000 false)))
+      (.interrupt worker)
+      (let [{:keys [interrupted? result]} (deref outcome 2000 nil)]
+        (is (sut/generation-failure? result))
+        (is (true? interrupted?) "the interrupt flag is set again")
+        (is (= 1 @calls) "no paid attempt follows")))))
+
+
+(deftest an-unreadable-attempt-timeout-is-the-default
+  (testing "unset is the default, quietly"
+    (is (= 30000 (#'sut/generation-timeout-ms-from nil))))
+  (testing "a positive whole number is taken"
+    (is (= 12000 (#'sut/generation-timeout-ms-from " 12000 "))))
+  (testing "anything else is the default, never an exception"
+    (doseq [value ["" "  " "thirty" "0" "-5" "1.5" "99999999999999999999"]]
+      (is (= 30000 (#'sut/generation-timeout-ms-from value)) (pr-str value)))))
+
+
+(deftest a-timeout-the-proxy-could-not-cover-is-clamped
+  (let [bound @#'sut/longest-attempt-timeout-ms]
+    (testing "three attempts at the clamped timeout fit under the proxy's wait"
+      (is (<= (+ (* @#'sut/max-generation-attempts bound) @#'sut/attempt-margin-ms)
+              @#'sut/proxy-wait-ms)))
+    (testing "a configured 60 s attempt is clamped to the bound, and the clamp is logged once"
+      (let [{:keys [value signals]} (t/with-signals true (#'sut/generation-timeout-ms-from "60000"))]
+        (is (= bound value))
+        (is (= 1 (count signals)))
+        (let [{:keys [level id data]} (first signals)]
+          (is (= [:warn ::sut/generation-timeout-clamped] [level id]))
+          (is (= {:value 60000 :clamped-to bound} data)))))
+    (testing "the default is inside the bound and is kept, quietly"
+      (let [{:keys [value signals]} (t/with-signals true (#'sut/generation-timeout-ms-from nil))]
+        (is (= 30000 value))
+        (is (empty? signals))))))
+
+
+(deftest retry-after-reads-seconds-and-dates
+  (let [now (java.time.Instant/parse "1994-11-06T08:49:00Z")
+        retry-after (fn [value] (provider/retry-after-ms {:headers {:retry-after value}} now))]
+    (testing "delta-seconds"
+      (is (= 7000 (retry-after "7")))
+      (is (= 1500 (retry-after "1.5")) "a fraction is rounded up to the millisecond")
+      (is (= 0 (retry-after "0"))))
+    (testing "the three HTTP-date forms of RFC 9110"
+      (is (= 37000 (retry-after "Sun, 06 Nov 1994 08:49:37 GMT")))
+      (is (= 37000 (retry-after "Sunday, 06-Nov-94 08:49:37 GMT")))
+      (is (= 37000 (retry-after "Sun Nov  6 08:49:37 1994"))))
+    (testing "a date in the past is no delay"
+      (is (= 0 (retry-after "Sun, 06 Nov 1994 08:00:00 GMT"))))
+    (testing "a delay is held to an hour"
+      (is (= 3600000 (retry-after "86400")))
+      (is (= 3600000 (retry-after "99999999999999999999")))
+      (is (= 3600000 (retry-after "Fri, 01 Jan 2100 00:00:00 GMT"))))
+    (testing "anything else is no header at all, never an exception"
+      (doseq [value ["" "soon" "-5" "NaN" "Infinity" "1e400" "Sun, 32 Nov 1994 08:49:37 GMT"]]
+        (is (nil? (retry-after value)) (pr-str value)))
+      (is (nil? (provider/retry-after-ms {:headers {}} now))))))
+
+
+(deftest a-dictionary-that-cannot-be-read-is-a-failure-not-an-unknown-word
+  (testing "a read that timed out is a generation failure no retry follows"
+    (with-redefs [db/request-sync (fn [_request]
+                                    {:error (org.httpkit.client.TimeoutException. "read timeout")})]
+      (let [result (sut/word-meta (sut/subject {:word "Fenster" :translation "окно"}))]
+        (is (sut/generation-failure? result))
+        (is (false? (:retryable? result)))
+        (is (= :failure/dictionary (:context result))))))
+  (testing "a word the dictionary has no entry for is nil, and generation goes on"
+    (with-redefs [db/request-sync (fn [request]
+                                    (if (= "dictionary-db/_find" (:url request))
+                                      {:status 200 :body {:docs []}}
+                                      {:status 404 :body {}}))]
+      (is (nil? (sut/word-meta (sut/subject {:word "Fenster" :translation "окно"})))))))
