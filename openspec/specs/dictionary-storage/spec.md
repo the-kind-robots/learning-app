@@ -2,7 +2,9 @@
 
 ## Purpose
 Define how the German dictionary is built into a SQLite file, served to the browser, and queried there through a worker, keeping it separate from the PouchDB stores that hold the user's progress.
+
 ## Requirements
+
 ### Requirement: Dictionary build emits SQLite artifact and enrichment-meta side file
 The build tool SHALL produce a `dictionary.sqlite` containing all lemmas, translations, labels, translation-label links, and surface-form index data. Entries without Russian translations SHALL have no rows in the `translations` table; the file SHALL be deployable as-is without running enrichment. The build SHALL also emit `enrichment-meta.jsonl` as a build/enrichment support file containing senses context and priority data. `enrichment-meta.jsonl` SHALL NOT be required by the browser runtime.
 
@@ -182,3 +184,13 @@ The dictionary materializer SHALL exclude Kaikki form entries whose tags identif
 - **THEN** those forms are indexed in `surface_forms` normally
 - **AND** searching for their prefix returns the lemma
 
+### Requirement: Frequency index keeps the best rank of a normalized key
+The frequency index SHALL be keyed by `normalize-german` of the source word. When several source rows normalize to one key — an umlaut spelling and its ASCII transliteration (`Rücken`, `ruecken`), with or without an `'s` suffix — the index SHALL keep the entry with the best (lowest) rank. The build SHALL NOT let the order of the source rows decide which spelling's rank a key carries.
+
+#### Scenario: Two spellings of one word
+- **WHEN** the frequency file has `Rücken` at a higher count than `ruecken`
+- **THEN** the index entry for `ruecken` carries the rank and count of `Rücken`
+
+#### Scenario: Row order does not decide
+- **WHEN** the colliding rows appear in either order in the file
+- **THEN** the index entry is the same
