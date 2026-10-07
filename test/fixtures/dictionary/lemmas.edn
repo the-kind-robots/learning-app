@@ -15,10 +15,14 @@
 ;;     fixture apart from the shipped dictionary. Forget the environment
 ;;     variable and the suite fails loudly instead of quietly crawling.
 ;;
+;;   - "ruecken" is one lemma exactly, der Rücken, and it is outranked by its
+;;     compound das Rückenmark; that is what lets a spec see an exact match
+;;     come first rather than merely rank first (#357).
+;;
 ;; Shape is what dictionary.materialize/build-table-data consumes. Surface
 ;; forms are derived from :value and :forms by the same materializer the real
 ;; build runs, so normalization can never drift from what the client queries.
-;; Ranks are distinct: ordering is `rank DESC, value ASC`.
+;; Ranks are distinct: ordering is exact matches first, then `rank DESC, value ASC`.
 [{:value        "das Fenster"
   :pos          "noun"
   :rank         900
@@ -71,4 +75,16 @@
   :pos          "noun"
   :rank         840
   :forms        ["Hundes" "Hunde" "Hunden"]
-  :translations [{:lang "ru" :value "пёс"}]}]
+  :translations [{:lang "ru" :value "пёс"}]}
+
+ {:value        "der Rücken"
+  :pos          "noun"
+  :rank         100
+  :forms        ["Rückens"]
+  :translations [{:lang "ru" :value "спина"}]}
+
+ {:value        "das Rückenmark"
+  :pos          "noun"
+  :rank         950
+  :forms        ["Rückenmarks"]
+  :translations [{:lang "ru" :value "спинной мозг"}]}]
