@@ -1,6 +1,6 @@
 (ns client.domain.vocabulary-test
   (:require
-   [cljs.test :refer-macros [deftest is testing]]
+   [cljs.test :refer-macros [are deftest is testing]]
    [domain.vocabulary :as sut]))
 
 
@@ -77,3 +77,34 @@
            (->> ["Zug" "der Zug"]
                 (sort-by (comp sut/filed-under sut/vocab-id))
                 (mapv (comp sut/filed-under sut/vocab-id)))))))
+
+
+(def ^:private haus
+  "What the completion query answers for `häu`: the lemma and the forms of it
+   that fell in the range."
+  {:lemma "das Haus" :matched-forms ["haeuser" "haeusern"]})
+
+
+(def ^:private gehen
+  {:lemma "gehen" :matched-forms ["ging" "gingen" "gingst" "gingt"]})
+
+
+(def ^:private ruecken
+  {:lemma "der Rücken" :matched-forms ["der ruecken" "ruecken" "rueckens"]})
+
+
+(deftest a-completion-still-completes-the-typed-text-by-its-lemma-or-a-matched-form
+  (testing "the kept suggestion list is narrowed by this, as the query would narrow it (#535)"
+    (are [typed completion] (sut/completes? typed completion)
+     "rück"     {:lemma "der Rücken"} ; umlaut and article do not count against the row
+     "der Rück" {:lemma "der Rücken"} ; the article typed in full is part of the lemma
+     "d"        {:lemma "der Rücken"}
+     ""         {:lemma "der Rücken"}
+     "Häus"     haus                  ; the inflected form the reader is typing
+     "gingst"   gehen
+     "Rücken"   ruecken)
+    (are [typed completion] (not (sut/completes? typed completion))
+     "Rückenk" ruecken ; typed past the lemma and every matched form
+     "ginge"   {:lemma "gehen" :matched-forms ["ging"]}
+     "hu"      {:lemma "das Haus" :matched-forms ["haus"]}
+     "rücke"   {:lemma "die Rücksicht"})))

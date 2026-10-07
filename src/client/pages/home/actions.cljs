@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as str]
    [domain.phrase :as phrase]
+   [domain.vocabulary :as vocabulary]
    [nexus.registry :as nxr]))
 
 
@@ -147,10 +148,23 @@
     [[:effect/save {:home/suggestions empty-suggestions}]]))
 
 
+(defn- narrowed
+  "The shown list with the rows the typed `value` has left behind taken out,
+   in their order; the marked entry stays marked when it is among the rows
+   kept. Nothing left is no list, so a dropped row cannot be tapped, or picked
+   by Enter or Tab, while the next answer is on its way (#535)."
+  [{:suggestions/keys [items active-idx]} value]
+  (let [active (get items (or active-idx 0))
+        kept   (filterv #(vocabulary/completes? value %) items)]
+    (when (seq kept)
+      (suggestions kept (max 0 (.indexOf kept active))))))
+
+
 ;; Suggestions are deliberately not cleared here: the previous list stays
 ;; until :action/update-suggestions delivers the next answer (GH-178), so the
-;; list does not flash empty on every keystroke. An emptied input still clears
-;; it — the dictionary returns [] for an empty prefix.
+;; list does not flash empty on every keystroke. Only the rows the new value
+;; no longer matches go, at once (GH-535). An emptied input still clears it —
+;; the dictionary returns [] for an empty prefix.
 (nxr/register-action! :action/update-word
   (fn update-word [state value]
     ;; A prefilled translation belongs to the word that earned it: emptying the
@@ -158,6 +172,8 @@
     ;; that made the field blink and resize while typing in this one.
     [[:effect/save
       (cond-> {:home/word value}
+        (:home/suggestions state)
+        (assoc :home/suggestions (narrowed (:home/suggestions state) value))
         (and (str/blank? value) (not (:home/translation-typed? state)))
         (assoc :home/translation ""))]
      [:effect/suggest-completions value]]))
