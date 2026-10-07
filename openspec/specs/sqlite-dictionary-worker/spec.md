@@ -2,7 +2,9 @@
 
 ## Purpose
 Define the Dedicated Worker that hosts the SQLite dictionary in the browser, the RPC the main thread uses to query it, and the completion query that feeds home autocomplete.
+
 ## Requirements
+
 ### Requirement: Dictionary SQLite runs in a Dedicated Worker
 The system SHALL run the SQLite dictionary (`opfs-sahpool` VFS) inside a Dedicated Worker;
 the main thread SHALL NOT access SQLite synchronously. Every browsing context SHALL have a
@@ -93,6 +95,8 @@ on readiness.
 ### Requirement: Worker completion result supports home autocomplete
 The system SHALL return completion rows that the home add-word form can render and use to prefill translation. Each row's translations SHALL be carried as discrete elements from the query to the caller, so that no character occurring inside a translation can change how many translations a lemma has. The client SHALL NOT split a completion's translations on any separator.
 
+The rows SHALL be ordered so that every lemma with a surface form equal to the normalized input — of any part of speech the query admits — comes before every lemma without one. Among the exact matches the order SHALL be rank descending, then lemma text; among the rest the same. An exact match SHALL be in the result whenever the result is non-empty, even when its rank would place it outside the result limit. The result limit SHALL stay at ten rows in all.
+
 #### Scenario: Non-empty completion result
 - **WHEN** the input matches entries in the SQLite dictionary
 - **THEN** the resolved value is a sequence of completion maps
@@ -101,6 +105,22 @@ The system SHALL return completion rows that the home add-word form can render a
 #### Scenario: No-match completion result
 - **WHEN** the input matches no entries
 - **THEN** the resolved value is empty
+
+#### Scenario: A finished word comes first
+- **WHEN** the normalized input is a surface form of a lemma
+- **AND** other lemmas in the prefix range have a higher rank
+- **THEN** that lemma is the first row
+- **AND** its exact-match flag is set
+
+#### Scenario: Every part of speech of a finished word comes first
+- **WHEN** the normalized input is a surface form of several lemmas (`rücken`: der Rücken and rücken)
+- **THEN** all of them precede every lemma that is not an exact match
+- **AND** they are ordered by rank among themselves
+
+#### Scenario: An exact match outside the rank top ten is still listed
+- **WHEN** more than ten lemmas in the prefix range outrank the exact match
+- **THEN** the exact match is in the result
+- **AND** the result has ten rows
 
 #### Scenario: A translation containing punctuation stays one translation
 - **WHEN** a matching lemma has a translation whose text contains a comma, semicolon or full stop
@@ -117,7 +137,7 @@ The system SHALL return completion rows that the home add-word form can render a
 - **AND** no blank translation is produced
 
 ### Requirement: Completion query cost scales with the answer, not the prefix range
-The completions SQL SHALL select the ten winning lemmas before joining translations or computing the exact-match flag, so that per-row aggregation work is bounded by the result limit rather than by the number of surface forms matching the prefix. Carrying translations as discrete elements SHALL NOT reintroduce work proportional to the prefix range.
+The completions SQL SHALL select the winning lemmas before joining translations, so that per-row aggregation work is bounded by the result limit rather than by the number of surface forms matching the prefix. The exact matches SHALL be found by an equality lookup on the surface-form key, not by inspecting the prefix range, and the exact-match flag SHALL come from that lookup rather than from a lookup per returned row. Carrying translations as discrete elements SHALL NOT reintroduce work proportional to the prefix range.
 
 #### Scenario: Short prefix costs the same order as a long one
 - **WHEN** completions run for a one-letter prefix matching tens of thousands of surface forms
@@ -126,7 +146,7 @@ The completions SQL SHALL select the ten winning lemmas before joining translati
 
 #### Scenario: Rewritten query returns identical rows
 - **WHEN** the rewritten query runs for any prefix
-- **THEN** its rows, columns, ordering, and limit match the previous grouping query exactly
+- **THEN** its rows and columns match the previous query's for that prefix, except that exact matches are moved to the front and an exact match displaced from the top ten takes the place of the tenth row
 - **AND** `has_exact` still reflects whether the lemma has a surface form equal to the normalized input
 
 #### Scenario: The element-carrying aggregate is measured, not assumed
@@ -134,3 +154,8 @@ The completions SQL SHALL select the ten winning lemmas before joining translati
 - **THEN** its cost is measured against the shipped dictionary on the prefixes `f`, `fe`, `fen`, `sch`, `hau` and `a`
 - **AND** the before and after figures are recorded with the change
 
+#### Scenario: The exact-match lookup is measured, not assumed
+- **WHEN** the exact-match lookup is added to the query
+- **THEN** its cost is measured against the shipped dictionary on one-, two- and three-letter prefixes
+- **AND** a short prefix costs no more than it did before the lookup, within measurement noise
+- **AND** the before and after figures are recorded with the change
