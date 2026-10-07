@@ -22,8 +22,8 @@ The system SHALL avoid forcing focus restoration on touch-first/mobile devices a
 - **THEN** the success flow completes without explicitly focusing the German input
 - **AND** the implementation does not intentionally reopen the soft keyboard
 
-### Requirement: Enter on the German word input picks the highlighted suggestion
-The system SHALL apply the highlighted autocomplete suggestion when the user presses Enter while the suggestions dropdown is open and has an active item. Default form submission SHALL be suppressed in this case.
+### Requirement: Enter on the German word input picks the highlighted suggestion or moves on
+The system SHALL apply the highlighted autocomplete suggestion when the user presses Enter while the suggestions dropdown is open and has an active item. Default form submission SHALL be suppressed in this case. With no suggestion list on screen, Enter SHALL move focus to the translation field and SHALL NOT submit the form.
 
 #### Scenario: Enter confirms the active suggestion
 - **WHEN** the suggestions dropdown is visible
@@ -34,10 +34,12 @@ The system SHALL apply the highlighted autocomplete suggestion when the user pre
 - **AND** the suggestions dropdown closes
 - **AND** focus moves to the translation input
 
-#### Scenario: Enter without an active suggestion submits the form
-- **WHEN** the dropdown is closed or has no active item
-- **AND** the user presses Enter
-- **THEN** the form submits normally (no interception)
+#### Scenario: Enter without a suggestion list moves to the translation field
+- **WHEN** no suggestion list is on screen
+- **AND** the user presses Enter while the German input has focus
+- **THEN** default form submission is prevented
+- **AND** focus moves to the translation input
+- **AND** the form is not submitted
 
 ### Requirement: Blur on the German word input dismisses the suggestions
 The system SHALL clear the suggestions dropdown when the German word input loses focus, without racing the click that picks a suggestion.
@@ -64,13 +66,31 @@ The system SHALL render a visible focus indicator on every interactive button re
 - **AND** the focus ring uses the project accent color (or an equally contrasting outline) so it is clearly distinguishable from the unfocused state
 
 ### Requirement: Typing keeps the previous suggestion list until the next answer
-The system SHALL keep the currently displayed suggestion list while the user types in the German word input, replacing it only when the dictionary delivers the answer for the new prefix. A keystroke SHALL NOT blank the list.
+The system SHALL keep the currently displayed suggestion list while the user types in the German word input, replacing it only when the dictionary delivers the answer for the new prefix. A keystroke SHALL NOT blank the list, but it SHALL drop, at once and without a query, every row that no longer completes what the field holds. A row still completes it while the normalised typed text is a prefix of the row's lemma, with or without a leading definite article, or of one of the word's forms that matched the prefix the row was answered for — the answer carries those forms per row, so `das Haus` answered for `Häu` through `Häuser` stays while the field reads `Häus`, and `der Rücken` stays while it reads `rücke`. The comparison SHALL normalise as the dictionary query does (case, umlauts, ß). The rows that still match SHALL keep their order and the marked entry when it is among them; a dropped row SHALL NOT be on screen, tappable, or picked by Enter or Tab.
 
 #### Scenario: A further keystroke does not blank the list
 - **WHEN** a suggestion list is visible
-- **AND** the user types another character
+- **AND** the user types another character that every row's lemma still starts with
 - **THEN** the previous list stays visible through the debounce and lookup
 - **AND** the dictionary's answer for the new prefix replaces it
+
+#### Scenario: Typing past a row drops it before any answer
+- **WHEN** the list for `Rücken` holds `der Rücken`
+- **AND** the user types `k`
+- **THEN** `der Rücken` is gone from the list before the dictionary answers for `Rückenk`
+- **AND** no query was needed to remove it
+
+#### Scenario: A dropped row cannot be picked
+- **WHEN** a row has been dropped by further typing
+- **AND** the user taps where it was, or presses Enter or Tab
+- **THEN** the word field keeps what was typed
+- **AND** the translation field is not filled from that row
+
+#### Scenario: Typing on through an inflected form keeps the row
+- **WHEN** the list for `Häu` holds `das Haus`, matched through `Häuser`, or the list for `ging` holds `gehen`, matched through `ging`, `gingen`, `gingst`, `gingt`
+- **AND** the user types on to `Häus`, or to `gingst`
+- **THEN** the row stays through the keystroke and the answer
+- **AND** the list does not flash
 
 #### Scenario: Emptying the input clears the list
 - **WHEN** a suggestion list is visible
@@ -125,7 +145,7 @@ The translation field SHALL accept a multi-line translation. A bare `Enter` SHAL
 #### Scenario: The German input keeps its Enter
 - **WHEN** the German word input has focus
 - **AND** the user presses `Enter`
-- **THEN** the existing behaviour applies — the highlighted suggestion is picked, or the form submits when there is none
+- **THEN** the existing behaviour applies — the highlighted suggestion is picked, or focus moves to the translation field when there is none
 
 ### Requirement: The prefilled translation is the dictionary's text as stored
 When the dictionary fills the translation field — on a suggestion arriving for an untouched field, or on the user picking a suggestion — the field SHALL receive the dictionary's translation text as the dictionary holds it. The transport splits a lemma's translations on `,` and leaves the following space on the next piece, so the form SHALL trim the pieces before rejoining them on `, `. What the field shows is what gets stored, so the reconstruction SHALL neither drop nor double a space.
