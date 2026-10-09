@@ -2,7 +2,8 @@
 #
 # One rule: deny when the first command of a pipeline is cat/less/more/head/tail/sed,
 # its stdout is neither piped nor redirected to a file, and it names a regular file
-# of more than LIMIT lines. head/tail with an explicit -n N <= LIMIT pass unread.
+# of more than LIMIT lines. head/tail with an explicit -n N <= LIMIT and sed -n 'A,Bp'
+# spanning <= LIMIT lines pass unread.
 import glob
 import json
 import os
@@ -18,6 +19,7 @@ STDOUT_REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
 REDIRECTS = STDOUT_REDIRECTS | {"<", ">&", "<&"}
 GLOB = re.compile(r"[*?\[]")
 COUNT = re.compile(r"-n(\d+)|--lines=(\d+)|-(\d+)")
+RANGE = re.compile(r"(\d+)(?:,(\d+))?p")
 WORDCHARS = "".join(c for c in map(chr, range(33, 127)) if c not in "\"'();<>|&\\")
 
 
@@ -72,6 +74,15 @@ def explicit_count(args):
     return None
 
 
+def narrow_range(args):
+    """sed -n 'A,Bp' / 'Ap' printing at most LIMIT lines: the reading this guard asks for."""
+    m = next((RANGE.fullmatch(a) for a in args if RANGE.fullmatch(a)), None)
+    if not m or "-n" not in args:
+        return False
+    start, end = int(m.group(1)), int(m.group(2) or m.group(1))
+    return 0 <= end - start < LIMIT
+
+
 def oversized(argv, cwd):
     name, args = os.path.basename(argv[0]), argv[1:]
     if name not in READERS:
@@ -80,6 +91,8 @@ def oversized(argv, cwd):
         n = explicit_count(args)
         if n is None or (n.isdigit() and int(n) <= LIMIT):
             return None
+    if name == "sed" and narrow_range(args):
+        return None
     for a in args:
         if a.startswith("-") or a.startswith("--"):
             continue
