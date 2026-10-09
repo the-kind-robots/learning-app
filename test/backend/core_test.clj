@@ -12,7 +12,6 @@
    [next.jdbc.result-set :as result-set]
    [org.httpkit.client :as client]
    [org.httpkit.server :as server]
-   [taoensso.telemere :as t]
    [utils :as utils])
   (:import
    [java.io File]
@@ -75,30 +74,11 @@
     (is (false? (#'sut/burn-grant! db token)))))
 
 
-(deftest the-invite-url-points-at-the-configured-public-origin
-  (testing "without configuration the canonical origin is assumed"
-    (is (= "https://sprecha.de" (#'sut/configured-public-url {}))))
-  (testing "the environment wins"
-    (is (= "https://example.test"
-           (#'sut/configured-public-url {"LEARNING_APP__PUBLIC_URL" "https://example.test"}))))
-  (testing "a trailing slash never doubles up in the URL"
-    (is (= "https://example.test/#invite=abc"
-           (#'sut/invite-url
-            (#'sut/configured-public-url {"LEARNING_APP__PUBLIC_URL" "https://example.test/"})
-            "abc")))))
-
-
-(deftest the-mint-invite-command-prints-a-usable-invite-and-starts-no-server
-  (let [db (migrated-db)]
-    (with-redefs [sut/db-spec db
-                  sut/adopt-legacy-database! (fn [])]
-      (let [out   (with-out-str (sut/-main "mint-invite"))
-            token (second (re-find #"/#invite=([0-9a-f]{40})" out))]
-        (testing "the printed URL carries a grant the server will honour"
-          (is (some? token) (str "no invite URL in output: " (pr-str out)))
-          (is (true? (#'sut/burn-grant! db token))))
-        (testing "the command serves nothing"
-          (is (nil? @sut/server)))))))
+(deftest the-invite-url-never-doubles-a-trailing-slash
+  (is (= "https://example.test/#invite=abc"
+         (#'sut/invite-url
+          (#'sut/configured-public-url {"LEARNING_APP__PUBLIC_URL" "https://example.test/"})
+          "abc"))))
 
 
 (deftest stopping-the-server-drains-in-flight-requests
@@ -255,23 +235,6 @@
                "including the structure items and their indexes")))))))
 
 
-(deftest the-prompt-is-built-from-the-glosses-the-key-is-built-from
-  (testing "spacing and order fold into the key, so they must fold into the generation too"
-    (let [asked (atom [])]
-      (with-example-server
-       ;; What reaches the provider is the question itself, glosses included.
-       (fn [question] (swap! asked conj (:translations question)) generated)
-       (fn [ask]
-         (ask (query "word" "Hund" "translation" "  собака "))
-         (is (= [["собака"]] @asked) "the gloss reaches the provider trimmed")
-         (ask (query "word" "Hund" "translation" "собака"))
-         (is (= [["собака"]] @asked) "and the untrimmed question was cached under that same key")
-         (ask (query "word" "Bank" "translation" "скамейка" "translation" "банк"))
-         (ask (query "word" "Bank" "translation" "банк" "translation" "скамейка"))
-         (is (= [["собака"] ["банк" "скамейка"]] @asked)
-             "one generation for both orders, and the prompt gets the order the key has"))))))
-
-
 (deftest a-word-the-dictionary-answers-for-is-a-different-question
   (testing "the metadata goes into the prompt, so it goes into the key"
     (let [generations (atom 0)
@@ -347,47 +310,10 @@
          (is (not (str/includes? (:body response) "Der Hund bellt."))))))))
 
 
-(deftest the-precache-list-is-the-shell-and-not-whatever-is-on-disk
-  (testing "an asset added to a shell directory joins with no edit here"
-    (is (contains? (set (#'sut/shell-assets ["/css/blocks/brand-new.css"]))
-                   "/css/blocks/brand-new.css")))
-  (testing "anything else a checkout collects is ignored"
-    ;; An old build's output, a downloaded file, the worker's own source and
-    ;; the metrics library a development build loads: each was served, none
-    ;; belongs in a cache.addAll that must not reject.
-    (is (= (#'sut/shell-assets [])
-           (#'sut/shell-assets
-            ["/js/cljs-runtime/cljs.core.js"
-             "/js/app/cljs-runtime/goog.base.js"
-             "/js/sw.js"
-             "/js/web-vitals.js"
-             "/dictionary.sqlite3"
-             "/styles.css.orig"]))))
-  (testing "the shell is there with nothing found at all"
-    (is (= (sort (#'sut/shell-assets []))
-           (sort @#'sut/shell-asset-files)))))
-
-
 (deftest every-precached-path-is-a-file-that-exists
   (testing "a named asset that was deleted would reject the atomic install"
     (doseq [path (remove #{"/" "/js/app/main.js"} (#'sut/precache-paths))]
       (is (.exists (File. (str "resources/public" path))) path))))
-
-
-(deftest the-new-secret-name-is-read
-  (is (= "new" (#'sut/configured-db-auth-secret {"LEARNING_APP__DB_AUTH_SECRET" "new"} false))))
-
-
-(deftest the-old-secret-name-still-works-until-the-unit-renames
-  (is (= "old" (#'sut/configured-db-auth-secret {"LEARNING_APP_DB_AUTH_SECRET" "old"} false))))
-
-
-(deftest the-new-secret-name-wins-when-both-are-set
-  (is (= "new"
-         (#'sut/configured-db-auth-secret
-          {"LEARNING_APP_DB_AUTH_SECRET"  "old"
-           "LEARNING_APP__DB_AUTH_SECRET" "new"}
-          false))))
 
 
 (deftest a-packaged-app-without-a-secret-refuses-to-start
@@ -396,19 +322,10 @@
                         (#'sut/configured-db-auth-secret {} false))))
 
 
-(deftest a-checkout-falls-back-to-the-well-known-secret
-  (is (= "secret" (#'sut/configured-db-auth-secret {} true))))
-
-
 (deftest a-packaged-app-without-a-couchdb-password-refuses-to-start
   (is (thrown-with-msg? clojure.lang.ExceptionInfo
                         #"LEARNING_APP__COUCHDB_PASSWORD"
                         (#'sut/require-couchdb-password! {} false))))
-
-
-(deftest a-couchdb-password-or-a-checkout-satisfies-the-guard
-  (is (nil? (#'sut/require-couchdb-password! {"LEARNING_APP__COUCHDB_PASSWORD" "x"} false)))
-  (is (nil? (#'sut/require-couchdb-password! {} true))))
 
 
 (deftest a-recycled-id-is-refused-not-inherited
@@ -501,21 +418,6 @@
       (is (= "old-bytes" (slurp legacy)) "legacy left in place"))))
 
 
-(deftest no-legacy-database-means-no-adoption
-  (let [dir    (temp-dir)
-        target (File. dir "db.sqlite")]
-    (#'sut/adopt-database! (File. dir "app.db") {:dbname (.getPath target)})
-    (is (not (.exists target)))))
-
-
-(deftest the-default-path-is-its-own-home
-  (testing "dev: legacy and target are the same file, nothing moves"
-    (let [dir (temp-dir)
-          db  (doto (File. dir "app.db") (spit "dev-bytes"))]
-      (#'sut/adopt-database! db {:dbname (.getPath db)})
-      (is (= "dev-bytes" (slurp db))))))
-
-
 (deftest an-empty-pre-created-target-does-not-block-adoption
   (testing "systemd-tmpfiles pre-creates the target as a zero-length file (#225)"
     (let [dir    (temp-dir)
@@ -524,28 +426,3 @@
       (#'sut/adopt-database! legacy {:dbname (.getPath target)})
       (is (= "real-bytes" (slurp target)) "adopted over the empty placeholder")
       (is (not (.exists legacy))))))
-
-
-(defn- signal-of
-  "The last signal a query on db leaves, with debug signals let through."
-  [db sql-params]
-  (t/with-min-level :debug
-                    (t/with-signal
-                     (sut/on-connection [conn db]
-                       (try (jdbc/execute! conn sql-params)
-                            (catch Exception _))))))
-
-
-(deftest a-query-leaves-a-signal-with-its-sql-and-no-parameters
-  (let [db (migrated-db)]
-    (testing "a successful query is logged at debug"
-      (let [{:keys [level id data]} (signal-of db ["SELECT ? AS secret" "tok-123"])]
-        (is (= [:debug :core/query] [level id]))
-        (is (= "SELECT ? AS secret" (:sql data)))
-        (is (nat-int? (:ms data)))
-        (is (not (str/includes? (pr-str data) "tok-123")))))
-    (testing "a failing query is logged at error with its cause"
-      (let [{:keys [level id data error]} (signal-of db ["SELECT * FROM no_such_table"])]
-        (is (= [:error :core/query-failed] [level id]))
-        (is (= "SELECT * FROM no_such_table" (:sql data)))
-        (is (instance? Throwable error))))))

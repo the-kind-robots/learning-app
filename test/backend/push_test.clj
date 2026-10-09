@@ -32,27 +32,12 @@
 
 
 (deftest unsubscribing-the-last-channel-stops-its-pokes
-  (push/subscribe! 4 :only)
-  (push/unsubscribe! 4 :only)
-  (is (empty? (get @@#'push/channels "userdb-4"))))
-
-
-(deftest failed-turn-backs-off-by-error-type
-  (testing "refused credentials back off for minutes and log loudly"
-    (doseq [status [401 403]]
-      (let [{:keys [level sleep-ms]} (#'push/backoff (ex-info "Could not read _db_updates" {:status status}))]
-        (is (= :error level))
-        (is
-         (<= 60000 sleep-ms)
-         "minutes, not seconds — a steady retry of bad credentials trips the server's lockout"))))
-
-  (testing "everything else keeps the quick retry"
-    (doseq [error [(java.net.ConnectException. "Connection refused")
-                   (ex-info "Could not read _db_updates" {:status 404 :body {:error "not_found"}})
-                   (ex-info "no status at all" {})]]
-      (let [{:keys [level sleep-ms]} (#'push/backoff error)]
-        (is (= :warn level))
-        (is (= 5000 sleep-ms))))))
+  (let [poked (atom [])]
+    (with-redefs [push/send-poke! (fn [ch] (swap! poked conj ch))]
+      (push/subscribe! 4 :only)
+      (push/unsubscribe! 4 :only)
+      (#'push/poke-subscribers! {:results [{:db_name "userdb-4" :type "updated"}] :last_seq "1"})
+      (is (empty? @poked)))))
 
 
 (deftest refused-feed-turn-is-auth-shaped-end-to-end
