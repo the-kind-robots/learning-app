@@ -7,8 +7,8 @@ artifacts:
     description: Initial proposal document outlining the change
     template: proposal.md
     instruction: >
-      Create the proposal: WHY this change is needed. Hard limit: 2000
-      characters. No Context or Goals sections.
+      Create the proposal: WHY this change is needed. Aim for under 2000
+      characters (guidance, not a hard rule). No Context or Goals sections.
 
 
       Sections:
@@ -124,8 +124,10 @@ artifacts:
       ```
 
 
-      Size limit: 3000 characters per capability delta. Over that, split the
-      requirement or drop prose — scenarios carry the behaviour.
+      Size: aim for under 3000 characters per capability delta (guidance, not a
+      hard rule). If it runs over, split the requirement or drop prose —
+      scenarios carry the behaviour. The aim does NOT apply to MODIFIED
+      requirement blocks: those are restated whole, however long.
 
 
       Specs should be testable - each scenario is a potential test case.
@@ -150,16 +152,19 @@ artifacts:
 
       Sections (template): **Decisions** — key choices, why X over Y;
       **Risks** — `[Risk] → Mitigation`. No Context, Goals or restated
-      behaviour. Keep it under 2000 characters.
+      behaviour. Aim for under 2000 characters (guidance, not a hard rule).
     requires:
       - proposal
   - id: adr
     generates: adr/*.md
-    description: Architecture Decision Records distilled from design for future reference
+    description: Architecture Decision Records distilled from the proposal's Decisions and design.md (if present) for future reference
     template: adr.md
     instruction: >
-      Distill significant decisions from design.md into Architecture Decision
-      Records. An ADR is born in its change: write it to
+      Distill significant decisions from the proposal's Decisions (and
+      design.md, if present) into Architecture Decision Records. An ADR is
+      REQUIRED when the proposal's Decisions introduce an architectural
+      decision (see the bar in Process step 2); a change without one needs
+      none. An ADR is born in its change: write it to
       openspec/changes/<change>/adr/, beside proposal.md and design.md.
       Archiving moves it to <repo>/adr/ — the target repository's top-level
       adr/ folder beside openspec/ — where accepted ADRs accumulate and
@@ -222,8 +227,9 @@ artifacts:
     description: Implementation checklist with trackable tasks
     template: tasks.md
     instruction: >
-      Create the task list that breaks down the implementation work. Hard
-      limit: 1500 characters — a checklist, no prose.
+      Create the task list that breaks down the implementation work. Aim for
+      under 1500 characters (guidance, not a hard rule) — a checklist, no
+      prose.
 
 
       **IMPORTANT: Follow the template below exactly.** The apply phase parses
@@ -263,6 +269,10 @@ artifacts:
       - [ ] 2.2 Add CSV formatting utilities
 
       ```
+
+
+      When the change has an ADR, a task MUST reference it (e.g. "honors
+      ADR-NNNN"). A change with no ADR needs no such task.
 
 
       Reference specs for what to build, design for how to build it, and

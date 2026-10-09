@@ -75,7 +75,7 @@ EXPLAIN: the proposal captures **why** and **what**, the elevator pitch.
 
 DO: draft (don't save yet). `<capability-path>` = spec dir relative to `specs/` (e.g. `user-auth`, `identity/user-auth`); use the exact existing path for modified capabilities; follow project organization for new ones.
 
-Sections: Why (1-2 sentences), What Changes (bullets), Capabilities (New: `<capability-path>`; Modified: `<existing-capability-path>`), Impact (files).
+Sections: Why (1-2 sentences), Changes (bullets; mark breaking), Capabilities (New: `<capability-path>`; Modified: `<existing-capability-path>`), Decisions (one line per choice, with the rejected alternative).
 Ask whether it captures the intent. **PAUSE** for approval/feedback.
 
 After approval:
@@ -98,7 +98,7 @@ Format: `# Spec Delta` > `## ADDED Requirements` > `### Requirement: <Name>` + d
 
 ## Phase 7: Design (optional)
 
-design.md is OPTIONAL: only for cross-cutting changes or when a new ADR is warranted. For a small task, skip it and tell the user why (decisions fit in proposal/tasks). If needed, EXPLAIN it captures **how** (decisions, tradeoffs), draft with sections Context, Goals / Non-Goals, Decisions (each with rationale), and save to `resolvedOutputPath` from `openspec instructions design --change "<name>" --json`.
+design.md is OPTIONAL: only for cross-cutting changes or when a new ADR is warranted. For a small task, skip it and tell the user why (decisions fit in proposal/tasks). If needed, EXPLAIN it captures **how** (decisions, tradeoffs), draft with sections Decisions (why X over Y) and Risks (`[Risk] → Mitigation`), and save to `resolvedOutputPath` from `openspec instructions design --change "<name>" --json`.
 
 ## Phase 8: Tasks
 

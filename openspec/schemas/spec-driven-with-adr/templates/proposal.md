@@ -1,4 +1,4 @@
-<!-- Hard limit: 2000 characters. No Context/Goals. Behaviour lives in specs only. -->
+<!-- Aim for under 2000 characters (guidance). No Context/Goals. Behaviour lives in specs only. -->
 ## Why
 
 <!-- 1-2 sentences: the problem and why now. -->
