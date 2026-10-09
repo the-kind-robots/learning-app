@@ -8,7 +8,6 @@
    [clojure.string :as str]
    [db :as db]
    [examples :as examples]
-   [examples.cache :as cache]
    [examples.dictionary :as dictionary]
    [hiccup :as hiccup]
    [migrations :as migrations]
@@ -605,38 +604,42 @@
                 :body    (cheshire/generate-string {:error "Missing 'word' parameter"})}
 
                :else
-               ;; One value through all of it: the question is normalized once,
-               ;; and the cache and the provider are handed the same one. Built
-               ;; twice, or taken apart on the way, a gloss differing only in
-               ;; spacing keys one question and asks another.
-               (let [question (examples/question (:params request))
-                     stored   (cache/lookup db question)
-                     result   (when-not stored (examples/generate-one! question))]
-                 (cond
+               ;; One subject value feeds both the cache key and the prompt.
+               (let [result (examples/get! db (examples/subject (:params request)))]
+                 (case (examples/outcome result)
                    ;; A hit answers without the provider — that saving is the
                    ;; whole point of the table. Authentication still ran above.
                    ;; The cache holds the example as data, so a hit renders here
                    ;; exactly as a fresh generation does.
-                   stored
+                   :outcome/success
                    {:status  200
                     :headers {"Content-Type" "application/json"}
-                    :body    (cheshire/generate-string stored)}
+                    :body    (cheshire/generate-string result)}
 
-                   (examples/valid-example? result)
-                   (do
-                     ;; Only a result the endpoint would serve is kept: a bad
-                     ;; answer cached once is served to everyone forever.
-                     (cache/store! db question result)
-                     {:status  200
-                      :headers {"Content-Type" "application/json"}
-                      :body    (cheshire/generate-string result)})
+                   ;; The pair's failure: no candidate passed, or the input was
+                   ;; refused.
+                   :outcome/rejected
+                   {:status  422
+                    :headers {"Content-Type" "application/json"}
+                    :body    (cheshire/generate-string
+                              {:error "No example could be generated for this word"})}
 
-                   :else
-                   {:status  (or (:status result) 502)
-                    :headers (cond-> {"Content-Type" "application/json"}
-                               (:retry-after-ms result)
-                               (assoc "Retry-After"
-                                      (str (max 1 (long (Math/ceil (/ (:retry-after-ms result) 1000.0)))))))
+                   ;; The provider's own delay; no delay sends no header.
+                   :outcome/throttled
+                   (let [seconds (some-> (:retry-after-ms result) (/ 1000.0) Math/ceil long)]
+                     {:status  429
+                      :headers (cond-> {"Content-Type" "application/json"}
+                                 (and seconds (pos? seconds))
+                                 (assoc "Retry-After" (str seconds)))
+                      :body    (cheshire/generate-string
+                                {:error "Examples are temporarily unavailable"})})
+
+                   ;; The service's problem, never the session's: the
+                   ;; provider's 401 or 403 does not reach the client.
+                   :outcome/unavailable
+                   {:status  503
+                    :headers {"Content-Type" "application/json"
+                              "Retry-After"  "30"}
                     :body    (cheshire/generate-string
                               {:error "Examples are temporarily unavailable"})}))))))}]
 

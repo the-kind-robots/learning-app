@@ -1,9 +1,28 @@
-# example-cache Specification
+## REMOVED Requirements
 
-## Purpose
-Define the server-side cache of generated example sentences, so a subject already generated is served again without paying the provider, and the cache never becomes a reason to refuse a request.
+### Requirement: A generated example is cached under the request that produced it
 
-## Requirements
+**Reason**: Renamed. The key is built from the subject — the word, the glosses and the context — not
+from the request that carried it.
+
+**Migration**: Replaced by "A generated example is cached under its subject", which keeps every rule
+and adds the readable glosses as a JSON array.
+
+### Requirement: A cached request is answered without reaching the provider
+
+**Reason**: Renamed. What the cache holds is a subject's example, not a request.
+
+**Migration**: Replaced by "A cached subject is served without reaching the provider", unchanged
+otherwise.
+
+### Requirement: The cache is shared and has no expiry
+
+**Reason**: Renamed, and its scenario now speaks of the subject an account sends.
+
+**Migration**: Replaced by "The cache is shared across accounts and never expires", unchanged
+otherwise.
+
+## MODIFIED Requirements
 
 ### Requirement: Only a valid example is cached
 
@@ -33,6 +52,8 @@ served.
 
 - **WHEN** storing a generated example fails
 - **THEN** the request is still answered with that example
+
+## ADDED Requirements
 
 ### Requirement: The cache is shared across accounts and never expires
 

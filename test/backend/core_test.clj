@@ -1,6 +1,7 @@
 (ns backend.core-test
   (:require
    [backend.support.db :as support.db]
+   [backend.support.generation :as support.generation]
    [cheshire.core :as cheshire]
    [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
@@ -8,6 +9,7 @@
    [db :as db]
    [examples :as examples]
    [examples.dictionary :as dictionary]
+   [examples.provider :as provider]
    [next.jdbc :as jdbc]
    [next.jdbc.result-set :as result-set]
    [org.httpkit.client :as client]
@@ -110,7 +112,8 @@
         generations (atom 0)]
     (add-account! db 1 "token-of-one")
     (with-redefs [sut/db-spec db
-                  examples/generate-one! (fn [_]
+                  dictionary/lookup-dictionary-entries (constantly nil)
+                  examples/generate-one! (fn [_subject _word-meta]
                                            (swap! generations inc)
                                            {:translation "У дома есть сад."
                                             :value       "Das Haus hat einen Garten."})]
@@ -143,28 +146,31 @@
 
 (defn- with-example-server
   "Serves `/api/examples` against a fresh database holding one account, with
-   `generate!` in the provider's place. Calls (f ask), where ask takes a query
+   `generate!`, a function of the subject alone, in the provider's place. The
+   dictionary answers, and knows no word; a test that wants it otherwise
+   redefines the lookup inside `body`. Calls (body ask), where ask takes a query
    string and returns the response of an authenticated request. `prepare!` runs
    against that database before the server starts, for a test that wants it in
    some other state."
-  ([generate! f]
-   (with-example-server generate! f identity))
-  ([generate! f prepare!]
+  ([generate! body]
+   (with-example-server generate! body identity))
+  ([generate! body prepare!]
    (let [db (migrated-db)]
      (add-account! db 1 "token-of-one")
      (prepare! db)
      (with-redefs [sut/db-spec db
-                   examples/generate-one! generate!]
+                   dictionary/lookup-dictionary-entries (constantly nil)
+                   examples/generate-one! (fn [subject _word-meta] (generate! subject))]
        (sut/start-server! sut/app-handler 0)
        (try
          (let [port (server/server-port @sut/server)]
-           (f (fn ask
-                ([query] (ask query "token-of-one"))
-                ([query cookie]
-                 @(client/request
-                   (cond-> {:method :get
-                            :url    (str "http://localhost:" port "/api/examples" query)}
-                     cookie (assoc :headers {"Cookie" (str "auth-token=" cookie)})))))))
+           (body (fn ask
+                   ([query] (ask query "token-of-one"))
+                   ([query cookie]
+                    @(client/request
+                      (cond-> {:method :get
+                               :url    (str "http://localhost:" port "/api/examples" query)}
+                        cookie (assoc :headers {"Cookie" (str "auth-token=" cookie)})))))))
          (finally
           (sut/stop-server!)))))))
 
@@ -186,7 +192,7 @@
    :value       "Der Hund bellt."})
 
 
-(deftest a-question-already-answered-never-reaches-the-provider
+(deftest a-subject-already-generated-never-reaches-the-provider
   (let [generations (atom 0)]
     (with-example-server
      (fn [_] (swap! generations inc) generated)
@@ -200,12 +206,12 @@
            (is (= 200 (:status again)))
            (is (str/includes? (:body again) "Der Hund bellt."))
            (is (= 1 @generations))))
-       (testing "the same glosses in another order are the same question"
+       (testing "the same glosses in another order are the same subject"
          (ask "?word=Hund&translation=пёс&translation=собака")
-         (is (= 2 @generations) "two glosses are a different question than one")
+         (is (= 2 @generations) "two glosses are a different subject than one")
          (ask "?word=Hund&translation=собака&translation=пёс")
          (is (= 2 @generations)))
-       (testing "a different collection context is a different question"
+       (testing "a different collection context is a different subject"
          (ask "?word=Hund&translation=собака&context=Tiere")
          (is (= 3 @generations)))))))
 
@@ -235,7 +241,7 @@
                "including the structure items and their indexes")))))))
 
 
-(deftest a-word-the-dictionary-answers-for-is-a-different-question
+(deftest a-word-the-dictionary-knows-is-a-different-subject
   (testing "the metadata goes into the prompt, so it goes into the key"
     (let [generations (atom 0)
           entry       {:pos         "noun"
@@ -246,7 +252,7 @@
        (fn [ask]
          (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
            (is (= 200 (:status (ask (query "word" "Hund" "translation" "собака")))))
-           (testing "and the answer given while the dictionary was away is kept"
+           (testing "and the example of a word the dictionary does not know is kept"
              (is (= 200 (:status (ask (query "word" "Hund" "translation" "собака")))))
              (is (= 1 @generations))))
          (testing "the word arriving in the dictionary is a miss, like an edited prompt"
@@ -255,7 +261,7 @@
              (is (= 2 @generations)))))))))
 
 
-(deftest a-broken-cache-still-answers-the-question
+(deftest a-broken-cache-still-serves-the-subject
   (testing "the table is gone: the read misses, the write is dropped, the caller is served"
     (let [generations (atom 0)]
       (with-example-server
@@ -276,10 +282,12 @@
      (fn [_]
        (swap! generations inc)
        ;; What the provider path returns when it gives up: not an example.
-       {:status 429 :retry-after-ms 2000})
+       {::examples/type ::examples/generation-failure :status 429 :retry-after-ms 2000})
      (fn [ask]
-       (testing "the caller is told it failed"
-         (is (= 429 (:status (ask "?word=Hund&translation=собака")))))
+       (testing "the caller is told it failed, and how long to wait"
+         (let [response (ask "?word=Hund&translation=собака")]
+           (is (= 429 (:status response)))
+           (is (= "2" (get-in response [:headers :retry-after])))))
        (testing "and the next caller generates again rather than being served the failure"
          (is (= 429 (:status (ask "?word=Hund&translation=собака"))))
          (is (= 2 @generations)))))))
@@ -294,8 +302,8 @@
        ;; refuses it, and so must the cache.
        {:value "Der Hund bellt." :translation "   "})
      (fn [ask]
-       (is (= 502 (:status (ask "?word=Hund&translation=собака"))))
-       (is (= 502 (:status (ask "?word=Hund&translation=собака"))))
+       (is (= 422 (:status (ask "?word=Hund&translation=собака"))))
+       (is (= 422 (:status (ask "?word=Hund&translation=собака"))))
        (is (= 2 @generations))))))
 
 
@@ -308,6 +316,157 @@
        (let [response (ask (query "word" "Hund") nil)]
          (is (= 401 (:status response)))
          (is (not (str/includes? (:body response) "Der Hund bellt."))))))))
+
+
+(def ^:private real-generation
+  "The generation itself, kept before any test puts a stub in its place. The
+   dictionary knows no word in these tests, so it is handed no reading. The attempts
+   are named, since the shorter arity calls back through the stubbed var."
+  (let [generate-one! examples/generate-one!]
+    (fn [subject]
+      (generate-one! subject nil 3))))
+
+
+(deftest a-failed-generation-says-whose-problem-it-is
+  (doseq [[provider-answer status retry-after attempts reason]
+          [[{:status 401 :body "{}"} 503 "30" 1 "the provider refuses the service's key"]
+           [{:status 403 :body "{\"error\":{\"code\":403,\"message\":\"Key disabled\"}}"} 503 "30" 1
+            "the provider forbids the service"]
+           [{:status 402 :body "{}"} 503 "30" 1 "the provider's credits are spent"]
+           [{:status 500 :body "{}"} 503 "30" 3 "the provider fails on every attempt"]
+           [{:error (java.net.ConnectException. "Connection refused")} 503 "30" 3 "the provider cannot be reached"]
+           [(support.generation/completion {:content nil}) 503 "30" 3 "the provider answers with no completion"]
+           [{:status 429 :headers {:retry-after "7"}} 429 "7" 1 "the provider throttles"]
+           [{:status 429} 429 nil 1 "the provider throttles and names no delay"]
+           ;; A date already past is no delay: the application sends no
+           ;; Retry-After at all, and nginx adds its own 5 to a bare 429.
+           [{:status 429 :headers {:retry-after "Sun, 06 Nov 1994 08:49:37 GMT"}} 429 nil 1
+            "the provider throttles with a date already past"]
+           [support.generation/rejected-candidate 422 nil 3 "no candidate passes the checks"]
+           [(support.generation/completion {:content "{\"value\":\"Der Hund"} "length") 422 nil 3
+            "every candidate is cut off"]
+           [{:status 403
+             :body   "{\"error\":{\"code\":403,\"message\":\"Flagged\",\"metadata\":{\"reasons\":[\"violence\"]}}}"}
+            422 nil 1 "the provider's moderation refuses the input"]]]
+    (testing reason
+      (let [calls (atom 0)]
+        (with-redefs [examples/example-api-request (support.generation/provider-answering-in-turn calls
+                                                                                                  [provider-answer])
+                      dictionary/lookup-dictionary-entries (constantly nil)]
+          (with-example-server
+           real-generation
+           (fn [ask]
+             (let [response (ask (query "word" "Hund" "translation" "собака"))]
+               (is (= status (:status response)))
+               (is (= retry-after (get-in response [:headers :retry-after])))
+               (is (= attempts @calls))))))))))
+
+
+(deftest the-provider-retry-after-reaches-the-client
+  (testing "through a real http-kit request, whose headers arrive as keywords"
+    (let [provider-server (server/run-server
+                           (fn [_]
+                             {:status  429
+                              :headers {"Retry-After" "7"}
+                              :body    "{}"})
+                           {:port 0 :legacy-return-value? false})
+          config (provider/config)]
+      (try
+        (with-redefs [provider/config (constantly
+                                       (assoc config
+                                              :api-url
+                                              (str "http://localhost:"
+                                                   (server/server-port provider-server)
+                                                   "/")))
+                      dictionary/lookup-dictionary-entries (constantly nil)]
+          (with-example-server
+           real-generation
+           (fn [ask]
+             (let [response (ask (query "word" "Hund" "translation" "собака"))]
+               (is (= 429 (:status response)))
+               (is (= "7" (get-in response [:headers :retry-after])))))))
+        (finally
+         (server/server-stop! provider-server))))))
+
+
+(deftest nothing-is-generated-without-the-dictionary
+  (doseq [[failure reason] [[(ex-info "Dictionary DB error" {:status 500}) "the dictionary fails"]
+                            [(ex-info "Dictionary DB error" {:status nil}) "the dictionary does not answer in time"]]]
+    (testing reason
+      (let [generations (atom 0)
+            database    (atom nil)]
+        (with-example-server
+         (fn [_] (swap! generations inc) generated)
+         (fn [ask]
+           (with-redefs [dictionary/lookup-dictionary-entries (fn [_] (throw failure))]
+             (let [response (ask (query "word" "Hund" "translation" "собака"))]
+               (is (= 503 (:status response)))
+               (is (= "30" (get-in response [:headers :retry-after])))))
+           (is (zero? @generations) "the provider is not called")
+           (is (empty? (jdbc/execute! @database ["SELECT 1 FROM example_cache"])) "nothing is stored"))
+         (fn [db] (reset! database db)))))))
+
+
+(deftest identical-subjects-in-flight-share-one-generation
+  (testing "a failure is not cached, so a second generation could not hide behind the cache"
+    (let [generations (atom 0)
+          release     (promise)]
+      (with-example-server
+       (fn [_]
+         (swap! generations inc)
+         @release
+         {::examples/type ::examples/generation-failure :status 500})
+       (fn [ask]
+         (support.generation/with-joins-counted
+          1
+          (fn [joined]
+            (let [first-response  (future (ask (query "word" "Hund" "translation" "собака")))
+                  second-response (future (ask (query "word" "Hund" "translation" "собака")))]
+              (is (true? (joined)) "the second request joined the running generation")
+              (deliver release true)
+              (is (= 503 (:status @first-response)))
+              (is (= 503 (:status @second-response)))
+              (is (= 1 @generations)))))))))
+  (testing "both callers get the same example"
+    (let [generations (atom 0)
+          release     (promise)]
+      (with-example-server
+       (fn [_]
+         (let [n (swap! generations inc)]
+           @release
+           (assoc generated :value (str "Der Hund bellt " n "."))))
+       (fn [ask]
+         (support.generation/with-joins-counted
+          1
+          (fn [joined]
+            (let [first-response  (future (ask (query "word" "Hund" "translation" "собака")))
+                  second-response (future (ask (query "word" "Hund" "translation" "собака")))]
+              (is (true? (joined)))
+              (deliver release true)
+              (is (= 200 (:status @first-response) (:status @second-response)))
+              (is (= (:body @first-response) (:body @second-response)))
+              (is (= 1 @generations)))))))))
+  (testing "a different subject does not wait on a running one"
+    (let [release (promise)
+          started (promise)]
+      (with-example-server
+       (fn [subject]
+         (when (= "Hund" (:word subject))
+           (deliver started true)
+           @release)
+         generated)
+       (fn [ask]
+         (let [held (future (ask (query "word" "Hund" "translation" "собака")))]
+           (try
+             (is (true? (deref started 2000 false)))
+             (is (= 200
+                    (:status (deref (future (ask (query "word" "Katze" "translation" "кошка")))
+                                    2000
+                                    nil)))
+                 "answered while the other subject is still generating")
+             (finally
+              (deliver release true)))
+           (is (= 200 (:status @held)))))))))
 
 
 (deftest every-precached-path-is-a-file-that-exists

@@ -5,6 +5,7 @@
    [db :as db]
    [examples :as sut]
    [examples.dictionary :as dictionary]
+   [examples.provider :as provider]
    [org.httpkit.client :as client]))
 
 
@@ -39,16 +40,17 @@
                   (fn [_request]
                     (let [response (first @remaining)]
                       (when (next @remaining) (swap! remaining rest))
-                      (if (instance? Throwable response)
-                        (delay (throw response))
-                        (delay response))))
+                      (support.generation/answered
+                       (if (instance? Throwable response)
+                         {:error response}
+                         response))))
                   dictionary/lookup-dictionary-entries (constantly nil)]
       (f))))
 
 
 (defn- generate
   [word translation attempts]
-  (sut/generate-one! (sut/question {:word word :translation translation}) attempts))
+  (sut/generate-one! (sut/subject {:word word :translation translation}) nil attempts))
 
 
 (deftest a-generation-that-fails-transiently-is-retried-to-a-valid-example
@@ -65,7 +67,9 @@
                        #(generate "Leiter" "лестница" 2)))))
   (testing "when every attempt fails the caller gets no example"
     (is (nil? (generating [(chat too-short-example)] #(generate "Leiter" "лестница" 3))))
-    (is (nil? (generating [(ex-info "network down" {:status 0})] #(generate "Hund" "собака" 2))))))
+    (is (sut/generation-failure?
+         (generating [(ex-info "network down" {:status 0})] #(generate "Hund" "собака" 2)))
+        "a provider that cannot be reached is its failure, not the pair's")))
 
 
 (deftest a-rate-limited-generation-is-not-retried
@@ -337,22 +341,22 @@
                 "vorstellen"
                 example)))))))
 
-(deftest a-question-reads-what-the-caller-sent
+(deftest a-subject-reads-what-the-caller-sent
   (testing "one gloss as a bare string"
-    (is (= ["собака"] (:translations (sut/question {:word "Hund" :translation "собака"})))))
+    (is (= ["собака"] (:translations (sut/subject {:word "Hund" :translation "собака"})))))
   (testing "several as a collection, sorted — their order is this device's, not anyone's"
     (is (= ["пёс" "собака"]
-           (:translations (sut/question {:word "Hund" :translation ["собака" "пёс"]})))))
+           (:translations (sut/subject {:word "Hund" :translation ["собака" "пёс"]})))))
   (testing "none at all"
-    (is (= [] (:translations (sut/question {:word "Hund"})))))
+    (is (= [] (:translations (sut/subject {:word "Hund"})))))
   (testing "blanks and duplicates are not glosses"
     (is (= ["собака"]
-           (:translations (sut/question {:word "Hund" :translation [" собака " "   " "собака"]})))))
+           (:translations (sut/subject {:word "Hund" :translation [" собака " "   " "собака"]})))))
   (testing "the word keeps its case and loses its spacing"
-    (is (= "Hund" (:word (sut/question {:word " Hund "})))))
+    (is (= "Hund" (:word (sut/subject {:word " Hund "})))))
   (testing "a blank context is no context"
-    (is (nil? (:context (sut/question {:word "Hund" :context "   "}))))
-    (is (= "Tiere" (:context (sut/question {:word "Hund" :context " Tiere "}))))))
+    (is (nil? (:context (sut/subject {:word "Hund" :context "   "}))))
+    (is (= "Tiere" (:context (sut/subject {:word "Hund" :context " Tiere "}))))))
 
 (deftest a-bare-word-resolves-through-its-surface-form-to-the-lemma-entry
   (testing "bare words can resolve through surface-form docs to article-bearing lemma docs"
@@ -379,3 +383,24 @@
                                         (throw (ex-info "unexpected request" request))))]
         (is (= ["das Fenster"]
                (mapv :value (#'dictionary/lookup-dictionary-entries "Fenster")))))))
+
+
+(deftest the-provider-retry-after-reads-seconds-and-dates
+  (let [now         (java.time.Instant/parse "1994-11-06T08:49:00Z")
+        retry-after (fn [value] (provider/retry-after-ms {:headers {:retry-after value}} now))]
+    (are [header delay-ms] (= delay-ms (retry-after header))
+      "7"                              7000
+      "0"                              0
+      "Sun, 06 Nov 1994 08:49:37 GMT"  37000
+      "Sunday, 06-Nov-94 08:49:37 GMT" 37000
+      "Sun Nov  6 08:49:37 1994"       37000
+      "Sun, 06 Nov 1994 08:00:00 GMT"  0
+      "86400"                          3600000
+      "soon"                           nil
+      "-5"                             nil)))
+
+
+(deftest a-dictionary-that-cannot-be-read-is-a-failure-not-an-unknown-word
+  (with-redefs [db/request-sync (fn [_request]
+                                  {:error (org.httpkit.client.TimeoutException. "read timeout")})]
+    (is (sut/generation-failure? (sut/word-meta (sut/subject {:word "Fenster" :translation "окно"}))))))

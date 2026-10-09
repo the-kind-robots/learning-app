@@ -2,7 +2,9 @@
 
 ## Purpose
 Define the security boundary of the production services: systemd sandboxing and directory ownership, CouchDB admin provisioning, the proxy-auth headers nginx must strip, and rate limits on endpoints that cost money.
+
 ## Requirements
+
 ### Requirement: Service units are sandboxed to their observed needs
 Every learning-app unit with a `[Service]` section SHALL declare a systemd hardening block that leaves writable only the paths the service demonstrably writes, reachable only the address families it demonstrably uses, and grants no capabilities beyond what its user and task require. Directives whose compatibility with the workload cannot be established SHALL be omitted and the omission recorded, never guessed at.
 
@@ -78,6 +80,10 @@ budget for replication.
 A throttled response SHALL be `429` and SHALL carry `Retry-After`, so a client backs off on the
 server's timetable instead of its own.
 
+The proxy SHALL add its own `Retry-After` only to a `429` that carries none. A `Retry-After` the
+application sent SHALL reach the client unchanged and exactly once: it carries the provider's
+timetable, which the proxy's fixed delay knows nothing of.
+
 The limit SHALL be present in the development proxy config as well as production, so the behaviour is
 exercised on the stand rather than first met in production.
 
@@ -87,6 +93,16 @@ exercised on the stand rather than first met in production.
   burst
 - **THEN** the excess requests are answered `429` with a `Retry-After` header
 - **AND** those requests never reach the application, so nothing is spent on them
+
+#### Scenario: The application throttles with its own delay
+
+- **WHEN** the application answers an example request `429` with `Retry-After: 7`
+- **THEN** the client receives `429` with one `Retry-After` header, whose value is `7`
+
+#### Scenario: The application throttles without a delay
+
+- **WHEN** the application answers an example request `429` with no `Retry-After`
+- **THEN** the client receives `429` with the proxy's `Retry-After`
 
 #### Scenario: Ordinary use
 
@@ -98,4 +114,3 @@ exercised on the stand rather than first met in production.
 - **WHEN** database replication produces a burst against `/db/`
 - **THEN** it is accounted against the replication zone only, and leaves the example endpoint's
   allowance untouched
-
