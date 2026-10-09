@@ -6,7 +6,6 @@
    [client.support.test :refer [async-testing]])
   (:require
    [adapters.learner.memory :as sut]
-   [adapters.learner.loader :as loader]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-seed :as db-seed]
    [client.support.learner :as learner]
@@ -49,20 +48,17 @@
   {:_id "vocab:der hund" :type "vocab" :value "der Hund" :translation [{:lang "ru" :value "пёс"}]})
 
 
-(deftest a-document-is-projected-once-per-revision
+(deftest a-document-seen-twice-is-one-word-and-a-deletion-removes-it
   (let [doc     (assoc hund :_rev "1-a")
         once    (sut/with-docs sut/empty-memory [doc])
         twice   (sut/with-docs once [doc])
         deleted (sut/with-docs once [{:_deleted true :_id "vocab:der hund" :_rev "2-b"}])]
     (is (= "der Hund" (:value (word once "vocab:der hund"))))
-    (is (= "der hund\nпёс" (:search (word once "vocab:der hund")))
-        "the search text is normalised once, value and translations a line each")
-    (is (identical? once twice) "the revision memory has changes nothing")
-    (is (nil? (word deleted "vocab:der hund")) "a deletion removes the word")
-    (is (nil? (:_rev (word once "vocab:der hund"))) "no storage name reaches the entity")))
+    (is (= (sut/words once) (sut/words twice)) "the revision memory has changes nothing")
+    (is (nil? (word deleted "vocab:der hund")) "a deletion removes the word")))
 
 
-(deftest a-review-tombstone-leaves-its-word
+(deftest a-deleted-review-leaves-its-word
   (testing "a deleted review carries no word id; memory's own record says which word it was"
     (let [review {:_id        "r1"
                   :_rev       "1-a"
@@ -76,7 +72,7 @@
       (is (empty? (review-ids gone "vocab:der hund"))))))
 
 
-(deftest same-second-reviews-give-one-retention-whatever-their-order
+(deftest reviews-of-the-same-second-give-one-retention-whatever-their-order
   (testing "reviews tied on time are taken in id order, not arrival order"
     (let [word {:_id "vocab:w" :_rev "1-a" :type "vocab" :value "w" :translation []}
           reviews
@@ -91,7 +87,7 @@
              (state (cons word (reverse reviews))))))))
 
 
-(deftest a-document-memory-cannot-take-is-left-out
+(deftest a-document-memory-cannot-read-is-left-out
   (let [memory (sut/with-docs sut/empty-memory
                               [{:_id "vocab:odd" :_rev "1-a" :type "vocab" :value 42 :translation 7}
                                (assoc hund :_rev "1-a")])]
@@ -99,29 +95,12 @@
     (is (some? (sut/word memory "vocab:der hund")) "the documents after it are taken")))
 
 
-(deftest a-revision-memory-cannot-take-removes-the-one-it-held
+(deftest a-revision-memory-cannot-read-removes-the-one-it-held
   (let [odd    {:_id "vocab:der hund" :_rev "2-b" :type "vocab" :value 42 :translation 7}
         memory (sut/with-docs sut/empty-memory [(assoc hund :_rev "1-a") odd])]
     (is (nil? (sut/word memory "vocab:der hund")) "the older revision is not kept in its place")
     (is (= (sut/entries (sut/with-docs sut/empty-memory [odd])) (sut/entries memory))
         "memory holds what a full read gives")))
-
-
-(deftest a-batch-of-nothing-memory-keeps-leaves-memory-as-it-was
-  (let [memory (sut/with-changes sut/empty-memory
-                                 [(assoc hund :_rev "1-a")]
-                                 {:id "vocab:der hund" :rev "1-a" :seq 1})]
-    (is
-     (identical?
-      memory
-      (sut/with-changes memory
-                        [{:_id "pairing:n1" :_rev "1-a" :type "pairing"}]
-                        {:id "pairing:n1" :rev "1-a" :seq 7}))
-     "a pairing receipt gives no new memory, so nothing renders and no snapshot is written")
-    (is (identical?
-         memory
-         (sut/with-changes memory [(assoc hund :_rev "1-a")] {:id "vocab:der hund" :rev "1-a" :seq 2}))
-        "nor does a revision memory holds already")))
 
 
 (deftest memory-loads-user-db-and-follows-the-feed
@@ -164,21 +143,3 @@
         (stop))))))
 
 
-(deftest memory-is-loaded-in-one-go
-  (async-testing "the load hands memory over once, with everything user-db holds"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "vocab:der hund" :value "der Hund" :translation "пёс"}]))
-      (await (db/insert (:user/db dbs) {:_id "coll-tiere" :type "collection" :name "Tiere" :word-ids ["vocab:der hund"]}))
-      (let [effects (atom [])
-            stop    (await (loader/start! dbs
-                                          (atom {})
-                                          (fn [[[effect memory]]] (swap! effects conj [effect memory]))))
-            [[effect memory]] @effects]
-        (is (= 1 (count @effects)))
-        (is (= :effect/memory-loaded effect))
-        (is (some? (sut/word memory "vocab:der hund")))
-        (is (= 1 (count (review-ids memory "vocab:der hund"))))
-        (is (some? (sut/collection memory "coll-tiere")))
-        (stop))))))

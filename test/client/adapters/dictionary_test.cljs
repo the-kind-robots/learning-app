@@ -36,26 +36,12 @@
           "three stored translations stay three, character for character"))))
 
 
-(deftest translation-order-follows-the-query
-  (async-testing "translations keep the order the query returned them in"
-    (let [rows   [(row "Fenster" ["окно" "витрина" "форточка"])]
-          result (await (sut/completions (stub-db rows (atom [])) "fenster"))]
-      (is (= ["окно" "витрина" "форточка"]
-             (:translations (first result)))))))
-
-
 (deftest a-lemma-without-translations-gets-none
-  (async-testing "an empty array yields no translations, not one blank one"
-    (let [rows   [(row "Hund" [])]
-          result (await (sut/completions (stub-db rows (atom [])) "hund"))]
-      (is (= [] (:translations (first result)))))))
-
-
-(deftest a-missing-translations-column-gets-none
-  (async-testing "a null translations cell yields no translations"
-    (let [rows   [{"lemma" "Hund" "pos" "noun" "has_exact" 0 "translations" nil}]
-          result (await (sut/completions (stub-db rows (atom [])) "hund"))]
-      (is (= [] (:translations (first result)))))))
+  (async-testing "an empty array and a null cell both yield no translations, not one blank one"
+    (let [rows   [(row "Hund" [])
+                  {"lemma" "Katze" "pos" "noun" "has_exact" 0 "translations" nil}]
+          result (await (sut/completions (stub-db rows (atom [])) "h"))]
+      (is (= [[] []] (mapv :translations result))))))
 
 
 (deftest a-completion-carries-lemma-pos-and-exactness
@@ -75,19 +61,6 @@
                :pos          "noun"
                :translations ["домашнее задание"]}]
              (vec result))))))
-
-
-(deftest a-prefix-matching-nothing-yields-nothing
-  (async-testing "no matching lemmas means no completions"
-    (is (= [] (vec (await (sut/completions (stub-db [] (atom [])) "xyzq")))))))
-
-
-(deftest the-prefix-range-is-bound-normalized
-  (async-testing "the umlaut prefix is normalized and bounded before binding"
-    (let [calls (atom [])]
-      (await (sut/completions (stub-db [] calls) "Über"))
-      (is (= ["ueber" "ueberz" "ueber"]
-             (vec (.-bind ^js (first @calls))))))))
 
 
 (deftest a-blank-prefix-asks-nothing

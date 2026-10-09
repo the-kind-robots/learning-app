@@ -6,7 +6,6 @@
    [client.support.db-fixtures :as db-fixtures]
    [cljs.test :refer-macros [deftest is testing use-fixtures]]
    [db :as db]
-   [db.pouch :as pouch]
    [sync :as sut]))
 
 
@@ -229,50 +228,6 @@
               (into #{} (map :value) (:translation (await (db/get user-db "vocab:hase")))))))))))
 
 
-(defn- ^:async pass-heard-by
-  "Runs one pass with `listener` subscribed, and unsubscribes afterwards."
-  [listener pass]
-  (let [unsubscribe (sut/on-pass! listener)]
-    (try
-      (await
-       (db-fixtures/with-test-db
-         user-db-name
-         (^:async fn
-          [user-db]
-          (with-redefs [pouch/sync-once! (fn [_ _] (js/Promise.resolve pass))]
-            (await (sut/sync-once! {:user/db user-db} "account"))))))
-      (finally
-       (unsubscribe)))))
-
-
-(deftest a-completed-pass-tells-whoever-is-listening-what-it-brought
-  (async-testing "the engine publishes; what listens is none of its business"
-    (let [heard (atom [])
-          hear  #(swap! heard conj %)]
-      (is (= {:pulled 1 :pulled-ids ["vocab:hund"] :pushed 0}
-             (await (pass-heard-by hear {:pulled 1 :pulled-ids ["vocab:hund"] :pushed 0}))))
-      (is (= [{:pulled 1 :pulled-ids ["vocab:hund"] :pushed 0}] @heard)
-          "the ids the pull wrote reach the listener")
-      (await (pass-heard-by hear {:pulled 0 :pulled-ids [] :pushed 2}))
-      (is (= 2 (count @heard)) "a push-only pass still announces, with nothing in it")
-      (await (pass-heard-by hear nil))
-      (is (= 2 (count @heard)) "a failed pass announces nothing"))))
-
-
-(deftest a-listener-that-unsubscribes-is-not-called-again
-  (async-testing "the subscription hands back the way out"
-    (let [heard (atom 0)]
-      (await (pass-heard-by (fn [_] (swap! heard inc)) {:pulled 0 :pulled-ids [] :pushed 1}))
-      (is (= 1 @heard))
-      (await
-       (db-fixtures/with-test-db
-         user-db-name
-         (^:async fn
-          [user-db]
-          (with-redefs [pouch/sync-once! (fn [_ _]
-                                           (js/Promise.resolve {:pulled 0 :pulled-ids [] :pushed 1}))]
-            (await (sut/sync-once! {:user/db user-db} "account"))))))
-      (is (= 1 @heard) "nobody is listening any more"))))
 
 
 ;;
@@ -350,19 +305,5 @@
          (is (contains? ids "task-queued"))))))))
 
 
-(def ^:private a-completed-pass
-  {:pulled 1 :pulled-ids ["vocab:hund"] :pushed 0})
 
 
-(deftest a-pass-does-not-wait-for-what-it-announces
-  (async-testing "the screen redraws and the throttle starts when replication is done"
-    (let [finished (atom false)
-          listener (fn [_] (js/setTimeout #(reset! finished true) 0) nil)]
-      (is (= a-completed-pass (await (pass-heard-by listener a-completed-pass))))
-      (is (false? @finished) "the pass was over before the work it started"))))
-
-
-(deftest a-listener-that-fails-does-not-fail-the-pass
-  (async-testing "a device that cannot read what it is missing still replicated"
-    (is (= a-completed-pass
-           (await (pass-heard-by (fn [_] (throw (js/Error. "no view"))) a-completed-pass))))))

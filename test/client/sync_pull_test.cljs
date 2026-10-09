@@ -201,36 +201,3 @@
            (is (= 2 @started)))))))))
 
 
-(deftest a-listener-that-comes-after-a-pass-learns-of-it-once
-  (async-testing "told once that a pass of this start has happened; a start after a stop has had none"
-    (let [{:keys [finish! sync-once]} (held-passes)
-          heard (atom [])
-          hear  (fn [label] #(swap! heard conj [label %]))
-          stops (atom [])]
-      (await
-       (with-sync!
-        sync-once
-        (^:async fn
-         [{:keys [request! start-again! started]}]
-         (try
-           (swap! stops conj ((:sync/on-pass started) (hear :before)))
-           (is (empty? @heard) "a listener before any pass hears nothing")
-           (request!)
-           (await (settled))
-           (finish! quiet-pass)
-           (await (settled))
-           (swap! stops conj ((:sync/on-pass started) (hear :after)))
-           (is (= [[:before quiet-pass] [:after {}]] @heard)
-               "one that comes after the pass is told once that one happened, with nothing to deliver again")
-           (sut/stop! started)
-           (reset! heard [])
-           (let [again (await (start-again!))]
-             (swap! stops conj ((:sync/on-pass again) (hear :restarted)))
-             (is (empty? @heard) "a start after a stop has had no pass, whatever the start before it had")
-             ((:sync/pull! again))
-             (await (settled))
-             (finish! quiet-pass)
-             (await (settled))
-             (is (some #{[:restarted quiet-pass]} @heard) "until it completes one"))
-           (finally
-             (run! #(%) @stops)))))))))

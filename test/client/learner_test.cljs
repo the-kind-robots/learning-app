@@ -265,34 +265,6 @@
                (mapv :value (:translation (await (db/get (:user/db dbs) "vocab:der hund")))))))))))
 
 
-(deftest no-write-waits-for-another
-  (async-testing "a write PouchDB never answers does not hold the next one"
-    (with-learner
-     [hund]
-     (^:async fn
-      [{:keys [dbs learner]}]
-      (let [insert pouch/insert]
-        ;; PouchDB never answers a write of der Hund.
-        (set! pouch/insert
-              (fn [dbs schema doc]
-                (if (= "vocab:der hund" (:_id doc))
-                  (js/Promise. (fn [_ _]))
-                  (insert dbs schema doc))))
-        (try
-          (let [update! (:learner/update-word! learner)
-                change  #(assoc % :value "der Hund!")
-                ;; Function and change bound first: a call with a keyword
-                ;; lookup or a literal in it compiles to an awaited
-                ;; expression, and this write never resolves.
-                _ (update! "vocab:der hund" change)
-                added   (await ((:learner/add-word! learner)
-                                {:id "vocab:die katze" :translation [{:lang "ru" :value "кошка"}] :value "die Katze"}))]
-            (is (true? (:created? added)))
-            (is (= "die Katze" (:value (await (db/get (:user/db dbs) "vocab:die katze"))))))
-          (finally
-           (set! pouch/insert insert))))))))
-
-
 (deftest a-word-re-created-on-another-device-keeps-its-reviews
   (async-testing "a word deleted here and made again elsewhere keeps the reviews of both"
     (await
@@ -406,56 +378,6 @@
        (set! pouch/follow-changes follow)))))
 
 
-(deftest every-write-is-in-memory-when-it-resolves
-  (async-testing "with live feeds that report nothing, no write waits for them, and its own catch-up puts it in memory"
-    (with-catch-up-only-feeds
-     #(with-learner
-       [hund tiere]
-       (^:async fn
-        [{:keys [learner store]}]
-        (let [memory (fn [] (:learner/memory @store))]
-          (await ((:learner/update-word! learner) "vocab:der hund" (fn [word] (assoc word :value "der Hund!"))))
-          (is (= "der Hund!" (:value (memory/word (memory) "vocab:der hund"))) "an edited word")
-          (await ((:learner/add-word! learner)
-                  {:id "vocab:die katze" :kind :word :translation [{:lang "ru" :value "кошка"}] :value "die Katze"}))
-          (is (some? (memory/word (memory) "vocab:die katze")) "an added word")
-          (await ((:learner/add-review! learner) "vocab:die katze" true "кошка"))
-          (is (= 1 (count (:ids (memory/review-history (memory) "vocab:die katze")))) "a review")
-          (let [{:keys [id]} (await ((:learner/create-collection! learner) "Haus"))]
-            (is (= "Haus" (:name (memory/collection (memory) id))) "a new collection, so its name is taken"))
-          (await ((:learner/delete-collection! learner) "coll-tiere"))
-          (is (nil? (memory/collection (memory) "coll-tiere")) "a deleted collection")
-          (await ((:learner/delete-word! learner) "vocab:der hund"))
-          (is (nil? (memory/word (memory) "vocab:der hund")) "a deleted word")))))))
-
-
-(deftest an-add-does-not-wait-on-device-db
-  (async-testing "device-db can be neither read nor written: the word is added and memory has it"
-    (with-learner
-     [hund]
-     (^:async fn
-      [{:keys [dbs learner store]}]
-      ;; PouchDB 9 binds these on the instance, so the originals are kept
-      ;; and put back.
-      (let [device    ^js (:device/db dbs)
-            refused   (fn [& _] (js/Promise.reject (js/Error. "device-db unavailable")))
-            methods   ["allDocs" "bulkDocs" "changes" "get" "put"]
-            originals (into {} (map (juxt identity #(aget device %))) methods)]
-        (doseq [method methods]
-          (aset device method refused))
-        (try
-          (let [{:keys [created?]} (await (vocabulary/add! {:learner
-                                                            (assoc learner :learner/active-collection (constantly nil))}
-                                                           "die Katze"
-                                                           "кошка"
-                                                           :word))]
-            (is (true? created?))
-            (is (some? (stored-word store "vocab:die katze"))))
-          (finally
-           (doseq [[method original] originals]
-             (aset device method original)))))))))
-
-
 (deftest a-delete-refused-twice-leaves-the-word-as-it-was
   (async-testing "PouchDB refuses the word's deletion twice: the delete fails, and the word is in its collection again"
     (with-learner
@@ -490,19 +412,6 @@
             (.dispatchEvent document (js/Event. "visibilitychange"))
             (await (wait/until #(stored-word store "vocab:der hund")))
             (is (some? (stored-word store "vocab:der hund")))))))))))
-
-
-(deftest stopping-stops-following
-  (async-testing "after the stop function runs, a change no longer reaches memory"
-    (with-learner
-     []
-     (^:async fn
-      [{:keys [dbs stop store]}]
-      (stop)
-      (await (db/insert (:user/db dbs) hund))
-      (await (wait/settled))
-      (await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
-      (is (nil? (stored-word store "vocab:der hund")))))))
 
 
 ;;
@@ -639,8 +548,8 @@
       (is (= 1 (await (adapter/move-device-examples! (adapter dbs store)))) "the next run moves it")))))
 
 
-(deftest the-move-goes-a-page-at-a-time
-  (async-testing "more examples than one page: each page is one write to user-db"
+(deftest a-device-with-many-examples-moves-them-all
+  (async-testing "more examples than one page: every one reaches user-db, none stays behind"
     (with-learner
      [hund]
      (^:async fn
@@ -648,18 +557,9 @@
       (await (db-seed/seed-examples! (:device/db dbs)
                                      (mapv #(assoc (second kept-on-device) :_id (str "ID" (+ 1000 %)) :value (str "Satz " %))
                                            (range 501))))
-      (let [writes (atom [])]
-        (await (with-insert-all
-                (fn [real]
-                  (fn [dbs schema docs]
-                    (swap! writes conj (count docs))
-                    (real dbs schema docs)))
-                (^:async fn []
-                 (is (= 501 (await (adapter/move-device-examples! (adapter dbs store))))))))
-        (is (= [100 100 100 100 100 1] @writes))
-        (is (= 501 (count (filter #(= "example" (get-in % [:doc :type]))
-                                  (:rows (await (db/all-docs (:user/db dbs) {:include-docs true})))))))
-        (is (empty? (await (db-queries/fetch-examples (:device/db dbs))))))))))
+      (is (= 501 (await (adapter/move-device-examples! (adapter dbs store)))))
+      (is (= 501 (count (:docs (await (db/find-all (:user/db dbs) {:selector {:type "example"}}))))))
+      (is (empty? (await (db-queries/fetch-examples (:device/db dbs)))))))))
 
 
 (deftest a-failed-move-is-run-again

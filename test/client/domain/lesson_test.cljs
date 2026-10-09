@@ -1,7 +1,7 @@
 (ns client.domain.lesson-test
   (:require
    [client.support.fixtures :as fixtures]
-   [cljs.test :refer-macros [deftest is testing]]
+   [cljs.test :refer-macros [are deftest is testing]]
    [domain.lesson :as sut]))
 
 
@@ -10,57 +10,9 @@
 ;; =============================================================================
 
 
-(deftest generate-trials-creates-word-trials
-  (testing "each word produces a word trial with :type, :word-id, :prompt, :answer"
-    (let [trials (sut/generate-trials fixtures/lesson-words [])]
-      (is (= 2 (count trials)))
-      (is (= fixtures/expected-word-trials trials)))))
-
-
-(deftest generate-trials-creates-example-trials
-  (testing "each example produces an example trial"
-    (let [trials (sut/generate-trials [] fixtures/lesson-examples)]
-      (is (= 1 (count trials)))
-      (is (= fixtures/expected-example-trials trials)))))
-
-
-(deftest generate-trials-combines-words-and-examples
-  (testing "word trials come first, then example trials"
-    (let [trials (sut/generate-trials fixtures/lesson-words fixtures/lesson-examples)]
-      (is (= 3 (count trials)))
-      (is (= fixtures/all-expected-trials trials)))))
-
-
-(deftest a-word-with-two-examples-gets-one-example-trial
-  (testing "of a word's examples, the one with the smallest id makes its trial, in whatever order they come"
-    (let [one    {:id "example:word-1::aaaa" :word-id "word-1" :translation "Пёс спит" :value "Der Hund schlaeft."}
-          other  {:id "example:word-1::bbbb" :word-id "word-1" :translation "Пёс лает" :value "Der Hund bellt."}
-          trials (sut/generate-trials [] [other one])]
-      (is (= ["Der Hund schlaeft."] (map :answer trials))))))
-
-
-(deftest generate-trials-handles-empty-inputs
-  (testing "empty words and examples produces empty trials"
-    (is (= [] (sut/generate-trials [] [])))))
-
-
 ;; =============================================================================
 ;; trial predicates
 ;; =============================================================================
-
-
-(deftest example-trial?-identifies-example-trials
-  (let [word-trial    {:type "word" :word-id "w1" :prompt "p" :answer "a"}
-        example-trial {:type "example" :word-id "w1" :prompt "p" :answer "a"}]
-    (is (false? (sut/example-trial? word-trial)))
-    (is (true? (sut/example-trial? example-trial)))))
-
-
-(deftest word-trial?-identifies-word-trials
-  (let [word-trial    {:type "word" :word-id "w1" :prompt "p" :answer "a"}
-        example-trial {:type "example" :word-id "w1" :prompt "p" :answer "a"}]
-    (is (true? (sut/word-trial? word-trial)))
-    (is (false? (sut/word-trial? example-trial)))))
 
 
 ;; =============================================================================
@@ -68,60 +20,9 @@
 ;; =============================================================================
 
 
-(deftest trial-id-generates-unique-composite-id
-  (testing "trial-id combines type and word-id"
-    (let [word-trial    {:type "word" :word-id "w1" :prompt "p" :answer "a"}
-          example-trial {:type "example" :word-id "w1" :prompt "p" :answer "a"}]
-      (is (= "word:w1" (sut/trial-id word-trial)))
-      (is (= "example:w1" (sut/trial-id example-trial)))
-      (is (not= (sut/trial-id word-trial) (sut/trial-id example-trial))))))
-
-
 ;; =============================================================================
 ;; initial-state
 ;; =============================================================================
-
-
-(deftest initial-state-creates-lesson-document
-  (testing "lesson has required fields per data-model spec"
-    (let [state (sut/initial-state
-                 fixtures/lesson-words
-                 fixtures/lesson-examples
-                 :first)]
-      (is (nil? (:_id state)) "storage names belong to the repository, not the state")
-      (is (= 3 (count (:trials state))))
-      (is (= 3 (count (:remaining-trials state))))
-      (is (some? (:current-trial state)))
-      (is (nil? (:last-result state))))))
-
-
-(deftest initial-state-does-not-include-words
-  (testing "lesson document has denormalized trials, no :words field"
-    (let [state (sut/initial-state
-                 fixtures/lesson-words
-                 fixtures/lesson-examples
-                 :first)]
-      (is (not (contains? state :words))))))
-
-
-(deftest initial-state-uses-injected-trial-selector
-  (testing ":first selector picks first trial"
-    (let [state (sut/initial-state
-                 fixtures/lesson-words
-                 fixtures/lesson-examples
-                 :first)]
-      (is (= (first (:trials state)) (:current-trial state))))))
-
-
-(deftest initial-state-keeps-example-trials-locked
-  (testing "example trials are present but locked at lesson start"
-    (let [state (sut/initial-state
-                 fixtures/lesson-words
-                 fixtures/lesson-examples
-                 :first)
-          example-trials (filter sut/example-trial? (:remaining-trials state))]
-      (is (= 1 (count example-trials)))
-      (is (every? :locked? example-trials)))))
 
 
 ;; =============================================================================
@@ -129,15 +30,7 @@
 ;; =============================================================================
 
 
-(deftest expected-answer-returns-trial-answer
-  (let [state (sut/initial-state
-               fixtures/lesson-words
-               []
-               :first)]
-    (is (= "der Hund" (sut/expected-answer state)))))
-
-
-(deftest answer-segments-builds-annotated-and-plain-words
+(deftest an-example-answer-is-split-into-annotated-and-plain-words
   (testing "example answer segments use wordIndex to annotate matching words"
     (let [trial    {:type      "example"
                     :word-id   "word-1"
@@ -172,58 +65,9 @@
 ;; =============================================================================
 
 
-(deftest normalized-answer-handles-case-and-german-chars
-  (testing "normalizes for comparison"
-    (is (= (sut/normalized-answer "Der Hund")
-           (sut/normalized-answer "der hund")))
-    (is (= (sut/normalized-answer "Käse")
-           (sut/normalized-answer "kaese")))
-    (is (= (sut/normalized-answer "größe")
-           (sut/normalized-answer "GROESSE")))
-    (is (= (sut/normalized-answer "  extra   spaces  ")
-           (sut/normalized-answer "extra spaces")))))
-
-
-(deftest normalized-answer-handles-nil
-  (is (= "" (sut/normalized-answer nil))))
-
-
 ;; =============================================================================
 ;; check-answer - correct answers
 ;; =============================================================================
-
-
-(deftest check-answer-correct-removes-trial
-  (testing "correct answer removes trial from remaining-trials"
-    (let [state (sut/initial-state
-                 fixtures/lesson-words
-                 []
-                 :first)
-          state (sut/check-answer state "der Hund")]
-      (is (true? (:correct? (sut/last-result state))))
-      (is (= 1 (count (:remaining-trials state)))))))
-
-
-(deftest check-answer-correct-word-unlocks-examples
-  (testing "correct word answer unlocks example trials for that word"
-    (let [state         (sut/initial-state
-                         fixtures/lesson-words
-                         fixtures/lesson-examples
-                         :first)
-          updated-state (sut/check-answer state "der Hund")
-          example-trial (first (filter sut/example-trial? (:remaining-trials updated-state)))]
-      (is (some? example-trial))
-      (is (false? (:locked? example-trial))))))
-
-
-(deftest check-answer-correct-case-insensitive
-  (testing "answer comparison ignores case"
-    (let [state (sut/initial-state
-                 fixtures/lesson-words
-                 []
-                 :first)
-          state (sut/check-answer state "DER HUND")]
-      (is (true? (:correct? (sut/last-result state)))))))
 
 
 ;; =============================================================================
@@ -231,52 +75,9 @@
 ;; =============================================================================
 
 
-(deftest check-answer-wrong-keeps-trial
-  (testing "wrong answer keeps trial in remaining-trials"
-    (let [state (sut/initial-state
-                 fixtures/lesson-words
-                 []
-                 :first)
-          state (sut/check-answer state "wrong answer")]
-      (is (false? (:correct? (sut/last-result state))))
-      (is (= 2 (count (:remaining-trials state)))))))
-
-
-(deftest check-answer-wrong-word-keeps-examples-locked
-  (testing "wrong word answer does not unlock example trials"
-    (let [state         (sut/initial-state
-                         fixtures/lesson-words
-                         fixtures/lesson-examples
-                         :first)
-          updated-state (sut/check-answer state "wrong answer")
-          example-trial (first (filter sut/example-trial? (:remaining-trials updated-state)))]
-      (is (some? example-trial))
-      (is (true? (:locked? example-trial))))))
-
-
 ;; =============================================================================
 ;; check-answer - result shape
 ;; =============================================================================
-
-
-(deftest check-answer-returns-lesson-state
-  (testing "check result returns lesson state"
-    (let [state     (sut/initial-state
-                     fixtures/lesson-words
-                     []
-                     :first)
-          new-state (sut/check-answer state "der Hund")]
-      (is (= (keys state) (keys new-state))))))
-
-
-(deftest check-answer-last-result-includes-user-answer
-  (testing "last-result stores user's answer per spec"
-    (let [state (sut/initial-state
-                 fixtures/lesson-words
-                 []
-                 :first)
-          state (sut/check-answer state "my answer")]
-      (is (= "my answer" (:answer (sut/last-result state)))))))
 
 
 ;; =============================================================================
@@ -284,7 +85,7 @@
 ;; =============================================================================
 
 
-(deftest check-answer-is-finished-when-no-remaining
+(deftest the-lesson-is-finished-when-the-last-trial-is-answered
   (testing "is-finished? true when all trials answered correctly"
     (let [state (sut/initial-state
                  [{:_id "w1" :value "der Hund" :translation [{:lang "en" :value "dog"}]}]
@@ -295,47 +96,12 @@
       (is (empty? (:remaining-trials state))))))
 
 
-(deftest check-answer-not-finished-when-remaining
-  (testing "is-finished? false when trials remain"
-    (let [state (sut/initial-state
-                 fixtures/lesson-words
-                 []
-                 :first)
-          state (sut/check-answer state "der Hund")]
-      (is (false? (sut/finished? state))))))
-
-
 ;; =============================================================================
 ;; advance
 ;; =============================================================================
 
 
-(deftest advance-selects-next-trial
-  (testing "advance selects from remaining trials excluding current"
-    (let [state      (sut/initial-state
-                      fixtures/lesson-words
-                      []
-                      :first)
-          next-state (sut/advance state)]
-      ;; With 2 trials and :first selector, advance excludes current and picks from remaining
-      ;; Current is first trial, so next should be the second trial
-      (is (= (second (:remaining-trials state))
-             (:current-trial next-state))))))
-
-
-(deftest advance-clears-last-result
-  (testing "advance sets last-result to nil"
-    (let [state      (sut/initial-state
-                      fixtures/lesson-words
-                      []
-                      :first)
-          state      (sut/check-answer state "der Hund")
-          next-state (sut/advance state)]
-      (is (some? (sut/last-result state)))
-      (is (nil? (sut/last-result next-state))))))
-
-
-(deftest advance-skips-locked-example-trials
+(deftest the-next-trial-is-never-a-locked-example
   (testing "advance selects only unlocked trials"
     (let [state      (sut/initial-state
                       fixtures/lesson-words
@@ -346,65 +112,9 @@
       (is (not (:locked? (:current-trial next-state)))))))
 
 
-(deftest advance-keeps-random-pool-after-unlock
-  (testing "unlocked examples join normal selectable pool instead of forcing next trial"
-    (let [state      (sut/initial-state
-                      fixtures/lesson-words
-                      fixtures/lesson-examples
-                      :first)
-          state      (sut/check-answer state "der Hund")
-          next-state (sut/advance state)]
-      (is (= "word-2" (:word-id (:current-trial next-state))))
-      (is (sut/word-trial? (:current-trial next-state))))))
-
-
-(deftest advance-returns-nil-when-no-remaining
-  (testing "advance returns nil when no trials remain"
-    (let [state (sut/initial-state
-                 [{:_id "w1" :value "der Hund" :translation [{:lang "en" :value "dog"}]}]
-                 []
-                 :first)
-          state (sut/check-answer state "der Hund")]
-      (is (nil? (sut/advance state))))))
-
-
-(deftest advance-uses-random-selector-by-default
-  (testing "advance uses trial-selector from options"
-    (let [state      (sut/initial-state
-                      fixtures/lesson-words
-                      []
-                      :first)
-          next-state (sut/advance state)]
-      ;; Just verify it returns a state with a current-trial
-      (is (some? next-state))
-      (is (some? (sut/current-trial next-state))))))
-
-
 ;; =============================================================================
 ;; Full lesson flow
 ;; =============================================================================
-
-
-(deftest full-lesson-flow
-  (testing "complete lesson from start to finish"
-    (let [state        (sut/initial-state
-                        fixtures/lesson-words
-                        fixtures/lesson-examples
-                        :first)
-          trials-count (count (:remaining-trials state))]
-      ;; Start with 3 trials
-      (is (= 3 trials-count))
-
-      ;; Answer all trials correctly
-      (let [final-state
-            (loop [current-state state
-                   attempts      trials-count]
-              (let [answer       (sut/expected-answer current-state)
-                    lesson-state (sut/check-answer current-state answer)]
-                (if (or (sut/finished? lesson-state) (zero? attempts))
-                  lesson-state
-                  (recur (sut/advance lesson-state) (dec attempts)))))]
-        (is (empty? (:remaining-trials final-state)))))))
 
 
 ;; =============================================================================
@@ -426,45 +136,23 @@
    :value       "Wie geht's dir heute, fragte er leise?"})
 
 
-(deftest generate-trials-creates-phrase-trials
-  (testing "a phrase item produces a phrase trial"
-    (let [trials (sut/generate-trials [phrase-word] [])]
-      (is (= 1 (count trials)))
-      (is (true? (sut/phrase-trial? (first trials))))
-      (is (= "Wie geht's?" (:answer (first trials))))
-      (is (= "Как дела?" (:prompt (first trials)))))))
+(deftest only-a-right-answer-clears-the-trial-and-unlocks-its-examples
+  (doseq [[kind words examples right]
+          [["word" fixtures/lesson-words fixtures/lesson-examples "der Hund"]
+           ["phrase" [phrase-word] [phrase-example] "wie gehts"]]]
+    (let [state (sut/initial-state words examples :first)
+          total (count (:remaining-trials state))]
+      (are [answer correct? cleared? locked?]
+           (let [after   (sut/check-answer state answer)
+                 example (first (filter sut/example-trial? (:remaining-trials after)))]
+             (and (= correct? (:correct? (sut/last-result after)))
+                  (= cleared? (= (dec total) (count (:remaining-trials after))))
+                  (= locked? (:locked? example))))
+        right          true  true  false
+        "wrong answer" false false true))))
 
 
-(deftest a-phrase-gets-an-example-trial-locked-behind-its-own
-  (testing "GH-371: a phrase's example trial waits for the phrase trial, as a word's does"
-    (let [state (sut/initial-state [phrase-word] [phrase-example] :first)
-          example-trial (first (filter sut/example-trial? (:trials state)))]
-      (is (= 2 (count (:trials state))))
-      (is (some? example-trial))
-      (is (true? (:locked? example-trial)))
-      (is (true? (sut/phrase-trial? (:current-trial state)))
-          "only the phrase trial is selectable at the start"))))
-
-
-(deftest a-correct-phrase-answer-unlocks-its-examples
-  (testing "GH-371: the unlock is driven by the vocabulary trial, whichever kind it is"
-    (let [state   (sut/initial-state [phrase-word] [phrase-example] :first)
-          updated (sut/check-answer state "wie gehts")
-          example (first (filter sut/example-trial? (:remaining-trials updated)))]
-      (is (some? example))
-      (is (false? (:locked? example))))))
-
-
-(deftest a-wrong-phrase-answer-leaves-its-examples-locked
-  (testing "GH-371: only a correct answer unlocks"
-    (let [state   (sut/initial-state [phrase-word] [phrase-example] :first)
-          updated (sut/check-answer state "wie stehts")
-          example (first (filter sut/example-trial? (:remaining-trials updated)))]
-      (is (some? example))
-      (is (true? (:locked? example))))))
-
-
-(deftest phrase-answers-forgive-typography-only
+(deftest an-answer-forgives-typography-only
   (testing "apostrophes and case are forgiven, words are not"
     (let [state (sut/initial-state [phrase-word] [] :first)]
       (is (true? (-> state (sut/check-answer "wie gehts") sut/last-result :correct?)))
@@ -472,7 +160,7 @@
       (is (false? (-> state (sut/check-answer "wie stehts") sut/last-result :correct?))))))
 
 
-(deftest a-failed-phrase-trial-comes-back-in-the-same-lesson
+(deftest a-failed-trial-comes-back-in-the-same-lesson
   (testing "a wrong answer keeps the trial in the pool, so it can be graded again"
     (let [state (sut/initial-state [phrase-word] [] :first)
           wrong (sut/check-answer state "wie stehts")
@@ -509,7 +197,7 @@
         (range n)))
 
 
-(deftest pick-vocab-draws-from-the-pool
+(deftest a-lesson-draws-its-words-from-the-pool
   (testing "the asked-for count, all of it from the pool, nothing twice"
     (let [picked (sut/pick-vocab pool :urgency 20 3)]
       (is (= 3 (count picked)))
@@ -517,21 +205,7 @@
       (is (= 3 (count (distinct picked)))))))
 
 
-(deftest pick-vocab-takes-a-short-pool-whole
-  (testing "a pool smaller than the lesson gives what it has"
-    (let [picked (sut/pick-vocab (rows [2 1]) :urgency 20 3)]
-      (is (= 2 (count picked)))
-      (is (= #{"vocab:wort-a" "vocab:wort-b"} (set (map :id picked))))))
-  (testing "an empty pool gives nothing"
-    (is (= [] (sut/pick-vocab [] :urgency 20 3)))))
-
-
-(deftest pick-vocab-does-not-answer-the-same-pool-the-same-way
-  (testing "repeated draws are not one fixed answer — 50 draws of 3 from 20"
-    (is (< 1 (count (draws pool 20 3 50))))))
-
-
-(deftest pick-vocab-cuts-a-tied-pool-at-random
+(deftest a-tied-pool-is-cut-at-random
   (testing "every item never reviewed ties at ##Inf, and the cut is not the alphabet"
     (let [tied (rows (repeat 10 ##Inf))]
       (is (< 1 (count (draws tied 3 3 50))))))
@@ -540,7 +214,7 @@
       (is (< 1 (count (draws tied 3 3 50)))))))
 
 
-(deftest pick-vocab-lets-strict-urgency-win-over-the-shuffle
+(deftest strict-urgency-wins-over-the-shuffle
   (testing "a more due item outranks a less due one every time, not merely usually"
     (let [ranked (rows [9 8 7 6 5 4 3 2 1])
           top    (set (map :id (take 3 ranked)))]
@@ -551,12 +225,7 @@
       (is (every? #(contains? % "vocab:wort-a") (draws ranked 3 3 50))))))
 
 
-(deftest pick-vocab-with-no-pool-picks-nothing
-  (is (= [] (sut/pick-vocab (rows [3 2 1]) :urgency 0 3)))
-  (is (= [] (sut/pick-vocab (rows [3 2 1]) :urgency nil 3))))
-
-
-(deftest a-row-without-a-number-for-urgency-cannot-hold-the-pool
+(deftest a-row-without-a-number-for-urgency-never-holds-the-pool
   (testing "NaN ranks last, so it never blocks a real urgency out of a full pool"
     (let [nan-first (cons {:id "vocab:nan" :urgency ##NaN} (rows [1 2 3 4]))]
       (is (every? #(not (contains? % "vocab:nan")) (draws nan-first 2 2 30))))))

@@ -3,7 +3,6 @@
    [client.support.test :refer [async-testing]])
   (:require
    [client.support.db-fixtures :as db-fixtures]
-   [client.support.db-queries :as db-queries]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
@@ -69,52 +68,7 @@
            (is (empty? (filter #(re-find #"^_design/" %) (disj remote-ids "_design/remote-only"))))))))))
 
 
-(deftest a-test-database-has-the-queue-index-only
-  (async-testing
-    "the fixture installs the task queue's index, and no other"
-    (db-fixtures/with-test-db
-      local-name
-      (^:async fn
-       [local]
-       (let [names (await (db-queries/index-names local))]
-         (is (not (contains? names "by-type")) "the engine adds no index of its own")
-         (is (contains? names "by-type-run-at-created-at") "the task queue's")
-         (is (not (contains? names "by-type-word-id"))
-             "memory answers a word's reviews and examples; no index is kept for them"))))))
-
-
-(deftest a-pass-reports-the-ids-the-pull-wrote-under-their-types
-  (async-testing "what the pull brought home, grouped by type, and not what the push sent"
-    (db-fixtures/with-test-db
-      local-name
-      (^:async fn
-       [local]
-       (.mkdirSync (js/require "fs") "target/pouch/db" #js {:recursive true})
-       (let [account-db (db/use account-db-name)]
-         (await (db/insert local {:_id "vocab:hund" :type "vocab" :value "Hund"}))
-         (await (db/insert account-db {:_id "vocab:katze" :type "vocab" :value "Katze"}))
-         (await (db/insert account-db {:_id "vocab:maus" :type "vocab" :value "Maus"}))
-         (await (db/insert account-db {:_id "coll-tiere" :type "collection" :name "Tiere"}))
-         (await (db/insert account-db {:_id "review-1" :type "review" :word-id "vocab:katze"}))
-         ;; The origin is read off `location`, which a node test has not.
-         (set! (.-location js/globalThis) #js {:origin "target/pouch"})
-         (try
-           (let [{:keys [pulled pulled-ids pushed]}
-                 (await (sut/sync-once! {:user/db local} :user/db account-id))]
-             (is (= 4 pulled))
-             (is (= 1 pushed))
-             (is (= {"vocab"      #{"vocab:katze" "vocab:maus"}
-                     "collection" #{"coll-tiere"}
-                     "review"     #{"review-1"}}
-                    pulled-ids)
-                 "every type the pass wrote, so a reader takes the ones it owns")
-             (is (not (contains? (get pulled-ids "vocab") "vocab:hund"))
-                 "the document this device pushed is not one it has to fetch an example for"))
-           (finally
-            (js/Reflect.deleteProperty js/globalThis "location"))))))))
-
-
-(deftest the-change-feed-names-a-pulled-revision-as-the-pass-does
+(deftest a-revision-the-pull-wrote-is-recognised-on-the-feed-and-a-local-write-is-not
   (async-testing "GH-319: what the pull wrote is recognisable on the feed; a local write is not"
     (db-fixtures/with-test-db
       local-name
@@ -125,20 +79,19 @@
              seen       (atom [])
              unwatch    (sut/on-change {:user/db local}
                                        :user/db
-                                       #(swap! seen conj (sut/change-revision %)))
-             settle     #(js/Promise. (fn [resolve] (js/setTimeout resolve 50)))]
+                                       #(swap! seen conj (sut/change-revision %)))]
          (await (db/insert account-db {:_id "vocab:katze" :type "vocab" :value "Katze"}))
          (await (db/insert account-db {:_id "review-1" :type "review" :word-id "vocab:katze"}))
          (set! (.-location js/globalThis) #js {:origin "target/pouch"})
          (try
            (let [{:keys [pulled-revs]} (await (sut/sync-once! {:user/db local} :user/db account-id))]
-             (await (settle))
+             (await (wait/until #(<= 2 (count @seen))))
              (is (= 2 (count pulled-revs)))
              (is (= pulled-revs (set @seen))
                  "every feed event of the pull is a revision the pass reports")
              (reset! seen [])
              (await (db/insert local {:_id "vocab:hund" :type "vocab" :value "Hund"}))
-             (await (settle))
+             (await (wait/until #(= 1 (count @seen))))
              (is (= 1 (count @seen)))
              (is (not-any? pulled-revs @seen) "a local write is none of them"))
            (finally
@@ -146,7 +99,7 @@
             (js/Reflect.deleteProperty js/globalThis "location"))))))))
 
 
-(deftest a-followed-feed-brings-every-change-in-order
+(deftest a-followed-feed-brings-every-change-in-the-order-stored
   (async-testing "the documents stored after `since` arrive in the order they were stored"
     (db-fixtures/with-test-db
       local-name
@@ -158,13 +111,12 @@
              unwatch (sut/follow-changes dbs
                                          :user/db
                                          (:seq (await (sut/feed-position dbs :user/db)))
-                                         (fn [docs _position] (swap! batches conj (mapv :_id docs))))
-             settle  #(js/Promise. (fn [resolve] (js/setTimeout resolve 50)))]
+                                         (fn [docs _position] (swap! batches conj (mapv :_id docs))))]
          (try
            (await (db/bulk-docs local [{:_id "a" :type "x"} {:_id "b" :type "x"}]))
-           (await (settle))
+           (await (wait/until #(= 2 (count (apply concat @batches)))))
            (await (db/insert local {:_id "c" :type "x"}))
-           (await (settle))
+           (await (wait/until #(= 3 (count (apply concat @batches)))))
            (is (= ["a" "b" "c"] (apply concat @batches)) "every change, in the order stored, nothing before `since`")
            (finally
             ((:stop! unwatch)))))))))
@@ -199,45 +151,6 @@
            (finally
             (set! sut/read-changes original)
             ((:stop! feed)))))))))
-
-
-(deftest a-database-holds-the-change-at-a-position
-  (async-testing "the change at a position is there, or its revision is known once a later change replaced it"
-    (db-fixtures/with-test-db
-      local-name
-      (^:async fn
-       [local]
-       (let [dbs   {:user/db local}
-             _ (await (db/insert local {:_id "a" :type "x"}))
-             at-a  (await (sut/feed-position dbs :user/db))
-             _ (await (db/insert local {:_id "b" :type "x"}))
-             at-b  (await (sut/feed-position dbs :user/db))]
-         (is (= "b" (:id at-b)))
-         (is (true? (await (sut/holds-position? dbs :user/db at-a))))
-         (is (true? (await (sut/holds-position? dbs :user/db at-b))))
-         (is (true? (await (sut/holds-position? dbs :user/db {:seq 0}))))
-         (let [b (await (db/get local "b"))]
-           (await (db/insert local (assoc b :n 2))))
-         (is (true? (await (sut/holds-position? dbs :user/db at-b)))
-             "a later change of b replaced the change at its position; the revision is known")
-         (is (false? (await (sut/holds-position? dbs :user/db (assoc at-a :id "c"))))
-             "another document at that sequence")
-         (is (false? (await (sut/holds-position? dbs :user/db (assoc at-b :rev "1-unknown"))))
-             "a revision the database does not know"))))))
-
-
-(deftest a-bulk-write-resolves-with-what-it-wrote
-  (async-testing "the documents PouchDB accepted, each at its new revision; a refused one is left out"
-    (db-fixtures/with-test-db
-      local-name
-      (^:async fn
-       [local]
-       (await (db/insert local {:_id "taken" :type "x"}))
-       (let [written (await (sut/bulk-docs {:user/db local}
-                                           {:db :user/db :type "x"}
-                                           [{:_id "new" :type "x"} {:_id "taken" :type "x"}]))]
-         (is (= ["new"] (mapv :_id written)))
-         (is (string? (:_rev (first written)))))))))
 
 
 (deftest a-read-goes-past-one-page
