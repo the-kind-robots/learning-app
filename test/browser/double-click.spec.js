@@ -1,5 +1,6 @@
-const { test, expect, nothingHappensFor } = require('./fixtures');
+const { test, expect, nothingHappensFor, docsOfType } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
+const { seedWords } = require('./seed.shared');
 
 // A screen renders in the task of the tap that opened it (#494), so the
 // second click of a double click lands on the new screen. It must not act
@@ -7,15 +8,7 @@ const { addWord } = require('./add-form.shared');
 // Likewise one Enter on the focused ДАЛЕЕ advances the lesson once (#277): the
 // button used to click itself on top of the native Enter activation.
 
-// Read at the engine level, as test/browser/README.md prescribes.
-async function reviewCount(page) {
-  return page.evaluate(async () => {
-    const kw = cljs.core.keyword;
-    const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
-    const found = await db.find_all(db.use('user-db'), toClj({ selector: { type: 'review' } }));
-    return cljs.core.count(cljs.core.get(found, kw('docs')));
-  });
-}
+const reviewCount = async (page) => (await docsOfType(page, 'user-db', 'review')).length;
 
 const answerWrong = async (page) => {
   await page.locator('#lesson-answer').fill('falsch');
@@ -47,9 +40,7 @@ test.describe('Двойное нажатие', () => {
 
     await test.step('Дано урок из трёх слов, неверный ответ, фокус на «ДАЛЕЕ»', async () => {
       await page.goto('/home');
-      await addWord(page, 'der Hund', 'пёс');
-      await addWord(page, 'die Katze', 'кошка');
-      await addWord(page, 'das Haus', 'дом');
+      await seedWords(page, ['der Hund', 'die Katze', 'das Haus']);
       await page.goto('/lesson');
       await expect(page.locator('.lesson__prompt')).toBeVisible();
       await countNextClicks(page);
@@ -81,7 +72,7 @@ test.describe('Двойное нажатие', () => {
     });
 
     await test.step('Когда он открывает список слов и дважды кликает угловой ✕', async () => {
-      await page.goto('/home');
+      await page.getByRole('button', { name: 'Закрыть' }).click();
       await page.getByRole('button', { name: 'Список слов' }).click();
       await expect(page.locator('.word-item')).toHaveCount(3);
       await page.getByRole('button', { name: 'Закрыть' }).dblclick();

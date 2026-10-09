@@ -1,4 +1,5 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, docsOfType } = require('./fixtures');
+const { seedWords } = require('./seed.shared');
 
 // Seeded at the engine level (see README, "Seeding from a spec"): a
 // collection document carries its own word ids, so no vocabulary is needed
@@ -13,24 +14,8 @@ async function seedCollections(page, collections) {
   }, collections);
 }
 
-async function seedWords(page, values) {
-  await page.evaluate(async (values) => {
-    const now = new Date().toISOString();
-    const docs = values.map((value) => ({
-      _id: 'vocab:' + value, type: 'vocab', value, translation: [{ lang: 'ru', value: 'перевод' }], created_at: now, modified_at: now,
-    }));
-    await db.bulk_docs(db.use('user-db'), docs);
-  }, values);
-}
-
-async function collectionNames(page) {
-  return page.evaluate(async () => {
-    const kw = cljs.core.keyword;
-    const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
-    const found = await db.find(db.use('user-db'), toClj({ selector: { type: 'collection' } }));
-    return cljs.core.clj__GT_js(cljs.core.map(kw('name'), cljs.core.get(found, kw('docs'))));
-  });
-}
+const collectionNames = async (page) =>
+  (await docsOfType(page, 'user-db', 'collection')).map((d) => d.name);
 
 const course = [
   ['kurs', 'Kurs', ['vocab:a', 'vocab:b']],

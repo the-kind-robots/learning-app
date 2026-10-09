@@ -1,4 +1,6 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, docsOfType } = require('./fixtures');
+const { fillTranslation } = require('./add-form.shared');
+const { token } = require('./lesson-answer.shared');
 
 // A phrase gets an example, like a word does (GH-371). The path CI does not
 // otherwise exercise: add form -> example-fetch task -> /api/examples -> stored
@@ -47,7 +49,7 @@ async function stubExampleEndpoint(page) {
 async function addPhrase(page) {
   await page.getByLabel('Слово (немецкий)').fill(PHRASE);
   await page.getByLabel('Фраза (немецкий)').waitFor();
-  await page.getByLabel('Перевод (русский)').fill(GLOSS);
+  await fillTranslation(page, GLOSS);
   await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
   await page.getByLabel('Слово (немецкий)').waitFor();
 }
@@ -55,15 +57,8 @@ async function addPhrase(page) {
 // The stored example is the only honest evidence that the answer landed: it is
 // written by the task runner, and nothing renders it until a lesson starts.
 // Read at the engine level, as test/browser/README.md prescribes.
-async function storedExampleValues(page) {
-  return page.evaluate(async () => {
-    const kw = cljs.core.keyword;
-    const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
-    const found = await db.find(db.use('user-db'), toClj({ selector: { type: 'example' } }));
-    const docs = cljs.core.get(found, kw('docs'));
-    return cljs.core.clj__GT_js(cljs.core.mapv((d) => cljs.core.get(d, kw('value')), docs));
-  });
-}
+const storedExampleValues = async (page) =>
+  (await docsOfType(page, 'user-db', 'example')).map((d) => d.value);
 
 // Adds the phrase and returns once its example is stored.
 async function addPhraseAndAwaitItsExample(page) {
@@ -127,8 +122,6 @@ test.describe('Пример к фразе', () => {
   });
 
   test('пользователь смотрит разбор примера к фразе → слова размечены по одному, без следа фразы', async ({ page }) => {
-    const token = (index) => page.locator(`.lesson__answer-token[data-word-index="${index}"]`);
-
     await test.step('Дано разбор ответа на предложение-пример', async () => {
       await addPhraseAndAwaitItsExample(page);
       await page.goto('/lesson');
@@ -143,13 +136,13 @@ test.describe('Пример к фразе', () => {
     await test.step('Тогда «Fall» размечено, а «auf» и «jeden» — обычный текст', async () => {
       // `structure` carries no membership, so a word of the construction shows
       // its own lemma, and `auf` and `jeden` have no card at all.
-      await expect(token(4)).toHaveText('Fall');
-      await expect(token(2)).toHaveCount(0);
-      await expect(token(3)).toHaveCount(0);
+      await expect(token(page, 4)).toHaveText('Fall');
+      await expect(token(page, 2)).toHaveCount(0);
+      await expect(token(page, 3)).toHaveCount(0);
     });
 
     await test.step('Когда он нажимает на «Fall»', async () => {
-      await token(4).click();
+      await token(page, 4).click();
     });
 
     await test.step('Тогда карточка про «der Fall», а не про всю фразу', async () => {

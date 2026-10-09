@@ -1,4 +1,4 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, nothingHappensFor, memoryReady } = require('./fixtures');
 
 // Every screen transition puts the target screen, with its data, in the page
 // before the first animation frame after the tap (#494). The tap and the
@@ -38,13 +38,8 @@ async function seedVocabulary(page) {
   }, { words: WORDS, perWord: REVIEWS_PER_WORD });
 }
 
-// Memory is loaded when the metrics say so (a development build). The first
-// start after the seed reads every document the seed wrote.
-const memoryReady = (page) => page.waitForFunction(
-  () => typeof window.__metrics === 'function' && window.__metrics().memory['ready-ms'],
-  null,
-  { timeout: 180000 },
-);
+// The first start after the seed reads every document the seed wrote.
+const MEMORY_READY = { timeout: 180000 };
 
 // Clicks `clickSel` and reports whether `dataSel` was in the DOM when the
 // first animation frame after the click ran.
@@ -75,7 +70,7 @@ test.describe('Переходы между экранами', () => {
       await expect(page.getByRole('heading', { name: 'Главная' })).toBeAttached();
       await seedVocabulary(page);
       await page.goto('/home');
-      await memoryReady(page);
+      await memoryReady(page, MEMORY_READY);
       await expect(page.locator(HOME_DATA)).toBeVisible();
     });
 
@@ -98,7 +93,8 @@ test.describe('Переходы между экранами', () => {
         // starts from the settled page.
         await expect(page.locator(data).first()).toBeAttached();
         await page.waitForLoadState('domcontentloaded');
-        await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 50)));
+        // No signal says popstate handling is done; let it pass before the next tap.
+        await nothingHappensFor(page, 50);
       }
     });
 
@@ -108,7 +104,7 @@ test.describe('Переходы между экранами', () => {
 
     await test.step('Когда он открывает список слов и вводит «wortq» в поиск', async () => {
       await page.goto('/words');
-      await memoryReady(page);
+      await memoryReady(page, MEMORY_READY);
       await expect(page.locator(WORD_ROW).first()).toBeVisible();
     });
 

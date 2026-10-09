@@ -1,4 +1,4 @@
-const { test, expect, nothingHappensFor } = require('./fixtures');
+const { test, expect, nothingHappensFor, memoryReady } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
 
 // The learner's data in memory stays a projection of PouchDB (#494,
@@ -9,13 +9,6 @@ const { addWord } = require('./add-form.shared');
 
 const rows = (page) => page.locator('.word-item');
 const homeHeading = (page) => page.getByRole('heading', { name: 'Главная' });
-
-// Memory is loaded when the development build's metrics say so.
-const memoryReady = (page) => page.waitForFunction(
-  () => typeof window.__metrics === 'function' && window.__metrics().memory['ready-ms'],
-  null,
-  { timeout: 60000 },
-);
 
 async function reopenWords(page) {
   await page.getByRole('button', { name: 'Закрыть' }).click();

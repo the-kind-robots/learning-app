@@ -1,21 +1,10 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, memoryFrom } = require('./fixtures');
 
 // A repeat start takes memory from a snapshot in the Cache API and catches up
 // from its feed positions (#508, ADR-0018). A snapshot that fails a check is
 // deleted, and every document is read.
 
 const rows = (page) => page.locator('.word-item');
-
-// Memory is loaded when the development build's metrics say so; they also
-// say where memory came from.
-async function memoryFrom(page) {
-  await page.waitForFunction(
-    () => typeof window.__metrics === 'function' && window.__metrics().memory['ready-ms'],
-    null,
-    { timeout: 60000 },
-  );
-  return page.evaluate(() => window.__metrics().memory.from);
-}
 
 // The stored snapshot as text, or '' when there is none.
 const storedSnapshot = (page) => page.evaluate(async () => {

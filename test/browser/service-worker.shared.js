@@ -1,3 +1,5 @@
+const { controlled } = require('./fixtures');
+
 // Page states the specs wait for: the service worker and the dictionary being
 // ready on home.
 
@@ -8,7 +10,7 @@
 async function openControlled(page, beforeClaim) {
   await page.goto('/');
   if (beforeClaim) await beforeClaim(page);
-  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30000 });
+  await controlled(page, { timeout: 30000 });
 }
 
 // Readiness is reported by the dictionary worker, which starts alongside the

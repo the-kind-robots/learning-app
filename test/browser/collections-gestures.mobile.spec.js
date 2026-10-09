@@ -208,16 +208,16 @@ test.describe('Темы на телефоне: касания', () => {
     });
   });
 
-  for (const { kind, target, name, count, remove } of [
-    { kind: 'строку папки', target: 'Meetings und Besprechungen mit Kollegen 3', name: 'Meetings und Besprechungen mit Kollegen', count: '3', remove: 'Удалить набор «Meetings und Besprechungen mit Kollegen»' },
-    { kind: 'заголовок папки', target: 'Reise 3', name: 'Reise', count: '3', remove: 'Удалить набор «Reise»' },
-    { kind: 'плитку без папки', target: 'Zusammenarbeitsvereinbarungen 2', name: 'Zusammenarbeitsvereinbarungen', count: '2', remove: 'Удалить набор «Zusammenarbeitsvereinbarungen»' },
+  for (const { kind, name, count } of [
+    { kind: 'строку папки', name: 'Meetings und Besprechungen mit Kollegen', count: '3' },
+    { kind: 'заголовок папки', name: 'Reise', count: '3' },
+    { kind: 'плитку без папки', name: 'Zusammenarbeitsvereinbarungen', count: '2' },
   ]) {
     test(`пользователь долго держит ${kind} → ✕ встаёт на место счётчика, имя не сдвигается`, async ({ page }) => {
-      const button = page.getByRole('button', { name: target, exact: true });
+      const button = page.getByRole('button', { name: `${name} ${count}`, exact: true });
       const nameEl = page.getByText(name, { exact: true });
       const countEl = nameEl.locator('xpath=following-sibling::span[1]');
-      const close = page.getByRole('button', { name: remove });
+      const close = page.getByRole('button', { name: `Удалить набор «${name}»` });
       let before;
 
       await test.step('Дано экран тем, счётчик виден', async () => {

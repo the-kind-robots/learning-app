@@ -1,4 +1,4 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, controlled, memoryFrom } = require('./fixtures');
 const shared = require('./service-worker.shared');
 
 // The worker's update path (ADR-0014). The backend prepends SW_VERSION to
@@ -92,13 +92,12 @@ test.describe('Обновление приложения', () => {
     });
 
     await test.step('Тогда страница на новой версии, перезагрузка была одна', async () => {
-      await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+      await controlled(page);
       await expect.poll(async () => (await cacheBuckets(page)).length).toBe(1);
       expect(await cacheBuckets(page)).not.toEqual(['shell-test-v1']);
       // The page after the reload started from the snapshot: activation kept it.
       if (dev) {
-        await page.waitForFunction(() => typeof window.__metrics === 'function' && window.__metrics().memory['ready-ms']);
-        expect(await page.evaluate(() => window.__metrics().memory.from)).toBe('snapshot');
+        expect(await memoryFrom(page)).toBe('snapshot');
       }
       expect(await page.evaluate(() => JSON.parse(localStorage.getItem('sw-states')))).toEqual(['installed', 'activating', 'activated']);
       expect(await page.evaluate(() => window.__firstLoad)).toBeUndefined();
@@ -128,7 +127,7 @@ test.describe('Обновление приложения', () => {
     });
 
     await test.step('Тогда страница перезагружена на новую версию', async () => {
-      await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+      await controlled(page);
       await expect.poll(async () => (await cacheBuckets(page)).length).toBe(1);
       expect(await cacheBuckets(page)).not.toEqual(['shell-test-v1']);
       expect(await page.evaluate(() => window.__firstLoad)).toBeUndefined();

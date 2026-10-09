@@ -71,4 +71,39 @@ const test = base.test.extend({
 // reaction's worth of time pass first. The one sanctioned fixed wait.
 const nothingHappensFor = (page, ms) => page.waitForTimeout(ms);
 
-module.exports = { test, expect: base.expect, chromium: base.chromium, nothingHappensFor };
+// Page states the specs wait for (development build, for the metrics). Memory
+// is loaded when the metrics say so; the first start after a large seed reads
+// every document the seed wrote, hence the optional longer timeout.
+const memoryReady = (page, { timeout = 60000 } = {}) => page.waitForFunction(
+  () => typeof window.__metrics === 'function' && window.__metrics().memory['ready-ms'],
+  null,
+  { timeout },
+);
+
+// Where memory came from: 'snapshot' or 'databases'.
+async function memoryFrom(page, options) {
+  await memoryReady(page, options);
+  return page.evaluate(() => window.__metrics().memory.from);
+}
+
+// The service worker has claimed the page; before that nothing passes through
+// its fetch handler.
+const controlled = (page, options) => page.waitForFunction(
+  () => navigator.serviceWorker.controller !== null,
+  null,
+  options,
+);
+
+// The documents of one type, read at the engine level as test/browser/README.md
+// prescribes: `db` is the database name ('user-db', 'device-db'). Plain objects.
+const docsOfType = (page, db, type) => page.evaluate(async ([name, docType]) => {
+  const kw = cljs.core.keyword;
+  const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
+  const found = await db.find_all(db.use(name), toClj({ selector: { type: docType } }));
+  return cljs.core.clj__GT_js(cljs.core.get(found, kw('docs')));
+}, [db, type]);
+
+module.exports = {
+  test, expect: base.expect, chromium: base.chromium,
+  nothingHappensFor, memoryReady, memoryFrom, controlled, docsOfType,
+};

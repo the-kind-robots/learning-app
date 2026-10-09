@@ -13,6 +13,14 @@ const signIn = async (page) => {
 
 const syncButton = (page) => page.getByRole('button', { name: 'Синхронизация' });
 
+// Screens that take the whole page: the button that opens each, and what shows it open.
+const closeButton = (page) => page.getByRole('button', { name: 'Закрыть' });
+const SCREENS = [
+  ['список слов', 'Список слов', closeButton],
+  ['наборы', 'Открыть наборы', closeButton],
+  ['урок', 'НАЧАТЬ УРОК', (page) => page.getByRole('progressbar', { name: 'Прогресс урока' })],
+];
+
 test.describe('Кнопка «Синхронизация»', () => {
   test('пользователь с аккаунтом открывает главную → кнопка видна', async ({ page }) => {
     await test.step('Дано пользователь с аккаунтом', async () => {
@@ -46,35 +54,20 @@ test.describe('Кнопка «Синхронизация»', () => {
       await addWord(page, 'Haus', 'дом');
     });
 
-    await test.step('Когда он открывает список слов', async () => {
-      await page.getByRole('button', { name: 'Список слов' }).click();
-      await expect(page.getByRole('button', { name: 'Закрыть' })).toBeVisible();
-    });
+    for (const [screen, opener, shown] of SCREENS) {
+      await test.step(`Когда он открывает ${screen}`, async () => {
+        await page.getByRole('button', { name: opener }).click();
+        await expect(shown(page)).toBeVisible();
+      });
 
-    await test.step('Тогда кнопки «Синхронизация» нет', async () => {
-      await expect(syncButton(page)).toHaveCount(0);
-    });
+      await test.step('Тогда кнопки «Синхронизация» нет', async () => {
+        await expect(syncButton(page)).toHaveCount(0);
+      });
 
-    await test.step('Когда он возвращается и открывает наборы', async () => {
-      await page.goto('/home');
-      await expect(syncButton(page)).toBeVisible();
-      await page.getByRole('button', { name: 'Открыть наборы' }).click();
-      await expect(page.getByRole('button', { name: 'Закрыть' })).toBeVisible();
-    });
-
-    await test.step('Тогда кнопки «Синхронизация» нет', async () => {
-      await expect(syncButton(page)).toHaveCount(0);
-    });
-
-    await test.step('Когда он возвращается и начинает урок', async () => {
-      await page.goto('/home');
-      await expect(syncButton(page)).toBeVisible();
-      await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
-      await expect(page.getByRole('progressbar', { name: 'Прогресс урока' })).toBeVisible();
-    });
-
-    await test.step('Тогда кнопки «Синхронизация» нет', async () => {
-      await expect(syncButton(page)).toHaveCount(0);
-    });
+      await test.step('Когда он закрывает экран', async () => {
+        await page.getByRole('button', { name: 'Закрыть' }).click();
+        await expect(syncButton(page)).toBeVisible();
+      });
+    }
   });
 });

@@ -1,4 +1,4 @@
-const { expect } = require('./fixtures');
+const { expect, docsOfType } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
 
 // Lesson setup shared by the desktop and the phone answer specs.
@@ -13,11 +13,10 @@ const { addWord } = require('./add-form.shared');
 // stateful layers need the `dbs` map that only `init!` in `main` builds, so a
 // spec does not reach for them — see test/browser/README.md.
 async function seedExample(page) {
-  await page.evaluate(async () => {
+  const [{ _id: wordId }] = await docsOfType(page, 'user-db', 'vocab');
+  await page.evaluate(async (wordId) => {
     const kw = cljs.core.keyword;
     const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
-    const found = await db.find(db.use('user-db'), toClj({ selector: { type: 'vocab' } }));
-    const wordId = cljs.core.get(cljs.core.first(cljs.core.get(found, kw('docs'))), kw('_id'));
     await db.insert(db.use('user-db'), adapters.learner.documents.example_doc(wordId, 'der Hund', null, toClj({
       'value': 'Der Hund schläft im Garten.',
       'translation': 'Пёс спит в саду.',
@@ -26,7 +25,7 @@ async function seedExample(page) {
         { usedForm: 'Garten', dictionaryForm: 'der Garten', translation: 'сад', wordIndex: 4 },
       ],
     })));
-  });
+  }, wordId);
 }
 
 // Answers the word trial, advances, and answers the example trial with

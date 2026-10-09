@@ -1,5 +1,5 @@
 const { test, expect } = require('./fixtures');
-const { addWord } = require('./add-form.shared');
+const { seedWords } = require('./seed.shared');
 
 // The server's splash stays until the first screen replaces it; nothing is
 // shown in between (#515).
@@ -86,6 +86,11 @@ test.describe('Старт приложения', () => {
   });
 
   test('пользователь открывает приложение на медленном телефоне, где кадры запаздывают → главная и урок остаются на экране', async ({ page }) => {
+    await test.step('Дано слово «der Hund» в базе', async () => {
+      await page.goto('/home');
+      await seedWords(page, ['der Hund']);
+    });
+
     await test.step('Когда кадры запаздывают на секунду и он открывает главную', async () => {
       await page.addInitScript(delayFrames, FRAME_DELAY_MS);
       await page.goto('/home');
@@ -98,8 +103,7 @@ test.describe('Старт приложения', () => {
       await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
     });
 
-    await test.step('Когда он добавляет слово и открывает урок', async () => {
-      await addWord(page, 'der Hund', 'пёс');
+    await test.step('Когда он открывает урок', async () => {
       await page.goto('/lesson');
       await expect(page.locator('.lesson__prompt')).toBeVisible();
       await runAskedFrames(page);
