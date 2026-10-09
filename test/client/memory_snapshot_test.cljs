@@ -15,7 +15,7 @@
    [client.support.document :as document]
    [client.support.learner :as learner]
    [client.support.wait :as wait]
-   [cljs.test :refer-macros [deftest is use-fixtures]]
+   [cljs.test :refer-macros [are deftest is use-fixtures]]
    [db :as db]
    [db.pouch :as pouch]))
 
@@ -293,6 +293,19 @@
               (str label ": memory equals a full read"))
           (is (= snapshot/format-version (:version (:header (stored entries))))
               (str label ": a new snapshot is written"))))))))))
+
+
+(deftest a-snapshot-is-refused-for-the-first-check-it-fails
+  (are [header at marked held expected]
+       (= expected (snapshot/refusal header at marked held))
+    {:version snapshot/format-version :marker "m" :position {:seq 5}} {:seq 5} "m" true  nil
+    {:version snapshot/format-version :marker "m" :position {:seq 5}} {:seq 9} "m" true  nil
+    {:version 0                       :marker "m" :position {:seq 5}} {:seq 5} "m" true  :version
+    {:version snapshot/format-version :marker "m" :position {:seq 5}} {:seq 5} "x" true  :marker
+    {:version snapshot/format-version :marker "m" :position {:seq 6}} {:seq 5} "m" true  :position
+    {:version snapshot/format-version :marker "m" :position nil}      {:seq 5} "m" true  :position
+    {:version snapshot/format-version :marker "m" :position {:seq 5}} {:seq 5} "m" false :change
+    {:version 0                       :marker "m" :position {:seq 6}} {:seq 5} "x" false :version))
 
 
 (deftest a-snapshot-of-another-format-version-is-dropped
