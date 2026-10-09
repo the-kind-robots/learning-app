@@ -7,15 +7,6 @@
    [utils :as utils]))
 
 
-(defn- log-dictionary-validation-failure!
-  [data]
-  (t/log!
-   {:level :warn
-    :id    ::dictionary-validation-failed
-    :data  data}
-   "Examples dictionary validation failed"))
-
-
 (def ^:private dictionary-db-name "dictionary-db")
 
 
@@ -215,28 +206,19 @@
 
 
 (defn lookup-dictionary-entries
-  "Fetches dictionary entries for dictionary-form from the DB.
-   Combines exact matches and surface-form matches for article-free words.
-   Returns nil on DB error (treated as lookup unavailable, not a hard failure)."
+  "Dictionary entries for `dictionary-form`, by exact and surface-form match.
+   Throws when the dictionary cannot be read."
   [dictionary-form]
   (let [normalized (normalize-dictionary-form dictionary-form)]
     (when (utils/non-blank normalized)
-      (try
-        (let [exact-docs (exact-dictionary-entry-docs normalized)]
-          (if (has-article? dictionary-form)
-            exact-docs
-            (let [surface-docs (surface-form-dictionary-entry-docs normalized)]
-              (cond
-                (nil? exact-docs)   nil
-                (nil? surface-docs) exact-docs
-                :else               (merge-dictionary-entry-docs exact-docs surface-docs)))))
-        (catch Exception error
-          (log-dictionary-validation-failure!
-           (merge
-            {:dictionary-form normalized
-             :error (.getMessage error)}
-            (ex-data error)))
-          nil)))))
+      (let [exact-docs (exact-dictionary-entry-docs normalized)]
+        (if (has-article? dictionary-form)
+          exact-docs
+          (let [surface-docs (surface-form-dictionary-entry-docs normalized)]
+            (cond
+              (nil? exact-docs)   nil
+              (nil? surface-docs) exact-docs
+              :else               (merge-dictionary-entry-docs exact-docs surface-docs))))))))
 
 
 (defn- dictionary-entry-matches-gloss?
@@ -252,9 +234,9 @@
 
 
 (defn lookup-word-meta
-  "Look up partOfSpeech and cefrLevel for a word from dictionary entries.
-   Prefers entries whose Russian gloss matches any of `translations`.
-   Returns nil if the lookup fails or produces no results."
+  "Part of speech and CEFR level of `word`, preferring an entry whose gloss
+   is one of `translations`. Nil when the dictionary has no entry; throws when
+   it cannot be read."
   [word translations]
   (let [entries (lookup-dictionary-entries (normalize-dictionary-form word))
         matches-any-gloss? (fn [entry]
