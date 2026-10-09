@@ -5,6 +5,8 @@
    [client.support.test :refer [async-testing]])
   (:require
    [client.support.db-fixtures :as db-fixtures]
+   [client.support.db-queries :as db-queries]
+   [client.support.db-seed :as db-seed]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [db-migrations :as sut]))
@@ -47,16 +49,6 @@
         (await (f {:local-db local-db :user-db user-db :device-db device-db})))))))
 
 
-(defn- ^:async insert-all!
-  [db docs]
-  (await (js/Promise.all (into-array (map #(db/insert db %) docs)))))
-
-
-(defn- ^:async docs-of
-  [db doc-type]
-  (:docs (await (db/find-all db {:selector {:type doc-type}}))))
-
-
 (def ^:private more-than-a-page
   "Past pouchdb-find's default limit of 25, where a move that reads one page
    would silently leave documents behind."
@@ -68,7 +60,7 @@
     (with-app-dbs
       (^:async fn
        [{:keys [local-db user-db device-db]}]
-       (await (insert-all! local-db (concat
+       (await (db-seed/insert-all! local-db (concat
                                      (for [i (range more-than-a-page)]
                                        {:_id (str "v" i) :type "vocab" :value (str "Wort " i)})
                                      [{:_id "r1" :type "review" :word-id "v1"}
@@ -76,10 +68,10 @@
                                       {:_id "e1" :type "example" :word-id "v1"}
                                       {:_id "l1" :type "lesson" :trials []}])))
        (await (sut/ensure-migrated!))
-       (is (= more-than-a-page (count (await (docs-of user-db "vocab")))))
-       (is (= 1 (count (await (docs-of user-db "review")))))
+       (is (= more-than-a-page (count (await (db-queries/fetch-by-type user-db "vocab")))))
+       (is (= 1 (count (await (db-queries/fetch-by-type user-db "review")))))
        (doseq [doc-type ["task" "example" "lesson"]]
-         (is (= 1 (count (await (docs-of device-db doc-type)))) doc-type))))))
+         (is (= 1 (count (await (db-queries/fetch-by-type device-db doc-type)))) doc-type))))))
 
 
 (deftest a-task-queued-before-the-data-field-is-rewritten
@@ -87,13 +79,13 @@
     (with-app-dbs
       (^:async fn
        [{:keys [device-db]}]
-       (await (insert-all! device-db (concat
+       (await (db-seed/insert-all! device-db (concat
                                       [{:_id "new" :type "task" :task-type "example-fetch" :data {:word-id "w"} :attempts 0}]
                                       (for [i (range more-than-a-page)]
                                         {:_id (str "old-" i) :type "task" :task-type "example-fetch"
                                          :word-id (str "w" i) :attempts 0}))))
        (await (sut/ensure-migrated!))
-       (let [tasks (into {} (map (juxt :_id identity)) (await (docs-of device-db "task")))]
+       (let [tasks (into {} (map (juxt :_id identity)) (await (db-queries/fetch-by-type device-db "task")))]
          (is (= (inc more-than-a-page) (count tasks)))
          (is (= {:word-id "w"} (:data (tasks "new"))))
          (is (= {:word-id "w7"} (:data (tasks "old-7"))))
@@ -110,7 +102,7 @@
        (await (db/insert local-db {:_id "v2" :type "vocab" :value "die Katze"}))
        (forget-the-run!)
        (await (sut/ensure-migrated!))
-       (is (= ["v1"] (mapv :_id (await (docs-of user-db "vocab")))))))))
+       (is (= ["v1"] (mapv :_id (await (db-queries/fetch-by-type user-db "vocab")))))))))
 
 
 (deftest callers-asking-at-once-wait-for-the-same-migration
@@ -138,4 +130,4 @@
                                   (use-db name)))]
            (is (= "rejected" (try (await (sut/ensure-migrated!)) (catch :default _ "rejected"))))
            (is (true? (await (sut/ensure-migrated!))))
-           (is (= ["v1"] (mapv :_id (await (docs-of user-db "vocab")))))))))))
+           (is (= ["v1"] (mapv :_id (await (db-queries/fetch-by-type user-db "vocab")))))))))))

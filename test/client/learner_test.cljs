@@ -558,7 +558,7 @@
                                      (mapv #(assoc (second kept-on-device) :_id (str "ID" (+ 1000 %)) :value (str "Satz " %))
                                            (range 501))))
       (is (= 501 (await (adapter/move-device-examples! (adapter dbs store)))))
-      (is (= 501 (count (:docs (await (db/find-all (:user/db dbs) {:selector {:type "example"}}))))))
+      (is (= 501 (count (await (db-queries/fetch-by-type (:user/db dbs) "example")))))
       (is (empty? (await (db-queries/fetch-examples (:device/db dbs)))))))))
 
 

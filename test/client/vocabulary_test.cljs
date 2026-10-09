@@ -160,7 +160,7 @@
                                     :modified-at time/test-now-iso}))
                       word-ids))))
         (await (seed-reviews! dbs word-ids))
-        (let [{reviews :docs} (await (db/find-all (:user/db dbs) {:selector {:type "review"}}))
+        (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))
               expected (->> (group-by :word-id reviews)
                             (map (fn [[word-id reviews]]
                                    (let [log (reduce retention/with-review

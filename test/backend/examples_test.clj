@@ -1,13 +1,11 @@
 (ns backend.examples-test
   (:require
    [backend.support.generation :as support.generation]
-   [cheshire.core :as cheshire]
    [clojure.test :refer [are deftest is testing]]
    [db :as db]
    [examples :as sut]
    [examples.dictionary :as dictionary]
-   [examples.provider :as provider]
-   [org.httpkit.client :as client]))
+   [examples.provider :as provider]))
 
 
 (def ^:private good-example
@@ -22,31 +20,15 @@
   (assoc good-example :value "Die Leiter."))
 
 
-(defn- chat
-  "The provider's answer carrying `example` as the model's message."
-  [example]
-  {:status 200
-   :body   (cheshire/generate-string
-            {:choices [{:message {:content (cheshire/generate-string example)}}]})})
-
-
 (defn- generating
   "Runs (f) with the provider answering each request with the next of
    `responses` (the last repeats) and the dictionary knowing nothing. The only
-   things stood in for are the provider's HTTP client and the dictionary
-   lookup. Returns what (f) returns."
+   things stood in for are the provider request and the dictionary lookup.
+   Returns what (f) returns."
   [responses f]
-  (let [remaining (atom responses)]
-    (with-redefs [client/request
-                  (fn [_request]
-                    (let [response (first @remaining)]
-                      (when (next @remaining) (swap! remaining rest))
-                      (support.generation/answered
-                       (if (instance? Throwable response)
-                         {:error response}
-                         response))))
-                  dictionary/lookup-dictionary-entries (constantly nil)]
-      (f))))
+  (with-redefs [sut/example-api-request (support.generation/provider-answering-in-turn (atom 0) responses)
+                dictionary/lookup-dictionary-entries (constantly nil)]
+    (f)))
 
 
 (defn- generate
@@ -58,16 +40,16 @@
   (testing "a provider error, then an invalid example, then a valid one: the valid one is the answer"
     (is (= (#'sut/add-word-indexes good-example)
            (generating [{:status 500 :body "oops"}
-                        (chat too-short-example)
-                        (chat good-example)]
+                        (support.generation/example-completion too-short-example)
+                        (support.generation/example-completion good-example)]
                        #(generate "Leiter" "лестница" 3)))))
   (testing "a dropped connection is just another failed attempt"
     (is (= (#'sut/add-word-indexes good-example)
            (generating [(ex-info "network down" {:status 0})
-                        (chat good-example)]
+                        (support.generation/example-completion good-example)]
                        #(generate "Leiter" "лестница" 2)))))
   (testing "when every attempt fails the caller gets no example"
-    (is (nil? (generating [(chat too-short-example)] #(generate "Leiter" "лестница" 3))))
+    (is (nil? (generating [(support.generation/example-completion too-short-example)] #(generate "Leiter" "лестница" 3))))
     (is (sut/generation-failure?
          (generating [(ex-info "network down" {:status 0})] #(generate "Hund" "собака" 2)))
         "a provider that cannot be reached is its failure, not the pair's")))
@@ -76,18 +58,19 @@
 (deftest a-rate-limited-generation-is-not-retried
   (testing "the failure is reported at once, though a valid answer waited behind it"
     (let [result (generating [{:status 429 :body "{\"error\":{\"code\":\"rate_limit_exceeded\"}}"}
-                              (chat good-example)]
+                              (support.generation/example-completion good-example)]
                              #(generate "Leiter" "лестница" 3))]
       (is (sut/generation-failure? result))
       (is (= 429 (:status result))))))
 
 
 (deftest a-meta-answer-in-the-wrong-language-is-not-an-example
-  (is (nil? (generating [(chat {:value       "The example for 'aufstehen' is ..."
-                                :translation "to stand up"
-                                :structure   [{:usedForm       "aufstehen"
-                                               :dictionaryForm "aufstehen"
-                                               :translation    "to stand up"}]})]
+  (is (nil? (generating [(support.generation/example-completion
+                          {:value       "The example for 'aufstehen' is ..."
+                           :translation "to stand up"
+                           :structure   [{:usedForm       "aufstehen"
+                                          :dictionaryForm "aufstehen"
+                                          :translation    "to stand up"}]})]
                         #(generate "aufstehen" "вставать" 3)))))
 
 

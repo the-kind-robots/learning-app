@@ -5,7 +5,7 @@
 
 (defn ^:async fetch-by-type
   [db doc-type]
-  (let [{:keys [docs]} (await (db/find db {:selector {:type doc-type}}))]
+  (let [{:keys [docs]} (await (db/find-all db {:selector {:type doc-type}}))]
     docs))
 
 

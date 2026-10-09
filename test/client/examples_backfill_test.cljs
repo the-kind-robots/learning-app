@@ -131,11 +131,10 @@
 
 (defn ^:async queued-tasks
   "What the queued fetches carry, which is what each request is built from.
-   Read without a page limit — `find` stops at 25, which a vocabulary's worth
-   of fetches is well past."
+   `fetch-by-type` reads without a page limit, which a vocabulary's worth of
+   fetches is well past."
   [dbs]
-  (let [{docs :docs} (await (db/find-all (:device/db dbs) {:selector {:type "task"}}))]
-    (mapv :data docs)))
+  (mapv :data (await (db-queries/fetch-by-type (:device/db dbs) "task"))))
 
 
 (defn ^:async queued-fetches

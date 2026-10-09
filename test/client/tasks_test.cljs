@@ -23,14 +23,8 @@
   (atom nil))
 
 
-(use-fixtures
- :each
- {:before (fn [] (reset! test-db-name (db-fixtures/db-name (str "client.tasks-test." run-id "." (gensym)))))
-  :after  (fn [] (db-fixtures/destroy-test-db @test-db-name) nil)})
-
-
-(def ^:private handled
-  "Ids of the tracking tasks the queue ran, with the clock reading each started at."
+(def ^:private runs
+  "The tasks the queue started, in order, as [id clock-reading]. Emptied before each test."
   (atom []))
 
 
@@ -61,19 +55,14 @@
 
 (defmethod sut/execute-task "tracking-task"
   [task _env]
-  (swap! handled conj [(:_id task) @clock-now])
+  (swap! runs conj [(:_id task) @clock-now])
   (js/Promise.resolve true))
-
-
-(def ^:private throttle-runs
-  "Ids of the throttle-once tasks in the order the queue started them, with the clock reading."
-  (atom []))
 
 
 (defmethod sut/execute-task "throttle-once-task"
   [task _env]
-  (swap! throttle-runs conj [(:_id task) @clock-now])
-  (js/Promise.resolve (if (= 1 (count @throttle-runs))
+  (swap! runs conj [(:_id task) @clock-now])
+  (js/Promise.resolve (if (= 1 (count @runs))
                         {:retry-after-ms 300}
                         true)))
 
@@ -82,6 +71,16 @@
   "The browser's online flag, the one thing the queue asks of its host."
   [online?]
   (aset js/globalThis "self" #js {:navigator #js {:onLine online?}}))
+
+
+(use-fixtures
+ :each
+ {:before (fn []
+            (reset! test-db-name (db-fixtures/db-name (str "client.tasks-test." run-id "." (gensym))))
+            (reset! runs [])
+            (reset! clock-now 1000)
+            (set-online! true))
+  :after  (fn [] (db-fixtures/destroy-test-db @test-db-name) nil)})
 
 
 (def ^:private clock
@@ -93,9 +92,6 @@
   "Runs `f` with the db the queue works on and a started runner, the clock at
    1000 ms, the browser online."
   [f]
-  (reset! handled [])
-  (reset! clock-now 1000)
-  (set-online! true)
   (await
    (db-fixtures/with-test-db
      @test-db-name
@@ -156,11 +152,16 @@
             (is (= 3000 (utils/iso->ms (:run-at task))) id)))))))
 
 
+(def ^:private retry-delays
+  "Attempts so far -> how long the next retry waits, ms."
+  [[0 2000] [1 4000] [3 16000] [10 60000] [100 60000]])
+
+
 (deftest a-retry-is-delayed-by-the-attempts-so-far-up-to-a-cap
   (async-testing "the delay doubles from one second and stops at a minute"
     (with-queue
       (^:async fn [_dbs db]
-        (doseq [attempts [0 1 3 10 100]]
+        (doseq [[attempts _delay] retry-delays]
           (await (db/insert db {:_id        (str "task:n" attempts)
                                 :type       "task"
                                 :task-type  "fail-task"
@@ -169,7 +170,7 @@
                                 :run-at     (utils/ms->iso 0)
                                 :created-at (utils/ms->iso 0)})))
         (sut/resume!)
-        (doseq [[attempts delay] [[0 2000] [1 4000] [3 16000] [10 60000] [100 60000]]]
+        (doseq [[attempts delay] retry-delays]
           (let [task (await (task-where db (str "n" attempts) #(= (inc attempts) (:attempts %))))]
             (is (= (+ 1000 delay) (utils/iso->ms (:run-at task))) (str attempts " attempts"))))))))
 
@@ -199,12 +200,12 @@
       (^:async fn [dbs db]
         (set-online! false)
         (await (queue dbs "tracking-task" ["o"]))
-        (is (empty? @handled))
+        (is (empty? @runs))
         (is (= 1 (count (await (tasks db)))))
         (set-online! true)
         (sut/resume!)
         (await (queue-drained db))
-        (is (= [["task:o" 1000]] @handled))))))
+        (is (= [["task:o" 1000]] @runs))))))
 
 
 (deftest only-due-tasks-run
@@ -214,13 +215,13 @@
         (await (sut/create-tasks! dbs clock "tracking-task"
                                   [{:id "task:later" :data {} :delay-ms 5000}
                                    {:id "task:now" :data {}}]))
-        (await (wait/until (fn [] (seq @handled))))
+        (await (wait/until (fn [] (seq @runs))))
         (await (wait/until (^:async fn [] (= ["task:later"] (map :_id (await (tasks db)))))))
-        (is (= ["task:now"] (map first @handled)))
+        (is (= ["task:now"] (map first @runs)))
         (reset! clock-now 6000)
         (sut/resume!)
         (await (queue-drained db))
-        (is (= ["task:now" "task:later"] (map first @handled)))))))
+        (is (= ["task:now" "task:later"] (map first @runs)))))))
 
 
 (deftest asking-for-the-same-work-twice-queues-it-once
@@ -228,8 +229,8 @@
     (with-queue
       (^:async fn [dbs db]
         (set-online! false)
-        (await (queue dbs "tracking-task" ["same"]))
-        (await (queue dbs "tracking-task" ["same"]))
+        (await (queue dbs "succeed-task" ["same"]))
+        (await (queue dbs "succeed-task" ["same"]))
         (is (= 1 (count (await (tasks db)))))))))
 
 
@@ -237,26 +238,22 @@
   (async-testing "no task starts before the Retry-After has passed on the clock; then all run"
     (with-queue
       (^:async fn [dbs db]
-        (reset! throttle-runs [])
         (await (sut/create-tasks! dbs clock "throttle-once-task"
                                   (mapv (fn [i] {:id (str "task:t" i) :data {}}) (range 10))))
-        (await (wait/until (fn [] (= 3 (count @throttle-runs)))))
+        (await (wait/until (fn [] (= 3 (count @runs)))))
         (await (wait/settled))
         (sut/resume!)
         (await (wait/settled))
-        (is (= 3 (count @throttle-runs)) "only the tasks already started when the answer came")
+        (is (= 3 (count @runs)) "only the tasks already started when the answer came")
         (reset! clock-now 1300)
         (sut/resume!)
         (await (queue-drained db))
-        (is (= 11 (count @throttle-runs)) "every task ran, the throttled one a second time")
-        (is (every? #(>= (second %) 1300) (drop 3 @throttle-runs)))))))
+        (is (= 11 (count @runs)) "every task ran, the throttled one a second time")
+        (is (every? #(>= (second %) 1300) (drop 3 @runs)))))))
 
 
 (deftest a-due-task-waits-until-memory-is-loaded
   (async-testing "the runner leaves the queue alone while memory loads"
-    (set-online! true)
-    (reset! handled [])
-    (reset! clock-now 1000)
     (await
      (db-fixtures/with-test-db
        @test-db-name
@@ -268,17 +265,15 @@
              (await (queue dbs "tracking-task" ["m"]))
              (task-queue/start! {:clock clock :db dbs :learner {:learner/loaded (constantly memory)}})
              (await (wait/settled))
-             (is (empty? @handled) "nothing runs while memory loads")
+             (is (empty? @runs) "nothing runs while memory loads")
              (@loaded nil)
              (await (queue-drained db))
-             (is (= [["task:m" 1000]] @handled))
+             (is (= [["task:m" 1000]] @runs))
              (finally (sut/stop!)))))))))
 
 
 (deftest a-stop-while-memory-loads-keeps-the-runner-stopped
   (async-testing "a runner stopped before it started never runs a task"
-    (set-online! true)
-    (reset! handled [])
     (await
      (db-fixtures/with-test-db
        @test-db-name
@@ -292,5 +287,5 @@
            (await (wait/settled))
            (await (queue dbs "tracking-task" ["s"]))
            (await (wait/settled))
-           (is (empty? @handled))
+           (is (empty? @runs))
            (is (= 1 (count (await (tasks db)))))))))))
