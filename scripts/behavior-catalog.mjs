@@ -25,7 +25,7 @@ const projectsOf = (spec) => [...new Set(spec.tests.map((t) => t.projectName))].
 function walk(suite, depth) {
   for (const spec of suite.specs ?? []) {
     total += 1;
-    lines.push(`${'  '.repeat(depth)}- ${spec.title} _(L${spec.line}; ${projectsOf(spec)})_`);
+    lines.push(`${'  '.repeat(depth)}- ${spec.title} _(${projectsOf(spec)})_`);
   }
   for (const child of suite.suites ?? []) {
     lines.push(`${'  '.repeat(depth)}- **${child.title}**`);

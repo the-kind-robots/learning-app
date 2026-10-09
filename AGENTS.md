@@ -116,7 +116,7 @@ PRs merge by squash, so this governs the branch history the reviewer reads, not 
 
 # Token hygiene
 
-- Never `cat` a whole file. Use Read with offset/limit, or `grep -n … | head -50`. `.claude/hooks/read-guard.sh` refuses `cat`/`less`/`more` of a file over 300 lines.
+- Never `cat` a whole file. Use Read with offset/limit, or `grep -n … | head -50`. `.claude/hooks/read-guard.sh` refuses printing over 300 lines of a file via `cat`/`less`/`more`, `sed -n` ranges, `head -n`, `tail -n` (unless piped into a filter).
 - `git diff --stat` before a full diff; then diff only the files you need. History: `git log --oneline -20`.
 - Hand subagents file paths, not pasted contents (e.g. "review `openspec/changes/<x>/VERIFY.md`").
 - Run `openspec validate` once, right before archive — not after every edit.

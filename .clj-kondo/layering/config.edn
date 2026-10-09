@@ -1,0 +1,26 @@
+;; Client storage barrier (was test/client/layering_test.cljs). CI gate:
+;;   clj-kondo --lint src/client --config-dir .clj-kondo/layering \
+;;     --config '{:linters ^:replace {:discouraged-namespace {:level :error}}}' --fail-level error
+;; This dir is the single source of the rules; ../config.edn pulls it in via
+;; :config-paths. The gate lints with this dir alone and ^:replace drops every
+;; other linter, so unrelated findings elsewhere in the tree do not decide it.
+;;
+;; The engine (db.*, db-migrations, sync, tasks) is reached only by adapters.*,
+;; main and ports.task-queue; use cases and pages reach adapters through ports;
+;; only views require presenters. `above-adapters` is default-deny: every client
+;; namespace is in it except the explicit allow-list of engine-side ones, so a
+;; new top-level namespace is checked without being registered.
+{:ns-groups [{:name engine :pattern "^(db\\..*|db-migrations|sync|tasks)$"}
+             {:name adapters :pattern "^adapters\\..*$"}
+             {:name presenters :pattern "^.*\\.presenter$"}
+             {:name above-adapters
+              :pattern "^(?!(db\\..*|db-migrations|sync|tasks|adapters\\..*|main|ports\\.task-queue)$).*$"}
+             {:name use-cases-and-pages :pattern "^(use-cases|pages)\\..*$"}
+             {:name presenter-free :pattern "^(use-cases\\..*|.*\\.actions|.*\\.effects)$"}]
+
+ :config-in-ns
+ {above-adapters      {:linters {:discouraged-namespace {engine {:message "Only adapters, the engine and main require the engine"}}}}
+  use-cases-and-pages {:linters {:discouraged-namespace {adapters {:message "Use cases and pages reach adapters through ports"}}}}
+  presenter-free      {:linters {:discouraged-namespace {presenters {:message "A presenter is for the view only"}}}}}
+
+ :linters {:discouraged-namespace {:level :error}}}

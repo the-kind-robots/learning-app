@@ -43,7 +43,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.codex/|codex/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$)'; then
+          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.clj-kondo/|scripts/behavior-catalog\.mjs$|test/browser/|test/BEHAVIOR\.md$|\.codex/|codex/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
@@ -83,6 +83,7 @@ jobs:
       - uses: DeLaGuardo/setup-clojure@13.6.1
         with:
           cli: latest
+          clj-kondo: latest
 
       - id: cache-clojure
         uses: actions/cache/restore@v6.1.0
@@ -100,6 +101,20 @@ jobs:
         run: |
           npx shadow-cljs compile node-test
           node target/node-tests.js
+
+      # Client layering (was test/client/layering_test.cljs). Only these rules
+      # gate: ^:replace drops every other linter, so unrelated findings pass.
+      - name: Check client layering
+        run: >
+          clj-kondo --lint src/client --config-dir .clj-kondo/layering
+          --config '{:linters ^:replace {:discouraged-namespace {:level :error}}}'
+          --fail-level error
+
+      # BEHAVIOR.md is generated from the Playwright titles; `--list` needs no browser.
+      - name: Check behaviour catalog is fresh
+        run: |
+          npm run test:catalog
+          git diff --exit-code test/BEHAVIOR.md
 
       - uses: actions/cache/save@v6.1.0
         if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}

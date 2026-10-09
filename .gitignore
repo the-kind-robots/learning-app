@@ -13,6 +13,8 @@
 
 # Settings
 **/.clj-kondo/**
+!/.clj-kondo/layering/
+!/.clj-kondo/layering/config.edn
 **/.lsp/**
 **/.nrepl-port
 
