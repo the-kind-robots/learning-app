@@ -1,17 +1,11 @@
 const { test, expect } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
 
 // Every screen but home closes from the corner, and home has no app screen
 // behind it (#411, ADR-0015).
 
 const close = (page) => page.getByRole('button', { name: 'Закрыть' });
 const homeHeading = (page) => page.getByRole('heading', { name: 'Главная' });
-
-async function addWord(page) {
-  await page.getByLabel('Слово (немецкий)').fill('Haus');
-  await page.getByLabel('Перевод (русский)').fill('дом');
-  await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
-  await expect(page.getByRole('button', { name: 'Список слов' })).toBeVisible();
-}
 
 // Waits for the rows, not only the address: a words read still in flight
 // when the test leaves would land after home's and put the words screen back
@@ -37,7 +31,7 @@ test('home has no close mark; words, themes and lesson each have one', async ({ 
   await expect(page.getByRole('button', { name: 'Открыть наборы' })).toBeVisible();
   await expect(close(page)).toHaveCount(0);
 
-  await addWord(page);
+  await addWord(page, 'Haus', 'дом');
 
   await page.getByRole('button', { name: 'Список слов' }).click();
   await expect(page.getByPlaceholder('Поиск')).toBeVisible();
@@ -62,7 +56,7 @@ test('home has no close mark; words, themes and lesson each have one', async ({ 
 
 test('the words screen has no back button and no visible heading', async ({ page }) => {
   await page.goto('/home');
-  await addWord(page);
+  await addWord(page, 'Haus', 'дом');
   await page.getByRole('button', { name: 'Список слов' }).click();
   await expect(page.getByRole('listitem').filter({ hasText: 'Haus' })).toBeVisible();
 
@@ -77,7 +71,7 @@ test('the words screen has no back button and no visible heading', async ({ page
 
 test('closing a screen leaves nothing of the app behind home', async ({ page }) => {
   await openAppAfterAnotherPage(page);
-  await addWord(page);
+  await addWord(page, 'Haus', 'дом');
 
   await openWords(page);
   await close(page).click();
@@ -90,7 +84,7 @@ test('closing a screen leaves nothing of the app behind home', async ({ page }) 
 
 test('Back from a screen is home, and Back from home leaves the app', async ({ page }) => {
   await openAppAfterAnotherPage(page);
-  await addWord(page);
+  await addWord(page, 'Haus', 'дом');
 
   await openWords(page);
   await page.goBack();
@@ -103,7 +97,7 @@ test('Back from a screen is home, and Back from home leaves the app', async ({ p
 
 test('a screen opened from a screen takes its place', async ({ page }) => {
   await openAppAfterAnotherPage(page);
-  await addWord(page);
+  await addWord(page, 'Haus', 'дом');
 
   await openWords(page);
   await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
@@ -150,10 +144,7 @@ const ANSWERS = { дом: 'Haus', собака: 'Hund' };
 
 async function addWords(page) {
   for (const [translation, word] of Object.entries(ANSWERS)) {
-    await page.getByLabel('Слово (немецкий)').fill(word);
-    await page.getByLabel('Перевод (русский)').fill(translation);
-    await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
-    await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
+    await addWord(page, word, translation);
   }
 }
 

@@ -1,4 +1,5 @@
 const { expect } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
 
 // The words search field sits in the bottom tray, directly above the lesson
 // button and as wide as it; the rows start under the shell bar with air
@@ -6,9 +7,7 @@ const { expect } = require('./fixtures');
 
 async function openWordsWithAWord(page) {
   await page.goto('/home');
-  await page.getByLabel('Слово (немецкий)').fill('Haus');
-  await page.getByLabel('Перевод (русский)').fill('дом');
-  await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
+  await addWord(page, 'Haus', 'дом');
   await page.getByRole('button', { name: 'Список слов' }).click();
   await expect(page.getByRole('listitem').filter({ hasText: 'Haus' })).toBeVisible();
 }

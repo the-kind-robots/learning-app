@@ -1,4 +1,5 @@
 const { test, expect } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
 
 // The learner's data in memory stays a projection of PouchDB (#494,
 // ADR-0016). A screen reads it when opened and does not follow it while open:
@@ -8,13 +9,6 @@ const { test, expect } = require('./fixtures');
 
 const rows = (page) => page.locator('.word-item');
 const homeHeading = (page) => page.getByRole('heading', { name: 'Главная' });
-
-async function addWord(page, value, translation) {
-  await page.getByLabel('Слово (немецкий)').fill(value);
-  await page.getByLabel('Перевод (русский)').fill(translation);
-  await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
-  await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
-}
 
 // Memory is loaded when the development build's metrics say so.
 const memoryReady = (page) => page.waitForFunction(

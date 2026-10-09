@@ -1,17 +1,16 @@
 const { test, expect } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
 
 // One word is all a lesson needs to exist, and adding it is also what makes
 // the lesson footer — and with it the hotkey — live.
-const addWord = async (page) => {
-  await page.getByLabel('Слово (немецкий)').fill('Haus');
-  await page.getByLabel('Перевод (русский)').fill('дом');
-  await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
+const addHaus = async (page) => {
+  await addWord(page, 'Haus', 'дом');
   await expect(page.getByRole('button', { name: 'НАЧАТЬ УРОК' })).toBeVisible();
 };
 
 test('Alt+Enter from the word field starts the lesson', async ({ page }) => {
   await page.goto('/home');
-  await addWord(page);
+  await addHaus(page);
 
   await page.getByLabel('Слово (немецкий)').focus();
   await page.keyboard.press('Alt+Enter');
@@ -22,7 +21,7 @@ test('Alt+Enter from the word field starts the lesson', async ({ page }) => {
 
 test('Alt+Enter from the translation field starts the lesson', async ({ page }) => {
   await page.goto('/home');
-  await addWord(page);
+  await addHaus(page);
 
   const translation = page.getByLabel('Перевод (русский)');
   await translation.focus();
@@ -44,7 +43,7 @@ test('Alt+Enter from the translation field starts the lesson', async ({ page }) 
 
 test('Alt+Enter outside the fields starts the lesson', async ({ page }) => {
   await page.goto('/home');
-  await addWord(page);
+  await addHaus(page);
 
   await page.getByRole('button', { name: 'Список слов' }).focus();
   await page.keyboard.press('Alt+Enter');

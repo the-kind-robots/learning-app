@@ -1,5 +1,5 @@
 const { test, expect } = require('./fixtures');
-const { addWord } = require('./lesson-answer.shared');
+const { addWord } = require('./add-form.shared');
 
 // One Enter on the focused ДАЛЕЕ advances the lesson once (#277). The button
 // used to carry a keydown handler that clicked it on top of the native Enter

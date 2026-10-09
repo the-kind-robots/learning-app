@@ -1,4 +1,5 @@
 const { test, expect } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
 
 // The list is ordered and paged off the view's key, so what a page holds and
 // in what order is one question. Rows are located by their class for the same
@@ -81,18 +82,9 @@ test('a word entered with an article is still the same entry', async ({ page }) 
 
   // Through the add form, so the whole duplicate check runs: the id did not
   // change, so entering the same value again must find the stored word and
-  // merge into it rather than make a second row. The form clearing itself is
-  // the app saying the write landed — without waiting for it the second add
-  // races the first.
-  const add = async (value, translation) => {
-    await page.getByLabel('Слово (немецкий)').fill(value);
-    await page.getByLabel('Перевод (русский)').fill(translation);
-    await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
-    await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
-  };
-
-  await add('der Zug', 'поезд');
-  await add('der Zug', 'состав');
+  // merge into it rather than make a second row.
+  await addWord(page, 'der Zug', 'поезд');
+  await addWord(page, 'der Zug', 'состав');
 
   await openWords(page);
   await expect(rows(page)).toHaveCount(1);
