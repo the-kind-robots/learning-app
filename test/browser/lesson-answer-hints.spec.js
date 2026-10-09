@@ -1,92 +1,168 @@
 const { test, expect } = require('./fixtures');
-const { setUpLesson, token, expectHintedAnswerAsWideAsPlainText } = require('./lesson-answer.shared');
+const { setUpLesson, token, answerWidths } = require('./lesson-answer.shared');
 
-// Answer-hint popover in the lesson (GH-273). Scenarios:
-//
-// 1. Example answered correctly → the revealed answer carries clickable
-//    annotated words; answered incorrectly → same, under «Правильно:».
-// 2. Word not in the vocabulary → hint card offers «+ В СЛОВАРЬ»;
-//    word already in the vocabulary → card shows «✓ В словаре» instead.
-// 3. Adding from the card updates the same popover in place to the
-//    "added" state and the word lands in the vocabulary list.
-// 4. The popover appears on token click, hides instantly on a click
-//    outside, and hides after a timeout once the pointer leaves it.
-//
-// Lesson setup lives in lesson-answer.shared.js, shared with the phone spec.
+// Answer-hint popover in the lesson (GH-273): the revealed example answer
+// carries clickable annotated words; a card offers adding an unknown word or
+// says the word is already known; the card appears on token click and hides on
+// a click outside or after the pointer leaves it. Lesson setup lives in
+// lesson-answer.shared.js.
 
 const popover = (page) => page.locator('#popover');
+const SENTENCE = 'Der Hund schläft im Garten.';
 
-test('correct example answer reveals clickable annotated words', async ({ page }) => {
-  await setUpLesson(page, 'Der Hund schläft im Garten.');
-  await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
-  await expect(token(page, 1)).toHaveText('Hund');
-  await expect(token(page, 4)).toHaveText('Garten.');
-});
+test.describe('Подсказки к словам в разборе ответа', () => {
+  test('пользователь верно отвечает на пример → видит «Правильно!» и слова с подсказками', async ({ page }) => {
+    await test.step('Когда он верно отвечает на предложение', async () => {
+      await setUpLesson(page, SENTENCE);
+    });
 
-test('wrong example answer reveals the correct answer with annotated words', async ({ page }) => {
-  await setUpLesson(page, 'Die Katze schläft.');
-  await expect(page.getByRole('heading', { name: 'Правильно:' })).toBeVisible();
-  await expect(token(page, 4)).toHaveText('Garten.');
-});
+    await test.step('Тогда видно «Правильно!» и кликабельные слова', async () => {
+      await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
+      await expect(token(page, 1)).toHaveText('Hund');
+      await expect(token(page, 4)).toHaveText('Garten.');
+    });
+  });
 
-test('unknown word offers add, known word shows already-in-dictionary', async ({ page }) => {
-  await setUpLesson(page, 'Der Hund schläft im Garten.');
+  test('пользователь неверно отвечает на пример → видит эталон со словами с подсказками', async ({ page }) => {
+    await test.step('Когда он неверно отвечает на предложение', async () => {
+      await setUpLesson(page, 'Die Katze schläft.');
+    });
 
-  await token(page, 4).click();
-  await expect(popover(page).locator('.token-card__word')).toHaveText('der Garten');
-  await expect(popover(page).getByRole('button', { name: '+ В СЛОВАРЬ' })).toBeVisible();
+    await test.step('Тогда видно «Правильно:» и эталон со словами с подсказками', async () => {
+      await expect(page.getByRole('heading', { name: 'Правильно:' })).toBeVisible();
+      await expect(token(page, 4)).toHaveText('Garten.');
+    });
+  });
 
-  await token(page, 1).click();
-  await expect(popover(page).locator('.token-card__word')).toHaveText('der Hund');
-  await expect(popover(page).locator('.token-card__state')).toHaveText('✓ В словаре');
-  await expect(popover(page).getByRole('button')).toHaveCount(0);
-});
+  test('пользователь нажимает на слово в разборе → для неизвестного предлагается добавить, для известного «уже в словаре»', async ({ page }) => {
+    await test.step('Дано разбор ответа', async () => {
+      await setUpLesson(page, SENTENCE);
+    });
 
-test('adding a word updates the card in place and persists the word', async ({ page }) => {
-  await setUpLesson(page, 'Der Hund schläft im Garten.');
+    await test.step('Когда он нажимает на неизвестное слово «Garten»', async () => {
+      await token(page, 4).click();
+    });
 
-  await token(page, 4).click();
-  await popover(page).getByRole('button', { name: '+ В СЛОВАРЬ' }).click();
+    await test.step('Тогда карточка предлагает «+ В СЛОВАРЬ»', async () => {
+      await expect(popover(page).locator('.token-card__word')).toHaveText('der Garten');
+      await expect(popover(page).getByRole('button', { name: '+ В СЛОВАРЬ' })).toBeVisible();
+    });
 
-  // The same popover flips to the added state without closing.
-  await expect(popover(page).locator('.token-card__state')).toHaveText('✓ В словаре');
-  await expect(popover(page).locator('.token-card__word')).toHaveText('der Garten');
+    await test.step('Когда он нажимает на известное слово «Hund»', async () => {
+      await token(page, 1).click();
+    });
 
-  await page.goto('/words');
-  await expect(page.locator('.word-item__value').filter({ hasText: 'der Garten' })).toBeVisible();
-});
+    await test.step('Тогда карточка пишет «✓ В словаре» и без кнопок', async () => {
+      await expect(popover(page).locator('.token-card__word')).toHaveText('der Hund');
+      await expect(popover(page).locator('.token-card__state')).toHaveText('✓ В словаре');
+      await expect(popover(page).getByRole('button')).toHaveCount(0);
+    });
+  });
 
-test('revealed answer selects as continuous text across hinted words', async ({ page }) => {
-  await setUpLesson(page, 'Der Hund schläft im Garten.');
-  const body = page.locator('.lesson__answer-body');
-  const box = await body.boundingBox();
-  await page.mouse.move(box.x + 1, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, { steps: 8 });
-  await page.mouse.up();
-  const selected = await page.evaluate(() => window.getSelection().toString());
-  expect(selected.replace(/\s+/g, ' ').trim()).toContain('Der Hund schläft im Garten.');
-});
+  test('пользователь добавляет слово из карточки → карточка обновляется на месте, слово в списке', async ({ page }) => {
+    await test.step('Дано карточка неизвестного слова «Garten»', async () => {
+      await setUpLesson(page, SENTENCE);
+      await token(page, 4).click();
+    });
 
-test('hinted words take the width of plain text', async ({ page }) => {
-  await setUpLesson(page, 'Der Hund schläft im Garten.');
-  await expectHintedAnswerAsWideAsPlainText(page);
-});
+    await test.step('Когда он нажимает «+ В СЛОВАРЬ»', async () => {
+      await popover(page).getByRole('button', { name: '+ В СЛОВАРЬ' }).click();
+    });
 
-test('popover light-dismisses instantly and auto-closes after pointer leaves', async ({ page }) => {
-  await setUpLesson(page, 'Der Hund schläft im Garten.');
+    await test.step('Тогда та же карточка показывает «✓ В словаре»', async () => {
+      await expect(popover(page).locator('.token-card__state')).toHaveText('✓ В словаре');
+      await expect(popover(page).locator('.token-card__word')).toHaveText('der Garten');
+    });
 
-  // Click outside → gone immediately.
-  await token(page, 4).click();
-  await expect(popover(page)).toBeVisible();
-  await page.locator('.lesson__prompt').click();
-  await expect(popover(page)).toBeHidden({ timeout: 500 });
+    await test.step('Когда он открывает список слов', async () => {
+      await page.goto('/words');
+    });
 
-  // Pointer parked on the card holds it open; leaving arms the close timer.
-  await token(page, 4).click();
-  await expect(popover(page)).toBeVisible();
-  const card = await popover(page).locator('.token-card').boundingBox();
-  await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2);
-  await page.mouse.move(5, 5);
-  await expect(popover(page)).toBeHidden({ timeout: 3000 });
+    await test.step('Тогда там есть «der Garten»', async () => {
+      await expect(page.locator('.word-item__value').filter({ hasText: 'der Garten' })).toBeVisible();
+    });
+  });
+
+  test('пользователь выделяет разбор ответа мышью → выделяется сплошной текст через слова с подсказками', async ({ page }) => {
+    await test.step('Дано разбор ответа', async () => {
+      await setUpLesson(page, SENTENCE);
+    });
+
+    await test.step('Когда он протягивает мышь по всей строке', async () => {
+      const box = await page.locator('.lesson__answer-body').boundingBox();
+      await page.mouse.move(box.x + 1, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, { steps: 8 });
+      await page.mouse.up();
+    });
+
+    await test.step('Тогда выделено всё предложение целиком', async () => {
+      const selected = await page.evaluate(() => window.getSelection().toString());
+      expect(selected.replace(/\s+/g, ' ').trim()).toContain(SENTENCE);
+    });
+  });
+
+  // The user's answer and the reference are compared by eye to find where they
+  // differ, so a hinted word must add no width of its own (#409). Checked at
+  // rest, hovered, and with its hint open.
+  test('пользователь сверяет свой ответ с эталоном → слова с подсказками не шире обычного текста, расхождение видно глазом', async ({ page }) => {
+    const expectSameWidth = async () => {
+      const { hinted, plain } = await answerWidths(page);
+      expect(Math.abs(hinted - plain)).toBeLessThanOrEqual(0.5);
+    };
+
+    await test.step('Дано разбор ответа со словами с подсказками', async () => {
+      await setUpLesson(page, SENTENCE);
+      await expect(token(page, 4)).toBeVisible();
+    });
+
+    await test.step('Тогда строка так же широка, как обычный текст', async () => {
+      await expectSameWidth();
+    });
+
+    await test.step('Когда он наводит мышь на слово', async () => {
+      await token(page, 1).hover();
+    });
+
+    await test.step('Тогда ширина та же', async () => {
+      await expectSameWidth();
+    });
+
+    await test.step('Когда он открывает подсказку слова', async () => {
+      await token(page, 4).click();
+      await expect(token(page, 4)).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    await test.step('Тогда ширина та же', async () => {
+      await expectSameWidth();
+    });
+  });
+
+  test('пользователь открыл подсказку и кликнул мимо или увёл мышь → подсказка закрывается', async ({ page }) => {
+    await test.step('Дано разбор ответа с открытой подсказкой', async () => {
+      await setUpLesson(page, SENTENCE);
+      await token(page, 4).click();
+      await expect(popover(page)).toBeVisible();
+    });
+
+    await test.step('Когда он кликает вне подсказки', async () => {
+      await page.locator('.lesson__prompt').click();
+    });
+
+    await test.step('Тогда подсказка закрывается сразу', async () => {
+      await expect(popover(page)).toBeHidden({ timeout: 500 });
+    });
+
+    await test.step('Когда он снова открывает подсказку, держит на ней мышь и уводит её', async () => {
+      await token(page, 4).click();
+      await expect(popover(page)).toBeVisible();
+      const card = await popover(page).locator('.token-card').boundingBox();
+      await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2);
+      await page.mouse.move(5, 5);
+    });
+
+    await test.step('Тогда через некоторое время подсказка закрывается', async () => {
+      await expect(popover(page)).toBeHidden({ timeout: 3000 });
+    });
+  });
 });

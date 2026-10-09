@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { test, expect, chromium } = require('./fixtures');
+const { test, expect, chromium, nothingHappensFor } = require('./fixtures');
 
 // The issue's phone (#456): 384 × 800.
 test.use({ viewport: { width: 384, height: 800 } });
@@ -73,65 +73,6 @@ async function recordPointer(page, suppress = []) {
   }, suppress);
 }
 
-// Asserting that a swipe activated nothing: the recovered tap would dispatch
-// inside the touchend handler, so there is nothing to wait for — only time
-// to let pass before looking.
-const nothingHappensFor = (page, ms) => page.waitForTimeout(ms);
-
-test('a swipe that starts on a tile scrolls and activates nothing', async ({ page }) => {
-  await openCollections(page);
-  // Chrome on Android never sends the moves inside the touch slop, so the
-  // phone's cancel arrives before any `pointermove`. Desktop Chrome sends
-  // them; stopping them at the window reproduces the phone's stream.
-  await recordPointer(page, ['pointermove']);
-  const finger = await touch(page);
-  const { x, y } = await centre(page.getByRole('button', { name: 'Alltag 0', exact: true }));
-
-  await finger.down(x, y);
-  for (let dy = 20; dy <= 300; dy += 20) await finger.move(x, y - dy);
-  await finger.up();
-  await nothingHappensFor(page, 300);
-
-  // Still the themes screen: an activation would have gone home.
-  await expect(page.getByRole('button', { name: 'Открыть наборы' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Наборы' })).toBeAttached();
-  // Without the cancel this would prove nothing about the recovery.
-  expect(await page.evaluate(() => window.__pointer.cancels)).toBeGreaterThan(0);
-  // The document is what scrolls on this screen.
-  expect(await page.evaluate(() => document.scrollingElement.scrollTop)).toBeGreaterThan(100);
-});
-
-test('a still tap switches the collection', async ({ page }) => {
-  await openCollections(page);
-  const finger = await touch(page);
-  const { x, y } = await centre(page.getByRole('button', { name: 'Alltag 0', exact: true }));
-
-  await finger.down(x, y);
-  await finger.up();
-
-  await expect(page.getByRole('heading', { name: 'Alltag', exact: true })).toBeVisible();
-});
-
-test('a still touch the browser cancels is still a tap', async ({ page }) => {
-  await openCollections(page);
-  // After a cancel Chrome sends no pointerup and no click; the real ones
-  // this uncancelled touch produces are stopped at the window.
-  await recordPointer(page, ['pointerup', 'click']);
-  const finger = await touch(page);
-  const tile = page.getByRole('button', { name: 'Alltag 0', exact: true });
-  const { x, y } = await centre(tile);
-
-  // Chrome cancels a still finger when it decides the touch is its own —
-  // the #404 case. The protocol has no way to make it do so, so the cancel
-  // is the one the browser would send, dispatched on the tile mid-touch.
-  await finger.down(x, y);
-  await tile.evaluate((el) => el.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerType: 'touch' })));
-  await finger.up();
-
-  expect(await page.evaluate(() => window.__pointer.cancels)).toBe(1);
-  await expect(page.getByRole('heading', { name: 'Alltag', exact: true })).toBeVisible();
-});
-
 // Held until the ✕ shows, which is what the long press is for.
 async function longPress(page, locator, close) {
   const finger = await touch(page);
@@ -163,76 +104,6 @@ const layoutBox = (el) => {
 const overlaps = (a, b) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
-for (const { kind, target, name, count, remove } of [
-  { kind: 'row', target: 'Meetings und Besprechungen mit Kollegen 3', name: 'Meetings und Besprechungen mit Kollegen', count: '3', remove: 'Удалить набор «Meetings und Besprechungen mit Kollegen»' },
-  { kind: 'folder header', target: 'Reise 3', name: 'Reise', count: '3', remove: 'Удалить набор «Reise»' },
-  { kind: 'plain tile', target: 'Zusammenarbeitsvereinbarungen 2', name: 'Zusammenarbeitsvereinbarungen', count: '2', remove: 'Удалить набор «Zusammenarbeitsvereinbarungen»' },
-]) {
-  test(`in editing mode the ✕ on a ${kind} takes the count's place and leaves the name alone`, async ({ page }) => {
-    await openCollections(page);
-    const button = page.getByRole('button', { name: target, exact: true });
-    const nameEl = page.getByText(name, { exact: true });
-    const countEl = nameEl.locator('xpath=following-sibling::span[1]');
-    await expect(countEl).toHaveText(count);
-    const before = await nameEl.evaluate(layoutBox);
-    const close = page.getByRole('button', { name: remove });
-
-    await longPress(page, button, close);
-
-    // Transparent, not `visibility: hidden`: the count stays in the
-    // target's accessible name.
-    await expect(countEl).toHaveCSS('opacity', '0');
-    await expect(button).toBeVisible();
-    expect(await nameEl.evaluate(layoutBox)).toEqual(before);
-    const closeBox = await close.boundingBox();
-    expect(overlaps(closeBox, await nameEl.boundingBox())).toBe(false);
-    // Where the count was: the ✕ box holds the centre of its digits.
-    const digits = await countEl.evaluate(textRect);
-    const mid = { x: digits.x + digits.width / 2, y: digits.y + digits.height / 2 };
-    expect(mid.x).toBeGreaterThan(closeBox.x);
-    expect(mid.x).toBeLessThan(closeBox.x + closeBox.width);
-    expect(mid.y).toBeGreaterThan(closeBox.y);
-    expect(mid.y).toBeLessThan(closeBox.y + closeBox.height);
-  });
-}
-
-// The keyboard's reveal is `:focus-visible`: the focus a touch delete hands
-// to the neighbour shows no ✕ of its own.
-test('a tap on the ✕ deletes and reveals no other ✕', async ({ page }) => {
-  await openCollections(page);
-  const button = page.getByRole('button', { name: 'Alltag 0', exact: true });
-  const close = page.getByRole('button', { name: 'Удалить набор «Alltag»' });
-  await longPress(page, button, close);
-
-  const finger = await touch(page);
-  const { x, y } = await centre(close);
-  await finger.down(x, y);
-  await finger.up();
-
-  await expect(button).toHaveCount(0);
-  await expect(page.locator('.masonry [data-collection-id]:focus')).toHaveCount(1);
-  const shown = await page.locator('.tile__close').evaluateAll(
-    (els) => els.filter((el) => getComputedStyle(el).opacity !== '0').length);
-  expect(shown).toBe(0);
-});
-
-test('names are German, «Всё подряд» is not, and nothing overflows its tile', async ({ page }) => {
-  await openCollections(page);
-  await expect(page.getByText('Unterkunftsmöglichkeiten', { exact: true })).toHaveAttribute('lang', 'de');
-  await expect(page.getByText('Deutsch-Test', { exact: true })).toHaveAttribute('lang', 'de');
-  await expect(page.getByText('Всё подряд', { exact: true })).not.toHaveAttribute('lang', /./);
-  await expect(page.getByText('Unterkunftsmöglichkeiten', { exact: true })).toHaveCSS('hyphens', 'auto');
-
-  // A string with no hyphenation point still wraps inside its tile.
-  const unbreakable = page.getByText('x'.repeat(40), { exact: true });
-  const fits = await unbreakable.evaluate((el) => {
-    const box = el.getBoundingClientRect();
-    const tile = el.closest('.tile').getBoundingClientRect();
-    return el.scrollWidth <= el.clientWidth && box.right <= tile.right && box.left >= tile.left;
-  });
-  expect(fits).toBe(true);
-});
-
 // Where each line of a text node starts, as character offsets.
 const lineStarts = (el) => {
   const text = el.firstChild;
@@ -260,72 +131,253 @@ const lineStarts = (el) => {
 // borrowed when there is one; without it (CI) there is nothing to measure.
 const hyphenData = path.join(os.homedir(), '.config/google-chrome/hyphen-data');
 
-test('a long German word breaks at a syllable with a hyphen', async ({ baseURL }, testInfo) => {
-  test.skip(!fs.existsSync(hyphenData), 'no Chrome hyphenation data on this machine');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hyphen-'));
-  fs.cpSync(hyphenData, path.join(dir, 'hyphen-data'), { recursive: true });
-  const context = await chromium.launchPersistentContext(dir, {
-    channel: 'chrome',
-    headless: true,
-    viewport: { width: 384, height: 800 },
-    hasTouch: true,
-    ignoreDefaultArgs: ['--disable-component-update'],
+
+test.describe('Темы на телефоне: касания', () => {
+  test('пользователь проводит пальцем, начав со плитки → экран прокручивается, ничего не открывается', async ({ page }) => {
+    let x, y;
+    let finger;
+
+    await test.step('Дано экран тем, длиннее экрана', async () => {
+      await openCollections(page);
+      // Chrome on Android never sends the moves inside the touch slop, so the
+      // phone's cancel arrives before any `pointermove`. Desktop Chrome sends
+      // them; stopping them at the window reproduces the phone's stream.
+      await recordPointer(page, ['pointermove']);
+      finger = await touch(page);
+      ({ x, y } = await centre(page.getByRole('button', { name: 'Alltag 0', exact: true })));
+    });
+
+    await test.step('Когда он ведёт палец вверх от плитки «Alltag»', async () => {
+      await finger.down(x, y);
+      for (let dy = 20; dy <= 300; dy += 20) await finger.move(x, y - dy);
+      await finger.up();
+      await nothingHappensFor(page, 300);
+    });
+
+    await test.step('Тогда он всё ещё на экране тем, а страница прокручена', async () => {
+      // An activation would have gone home.
+      await expect(page.getByRole('button', { name: 'Открыть наборы' })).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: 'Наборы' })).toBeAttached();
+      // Without the cancel this would prove nothing about the recovery.
+      expect(await page.evaluate(() => window.__pointer.cancels)).toBeGreaterThan(0);
+      // The document is what scrolls on this screen.
+      expect(await page.evaluate(() => document.scrollingElement.scrollTop)).toBeGreaterThan(100);
+    });
   });
-  try {
-    const page = context.pages()[0] || await context.newPage();
-    await openCollections(page, baseURL);
-    const word = page.getByText('Unterkunftsmöglichkeiten', { exact: true });
-    // Un-ter-kunfts-mög-lich-kei-ten
-    const syllables = [2, 5, 11, 14, 18, 21];
-    const starts = await word.evaluate(lineStarts);
-    expect(starts.length).toBeGreaterThan(0);
-    for (const at of starts) expect(syllables).toContain(at);
-    await word.screenshot({ path: testInfo.outputPath('hyphenated.png') });
-  } finally {
-    await context.close();
-    fs.rmSync(dir, { recursive: true, force: true });
+
+  test('пользователь касается плитки, не двигая пальцем → тема переключается, даже если браузер отменил касание', async ({ page }) => {
+    const tile = page.getByRole('button', { name: 'Alltag 0', exact: true });
+
+    await test.step('Дано экран тем', async () => {
+      await openCollections(page);
+    });
+
+    await test.step('Когда он касается плитки «Alltag» и убирает палец', async () => {
+      const finger = await touch(page);
+      const { x, y } = await centre(tile);
+      await finger.down(x, y);
+      await finger.up();
+    });
+
+    await test.step('Тогда открыта тема «Alltag»', async () => {
+      await expect(page.getByRole('heading', { name: 'Alltag', exact: true })).toBeVisible();
+    });
+
+    await test.step('Дано экран тем снова, браузер отменяет неподвижное касание', async () => {
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await expect(tile).toBeVisible();
+      // After a cancel Chrome sends no pointerup and no click; the real ones
+      // this uncancelled touch produces are stopped at the window.
+      await recordPointer(page, ['pointerup', 'click']);
+    });
+
+    await test.step('Когда он касается плитки, а браузер отменяет касание', async () => {
+      const finger = await touch(page);
+      const { x, y } = await centre(tile);
+      // Chrome cancels a still finger when it decides the touch is its own —
+      // the #404 case. The protocol cannot make it do so, so the cancel is the
+      // one the browser would send, dispatched on the tile mid-touch.
+      await finger.down(x, y);
+      await tile.evaluate((el) => el.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerType: 'touch' })));
+      await finger.up();
+    });
+
+    await test.step('Тогда тема всё равно переключена', async () => {
+      expect(await page.evaluate(() => window.__pointer.cancels)).toBe(1);
+      await expect(page.getByRole('heading', { name: 'Alltag', exact: true })).toBeVisible();
+    });
+  });
+
+  for (const { kind, target, name, count, remove } of [
+    { kind: 'строку папки', target: 'Meetings und Besprechungen mit Kollegen 3', name: 'Meetings und Besprechungen mit Kollegen', count: '3', remove: 'Удалить набор «Meetings und Besprechungen mit Kollegen»' },
+    { kind: 'заголовок папки', target: 'Reise 3', name: 'Reise', count: '3', remove: 'Удалить набор «Reise»' },
+    { kind: 'плитку без папки', target: 'Zusammenarbeitsvereinbarungen 2', name: 'Zusammenarbeitsvereinbarungen', count: '2', remove: 'Удалить набор «Zusammenarbeitsvereinbarungen»' },
+  ]) {
+    test(`пользователь долго держит ${kind} → ✕ встаёт на место счётчика, имя не сдвигается`, async ({ page }) => {
+      const button = page.getByRole('button', { name: target, exact: true });
+      const nameEl = page.getByText(name, { exact: true });
+      const countEl = nameEl.locator('xpath=following-sibling::span[1]');
+      const close = page.getByRole('button', { name: remove });
+      let before;
+
+      await test.step('Дано экран тем, счётчик виден', async () => {
+        await openCollections(page);
+        await expect(countEl).toHaveText(count);
+        before = await nameEl.evaluate(layoutBox);
+      });
+
+      await test.step('Когда он долго держит палец', async () => {
+        await longPress(page, button, close);
+      });
+
+      await test.step('Тогда счётчик прозрачен, но плитка на месте, имя не сдвинулось', async () => {
+        // Transparent, not `visibility: hidden`: the count stays in the
+        // target's accessible name.
+        await expect(countEl).toHaveCSS('opacity', '0');
+        await expect(button).toBeVisible();
+        expect(await nameEl.evaluate(layoutBox)).toEqual(before);
+      });
+
+      await test.step('Тогда ✕ не перекрывает имя и стоит там, где был счётчик', async () => {
+        const closeBox = await close.boundingBox();
+        expect(overlaps(closeBox, await nameEl.boundingBox())).toBe(false);
+        const digits = await countEl.evaluate(textRect);
+        const mid = { x: digits.x + digits.width / 2, y: digits.y + digits.height / 2 };
+        expect(mid.x).toBeGreaterThan(closeBox.x);
+        expect(mid.x).toBeLessThan(closeBox.x + closeBox.width);
+        expect(mid.y).toBeGreaterThan(closeBox.y);
+        expect(mid.y).toBeLessThan(closeBox.y + closeBox.height);
+      });
+    });
   }
-});
 
-// Owner's report on #459: moving editing from one row to another made the
-// ✕ jump. A row in editing mode is 24 px wider (it reaches past the tile's
-// padding), and a ✕ placed from the row's edge moved 12 px while fading
-// out. Sampled every frame across the switch, each visible ✕ stays put.
-test('moving editing between rows of a folder moves no ✕', async ({ page }) => {
-  await openCollections(page);
-  const fromLabel = 'Удалить набор «Meetings und Besprechungen mit Kollegen»';
-  const toLabel = 'Удалить набор «E-Mails»';
-  const from = page.getByRole('button', { name: 'Meetings und Besprechungen mit Kollegen 3', exact: true });
-  const to = page.getByRole('button', { name: 'E-Mails 1', exact: true });
-  const fromClose = page.getByRole('button', { name: fromLabel });
-  const toClose = page.getByRole('button', { name: toLabel });
-  // Where each ✕ stands at rest: the outgoing one in editing, the incoming
-  // one before it is shown.
-  const toRest = await toClose.boundingBox();
-  await longPress(page, from, fromClose);
-  const fromRest = await fromClose.boundingBox();
+  // The keyboard's reveal is `:focus-visible`: the focus a touch delete hands
+  // to the neighbour shows no ✕ of its own.
+  test('пользователь нажимает на ✕ → тема удалена, других ✕ не появилось', async ({ page }) => {
+    const button = page.getByRole('button', { name: 'Alltag 0', exact: true });
+    const close = page.getByRole('button', { name: 'Удалить набор «Alltag»' });
 
-  await page.evaluate(() => {
-    const closes = [...document.querySelectorAll('.tile__row .tile__close')];
-    window.__frames = [];
-    const sample = () => {
-      window.__frames.push(closes.map((el) => {
-        const r = el.getBoundingClientRect();
-        return { label: el.getAttribute('aria-label'), x: r.x, y: r.y, opacity: Number(getComputedStyle(el).opacity) };
-      }));
-      if (window.__frames.length < 60) requestAnimationFrame(sample);
-    };
-    requestAnimationFrame(sample);
+    await test.step('Дано долгое нажатие на «Alltag» показало ✕', async () => {
+      await openCollections(page);
+      await longPress(page, button, close);
+    });
+
+    await test.step('Когда он касается ✕', async () => {
+      const finger = await touch(page);
+      const { x, y } = await centre(close);
+      await finger.down(x, y);
+      await finger.up();
+    });
+
+    await test.step('Тогда плитки «Alltag» нет, фокус у соседа, ни одного ✕ не видно', async () => {
+      await expect(button).toHaveCount(0);
+      await expect(page.locator('.masonry [data-collection-id]:focus')).toHaveCount(1);
+      const shown = await page.locator('.tile__close').evaluateAll(
+        (els) => els.filter((el) => getComputedStyle(el).opacity !== '0').length);
+      expect(shown).toBe(0);
+    });
   });
-  await longPress(page, to, toClose);
-  await expect.poll(() => page.evaluate(() => window.__frames.length)).toBe(60);
 
-  const visible = (await page.evaluate(() => window.__frames)).flat().filter((c) => c.opacity > 0);
-  const fromSeen = visible.filter((c) => c.label === fromLabel);
-  const toSeen = visible.filter((c) => c.label === toLabel);
-  // Both were caught mid-fade, or the sampling proves nothing.
-  expect(fromSeen.some((c) => c.opacity < 1)).toBe(true);
-  expect(toSeen.some((c) => c.opacity < 1)).toBe(true);
-  for (const c of fromSeen) expect([c.x, c.y]).toEqual([fromRest.x, fromRest.y]);
-  for (const c of toSeen) expect([c.x, c.y]).toEqual([toRest.x, toRest.y]);
+  test('пользователь открывает темы с длинными немецкими названиями → названия помещаются в плитки, длинные слова переносятся по слогам', async ({ page, baseURL }) => {
+    await test.step('Дано экран тем с длинными названиями', async () => {
+      await openCollections(page);
+    });
+
+    await test.step('Тогда немецкие названия помечены как немецкие, «Всё подряд» — нет', async () => {
+      await expect(page.getByText('Unterkunftsmöglichkeiten', { exact: true })).toHaveAttribute('lang', 'de');
+      await expect(page.getByText('Deutsch-Test', { exact: true })).toHaveAttribute('lang', 'de');
+      await expect(page.getByText('Всё подряд', { exact: true })).not.toHaveAttribute('lang', /./);
+      await expect(page.getByText('Unterkunftsmöglichkeiten', { exact: true })).toHaveCSS('hyphens', 'auto');
+    });
+
+    await test.step('Тогда строка без мест переноса всё равно умещается в плитку', async () => {
+      const unbreakable = page.getByText('x'.repeat(40), { exact: true });
+      const fits = await unbreakable.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        const tile = el.closest('.tile').getBoundingClientRect();
+        return el.scrollWidth <= el.clientWidth && box.right <= tile.right && box.left >= tile.left;
+      });
+      expect(fits).toBe(true);
+    });
+
+    await test.step('Тогда длинное слово переносится только по слогам, с дефисом', async () => {
+      if (!fs.existsSync(hyphenData)) {
+        test.info().annotations.push({ type: 'skipped-step', description: 'no Chrome hyphenation data on this machine' });
+        return;
+      }
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hyphen-'));
+      fs.cpSync(hyphenData, path.join(dir, 'hyphen-data'), { recursive: true });
+      const context = await chromium.launchPersistentContext(dir, {
+        channel: 'chrome',
+        headless: true,
+        viewport: { width: 384, height: 800 },
+        hasTouch: true,
+        ignoreDefaultArgs: ['--disable-component-update'],
+      });
+      try {
+        const hyphenated = context.pages()[0] || await context.newPage();
+        await openCollections(hyphenated, baseURL);
+        const word = hyphenated.getByText('Unterkunftsmöglichkeiten', { exact: true });
+        // Un-ter-kunfts-mög-lich-kei-ten
+        const syllables = [2, 5, 11, 14, 18, 21];
+        const starts = await word.evaluate(lineStarts);
+        expect(starts.length).toBeGreaterThan(0);
+        for (const at of starts) expect(syllables).toContain(at);
+      } finally {
+        await context.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  // Owner's report on #459: moving editing from one row to another made the
+  // ✕ jump. A row in editing mode is 24 px wider (it reaches past the tile's
+  // padding), and a ✕ placed from the row's edge moved 12 px while fading
+  // out. Sampled every frame across the switch, each visible ✕ stays put.
+  test('пользователь переносит правку с одной строки папки на другую → ни один ✕ не прыгает', async ({ page }) => {
+    const fromLabel = 'Удалить набор «Meetings und Besprechungen mit Kollegen»';
+    const toLabel = 'Удалить набор «E-Mails»';
+    const from = page.getByRole('button', { name: 'Meetings und Besprechungen mit Kollegen 3', exact: true });
+    const to = page.getByRole('button', { name: 'E-Mails 1', exact: true });
+    const fromClose = page.getByRole('button', { name: fromLabel });
+    const toClose = page.getByRole('button', { name: toLabel });
+    let toRest, fromRest;
+
+    await test.step('Дано правка включена на первой строке папки', async () => {
+      await openCollections(page);
+      // Where each ✕ stands at rest: the outgoing one in editing, the
+      // incoming one before it is shown.
+      toRest = await toClose.boundingBox();
+      await longPress(page, from, fromClose);
+      fromRest = await fromClose.boundingBox();
+    });
+
+    await test.step('Когда он долго держит вторую строку папки', async () => {
+      await page.evaluate(() => {
+        const closes = [...document.querySelectorAll('.tile__row .tile__close')];
+        window.__frames = [];
+        const sample = () => {
+          window.__frames.push(closes.map((el) => {
+            const r = el.getBoundingClientRect();
+            return { label: el.getAttribute('aria-label'), x: r.x, y: r.y, opacity: Number(getComputedStyle(el).opacity) };
+          }));
+          if (window.__frames.length < 60) requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      });
+      await longPress(page, to, toClose);
+      await expect.poll(() => page.evaluate(() => window.__frames.length)).toBe(60);
+    });
+
+    await test.step('Тогда каждый ✕ в каждом кадре стоит на своём месте', async () => {
+      const visible = (await page.evaluate(() => window.__frames)).flat().filter((c) => c.opacity > 0);
+      const fromSeen = visible.filter((c) => c.label === fromLabel);
+      const toSeen = visible.filter((c) => c.label === toLabel);
+      // Both were caught mid-fade, or the sampling proves nothing.
+      expect(fromSeen.some((c) => c.opacity < 1)).toBe(true);
+      expect(toSeen.some((c) => c.opacity < 1)).toBe(true);
+      for (const c of fromSeen) expect([c.x, c.y]).toEqual([fromRest.x, fromRest.y]);
+      for (const c of toSeen) expect([c.x, c.y]).toEqual([toRest.x, toRest.y]);
+    });
+  });
 });

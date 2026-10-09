@@ -1,5 +1,5 @@
-// Page states the specs wait for: the service worker, the metrics, and the
-// dictionary being ready on home.
+// Page states the specs wait for: the service worker and the dictionary being
+// ready on home.
 
 // The first load of a fresh context: the worker installs, activates and
 // claims the page. Resolves once the page is controlled — before that nothing
@@ -10,11 +10,6 @@ async function openControlled(page, beforeClaim) {
   if (beforeClaim) await beforeClaim(page);
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30000 });
 }
-
-// `clj->js` keeps ClojureScript keyword names as written, so these arrive as
-// kebab-case. Reading them as camelCase silently yields undefined, which has
-// already cost one debugging round.
-const readMetrics = (page) => page.evaluate(() => window.__metrics());
 
 // Readiness is reported by the dictionary worker, which starts alongside the
 // app; after a reload the metrics global itself has to come back first.
@@ -33,4 +28,4 @@ async function openHome(page) {
   await dictionaryReady(page);
 }
 
-module.exports = { openControlled, readMetrics, dictionaryReady, openHome };
+module.exports = { openControlled, openHome };

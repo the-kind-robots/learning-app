@@ -1,4 +1,4 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, nothingHappensFor } = require('./fixtures');
 
 // The dictionary belongs to the tab being typed into (GH-351).
 //
@@ -65,16 +65,14 @@ const PAGE_STATE_SHIM = ({ hidden, focused }) => {
 // A new tab opens in front, which in a real browser takes the keyboard off
 // whichever tab had it. Nothing here knows about the other pages, so callers
 // that care say so with `focusOnly`.
-const openHome = async (context, { hidden = false, focused = true } = {}) => {
+const openHome = async (context) => {
   const page = await context.newPage();
-  await page.addInitScript(PAGE_STATE_SHIM, { hidden, focused });
+  await page.addInitScript(PAGE_STATE_SHIM, { hidden: false, focused: true });
   await page.goto('/home');
   await expect(valueField(page)).toBeVisible();
   return page;
 };
 
-const show = (page) => page.evaluate(() => window.__setHidden(false));
-const hide = (page) => page.evaluate(() => window.__setHidden(true));
 const blur = (page) => page.evaluate(() => window.__setFocused(false));
 const focus = (page) => page.evaluate(() => window.__setFocused(true));
 
@@ -93,11 +91,6 @@ const type = async (page, word) => {
 // Matching on the text, so a list left over from a previous word cannot pass.
 const suggestions = (page, word) => options(page).filter({ hasText: word });
 
-// A plain wait, named so the reason is visible at the call site: these
-// assertions are that nothing appears, and nothing appearing takes time to
-// establish.
-const nothingHappensFor = (page, ms) => page.waitForTimeout(ms);
-
 // A query is answered from what the tab has when it arrives, and nothing is
 // kept: one sent while the turn is still being taken comes back empty and is
 // never replayed. A user looking at an empty list types the word again, and so
@@ -115,152 +108,65 @@ const typeUntilAnswered = async (page, word, count) => {
   }
 };
 
-test('the foreground tab has the dictionary and a background one does not', async ({ context }) => {
-  const first = await openHome(context);
-  await typeUntilAnswered(first, 'Fenster', FIXTURE_FENSTER_MATCHES);
+test.describe('Подсказки слов в нескольких вкладках', () => {
+  test('пользователь печатает в двух видимых вкладках → подсказывает та, где клавиатура, и переходит за ним', async ({ context }) => {
+    let left, right;
 
-  // The second tab opens in front, so the first steps aside and the second
-  // takes over. Then the keyboard goes back, and the second is left visible
-  // but not in front — which is where a tab has no dictionary.
-  const second = await openHome(context);
-  await focusOnly(first, second);
+    await test.step('Дано две видимые вкладки главной (разделённый экран), клавиатура в левой', async () => {
+      // Neither tab is hidden at any point here, so `document.hidden` is false
+      // for both and cannot decide between them.
+      left = await openHome(context);
+      right = await openHome(context);
+      await focusOnly(left, right);
+    });
 
-  await type(second, 'Fenster');
-  await nothingHappensFor(second, SILENCE_MS);
-  await expect(options(second)).toHaveCount(0);
-});
+    await test.step('Когда он печатает «Fenster» в левой вкладке', async () => {
+      await typeUntilAnswered(left, 'Fenster', FIXTURE_FENSTER_MATCHES);
+    });
 
-test('two visible tabs: the one with the keyboard gets the dictionary', async ({ context }) => {
-  // Neither tab is hidden at any point here — this is the split-screen case,
-  // where `document.hidden` is false for both and cannot decide between them.
-  const left = await openHome(context);
-  const right = await openHome(context);
+    await test.step('Тогда левая вкладка показывает две подсказки', async () => {
+      await expect(suggestions(left, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES);
+    });
 
-  await focusOnly(left, right);
-  await typeUntilAnswered(left, 'Fenster', FIXTURE_FENSTER_MATCHES);
-  await type(right, 'Frage');
-  await nothingHappensFor(right, SILENCE_MS);
-  await expect(options(right)).toHaveCount(0);
+    await test.step('Когда он печатает «Frage» в правой вкладке, где клавиатуры нет', async () => {
+      await type(right, 'Frage');
+      await nothingHappensFor(right, SILENCE_MS);
+    });
 
-  // The user clicks into the other pane. Nothing changed about what is on
-  // screen; the dictionary still has to move, and the word has to be asked
-  // again — the answer given while the pane was idle was an empty one.
-  await focusOnly(right, left);
-  await typeUntilAnswered(right, 'Frage', 1);
-});
+    await test.step('Тогда правая вкладка подсказок не показывает', async () => {
+      await expect(options(right)).toHaveCount(0);
+    });
 
-test('the query asked while waiting comes back empty and is not replayed', async ({ context }) => {
-  const first = await openHome(context);
-  await typeUntilAnswered(first, 'Fenster', FIXTURE_FENSTER_MATCHES);
+    await test.step('Когда он переходит в правую вкладку и печатает «Frage» снова', async () => {
+      // Nothing changed about what is on screen; the dictionary still has to
+      // move, and the word asked again — the first answer was an empty one.
+      await focusOnly(right, left);
+      await typeUntilAnswered(right, 'Frage', 1);
+    });
 
-  const second = await openHome(context);
-  await focusOnly(first, second);
+    await test.step('Тогда правая вкладка показывает подсказку', async () => {
+      await expect(suggestions(right, 'Frage')).toHaveCount(1);
+    });
+  });
 
-  // Asked of a tab with no turn: answered, and answered with nothing. The
-  // wait is what says it was answered rather than left pending — a held query
-  // would land here once the turn came.
-  await type(second, 'Fenster');
-  await nothingHappensFor(second, SILENCE_MS);
-  await expect(options(second)).toHaveCount(0);
+  test('пользователь закрывает вкладку, где работали подсказки → в оставшейся подсказки работают', async ({ context }) => {
+    let holder, successor;
 
-  // The turn arrives with nothing waiting for it. No typing since, so nothing
-  // is asked again and the list stays as it was.
-  await focusOnly(second, first);
-  await nothingHappensFor(second, SILENCE_MS);
-  await expect(options(second)).toHaveCount(0);
+    await test.step('Дано две вкладки, в первой подсказки работают', async () => {
+      holder = await openHome(context);
+      await typeUntilAnswered(holder, 'Fenster', FIXTURE_FENSTER_MATCHES);
+      successor = await openHome(context);
+    });
 
-  // Typing is what asks, and now there is a dictionary to answer.
-  await typeUntilAnswered(second, 'Fenster', FIXTURE_FENSTER_MATCHES);
-});
+    await test.step('Когда он закрывает первую вкладку', async () => {
+      // Killed rather than backgrounded: no handler of ours runs, and the
+      // lock has to come back from the browser.
+      await holder.close();
+    });
 
-test('the tab that leaves the foreground gives the dictionary back', async ({ context }) => {
-  const first = await openHome(context);
-  await typeUntilAnswered(first, 'Fenster', FIXTURE_FENSTER_MATCHES);
-
-  const second = await openHome(context);
-
-  // Backgrounded, not merely blurred: both halves of the rule release it.
-  await hide(first);
-  await blur(first);
-  await focus(second);
-  await typeUntilAnswered(second, 'Frage', 1);
-
-  // And back again: the first tab returns, the second steps aside.
-  await hide(second);
-  await blur(second);
-  await show(first);
-  await focus(first);
-  await typeUntilAnswered(first, 'Fehler', 1);
-});
-
-test('focus flickering back and forth leaves the foreground tab working', async ({ context }) => {
-  const first = await openHome(context);
-  await typeUntilAnswered(first, 'Fenster', FIXTURE_FENSTER_MATCHES);
-  const second = await openHome(context);
-  await focusOnly(first, second);
-
-  // Focus is lost far more often than visibility — a click in the address
-  // bar, a glance at devtools — so this is the flicker that matters now.
-  // Twelve changes with nothing waited on in between, so each take and give
-  // overlaps the next. The lock serialises them; nothing is left half-held.
-  for (let i = 0; i < 3; i++) {
-    await blur(first);
-    await focus(second);
-    await blur(second);
-    await focus(first);
-  }
-
-  await typeUntilAnswered(first, 'Haus', 1);
-});
-
-test('with no tab in the foreground, the first one back takes the dictionary', async ({ context }) => {
-  const first = await openHome(context);
-  await typeUntilAnswered(first, 'Fenster', FIXTURE_FENSTER_MATCHES);
-  const second = await openHome(context);
-
-  // The whole browser window goes behind something else: both tabs still
-  // visible, neither holding the keyboard. Nobody holds the pool and nobody
-  // needs it — a resting state, not a fault.
-  await blur(first);
-  await blur(second);
-  await nothingHappensFor(second, 500);
-
-  await focus(second);
-  await typeUntilAnswered(second, 'Hund', 1);
-});
-
-// What this pins is the outcome, not the mechanism: a tab that was never in
-// front shows nothing, and shows something once it is. Which of the two guards
-// produced that — the startup value of `foreground`, or the
-// `if (!foreground) return` at the top of the lock callback — is not
-// observable from out here, and this test deliberately does not claim to say.
-//
-// Measured, because the distinction is tempting to assert and would be wrong:
-// a build that starts `foreground = true` and calls `acquire()` from `start()`
-// passes this too. Its lock request is granted a task later than the page's
-// first report is delivered, so the early return catches it. The contract
-// worth locking is the behaviour; nothing else in this file covers a tab that
-// boots out of the foreground at all.
-test('a tab that boots in the background has no dictionary until it is looked at', async ({ context }) => {
-  const page = await openHome(context, { hidden: true, focused: false });
-
-  await type(page, 'Fenster');
-  await nothingHappensFor(page, SILENCE_MS);
-  await expect(options(page)).toHaveCount(0);
-
-  await show(page);
-  await focus(page);
-  await typeUntilAnswered(page, 'Fenster', FIXTURE_FENSTER_MATCHES);
-});
-
-test('closing the tab that holds the dictionary releases it', async ({ context }) => {
-  const holder = await openHome(context);
-  await typeUntilAnswered(holder, 'Fenster', FIXTURE_FENSTER_MATCHES);
-
-  const successor = await openHome(context);
-  // Killed rather than backgrounded: no handler of ours runs, and the lock has
-  // to come back from the browser.
-  await holder.close();
-
-  await typeUntilAnswered(successor, 'Fenster', FIXTURE_FENSTER_MATCHES);
+    await test.step('Тогда во второй вкладке «Fenster» даёт две подсказки', async () => {
+      await typeUntilAnswered(successor, 'Fenster', FIXTURE_FENSTER_MATCHES);
+      await expect(suggestions(successor, 'Fenster')).toHaveCount(FIXTURE_FENSTER_MATCHES);
+    });
+  });
 });

@@ -39,27 +39,6 @@ const course = [
   ['gram', 'Grammatik / Konnektoren', ['vocab:e', 'vocab:f']],
 ];
 
-test('collections with a slash fold into folder tiles whose header counts the union', async ({ page }) => {
-  await page.goto('/');
-  await seedCollections(page, course);
-
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
-
-  // The header's name is its text: the folder key and the union count —
-  // a, b, c, d with b once.
-  await expect(page.getByRole('button', { name: 'Kurs 4', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Kapitel 2 1', exact: true })).toBeVisible();
-  // No `Grammatik` document: the header is a label with the children's
-  // union, not a target.
-  await expect(page.getByRole('heading', { name: 'Grammatik 2', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Grammatik/ })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Konnektoren 2', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Всё подряд 0', exact: true })).toBeVisible();
-  // A child is never a tile of its own.
-  await expect(page.getByRole('button', { name: /Kurs \/ Kapitel/ })).toHaveCount(0);
-});
-
 // All three targets are buttons, not divs wearing `role="button"`: the role
 // alone announces a control the keyboard cannot reach. Tab is the only honest
 // test of that — `.focus()` does nothing on an unfocusable element and would
@@ -84,199 +63,225 @@ async function tabUntil(page, locator, key = 'Tab') {
   return reached;
 }
 
-test('a keyboard reaches every target, each ✕ right after its own', async ({ page }) => {
-  await page.goto('/');
-  await seedCollections(page, course.concat([['solo', 'Solo', ['vocab:a']]]));
+test.describe('Плитки тем', () => {
+  test('пользователь открывает темы с вложенными названиями → видит папки с суммой слов в заголовке', async ({ page }) => {
+    await test.step('Дано темы «Kurs», «Kurs / Kapitel 1», «Kurs / Kapitel 2» и «Grammatik / Konnektoren»', async () => {
+      await page.goto('/');
+      await seedCollections(page, course);
+    });
 
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
-  // Last in the reading order, so the walk passes the others on the way.
-  const tile = page.getByRole('button', { name: 'Solo 1', exact: true });
-  await expect(tile).toBeVisible();
+    await test.step('Когда он открывает экран тем', async () => {
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    });
 
-  // «Всё подряд», the Grammatik folder's one row, the Kurs header and its
-  // two rows, then the plain tile: every target in reading order, and every
-  // named collection's ✕ right after it.
-  expect(await tabUntil(page, page.getByRole('button', { name: 'Удалить набор «Solo»' }))).toEqual([
-    'main',
-    'collection:gram', 'Удалить набор «Konnektoren»',
-    'collection:kurs', 'Удалить набор «Kurs»',
-    'collection:k1', 'Удалить набор «Kapitel 1»',
-    'collection:k2', 'Удалить набор «Kapitel 2»',
-    'collection:solo', 'Удалить набор «Solo»',
-  ]);
+    await test.step('Тогда папка «Kurs» насчитывает 4 слова без повторов, а главы — свои', async () => {
+      await expect(page.getByRole('button', { name: 'Kurs 4', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Kapitel 2 1', exact: true })).toBeVisible();
+    });
 
-  await page.keyboard.press('Shift+Tab');
-  await expect(tile).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Solo', exact: true })).toBeVisible();
-});
+    await test.step('Тогда «Grammatik» без своей темы — надпись, а не плитка', async () => {
+      await expect(page.getByRole('heading', { name: 'Grammatik 2', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Grammatik/ })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Konnektoren 2', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Всё подряд 0', exact: true })).toBeVisible();
+    });
 
-test('the ✕ shows for keyboard focus, deletes on Enter and hands focus to the neighbour', async ({ page }) => {
-  await page.goto('/');
-  await seedCollections(page, course.concat([['solo', 'Solo', ['vocab:a']]]));
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
-  const tile = page.getByRole('button', { name: 'Solo 1', exact: true });
-  await tile.click();
-  await expect(page.getByRole('heading', { name: 'Solo', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
-
-  // The active collection is the current one, and only it.
-  await expect(tile).toHaveAttribute('aria-current', 'true');
-  await expect(page.locator('.masonry [aria-current]')).toHaveCount(1);
-
-  // Hidden and untappable until keyboard focus comes in.
-  const close = page.getByRole('button', { name: 'Удалить набор «Solo»' });
-  await expect(close).toHaveCSS('opacity', '0');
-  await expect(close).toHaveCSS('pointer-events', 'none');
-
-  await tabUntil(page, tile);
-  await expect(close).toHaveCSS('opacity', '1');
-  await expect(close).toHaveCSS('pointer-events', 'auto');
-  await expect(tile.locator('.tile__count')).toHaveCSS('opacity', '0');
-  await page.keyboard.press('Tab');
-  await expect(close).toBeFocused();
-
-  // Last on the screen: focus falls back to the target before it, the Kurs
-  // folder's last row.
-  await page.keyboard.press('Enter');
-  await expect(tile).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Kapitel 2 1', exact: true })).toBeFocused();
-  await expect(page.getByRole('status')).toHaveText('Набор «Solo» удалён');
-  expect(await collectionNames(page)).not.toContain('Solo');
-  // The active collection is gone, so «Всё подряд» is current.
-  await expect(page.getByRole('button', { name: 'Всё подряд 0', exact: true })).toHaveAttribute('aria-current', 'true');
-
-  // A folder's parent leaves a label behind; its first row takes the focus.
-  await tabUntil(page, page.getByRole('button', { name: 'Удалить набор «Kurs»' }), 'Shift+Tab');
-  await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: 'Kurs 4', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Kurs 3', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toBeFocused();
-  await expect(page.getByRole('status')).toHaveText('Набор «Kurs» удалён');
-});
-
-test('the same name deleted twice in a row is announced twice', async ({ page }) => {
-  await page.goto('/');
-  await seedCollections(page, course.concat([['solo', 'Solo', ['vocab:a']]]));
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
-  await expect(page.getByRole('button', { name: 'Solo 1', exact: true })).toBeVisible();
-
-  // A live region speaks on a change of text: every text it shows is kept.
-  await page.getByRole('status').evaluate((region) => {
-    window.statusTexts = [];
-    new MutationObserver(() => window.statusTexts.push(region.textContent))
-      .observe(region, { childList: true, characterData: true, subtree: true });
+    await test.step('Тогда вложенные темы не показаны отдельными плитками', async () => {
+      await expect(page.getByRole('button', { name: /Kurs \/ Kapitel/ })).toHaveCount(0);
+    });
   });
-  const message = 'Набор «Solo» удалён';
-  const deleteSolo = async (tileName) => {
-    await page.getByRole('button', { name: 'Удалить набор «Solo»' }).focus();
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('button', { name: tileName, exact: true })).toHaveCount(0);
-  };
 
-  await deleteSolo('Solo 1');
-  await expect(page.getByRole('status')).toHaveText(message);
-  page.once('dialog', (dialog) => dialog.accept('Solo'));
-  await page.getByRole('button', { name: 'Новый набор' }).click();
-  await expect(page.getByRole('button', { name: 'Solo 0', exact: true })).toBeVisible();
-  await deleteSolo('Solo 0');
+  test('пользователь ходит по темам с клавиатуры → доходит до каждой плитки, видит ✕ при фокусе и удаляет тему Enter', async ({ page }) => {
+    const tile = page.getByRole('button', { name: 'Solo 1', exact: true });
+    const close = page.getByRole('button', { name: 'Удалить набор «Solo»' });
 
-  // Emptied first, then the same message again.
-  await expect.poll(() => page.evaluate(() => window.statusTexts)).toEqual([message, '', message]);
-  await expect(page.getByRole('status')).toHaveText(message);
-});
+    await test.step('Дано экран тем с активной темой «Solo»', async () => {
+      await page.goto('/');
+      await seedCollections(page, course.concat([['solo', 'Solo', ['vocab:a']]]));
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await tile.click();
+      await expect(page.getByRole('heading', { name: 'Solo', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    });
 
-test('a folder header with no document is a label; creating the parent through «+» makes it the tile', async ({ page }) => {
-  await page.goto('/');
-  await seedCollections(page, course);
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    await test.step('Тогда активна только «Solo», а её ✕ скрыт и не нажимается', async () => {
+      await expect(tile).toHaveAttribute('aria-current', 'true');
+      await expect(page.locator('.masonry [aria-current]')).toHaveCount(1);
+      await expect(close).toHaveCSS('opacity', '0');
+      await expect(close).toHaveCSS('pointer-events', 'none');
+    });
 
-  // The label takes no tap: still on the themes screen, no document written.
-  await page.getByRole('heading', { name: 'Grammatik 2', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Наборы' })).toBeVisible();
-  expect(await collectionNames(page)).not.toContain('Grammatik');
+    await test.step('Когда он идёт Tab-ом до «Solo»', async () => {
+      // «Всё подряд», the Grammatik folder's one row, the Kurs header and its
+      // two rows, then the plain tile: every target in reading order, and
+      // every named collection's ✕ right after it.
+      expect(await tabUntil(page, tile)).toEqual([
+        'main',
+        'collection:gram', 'Удалить набор «Konnektoren»',
+        'collection:kurs', 'Удалить набор «Kurs»',
+        'collection:k1', 'Удалить набор «Kapitel 1»',
+        'collection:k2', 'Удалить набор «Kapitel 2»',
+        'collection:solo',
+      ]);
+    });
 
-  // Creating the parent is the user's job: the «+» prompt.
-  page.once('dialog', (dialog) => dialog.accept('Grammatik'));
-  await page.getByRole('button', { name: 'Новый набор' }).click();
+    await test.step('Тогда ✕ плитки виден вместо счётчика', async () => {
+      await expect(close).toHaveCSS('opacity', '1');
+      await expect(close).toHaveCSS('pointer-events', 'auto');
+      await expect(tile.locator('.tile__count')).toHaveCSS('opacity', '0');
+    });
 
-  // The header is now the collection, with the union of its children.
-  await expect(page.getByRole('button', { name: 'Grammatik 2', exact: true })).toBeVisible();
-  expect(await collectionNames(page)).toContain('Grammatik');
-});
+    await test.step('Когда он жмёт Tab и Enter', async () => {
+      await page.keyboard.press('Tab');
+      await expect(close).toBeFocused();
+      await page.keyboard.press('Enter');
+    });
 
-test('renaming a collection to a name already taken is refused, so one tile per name', async ({ page }) => {
-  await page.goto('/');
-  await seedCollections(page, course);
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
-  await page.getByRole('button', { name: 'Kurs 4', exact: true }).click();
+    await test.step('Тогда «Solo» удалена, фокус у предыдущей плитки, это объявлено, «Всё подряд» активна', async () => {
+      await expect(tile).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Kapitel 2 1', exact: true })).toBeFocused();
+      await expect(page.getByRole('status')).toHaveText('Набор «Solo» удалён');
+      expect(await collectionNames(page)).not.toContain('Solo');
+      await expect(page.getByRole('button', { name: 'Всё подряд 0', exact: true })).toHaveAttribute('aria-current', 'true');
+    });
 
-  // The heading is the inline rename (contenteditable plaintext-only, which
-  // fill() does not recognise — typed instead); Enter submits it.
-  const heading = page.getByRole('heading', { name: 'Kurs' });
-  await expect(heading).toBeVisible();
-  await heading.click();
-  await page.keyboard.press('ControlOrMeta+a');
-  await page.keyboard.type(' kurs / kapitel 1 ');
-  await page.keyboard.press('Enter');
+    await test.step('Когда он идёт Shift+Tab до ✕ папки «Kurs» и жмёт Enter', async () => {
+      await tabUntil(page, page.getByRole('button', { name: 'Удалить набор «Kurs»' }), 'Shift+Tab');
+      await page.keyboard.press('Enter');
+    });
 
-  // Refused: the heading reverts, and the documents still carry one name each.
-  await expect(page.getByRole('heading', { name: 'Kurs', exact: true })).toBeVisible();
-  const names = await collectionNames(page);
-  expect(names.filter((n) => n.trim().toLowerCase() === 'kurs / kapitel 1')).toEqual(['Kurs / Kapitel 1']);
-  expect(names.filter((n) => n.trim().toLowerCase() === 'kurs')).toEqual(['Kurs']);
+    await test.step('Тогда от «Kurs» остаётся надпись, фокус у первой главы', async () => {
+      await expect(page.getByRole('button', { name: 'Kurs 4', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: 'Kurs 3', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toBeFocused();
+      await expect(page.getByRole('status')).toHaveText('Набор «Kurs» удалён');
+    });
+  });
 
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
-  await expect(page.getByRole('button', { name: 'Kurs 4', exact: true })).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toHaveCount(1);
-});
+  test('пользователь нажимает на надпись папки и создаёт тему с этим именем → надпись становится плиткой', async ({ page }) => {
+    await test.step('Дано папка «Grammatik» без собственной темы', async () => {
+      await page.goto('/');
+      await seedCollections(page, course);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    });
 
-// The issue's repro (#460): the collections icon is clicked while the caret
-// is still in the heading. The click's mousedown takes focus, so the rename
-// starts on that blur and the themes screen opens before its write lands.
-test('a rename left in the heading shows on the themes screen opened from it', async ({ page }) => {
-  await page.goto('/');
-  await seedCollections(page, [['xa', 'xxx, aaa', []]]);
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
-  await page.getByRole('button', { name: 'xxx, aaa 0', exact: true }).click();
+    await test.step('Когда он нажимает на надпись «Grammatik»', async () => {
+      await page.getByRole('heading', { name: 'Grammatik 2', exact: true }).click();
+    });
 
-  const heading = page.getByRole('heading', { name: 'xxx, aaa' });
-  await expect(heading).toBeVisible();
-  await heading.click();
-  await page.keyboard.press('ControlOrMeta+a');
-  await page.keyboard.type('xxx / aaa');
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    await test.step('Тогда он остаётся на экране тем, новая тема не создана', async () => {
+      await expect(page.getByRole('heading', { name: 'Наборы' })).toBeVisible();
+      expect(await collectionNames(page)).not.toContain('Grammatik');
+    });
 
-  await expect(page.getByRole('heading', { name: 'xxx 0', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'aaa 0', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /xxx, aaa/ })).toHaveCount(0);
-});
+    await test.step('Когда он создаёт набор «Grammatik» кнопкой «+»', async () => {
+      page.once('dialog', (dialog) => dialog.accept('Grammatik'));
+      await page.getByRole('button', { name: 'Новый набор' }).click();
+    });
 
-test('tapping a row opens that collection', async ({ page }) => {
-  await page.goto('/');
-  await seedCollections(page, course);
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    await test.step('Тогда «Grammatik» — плитка с суммой слов детей', async () => {
+      await expect(page.getByRole('button', { name: 'Grammatik 2', exact: true })).toBeVisible();
+      expect(await collectionNames(page)).toContain('Grammatik');
+    });
+  });
 
-  await page.getByRole('button', { name: 'Kapitel 1 2', exact: true }).click();
+  test('пользователь переименовывает тему в уже занятое имя → отказ, плитка на каждое имя одна', async ({ page }) => {
+    await test.step('Дано открыта тема «Kurs»', async () => {
+      await page.goto('/');
+      await seedCollections(page, course);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await page.getByRole('button', { name: 'Kurs 4', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Kurs' })).toBeVisible();
+    });
 
-  await expect(page.getByRole('heading', { name: 'Kurs / Kapitel 1' })).toBeVisible();
-});
+    await test.step('Когда он вписывает в заголовок «kurs / kapitel 1» и жмёт Enter', async () => {
+      // The heading is the inline rename (contenteditable plaintext-only,
+      // which fill() does not recognise — typed instead).
+      await page.getByRole('heading', { name: 'Kurs' }).click();
+      await page.keyboard.press('ControlOrMeta+a');
+      await page.keyboard.type(' kurs / kapitel 1 ');
+      await page.keyboard.press('Enter');
+    });
 
-test('the words list on a parent shows its children\'s words', async ({ page }) => {
-  await page.goto('/');
-  await seedWords(page, ['a', 'b', 'c', 'd', 'e', 'f']);
-  await seedCollections(page, course);
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
-  await page.getByRole('button', { name: 'Kurs 4', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Kurs' })).toBeVisible();
+    await test.step('Тогда заголовок вернулся к «Kurs», имена не задвоились', async () => {
+      await expect(page.getByRole('heading', { name: 'Kurs', exact: true })).toBeVisible();
+      const names = await collectionNames(page);
+      expect(names.filter((n) => n.trim().toLowerCase() === 'kurs / kapitel 1')).toEqual(['Kurs / Kapitel 1']);
+      expect(names.filter((n) => n.trim().toLowerCase() === 'kurs')).toEqual(['Kurs']);
+    });
 
-  await page.goto('/words');
+    await test.step('Тогда на экране тем по одной плитке на имя', async () => {
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await expect(page.getByRole('button', { name: 'Kurs 4', exact: true })).toHaveCount(1);
+      await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toHaveCount(1);
+    });
+  });
 
-  await expect(page.getByRole('heading', { name: 'Мои слова' })).toBeVisible();
-  // Kurs holds a and b; its chapters add c and d; e and f are Grammatik's.
-  for (const value of ['a', 'b', 'c', 'd']) {
-    await expect(page.getByText(value, { exact: true })).toBeVisible();
-  }
-  await expect(page.getByText('e', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('f', { exact: true })).toHaveCount(0);
+  // The issue's repro (#460): the collections icon is clicked while the caret
+  // is still in the heading. The click's mousedown takes focus, so the rename
+  // starts on that blur and the themes screen opens before its write lands.
+  test('пользователь переименовал тему и сразу открыл экран тем → новое имя уже видно', async ({ page }) => {
+    await test.step('Дано открыта тема «xxx, aaa»', async () => {
+      await page.goto('/');
+      await seedCollections(page, [['xa', 'xxx, aaa', []]]);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await page.getByRole('button', { name: 'xxx, aaa 0', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'xxx, aaa' })).toBeVisible();
+    });
+
+    await test.step('Когда он вписывает в заголовок «xxx / aaa» и сразу жмёт значок тем', async () => {
+      await page.getByRole('heading', { name: 'xxx, aaa' }).click();
+      await page.keyboard.press('ControlOrMeta+a');
+      await page.keyboard.type('xxx / aaa');
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    });
+
+    await test.step('Тогда видны папка «xxx» и тема «aaa», старого имени нет', async () => {
+      await expect(page.getByRole('heading', { name: 'xxx 0', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'aaa 0', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: /xxx, aaa/ })).toHaveCount(0);
+    });
+  });
+
+  test('пользователь нажимает на строку папки → открывается эта тема', async ({ page }) => {
+    await test.step('Дано экран тем с папкой «Kurs»', async () => {
+      await page.goto('/');
+      await seedCollections(page, course);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    });
+
+    await test.step('Когда он нажимает «Kapitel 1»', async () => {
+      await page.getByRole('button', { name: 'Kapitel 1 2', exact: true }).click();
+    });
+
+    await test.step('Тогда открыта тема «Kurs / Kapitel 1»', async () => {
+      await expect(page.getByRole('heading', { name: 'Kurs / Kapitel 1' })).toBeVisible();
+    });
+  });
+
+  test('пользователь выбирает родительскую тему и открывает список слов → в нём слова дочерних тем', async ({ page }) => {
+    await test.step('Дано выбрана тема «Kurs» с дочерними', async () => {
+      await page.goto('/');
+      await seedWords(page, ['a', 'b', 'c', 'd', 'e', 'f']);
+      await seedCollections(page, course);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await page.getByRole('button', { name: 'Kurs 4', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Kurs' })).toBeVisible();
+    });
+
+    await test.step('Когда он открывает список слов', async () => {
+      await page.goto('/words');
+      await expect(page.getByRole('heading', { name: 'Мои слова' })).toBeVisible();
+    });
+
+    await test.step('Тогда видны слова a, b, c, d, а слова e и f из «Grammatik» — нет', async () => {
+      // Kurs holds a and b; its chapters add c and d; e and f are Grammatik's.
+      for (const value of ['a', 'b', 'c', 'd']) {
+        await expect(page.getByText(value, { exact: true })).toBeVisible();
+      }
+      await expect(page.getByText('e', { exact: true })).toHaveCount(0);
+      await expect(page.getByText('f', { exact: true })).toHaveCount(0);
+    });
+  });
 });

@@ -43,18 +43,27 @@ async function seedVocabulary(page, words) {
 // server's splash until memory is loaded (#494, #515), and the first tile
 // shown already counts every word. A tile shown from empty memory would count
 // none.
-test('the themes screen opened at start shows its tiles counted, never a loading state', async ({ page }) => {
-  await page.addInitScript(watchSwitcher);
-  await page.goto('/');
-  await addWord(page, 'der Hund', 'пёс');
-  await seedVocabulary(page, 200);
+test.describe('Загрузка тем', () => {
+  test('пользователь открывает приложение сразу на экране тем → первая же плитка со всеми словами, без «загрузки»', async ({ page }) => {
+    await test.step('Дано 201 слово в словаре', async () => {
+      await page.addInitScript(watchSwitcher);
+      await page.goto('/');
+      await addWord(page, 'der Hund', 'пёс');
+      await seedVocabulary(page, 200);
+    });
 
-  await page.goto('/collections');
+    await test.step('Когда он открывает /collections', async () => {
+      await page.goto('/collections');
+    });
 
-  // One tile: «Всё подряд» with the 201 words.
-  await expect(page.getByRole('button', { name: 'Всё подряд 201', exact: true })).toBeVisible({ timeout: 30000 });
+    await test.step('Тогда видна плитка «Всё подряд 201»', async () => {
+      await expect(page.getByRole('button', { name: 'Всё подряд 201', exact: true })).toBeVisible({ timeout: 30000 });
+    });
 
-  const seen = await page.evaluate(() => window.__seen);
-  expect(seen.tile, 'the first tile counts every word').toContain('201');
-  expect(seen.loading, 'no loading state of its own').toBeUndefined();
+    await test.step('Тогда первая показанная плитка уже считала все слова, а состояния загрузки не было', async () => {
+      const seen = await page.evaluate(() => window.__seen);
+      expect(seen.tile, 'the first tile counts every word').toContain('201');
+      expect(seen.loading, 'no loading state of its own').toBeUndefined();
+    });
+  });
 });

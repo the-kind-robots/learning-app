@@ -12,37 +12,44 @@ const { openHome } = require('./service-worker.shared');
 // lemmas, and it is an article pair, so nothing but the pick keeps it a word
 // once its own suggestion list is gone.
 
-const options = (page) => page.getByRole('option');
+test.describe('Режим формы добавления', () => {
+  test('пользователь выбрал подсказку и дописал текст → форма переходит в режим фразы', async ({ page }) => {
+    // The value field's label follows the mode, so it is addressed by id: the
+    // element is the same one throughout (inputs are not remounted).
+    const field = page.locator('#new-word-value');
+    // The visually hidden legend carries the same words as the panel title,
+    // so only the role tells them apart.
+    const title = (name) => page.getByRole('heading', { name });
 
-// The value field's label follows the mode, so it is addressed by id: the
-// element is the same one throughout (inputs are not remounted).
-const valueField = (page) => page.locator('#new-word-value');
+    await test.step('Дано главная, в поле слова набрано «Haus»', async () => {
+      await openHome(page);
+      await expect(field).toBeVisible();
+      await field.pressSequentially('Haus');
+    });
 
-// The visually hidden legend carries the same words as the panel title, so
-// only the role tells them apart.
-const panelTitle = (page, name) => page.getByRole('heading', { name });
+    await test.step('Когда он выбирает подсказку «das Haus»', async () => {
+      const picked = page.getByRole('option').filter({ hasText: 'das Haus' }).first();
+      await expect(picked).toBeVisible();
+      await picked.click();
+    });
 
-test('typing on from a picked suggestion switches the form to phrase mode', async ({ page }) => {
-  await openHome(page);
+    await test.step('Тогда форма остаётся в режиме слова со значением «das Haus»', async () => {
+      await expect(field).toHaveValue('das Haus');
+      await expect(title('Добавить слово')).toBeVisible();
+      await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('das Haus');
+    });
 
-  const field = valueField(page);
-  await expect(field).toBeVisible();
+    await test.step('Когда он дописывает « ist gross»', async () => {
+      // The click hands focus to the translation field, so typing on means
+      // going back to the end of the value.
+      await field.click();
+      await page.keyboard.press('End');
+      await page.keyboard.type(' ist gross');
+    });
 
-  await field.pressSequentially('Haus');
-  const picked = options(page).filter({ hasText: 'das Haus' }).first();
-  await expect(picked).toBeVisible();
-  await picked.click();
-
-  await expect(field).toHaveValue('das Haus');
-  await expect(panelTitle(page, 'Добавить слово')).toBeVisible();
-  await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('das Haus');
-
-  // The click hands focus to the translation field, so typing on means going
-  // back to the end of the value.
-  await field.click();
-  await page.keyboard.press('End');
-  await page.keyboard.type(' ist gross');
-
-  await expect(panelTitle(page, 'Добавить фразу')).toBeVisible();
-  await expect(page.getByLabel('Фраза (немецкий)')).toHaveValue('das Haus ist gross');
+    await test.step('Тогда форма в режиме фразы', async () => {
+      await expect(title('Добавить фразу')).toBeVisible();
+      await expect(page.getByLabel('Фраза (немецкий)')).toHaveValue('das Haus ist gross');
+    });
+  });
 });

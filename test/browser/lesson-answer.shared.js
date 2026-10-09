@@ -71,21 +71,4 @@ async function answerWidths(page) {
   });
 }
 
-// A hinted word adds no width of its own: at rest, hovered, and with its
-// hint open (#409).
-async function expectHintedAnswerAsWideAsPlainText(page) {
-  await expect(token(page, 4)).toBeVisible();
-  const atRest = await answerWidths(page);
-  expect(Math.abs(atRest.hinted - atRest.plain)).toBeLessThanOrEqual(0.5);
-
-  await token(page, 1).hover();
-  const hovered = await answerWidths(page);
-  expect(Math.abs(hovered.hinted - hovered.plain)).toBeLessThanOrEqual(0.5);
-
-  await token(page, 4).click();
-  await expect(token(page, 4)).toHaveAttribute('aria-expanded', 'true');
-  const open = await answerWidths(page);
-  expect(Math.abs(open.hinted - open.plain)).toBeLessThanOrEqual(0.5);
-}
-
-module.exports = { setUpLesson, token, expectHintedAnswerAsWideAsPlainText };
+module.exports = { setUpLesson, token, answerWidths };

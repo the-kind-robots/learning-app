@@ -38,16 +38,6 @@ async function openWords(page) {
   await expect(page.getByRole('heading', { name: 'Мои слова' })).toBeVisible({ timeout: 20000 });
 }
 
-test('a noun is filed under its word, not under its article', async ({ page }) => {
-  await page.goto('/');
-  await seed(page, SIX);
-  await openWords(page);
-
-  await expect(rows(page)).toHaveCount(SIX.length);
-  await expect(rows(page)).toHaveText(FILED.map((value) => new RegExp(value)));
-  await page.screenshot({ path: 'test-results/words-order/six-words.png', fullPage: false });
-});
-
 // 60 nouns whose articles cycle, so ordering by the stored id would put all
 // twenty `das` words first and all twenty `die` words last. Ordering by the
 // word puts them in numeric order, and the page boundary at 50 is where a sort
@@ -57,45 +47,75 @@ const CYCLED = Array.from({ length: 60 }, (_, i) => {
   return article + ' Wort' + String(i).padStart(3, '0');
 });
 
-test('a page past the first continues the same order', async ({ page }) => {
-  await page.goto('/');
-  await seed(page, CYCLED);
-  await openWords(page);
+test.describe('Порядок слов в списке', () => {
+  test('пользователь открывает список слов → существительное стоит по слову, а не по артиклю', async ({ page }) => {
+    await test.step('Дано шесть слов, среди них существительные с артиклями', async () => {
+      await page.goto('/');
+      await seed(page, SIX);
+    });
 
-  await expect(rows(page)).toHaveCount(PAGE_SIZE);
-  await expect(rows(page).first()).toContainText('der Wort000');
-  await expect(rows(page).nth(PAGE_SIZE - 1)).toContainText('die Wort049');
+    await test.step('Когда он открывает список слов', async () => {
+      await openWords(page);
+    });
 
-  await rows(page).last().scrollIntoViewIfNeeded();
-  await expect(rows(page)).toHaveCount(CYCLED.length);
-  await expect(rows(page).nth(PAGE_SIZE)).toContainText('das Wort050');
-  await expect(rows(page).last()).toContainText('das Wort059');
+    await test.step('Тогда слова идут по алфавиту без учёта артикля', async () => {
+      await expect(rows(page)).toHaveCount(SIX.length);
+      await expect(rows(page)).toHaveText(FILED.map((value) => new RegExp(value)));
+    });
+  });
 
-  const rendered = await rows(page).allTextContents();
-  const numbers = rendered.map((text) => Number(text.match(/Wort(\d{3})/)[1]));
-  expect(numbers).toEqual(numbers.map((_, i) => i));
-  await page.screenshot({ path: 'test-results/words-order/paged.png', fullPage: false });
-});
+  test('пользователь прокручивает список дальше первой страницы → порядок продолжается без разрывов', async ({ page }) => {
+    await test.step('Дано шестьдесят слов с чередующимися артиклями', async () => {
+      await page.goto('/');
+      await seed(page, CYCLED);
+      await openWords(page);
+    });
 
-test('a word entered with an article is still the same entry', async ({ page }) => {
-  await page.goto('/home');
+    await test.step('Тогда показана первая страница от «der Wort000» до «die Wort049»', async () => {
+      await expect(rows(page)).toHaveCount(PAGE_SIZE);
+      await expect(rows(page).first()).toContainText('der Wort000');
+      await expect(rows(page).nth(PAGE_SIZE - 1)).toContainText('die Wort049');
+    });
 
-  // Through the add form, so the whole duplicate check runs: the id did not
-  // change, so entering the same value again must find the stored word and
-  // merge into it rather than make a second row.
-  await addWord(page, 'der Zug', 'поезд');
-  await addWord(page, 'der Zug', 'состав');
+    await test.step('Когда он доходит до конца списка', async () => {
+      await rows(page).last().scrollIntoViewIfNeeded();
+    });
 
-  await openWords(page);
-  await expect(rows(page)).toHaveCount(1);
-  await expect(rows(page).first()).toContainText('der Zug');
-  await expect(rows(page).first()).toContainText('поезд');
-  await expect(rows(page).first()).toContainText('состав');
+    await test.step('Тогда подгружены все слова подряд, без пропусков и повторов', async () => {
+      await expect(rows(page)).toHaveCount(CYCLED.length);
+      await expect(rows(page).nth(PAGE_SIZE)).toContainText('das Wort050');
+      await expect(rows(page).last()).toContainText('das Wort059');
+      const rendered = await rows(page).allTextContents();
+      const numbers = rendered.map((text) => Number(text.match(/Wort(\d{3})/)[1]));
+      expect(numbers).toEqual(numbers.map((_, i) => i));
+    });
+  });
 
-  // And editing it still reaches the same document.
-  await rows(page).first().getByRole('button').click();
-  await page.getByRole('textbox', { name: 'Перевод' }).fill('поезд, состав');
-  await page.getByRole('button', { name: 'Сохранить' }).click();
-  await expect(rows(page).first()).toContainText('поезд, состав');
-  await expect(rows(page)).toHaveCount(1);
+  test('пользователь добавляет то же слово с артиклем дважды и правит его → остаётся одна запись', async ({ page }) => {
+    await test.step('Когда он добавляет «der Zug» дважды с разными переводами', async () => {
+      await page.goto('/home');
+      // Through the add form, so the whole duplicate check runs.
+      await addWord(page, 'der Zug', 'поезд');
+      await addWord(page, 'der Zug', 'состав');
+    });
+
+    await test.step('Тогда в списке одна запись с обоими переводами', async () => {
+      await openWords(page);
+      await expect(rows(page)).toHaveCount(1);
+      await expect(rows(page).first()).toContainText('der Zug');
+      await expect(rows(page).first()).toContainText('поезд');
+      await expect(rows(page).first()).toContainText('состав');
+    });
+
+    await test.step('Когда он правит перевод', async () => {
+      await rows(page).first().getByRole('button').click();
+      await page.getByRole('textbox', { name: 'Перевод' }).fill('поезд, состав');
+      await page.getByRole('button', { name: 'Сохранить' }).click();
+    });
+
+    await test.step('Тогда запись обновилась, а новой не появилось', async () => {
+      await expect(rows(page).first()).toContainText('поезд, состав');
+      await expect(rows(page)).toHaveCount(1);
+    });
+  });
 });

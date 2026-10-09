@@ -8,59 +8,65 @@ const { test, expect } = require('./fixtures');
 //
 // Chrome-only, and that bounds what they prove: here `field-sizing: content`
 // owns the height, so the JS measuring path these specs would otherwise cover
-// runs on Safari alone. The phone layer — in-flow suggestions, the keyboard —
-// needs a mobile project with a seeded dictionary (#289), not this file.
+// runs on Safari alone.
 
-const value = () => 'Слово (немецкий)';
+test.describe('Форма добавления слова', () => {
+  test('пользователь вводит и отправляет слово → поля не меняют размеры и не прыгают', async ({ page }) => {
+    const word = () => page.getByLabel('Слово (немецкий)');
+    const translation = page.getByLabel('Перевод (русский)');
+    let emptyHeight;
+    let wordBox;
 
-test('a one-line translation does not overflow its field', async ({ page }) => {
-  await page.goto('/home');
+    await test.step('Дано главная с пустой формой', async () => {
+      await page.goto('/home');
+      emptyHeight = (await translation.boundingBox()).height;
+    });
 
-  const translation = page.getByLabel('Перевод (русский)');
-  await translation.fill('например, к примеру');
+    await test.step('Когда он вводит однострочный перевод', async () => {
+      await translation.fill('например, к примеру');
+    });
 
-  const overflows = await translation.evaluate(
-    (node) => node.scrollHeight > node.clientHeight
-  );
-  expect(overflows).toBe(false);
-});
+    await test.step('Тогда в поле нет полосы прокрутки', async () => {
+      const overflows = await translation.evaluate((n) => n.scrollHeight > n.clientHeight);
+      expect(overflows).toBe(false);
+      await translation.fill('');
+    });
 
-test('the value field stays put when the input becomes a phrase', async ({ page }) => {
-  await page.goto('/home');
+    await test.step('Когда слово превращается во фразу', async () => {
+      await word().fill('Haus');
+      wordBox = await word().boundingBox();
+      // The space flips detection to phrase mode and rewrites every label,
+      // this field's own included; the element stays the same one.
+      await word().fill('auf jeden Fall');
+    });
 
-  await page.getByLabel(value()).fill('Haus');
-  const before = await page.getByLabel(value()).boundingBox();
+    await test.step('Тогда поле слова остаётся на месте', async () => {
+      const after = await page.getByLabel('Фраза (немецкий)').boundingBox();
+      expect(after.x).toBe(wordBox.x);
+      expect(after.y).toBe(wordBox.y);
+    });
 
-  // The space flips detection to phrase mode, which rewrites every label on
-  // the form — including this field's own, so the locator has to follow the
-  // copy while the element stays the same one.
-  await page.getByLabel(value()).fill('auf jeden Fall');
-  const after = await page.getByLabel('Фраза (немецкий)').boundingBox();
+    await test.step('Когда он вводит длинную фразу с длинным переводом', async () => {
+      await page.getByLabel('Фраза (немецкий)').fill('Entschuldigung, dass ich zu spät komme');
+      await translation.fill(
+        'извините, что опаздываю; простите за опоздание, я застрял в пробке ' +
+          'и не успел предупредить заранее'
+      );
+    });
 
-  expect(after.y).toBe(before.y);
-  expect(after.x).toBe(before.x);
-});
+    await test.step('Тогда поле перевода выросло', async () => {
+      expect((await translation.boundingBox()).height).toBeGreaterThan(emptyHeight);
+    });
 
-test('a submitted form leaves both fields at their empty height', async ({ page }) => {
-  await page.goto('/home');
+    await test.step('Когда он нажимает «ДОБАВИТЬ»', async () => {
+      await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
+    });
 
-  const field = page.getByLabel(value());
-  const translation = page.getByLabel('Перевод (русский)');
-  const emptyHeight = (await translation.boundingBox()).height;
-
-  await field.fill('Entschuldigung, dass ich zu spät komme');
-  await translation.fill(
-    'извините, что опаздываю; простите за опоздание, я застрял в пробке ' +
-      'и не успел предупредить заранее'
-  );
-  const grown = await translation.boundingBox();
-  expect(grown.height).toBeGreaterThan(emptyHeight);
-
-  await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
-  await expect(page.getByRole('button', { name: 'Список слов' })).toBeVisible();
-
-  // A height measured for the old content is an inline style; nothing else
-  // clears it, so an emptied field would keep it.
-  await expect(translation).toHaveValue('');
-  expect((await translation.boundingBox()).height).toBe(emptyHeight);
+    await test.step('Тогда поля пусты и вернулись к исходной высоте', async () => {
+      await expect(translation).toHaveValue('');
+      // A height measured for the old content is an inline style; nothing
+      // else clears it, so an emptied field would keep it.
+      expect((await translation.boundingBox()).height).toBe(emptyHeight);
+    });
+  });
 });

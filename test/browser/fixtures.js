@@ -20,7 +20,7 @@ const base = require('@playwright/test');
 // a second, timed from here rather than inside the page, since a page that
 // runs nothing runs no timer either.
 //
-// A spec that delays frames (delayed-frames.spec.js) declares the delay on
+// A spec that delays frames (startup-splash.spec.js) declares the delay on
 // the page as `__frameDelayMs`, and both waits stretch by it: two chained
 // frames there take twice the delay, so against the plain one-second
 // give-up and the short quiet spell the guard would stop before a report
@@ -66,4 +66,9 @@ const test = base.test.extend({
   },
 });
 
-module.exports = { test, expect: base.expect, chromium: base.chromium };
+// Asserting that something never happens: auto-waiting can only wait for a
+// thing to become true, so the negative is established by letting a
+// reaction's worth of time pass first. The one sanctioned fixed wait.
+const nothingHappensFor = (page, ms) => page.waitForTimeout(ms);
+
+module.exports = { test, expect: base.expect, chromium: base.chromium, nothingHappensFor };

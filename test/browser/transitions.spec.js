@@ -66,54 +66,63 @@ const WORD_ROW = '.word-item';
 const FIRST_TRIAL = '.lesson__prompt';
 const THEME_TILE = '.masonry [data-collection-id]:not([data-collection-id="main"])';
 
-test('every transition shows the target screen with its data at the first frame', async ({ page }) => {
-  test.setTimeout(300000);
-  await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Главная' })).toBeAttached();
-  await seedVocabulary(page);
-  await page.goto('/home');
-  await memoryReady(page);
-  await expect(page.locator(HOME_DATA)).toBeVisible();
+test.describe('Переходы между экранами', () => {
+  test('пользователь переходит между экранами и печатает в поиске → данные экрана видны уже в первом кадре, без мигания', async ({ page }) => {
+    test.setTimeout(300000);
 
-  const transitions = [
-    ['home → words', '#home-words-button', WORD_ROW],
-    ['words → home', CLOSE, HOME_DATA],
-    ['home → lesson', '.home__lesson-button', FIRST_TRIAL],
-    ['lesson → home', CLOSE, HOME_DATA],
-    ['home → themes', 'button[aria-label="Открыть наборы"]', THEME_TILE],
-    ['themes → home', CLOSE, HOME_DATA],
-    ['home → words', '#home-words-button', WORD_ROW],
-    ['words → lesson', '.vocabulary__start', FIRST_TRIAL],
-    ['lesson → home', CLOSE, HOME_DATA],
-  ];
-  for (const [name, click, data] of transitions) {
-    expect(await dataAtFirstFrame(page, click, data), name).toBe(true);
-    // The step back a close takes lands with `popstate`; the next tap starts
-    // from the settled page.
-    await expect(page.locator(data).first()).toBeAttached();
-    await page.waitForLoadState('domcontentloaded');
-    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 50)));
-  }
-  await expect(page).toHaveURL(/\/home$/);
-});
-
-test('a keystroke in the words filter shows its rows at the first frame', async ({ page }) => {
-  test.setTimeout(300000);
-  await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Главная' })).toBeAttached();
-  await seedVocabulary(page);
-  await page.goto('/words');
-  await memoryReady(page);
-  await expect(page.locator(WORD_ROW).first()).toBeVisible();
-
-  const matched = await page.evaluate(() => new Promise((resolve) => {
-    const input = document.querySelector('input[placeholder="Поиск"]');
-    requestAnimationFrame(() => {
-      const values = [...document.querySelectorAll('.word-item__value')].map((n) => n.textContent);
-      resolve(values.length > 0 && values.every((v) => v.includes('wortq')));
+    await test.step('Дано 1500 слов и 7100 повторений, главная загружена', async () => {
+      await page.goto('/home');
+      await expect(page.getByRole('heading', { name: 'Главная' })).toBeAttached();
+      await seedVocabulary(page);
+      await page.goto('/home');
+      await memoryReady(page);
+      await expect(page.locator(HOME_DATA)).toBeVisible();
     });
-    input.value = 'wortq';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  }));
-  expect(matched).toBe(true);
+
+    await test.step('Когда он обходит экраны: слова, урок, темы и обратно', async () => {
+      const transitions = [
+        ['главная → слова', '#home-words-button', WORD_ROW],
+        ['слова → главная', CLOSE, HOME_DATA],
+        ['главная → урок', '.home__lesson-button', FIRST_TRIAL],
+        ['урок → главная', CLOSE, HOME_DATA],
+        ['главная → темы', 'button[aria-label="Открыть наборы"]', THEME_TILE],
+        ['темы → главная', CLOSE, HOME_DATA],
+        ['главная → слова', '#home-words-button', WORD_ROW],
+        ['слова → урок', '.vocabulary__start', FIRST_TRIAL],
+        ['урок → главная', CLOSE, HOME_DATA],
+      ];
+      for (const [name, click, data] of transitions) {
+        // Then: the target's data is in the page by the first frame.
+        expect(await dataAtFirstFrame(page, click, data), name).toBe(true);
+        // The step back a close takes lands with `popstate`; the next tap
+        // starts from the settled page.
+        await expect(page.locator(data).first()).toBeAttached();
+        await page.waitForLoadState('domcontentloaded');
+        await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      }
+    });
+
+    await test.step('Тогда он снова на главной', async () => {
+      await expect(page).toHaveURL(/\/home$/);
+    });
+
+    await test.step('Когда он открывает список слов и вводит «wortq» в поиск', async () => {
+      await page.goto('/words');
+      await memoryReady(page);
+      await expect(page.locator(WORD_ROW).first()).toBeVisible();
+    });
+
+    await test.step('Тогда подходящие слова видны уже в первом кадре после нажатия клавиши', async () => {
+      const matched = await page.evaluate(() => new Promise((resolve) => {
+        const input = document.querySelector('input[placeholder="Поиск"]');
+        requestAnimationFrame(() => {
+          const values = [...document.querySelectorAll('.word-item__value')].map((n) => n.textContent);
+          resolve(values.length > 0 && values.every((v) => v.includes('wortq')));
+        });
+        input.value = 'wortq';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }));
+      expect(matched).toBe(true);
+    });
+  });
 });
