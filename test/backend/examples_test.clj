@@ -1,5 +1,6 @@
 (ns backend.examples-test
   (:require
+   [backend.support.generation :as support.generation]
    [cheshire.core :as cheshire]
    [clojure.test :refer [are deftest is testing]]
    [db :as db]
