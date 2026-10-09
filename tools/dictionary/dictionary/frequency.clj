@@ -46,12 +46,26 @@
          count (assoc :count count))])))
 
 
+(defn- keep-best-ranked
+  "Adds `[key record]` to `index` unless the index already holds a better
+   (lower) rank for that key. Several source spellings normalize to one key
+   (Rücken, ruecken; für, fuer, für's), and the key has to carry the rank of
+   the spelling people actually write, not of whichever row came last (#357)."
+  [index [key record]]
+  (let [kept (get index key)]
+    (if (and kept (<= (:rank kept) (:rank record)))
+      index
+      (assoc index key record))))
+
+
 (defn read-frequency-file
   "Read optional TSV/CSV frequency data.
    Supported headers: word, count, rank, source.
    `count` is a normalized per-million word rate (linear, sums across
    surface forms).
-   Minimal format without header: word<TAB>count."
+   Minimal format without header: word<TAB>count.
+   Keys are `normalize-german` of the word; a key spelled several ways keeps
+   its best rank."
   [path]
   (if (str/blank? path)
     {}
@@ -72,7 +86,8 @@
                           (sort-by (fn [row]
                                      (- (or (parse-double-safe (or (second row) "0")) 0.0)))
                                    data-rows))]
-        (into {}
-              (keep-indexed (fn [index row]
-                              (row->record headers row (inc index))))
-              sorted)))))
+        (reduce keep-best-ranked
+                {}
+                (keep-indexed (fn [index row]
+                                (row->record headers row (inc index)))
+                              sorted))))))

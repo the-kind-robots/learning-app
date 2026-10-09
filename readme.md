@@ -40,7 +40,7 @@ Built files are committed to `resources/dictionary/` and imported from there int
 
 **Rebuild** (when source data changes — see `tools/dictionary/README.md` for stages):
 ```bash
-clojure -T:dictionary build :frequency-file '"tools/dictionary/data/frequency.tsv"'
+clojure -X:dictionary build   # -X, not -T: tool mode drops src/shared from the classpath
 # optional: enrich RU translations
 tools/dictionary/enrich-translations/enrich-translations --input resources/dictionary/dictionary-entries.jsonl
 ```
