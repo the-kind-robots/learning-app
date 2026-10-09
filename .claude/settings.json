@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'g=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/read-guard.sh\"; [ -r \"$g\" ] || g=.claude/hooks/read-guard.sh; [ -r \"$g\" ] || exit 0; exec bash \"$g\"'",
+            "command": "python3 -I -S \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/read-guard.py\"",
             "timeout": 10,
             "statusMessage": "Checking read size..."
           }
