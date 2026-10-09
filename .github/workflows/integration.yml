@@ -35,6 +35,7 @@ jobs:
       relevant: ${{ steps.diff.outputs.relevant }}
       browser: ${{ steps.diff.outputs.browser }}
       backend: ${{ steps.diff.outputs.backend }}
+      catalog: ${{ steps.diff.outputs.catalog }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -43,7 +44,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.clj-kondo/|scripts/behavior-catalog\.mjs$|test/browser/|test/BEHAVIOR\.md$|\.codex/|codex/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$)'; then
+          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.clj-kondo/|\.codex/|codex/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
@@ -52,6 +53,11 @@ jobs:
             echo "browser=true" >> "$GITHUB_OUTPUT"
           else
             echo "browser=false" >> "$GITHUB_OUTPUT"
+          fi
+          if git diff --name-only "$BASE" HEAD             | grep -qE '^(test/browser/|scripts/behavior-catalog\.mjs$|test/BEHAVIOR\.md$|playwright\.config\.js$|package(-lock)?\.json$)'; then
+            echo "catalog=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "catalog=false" >> "$GITHUB_OUTPUT"
           fi
           if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/backend/|src/shared/|resources/migrations/|lib/|test/backend/|\.github/workflows/|deps\.edn$)'; then
             echo "backend=true" >> "$GITHUB_OUTPUT"
@@ -107,12 +113,6 @@ jobs:
       - name: Lint (incl. client layering)
         run: clj-kondo --lint src --fail-level error
 
-      # BEHAVIOR.md is generated from the Playwright titles; `--list` needs no browser.
-      - name: Check behaviour catalog is fresh
-        run: |
-          npm run test:catalog
-          git diff --exit-code test/BEHAVIOR.md
-
       - uses: actions/cache/save@v6.1.0
         if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}
         with:
@@ -121,6 +121,27 @@ jobs:
             ~/.gitlibs
             ~/.deps.clj
           key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
+
+  # BEHAVIOR.md is generated from the Playwright titles; `--list` needs no browser.
+  behavior-catalog:
+    name: Behaviour Catalog
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.catalog == 'true') }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+      - name: Check behaviour catalog is fresh
+        run: |
+          npm run test:catalog
+          git diff --exit-code test/BEHAVIOR.md
 
   backend-tests:
     name: Backend Tests
