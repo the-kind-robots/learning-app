@@ -1,23 +1,20 @@
+<!-- Hard limit: 2000 characters. No Context/Goals. Behaviour lives in specs only. -->
 ## Why
 
-<!-- Explain the motivation for this change. What problem does this solve? Why now? -->
+<!-- 1-2 sentences: the problem and why now. -->
 
-## What Changes
+## Changes
 
-<!-- Describe what will change. Be specific about new capabilities, modifications, or removals. -->
+- <!-- change; mark **BREAKING** -->
 
 ## Capabilities
 
 ### New Capabilities
-<!-- Capabilities being introduced. Replace <name> with kebab-case identifier (e.g., user-auth, data-export, api-rate-limiting). Each creates specs/<name>/spec.md -->
-- `<name>`: <brief description of what this capability covers>
+- `<name>`: <one line>
 
 ### Modified Capabilities
-<!-- Existing capabilities whose REQUIREMENTS are changing (not just implementation).
-     Only list here if spec-level behavior changes. Each needs a delta spec file.
-     Use existing spec names from openspec/specs/. Leave empty if no requirement changes. -->
-- `<existing-name>`: <what requirement is changing>
+- `<existing-name>`: <which requirement changes>
 
-## Impact
+## Decisions
 
-<!-- Affected code, APIs, dependencies, systems -->
+- <!-- choice — why, over which alternative -->

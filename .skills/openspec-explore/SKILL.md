@@ -10,345 +10,114 @@ metadata:
   generatedBy: "1.13.1"
 ---
 
-Enter explore mode. Think deeply. Visualize freely. Follow the conversation wherever it goes.
+Enter explore mode. Think deeply. Follow the conversation wherever it goes. This is a stance, not a workflow: no fixed steps, no required outputs.
 
-**IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, investigate the codebase, and run read-only commands or tools without confirmation, but you must NEVER write code or implement features. If the user asks you to implement something, do not start it here: say that explore mode does not implement, and point them at `/openspec-propose`, which turns the discussion into a change. The work happens from that change, never from explore mode. You MAY create or update OpenSpec change artifacts (proposals, designs, specs) within a confirmed scope—that's capturing thinking, not implementing. Answering design or clarifying questions is never consent to write. Before the first write-capable action, name the artifacts or files you would change and what you would do, ask a direct yes/no question, and wait for the user's confirmation in a separate message. Confirmation covers only the scope you described; ask again before expanding it. An explicit request from the user to capture the exploration as a new change is itself that confirmation, covering the change and the change artifacts the request names; scaffold it first as described below.
+**Explore mode is for thinking, not implementing.** Read files, search code, run read-only commands/tools freely, but NEVER write code or implement features. If asked to implement: say explore mode does not implement, point to `/openspec-propose` (turns discussion into a change; work happens there). You MAY create/update OpenSpec change artifacts (proposal, specs, design, tasks) within a confirmed scope.
+- Answering design/clarifying questions is never consent to write.
+- Before the first write-capable action (including `openspec new change`): name the artifacts/files and what you'd change, ask a direct yes/no question, wait for confirmation in a separate message. Confirmation covers only the described scope; ask again before expanding.
+- Exception: a user's own explicit request to capture the exploration as a new change confirms the change and the artifacts the request names (scaffold first, see below). A yes to your offer confirms only what the offer named, so name the change and artifacts in the offer.
 
-**This is a stance, not a workflow.** There are no fixed steps, no required sequence, no mandatory outputs. You're a thinking partner helping the user explore.
+**Store selection:** If the user names a store (standalone OpenSpec repo registered on this machine) or the work lives in one, run `openspec store list --json` for ids, then pass `--store <id>` on commands that read/write specs and changes (`new change`, `status`, `instructions`, `list`, `show`, `validate`, `archive`, `doctor`, `context`, `schemas`, `view`). Sticky for the rest of the workflow; append it to every unscoped example below (e.g. `openspec status --change "<name>" --json --store "<id>"`). Other commands do not take the flag. Hints printed by commands already carry it. Without a store, commands act on the nearest local `openspec/` root.
 
-**Store selection:** If the user names a store (a store is a standalone OpenSpec repo registered on this machine) or the work lives in one, run `openspec store list --json` to discover registered store ids, then pass `--store <id>` on the commands that read or write specs and changes (`new change`, `status`, `instructions`, `list`, `show`, `validate`, `archive`, `doctor`, `context`, `schemas`, `view`). Once selected, treat `--store <id>` as sticky for the rest of the workflow. Every unscoped example of those commands below is shorthand: before running it, append the flag. For example, run `openspec status --change "<name>" --json --store "<id>"`, not the unscoped form shown below. Other commands do not take the flag. Hints printed by commands already carry the flag; keep it on follow-ups. Without a store, commands act on the nearest local `openspec/` root.
-
-**Project check:** These steps expect a project that already uses OpenSpec. Before the first step that writes anything (`new change`, `archive`, `sync specs`, or authoring an artifact file), confirm the project has a root: run `openspec list --json` (with `--store <id>` when a store is selected, since the store is then the root) and read `root`. A root object means the project is set up. `"root": null` means it is not - there is no `openspec/` directory here, and a write such as `openspec new change` would create one as a side effect. The command also exits non-zero, which is that answer rather than a broken CLI, so read the JSON instead of retrying or working around it.
-
-One `"root": null` is not about setup: when a `status` error message starts with `Declared in` or `Invalid store declaration in` and names this project's `openspec/config.yaml` (or `config.yml`), the project does use OpenSpec through a store it declares, which this machine cannot resolve (the store is not registered, or the `store:` line is malformed). Do not treat it as uninitialized and skip the branches below: stop before writing and show the user that error's `message` and `fix`.
-
-Otherwise, with no root, what happens next depends on how this workflow was reached:
-
-- **Auto-selected**: you chose this workflow yourself, without the user naming OpenSpec, naming this skill, or running its slash command. Stop using OpenSpec and answer the request normally, as you would with no OpenSpec installed. Do not ask them to set anything up and do not mention OpenSpec setup.
-- **Explicit OpenSpec request**: the user named OpenSpec, named this skill, or ran its slash command. Stop before writing and ask how to proceed: set this project up (`openspec init`), target a store they already have (`--store <id>`), or continue without OpenSpec for this request. Wait for their answer.
-
-In both branches, never create the root as a side effect: do not run `openspec init` until the user asks for it, do not hand-create `openspec/` files, and do not let a command create it.
+**Project check:** Before the first write (`new change`, `archive`, `sync specs`, authoring an artifact file), run `openspec list --json` (with `--store <id>` if selected) and read `root`. Root object = set up. `"root": null` = no `openspec/` dir (command exits non-zero; that is the answer, not a broken CLI - don't retry or work around).
+- Exception: if a `status` error message starts with `Declared in` or `Invalid store declaration in` and names this project's `openspec/config.yaml`/`config.yml`, the project uses a store this machine cannot resolve. Not uninitialized: stop before writing and show the user the error's `message` and `fix`.
+- Otherwise, no root:
+  - **Auto-selected** (user did not name OpenSpec, this skill, or its slash command): stop using OpenSpec, answer normally, don't mention setup.
+  - **Explicit request**: stop before writing and ask: set up (`openspec init`), target a store (`--store <id>`), or continue without OpenSpec. Wait.
+- Never create the root as a side effect: no `openspec init` until the user asks, no hand-created `openspec/` files.
 
 ---
 
-## The Stance
+## Stance
 
-- **Curious, not prescriptive** - Ask questions that emerge naturally, don't follow a script
-- **Open threads, not interrogations** - Surface multiple interesting directions and let the user follow what resonates. Don't funnel them through a single path of questions.
-- **Visual** - Use ASCII diagrams liberally when they'd help clarify thinking
-- **Adaptive** - Follow interesting threads, pivot when new information emerges
-- **Patient** - Don't rush to conclusions, let the shape of the problem emerge
-- **Grounded** - Explore the actual codebase when relevant, don't just theorize
-
----
+- Curious, not prescriptive: questions emerge naturally, no script
+- Open threads, not interrogations: surface several directions, let the user pick
+- Visual: ASCII diagrams (plain ASCII only: `+ - |`, `--> <-- ^ v`, `* x`; Unicode glyphs misalign) when they help
+- Adaptive, patient: pivot on new info, don't rush to conclusions
+- Grounded: explore the actual codebase
 
 ## Planning a Change
 
-When the user is planning a change, guide them toward shared understanding with focused discovery questions. For open-ended discussion, follow the conversation without imposing an interview or a required output.
+For open-ended discussion, just follow the conversation. When planning a change, guide toward shared understanding with focused discovery:
 
-Before asking a factual question, follow the context discovery below and inspect relevant OpenSpec artifacts, source, tests, docs, and configuration. Do not ask the user to repeat facts you can verify. Summarize relevant findings without reproducing private context or rules. If evidence is missing, conflicting, or inaccessible, state that limitation and ask only for the clarification needed to proceed.
-
-- **Follow dependencies** - Resolve the next blocking decision before its dependent details. For example, clarify the user's outcome and scope before choosing an API or data model. Revisit downstream assumptions when an earlier answer changes. Skip branches that do not matter to this goal.
-- **Keep questions focused** - Ask one focused question at a time, and briefly explain why it matters and which decision it unlocks. Batch questions only if the user asks for a batch; keep them small and group related decisions.
-- **Offer grounded recommendations** - When evidence supports a recommendation, state your preferred option and why it fits the user's goals, with alternatives and their tradeoffs when useful. Do not invent intent, priorities, or external constraints: ask the user when only they can answer. Avoid a fixed question format.
-- **Keep a conversational record** - Track decisions in the conversation, not in files. Separate confirmed decisions from proposed defaults and unresolved questions. Silence is not acceptance. Accepting an answer or a batch of recommendations is not permission to write. Keep file-write confirmation separate from discovery questions and follow the guardrails below.
-
-Stop asking when the user has enough clarity. Let them pause, pivot, or defer a decision; do not exhaust every branch or force a proposal.
-
-For example, after inspecting the relevant code:
-
-```text
-The CLI already uses SQLite and has no remote service. Is sharing state
-across devices in scope? That determines whether local storage is enough.
-If this stays a single-device tool, I recommend keeping SQLite to avoid
-adding a service to operate; shared state would need a separate sync design.
-```
-
----
+- Before asking a factual question, inspect OpenSpec artifacts, source, tests, docs, config. Don't ask the user to repeat verifiable facts. Summarize findings without reproducing private context/rules. If evidence is missing/conflicting/inaccessible, say so and ask only what's needed.
+- Follow dependencies: resolve the blocking decision before dependent details (outcome/scope before API/data model); revisit downstream assumptions when an earlier answer changes; skip irrelevant branches.
+- One focused question at a time, briefly say why it matters and what it unlocks. Batch only if the user asks.
+- Give grounded recommendations (preferred option, why, alternatives/tradeoffs). Don't invent intent, priorities, or constraints; ask when only the user knows.
+- Keep the record in conversation, not files: separate confirmed decisions, proposed defaults, open questions. Silence is not acceptance; accepting recommendations is not permission to write.
+- Stop asking once clarity is enough. Let the user pause, pivot, or defer; don't force a proposal.
 
 ## What You Might Do
 
-Depending on what the user brings, you might:
-
-**Explore the problem space**
-- Ask clarifying questions that emerge from what they said
-- Challenge assumptions
-- Reframe the problem
-- Find analogies
-
-**Investigate the codebase**
-- Map existing architecture relevant to the discussion
-- Find integration points
-- Identify patterns already in use
-- Surface hidden complexity
-
-**Compare options**
-- Brainstorm multiple approaches
-- Build comparison tables
-- Sketch tradeoffs
-- Recommend a path (if asked)
-
-**Visualize**
-```
-+------------------------------------------+
-|     Use ASCII diagrams liberally         |
-+------------------------------------------+
-|                                          |
-|   [State A] -------> [State B]           |
-|       |                                  |
-|       v                                  |
-|   [State C]                              |
-|                                          |
-|   System diagrams, state machines,       |
-|   data flows, architecture sketches,     |
-|   dependency graphs, comparison tables   |
-|                                          |
-+------------------------------------------+
-```
-
-**Draw with plain ASCII only** — borders `+` `-` `|`, arrows `-->` `<--` `^` `v`, markers `*` `x`.
-Unicode diagram glyphs can render at different widths across terminals, fonts, and locales, so padded boxes and aligned tables can drift. Keep every diagram character ASCII.
-
-**Surface risks and unknowns**
-- Identify what could go wrong
-- Find gaps in understanding
-- Suggest spikes or investigations
-
----
+- Explore the problem: clarify, challenge assumptions, reframe, find analogies
+- Investigate the codebase: map architecture, integration points, existing patterns, hidden complexity
+- Compare options: brainstorm, comparison tables, tradeoffs, recommend if asked
+- Surface risks and unknowns: gaps, spikes
 
 ## OpenSpec Awareness
 
-You have full context of the OpenSpec system. Use it naturally, don't force it.
+Use it naturally, don't force it.
 
 ### Check for context
 
-At the start, quickly check what exists:
+At start:
 ```bash
-openspec list --json
+openspec list --json     # active changes: names, schemas, status
+openspec list --specs    # durable capabilities (add --json for ids/requirement counts)
 ```
+Append `--store "<id>"` only for a registered standalone store. Inspect one spec cheaply: `openspec show "<spec-id>" --type spec --json --no-scenarios` (`--type spec` avoids ambiguity with a same-named change). That is only an overview: before deciding what is covered or should change, read each relevant spec in full with `openspec show "<spec-id>" --type spec`.
 
-This tells you:
-- If there are active changes
-- Their names, schemas, and status
-- What the user might be working on
+Then read `<root.path>/openspec/config.yaml` (or `.yml`; skip if absent):
+- `context`: stack, conventions, constraints
+- `rules`: keyed by artifact id; apply only when writing that artifact
 
-That is the *change* list - work in flight. It does not include the project's durable capabilities, so list those too:
-```bash
-openspec list --specs
-```
-Add `--json` for ids and requirement counts, and append `--store "<id>"` only for a registered standalone store. This is the inventory of what the project already claims to do, and `openspec list` on its own never shows it. To look at one, run `openspec show "<spec-id>" --type spec --json --no-scenarios` (same `--store` rule) - it returns that capability's purpose and requirement texts without pulling the whole spec file into context, and `--type spec` stops a change of the same name from making it ambiguous.
-
-The filtered read is only an overview. Before deciding what is already covered or what should change, read each relevant spec in full, including scenarios, with `openspec show "<spec-id>" --type spec` (same `--store` rule).
-
-Then read the project's own context from the resolved root - `<root.path>/openspec/config.yaml` (or `config.yml`). Use the `root.path` returned above, and skip this if neither file exists:
-- `context`: project background - tech stack, conventions, constraints
-- `rules`: keyed by artifact id - the entries for an artifact apply only when you write that artifact
-
-Ground your thinking in these. They are constraints for you to follow, not content to reproduce: do NOT copy them into the conversation or into any artifact you create.
+These are constraints for you; do NOT copy them into conversation or artifacts.
 
 ### When no change exists
 
-Think freely. When insights crystallize, you might offer:
+Think freely; when insights crystallize, offer e.g. "Want me to create a proposal?" or keep exploring.
 
-- "This feels solid enough to start a change. Want me to create a proposal?"
-- Or keep exploring - no pressure to formalize
+If the user asks to capture the exploration as a new change (see confirmation rules above):
 
-If the user asks you to capture the exploration as a new change, that request is the confirmation required above. It covers scaffolding that change and creating the change artifacts the request names, and nothing else. This holds only when the request is theirs: a yes to an offer you made confirms only the scope your offer itself named, so name the change and the artifacts in the offer. Don't re-ask for what they already asked for; do ask before anything beyond it. Transition seamlessly into the requested capture:
+1. `openspec new change "<name>"` before any artifact. Never hand-create a change dir under `openspec/changes/` (CLI creates required metadata such as `.openspec.yaml`). Keep `--store <id>` on follow-ups.
+2. `openspec status --change "<name>" --json`; process requested artifacts in dependency order. For each `ready` requested artifact run `openspec instructions "<artifact-id>" --change "<name>" --json`. Evaluate any condition in its `instruction` against the explored change; record a deliberate skip if it doesn't apply. If a requested artifact is blocked by a direct prerequisite the user did not request, run `instructions` for that prerequisite too (ready or blocked), evaluate its condition: skip deliberately only if it doesn't apply; otherwise (applies or unconditional) ask before expanding the capture. Don't create unrequested prerequisites without approval.
+3. Follow returned `template` and `instruction`. Read completed dependency files from `dependencies`; apply `context`/`rules` as constraints without copying. If the instruction delegates to a skill/command, invoke it; otherwise write to `resolvedOutputPath` (pick a concrete path if a glob). Verify the file exists.
+4. After each artifact re-run `status`; continue until every requested artifact is `done`, `skipped`, or deliberately skipped by condition. Tell the user about conditional skips, remember them, don't reconsider. If a requested artifact is `blocked` only by deliberately skipped conditional prerequisites, run its `instructions` anyway and create it. If blocked by an unrequested, non-skippable prerequisite, explain and ask before expanding.
 
-1. Run `openspec new change "<name>"` (with `--store <id>` when applicable) before creating any artifacts. Never create a new change directory under `openspec/changes/` by hand; the CLI scaffold creates required metadata such as `.openspec.yaml`. Keep the selected `--store <id>` on every applicable follow-up `status` and `instructions` command.
-2. Run `openspec status --change "<name>" --json` (append the confirmed `--store "<id>"` only for a registered standalone store), then process the requested artifacts in dependency order. For each requested artifact that is `ready`, run `openspec instructions "<artifact-id>" --change "<name>" --json` (append the confirmed `--store "<id>"` only for a registered standalone store). Before creating a requested artifact, evaluate any condition in its own `instruction` against the explored change; record a deliberate skip instead when the condition does not apply. If a requested artifact is blocked by a direct prerequisite the user did not request, run `openspec instructions "<prerequisite-id>" --change "<name>" --json` (append the confirmed `--store "<id>"` only for a registered standalone store) for that prerequisite whether it is `ready` or `blocked`. If its own `instruction` states a condition, evaluate that condition against the explored change and record a deliberate skip only when the condition does not apply. If the condition applies, or the prerequisite is not conditional, treat it as a normal prerequisite and ask before expanding the capture. Do not create an unrequested prerequisite unless the user approves.
-3. Follow the returned `template` and `instruction` fields. Read completed dependency files listed in `dependencies`, and apply `context` and `rules` as constraints without copying them into the artifact. If the instruction delegates creation to a specific skill or command, invoke it; otherwise write the artifact to `resolvedOutputPath`, using the instruction to choose a concrete path when it is a glob. Verify that the selected concrete output exists.
-4. After creating each artifact, re-run `openspec status --change "<name>" --json` (append the confirmed `--store "<id>"` only for a registered standalone store) and continue until every requested artifact is `done`, `skipped`, or was deliberately skipped because its own `instruction` stated a condition that did not apply. Tell the user about a deliberate conditional skip, remember it, and do not reconsider it. Dependencies are enablers, not gates: if a requested artifact is still `blocked` only because you deliberately skipped a conditional prerequisite, run `openspec instructions "<artifact-id>" --change "<name>" --json` (append the confirmed `--store "<id>"` only for a registered standalone store) despite the blocked status, then create it using step 3 only when those recorded conditional skips are its sole missing dependencies. If a requested artifact is blocked by a prerequisite the user did not ask to capture and cannot be conditionally skipped, explain that dependency and ask before expanding the capture.
-
-Capture the artifact(s) the user requested without asking them to invoke another workflow command. If they asked only to start a change, stop after scaffolding and show its status. When the requested capture is done, stop there and name where the work continues: `/openspec-propose` writes the remaining planning artifacts, and `/openspec-apply-change` implements the change once tasks exist. Capturing artifacts never starts implementing them.
+Don't ask the user to invoke another workflow command for the requested capture. If they only asked to start a change, stop after scaffolding and show status. When done, stop and name where work continues: `/openspec-propose` writes remaining planning artifacts; `/openspec-apply-change` implements once tasks exist. Capturing never starts implementing.
 
 ### When a change exists
 
-If the user mentions a change or you detect one is relevant:
+1. Run `openspec status --change "<name>" --json`; use `changeRoot`, `artifactPaths`, `actionContext`; read files in `artifactPaths.<artifact>.existingOutputPaths`.
+2. Reference artifacts naturally in conversation (e.g. "The proposal scopes this to premium users, but we now think everyone...").
+3. Offer to capture when decisions are made. `<capability-path>` = spec dir relative to `specs/` (e.g. `user-auth`, `identity/user-auth`); preserve an existing capability's full path, follow project organization for new ones.
 
-1. **Resolve and read existing artifacts for context**
-   - Run `openspec status --change "<name>" --json`.
-   - Use `changeRoot`, `artifactPaths`, and `actionContext` from the status JSON.
-   - Read existing files from `artifactPaths.<artifact>.existingOutputPaths`.
+   | Insight | Capture in |
+   |---|---|
+   | New/changed requirement | `specs/<capability-path>/spec.md` |
+   | Design decision | `design.md` (optional; only for cross-cutting changes / new ADR, else put it in proposal or tasks) |
+   | Scope changed | `proposal.md` |
+   | New work | `tasks.md` |
+   | Assumption invalidated | relevant artifact |
 
-2. **Reference them naturally in conversation**
-   - "Your design mentions using Redis, but we just realized SQLite fits better..."
-   - "The proposal scopes this to premium users, but we're now thinking everyone..."
+4. User decides: offer and move on; no pressure, no auto-capture.
 
-3. **Offer to capture when decisions are made**
+## Entry Points (brief)
 
-   `<capability-path>` is the spec directory relative to `specs/` (for example, `user-auth` or `identity/user-auth`). Preserve an existing capability's full path and follow the project's established organization for new capabilities.
+- Vague idea: lay out the spectrum of options/complexity, ask where their head is.
+- Specific problem: read the codebase, sketch current flow, name the tangles, ask which is burning.
+- Stuck mid-implementation (`/openspec-explore <change>`): read change artifacts, locate the task, trace it, suggest paths; offer to update the design/artifact or add a spike task.
+- Option comparison: ask context first, state key constraints, compare in a table, recommend.
 
-    | Insight Type               | Where to Capture                    |
-    |----------------------------|-------------------------------------|
-    | New requirement discovered | `specs/<capability-path>/spec.md` |
-    | Requirement changed        | `specs/<capability-path>/spec.md` |
-    | Design decision made       | `design.md`                       |
-    | Scope changed              | `proposal.md`                     |
-    | New work identified        | `tasks.md`                        |
-    | Assumption invalidated     | Relevant artifact                   |
+## Ending
 
-   Example offers:
-   - "That's a design decision. Capture it in design.md?"
-   - "This is a new requirement. Add it to specs?"
-   - "This changes scope. Update the proposal?"
-
-4. **The user decides** - Offer and move on. Don't pressure. Don't auto-capture.
-
----
-
-## What You Don't Have To Do
-
-- Follow a script
-- Ask the same questions every time
-- Produce a specific artifact
-- Reach a conclusion
-- Stay on topic if a tangent is valuable
-- Be brief (this is thinking time)
-
----
-
-## Handling Different Entry Points
-
-**User brings a vague idea:**
-```
-User: I'm thinking about adding real-time collaboration
-
-You: Real-time collab is a big space. Let me think about this...
-
-      COLLABORATION SPECTRUM
-      ============================================
-
-      Awareness          Coordination         Sync
-          |                   |                 |
-          v                   v                 v
-      +--------+         +--------+        +--------+
-      |Presence|         |Cursors |        |  CRDT  |
-      |  "3    |         | Multi  |        |Conflict|
-      |online" |         | select |        |  free  |
-      +--------+         +--------+        +--------+
-          |                   |                 |
-       trivial            moderate           complex
-
-      Where's your head at?
-```
-
-**User brings a specific problem:**
-```
-User: The auth system is a mess
-
-You: [reads codebase]
-
-     +---------------------------------------------+
-     |              CURRENT AUTH FLOW              |
-     +---------------------------------------------+
-                        |
-          +-------------+-------------+
-          v             v             v
-     +---------+  +---------+  +---------+
-     | Google  |  |  GitHub |  |  Email  |
-     |  OAuth  |  |  OAuth  |  |  Magic  |
-     +----+----+  +----+----+  +----+----+
-          |             |             |
-          +-------------+-------------+
-                        v
-                  +-----------+
-                  |  Session  |
-                  +-----+-----+
-                        |
-                        v
-                  +-----------+
-                  |   Perms   |
-                  +-----------+
-
-     I see three tangles. Which one's burning?
-```
-
-**User is stuck mid-implementation:**
-```
-User: /openspec-explore add-auth-system
-      The OAuth integration is more complex than expected
-
-You: [reads change artifacts]
-
-     You're on task 4: "Implement OAuth flow"
-
-     Let me trace what's involved...
-
-     [draws diagram, explores options, suggests paths]
-
-     Want to update the design to reflect this?
-     Or add a spike task to investigate?
-```
-
-**User wants to compare options:**
-```
-User: Should we use Postgres or SQLite?
-
-You: Generic answer is boring. What's the context?
-
-User: A CLI tool that tracks local dev environments
-
-You: That changes everything.
-
-     +-------------------------------------------------+
-     |          CLI TOOL DATA STORAGE                  |
-     +-------------------------------------------------+
-
-     Key constraints:
-     - No daemon running
-     - Must work offline
-     - Single user
-
-                  SQLite          Postgres
-     Deployment   embedded        needs server
-     Offline      yes             no
-     Single file  yes             no
-
-     SQLite. Not even close.
-
-     Unless... is there a sync component?
-```
-
----
-
-## Ending Discovery
-
-There's no required ending. Discovery might:
-
-- **Flow into a proposal**: "Ready to start? Run `/openspec-propose` and this becomes a change."
-- **Result in artifact updates**: "Updated design.md with these decisions"
-- **Just provide clarity**: User has what they need, moves on
-- **Continue later**: "We can pick this up anytime"
-
-When it feels like things are crystallizing, you might summarize:
-
-```
-## What We Figured Out
-
-**The problem**: [crystallized understanding]
-
-**The approach**: [if one emerged]
-
-**Open questions**: [if any remain]
-
-**Next steps** (if ready):
-- Turn this into a change: `/openspec-propose`
-- Keep exploring: just keep talking
-```
-
-But this summary is optional. Sometimes the thinking IS the value.
-
----
+No required ending: flow into `/openspec-propose`, update artifacts, just give clarity, or continue later. Optional summary: problem, approach, open questions, next steps (turn into a change with `/openspec-propose`, or keep exploring). Sometimes the thinking is the value.
 
 ## Guardrails
 
-- **Don't implement** - Never write code or implement features. Workflow configuration counts too: creating or editing schemas, templates, or `openspec/config.yaml` is a change, not thinking. Creating or updating OpenSpec change artifacts within the confirmed scope is fine, writing anything else is not. When the user is ready to build, name the handoff rather than starting: `/openspec-propose` turns the discussion into a change, and the work happens there.
-- **Don't fake understanding** - If something is unclear, dig deeper
-- **Don't rush** - Discovery is thinking time, not task time
-- **Don't force structure** - Let patterns emerge naturally
-- **Don't auto-capture** - Offer to save insights, don't just do it. Read-only commands and tools need no confirmation. Before the first write-capable action—including `openspec new change` or another command that writes files—name the artifacts or files and proposed changes, ask a direct yes/no question, and wait for explicit confirmation in a separate user message. That confirmation covers only the described scope; ask again before expanding it. Answers to design or clarifying questions are never consent to write. That rule governs `openspec new change` whenever you are the one proposing the capture; the user's own capture request is the exception, handled in the capture transition above.
-- **Don't manually scaffold changes** - Never create a new change directory under `openspec/changes/` by hand. Always use `openspec new change "<name>"` (with `--store <id>` when applicable) so required metadata such as `.openspec.yaml` is created before writing artifacts.
-- **Do visualize** - A good diagram is worth many paragraphs
-- **Do explore the codebase** - Ground discussions in reality
-- **Do question assumptions** - Including the user's and your own
+- Don't implement: no code. Workflow configuration (schemas, templates, `openspec/config.yaml`) counts as a change, not thinking. Only OpenSpec change artifacts within confirmed scope may be written. When the user is ready to build, hand off to `/openspec-propose`.
+- Don't fake understanding; dig deeper when unclear
+- Don't rush or force structure
+- Don't auto-capture: offer to save. Read-only commands/tools need no confirmation; the first write-capable action (including `openspec new change`) needs a named scope, yes/no question, and explicit confirmation in a separate user message. Scope-limited; ask again to expand. Exception: the user's own capture request (above).
+- Don't manually scaffold change dirs; always `openspec new change "<name>"` (with `--store <id>` when applicable)
+- Do visualize, explore the codebase, question assumptions (the user's and your own)

@@ -10,26 +10,20 @@ metadata:
   generatedBy: "1.13.1"
 ---
 
-Guide the user through their first complete OpenSpec workflow cycle. This is a teaching experience—you'll do real work in their codebase while explaining each step.
+Guide the user through their first complete OpenSpec workflow cycle: a teaching experience doing real work in their codebase while explaining each step.
 
-**Store selection:** If the user names a store (a store is a standalone OpenSpec repo registered on this machine) or the work lives in one, run `openspec store list --json` to discover registered store ids, then pass `--store <id>` on the commands that read or write specs and changes (`new change`, `status`, `instructions`, `list`, `show`, `validate`, `archive`, `doctor`, `context`, `schemas`, `view`). Once selected, treat `--store <id>` as sticky for the rest of the workflow. Every unscoped example of those commands below is shorthand: before running it, append the flag. For example, run `openspec status --change "<name>" --json --store "<id>"`, not the unscoped form shown below. Other commands do not take the flag. Hints printed by commands already carry the flag; keep it on follow-ups. Without a store, commands act on the nearest local `openspec/` root.
+**Store selection:** If the user names a store (standalone OpenSpec repo registered on this machine) or the work lives in one, run `openspec store list --json` for ids, then pass `--store <id>` on commands that read/write specs and changes (`new change`, `status`, `instructions`, `list`, `show`, `validate`, `archive`, `doctor`, `context`, `schemas`, `view`). Sticky for the rest of the workflow; append it to every unscoped example below (e.g. `openspec status --change "<name>" --json --store "<id>"`). Other commands do not take the flag. Hints printed by commands already carry it. Without a store, commands act on the nearest local `openspec/` root.
 
-**Project check:** These steps expect a project that already uses OpenSpec. Before the first step that writes anything (`new change`, `archive`, `sync specs`, or authoring an artifact file), confirm the project has a root: run `openspec list --json` (with `--store <id>` when a store is selected, since the store is then the root) and read `root`. A root object means the project is set up. `"root": null` means it is not - there is no `openspec/` directory here, and a write such as `openspec new change` would create one as a side effect. The command also exits non-zero, which is that answer rather than a broken CLI, so read the JSON instead of retrying or working around it.
-
-One `"root": null` is not about setup: when a `status` error message starts with `Declared in` or `Invalid store declaration in` and names this project's `openspec/config.yaml` (or `config.yml`), the project does use OpenSpec through a store it declares, which this machine cannot resolve (the store is not registered, or the `store:` line is malformed). Do not treat it as uninitialized and skip the branches below: stop before writing and show the user that error's `message` and `fix`.
-
-Otherwise, with no root, what happens next depends on how this workflow was reached:
-
-- **Auto-selected**: you chose this workflow yourself, without the user naming OpenSpec, naming this skill, or running its slash command. Stop using OpenSpec and answer the request normally, as you would with no OpenSpec installed. Do not ask them to set anything up and do not mention OpenSpec setup.
-- **Explicit OpenSpec request**: the user named OpenSpec, named this skill, or ran its slash command. Stop before writing and ask how to proceed: set this project up (`openspec init`), target a store they already have (`--store <id>`), or continue without OpenSpec for this request. Wait for their answer.
-
-In both branches, never create the root as a side effect: do not run `openspec init` until the user asks for it, do not hand-create `openspec/` files, and do not let a command create it.
+**Project check:** Before the first write (`new change`, `archive`, `sync specs`, authoring an artifact file), run `openspec list --json` (with `--store <id>` if selected) and read `root`. Root object = set up. `"root": null` = no `openspec/` dir (command exits non-zero; that is the answer, not a broken CLI - don't retry or work around).
+- Exception: if a `status` error message starts with `Declared in` or `Invalid store declaration in` and names this project's `openspec/config.yaml`/`config.yml`, the project uses a store this machine cannot resolve. Not uninitialized: stop before writing and show the user the error's `message` and `fix`.
+- Otherwise, no root:
+  - **Auto-selected** (user did not name OpenSpec, this skill, or its slash command): stop using OpenSpec, answer normally, don't mention setup.
+  - **Explicit request**: stop before writing and ask: set up (`openspec init`), target a store (`--store <id>`), or continue without OpenSpec. Wait.
+- Never create the root as a side effect: no `openspec init` until the user asks, no hand-created `openspec/` files.
 
 ---
 
 ## Preflight
-
-Before starting, check if the OpenSpec CLI is installed:
 
 ```bash
 # Unix/macOS
@@ -37,52 +31,15 @@ openspec --version 2>&1 || echo "CLI_NOT_INSTALLED"
 # Windows (PowerShell)
 # if (Get-Command openspec -ErrorAction SilentlyContinue) { openspec --version } else { echo "CLI_NOT_INSTALLED" }
 ```
-
-**If CLI not installed:**
-> OpenSpec CLI is not installed. Install it first, then come back to `/openspec-onboard`.
-
-Stop here if not installed.
-
----
+If not installed: tell the user "OpenSpec CLI is not installed. Install it first, then come back to `/openspec-onboard`." and stop.
 
 ## Phase 1: Welcome
 
-Display:
-
-```
-## Welcome to OpenSpec!
-
-I'll walk you through a complete change cycle—from idea to implementation—using a real task in your codebase. Along the way, you'll learn the workflow by doing it.
-
-**What we'll do:**
-1. Pick a small, real task in your codebase
-2. Explore the problem briefly
-3. Create a change (the container for our work)
-4. Build the artifacts: proposal → specs → design → tasks
-5. Implement the tasks
-6. Archive the completed change
-
-**Time:** ~15-20 minutes
-
-Let's start by finding something to work on.
-```
-
----
+Short welcome (~15-20 min): pick small real task, explore, create change, build artifacts (proposal, specs, tasks; design only if needed), implement, archive.
 
 ## Phase 2: Task Selection
 
-### Codebase Analysis
-
-Scan the codebase for small improvement opportunities. Look for:
-
-1. **TODO/FIXME comments** - Search for `TODO`, `FIXME`, `HACK`, `XXX` in code files
-2. **Missing error handling** - `catch` blocks that swallow errors, risky operations without try-catch
-3. **Functions without tests** - Cross-reference `src/` with test directories
-4. **Type issues** - `any` types in TypeScript files (`: any`, `as any`)
-5. **Debug artifacts** - `console.log`, `console.debug`, `debugger` statements in non-debug code
-6. **Missing validation** - User input handlers without validation
-
-Also check recent git activity:
+Scan for small improvements: TODO/FIXME/HACK/XXX; swallowed errors; untested functions; TS `any`; debug artifacts (`console.log`, `debugger`); unvalidated input. Also:
 ```bash
 # Unix/macOS
 git log --oneline -10 2>/dev/null || echo "No git history"
@@ -90,479 +47,110 @@ git log --oneline -10 2>/dev/null || echo "No git history"
 # git log --oneline -10 2>$null; if ($LASTEXITCODE -ne 0) { echo "No git history" }
 ```
 
-### Present Suggestions
+Present 3-4 suggestions (location `path:line`, scope, why good) plus "Something else?"; user picks a number or describes own.
 
-From your analysis, present 3-4 specific suggestions:
+If nothing found: ask "I didn't find obvious quick wins in your codebase. What's something small you've been meaning to add or fix?"
 
-```
-## Task Suggestions
-
-Based on scanning your codebase, here are some good starter tasks:
-
-**1. [Most promising task]**
-   Location: `src/path/to/file.ts:42`
-   Scope: ~1-2 files, ~20-30 lines
-   Why it's good: [brief reason]
-
-**2. [Second task]**
-   Location: `src/another/file.ts`
-   Scope: ~1 file, ~15 lines
-   Why it's good: [brief reason]
-
-**3. [Third task]**
-   Location: [location]
-   Scope: [estimate]
-   Why it's good: [brief reason]
-
-**4. Something else?**
-   Tell me what you'd like to work on.
-
-Which task interests you? (Pick a number or describe your own)
-```
-
-**If nothing found:** Fall back to asking what the user wants to build:
-> I didn't find obvious quick wins in your codebase. What's something small you've been meaning to add or fix?
-
-### Scope Guardrail
-
-If the user picks or describes something too large (major feature, multi-day work):
-
-```
-That's a valuable task, but it's probably larger than ideal for your first OpenSpec run-through.
-
-For learning the workflow, smaller is better—it lets you see the full cycle without getting stuck in implementation details.
-
-**Options:**
-1. **Slice it smaller** - What's the smallest useful piece of [their task]? Maybe just [specific slice]?
-2. **Pick something else** - One of the other suggestions, or a different small task?
-3. **Do it anyway** - If you really want to tackle this, we can. Just know it'll take longer.
-
-What would you prefer?
-```
-
-Let the user override if they insist—this is a soft guardrail.
-
----
+**Scope guardrail (soft):** if the pick is too large (major feature, multi-day), say it's larger than ideal for a first run and offer: (1) slice it smaller (suggest a specific slice), (2) pick something else, (3) do it anyway (takes longer). Let the user override.
 
 ## Phase 3: Explore Demo
 
-Once a task is selected, briefly demonstrate explore mode:
+Briefly show **explore mode**: 1-2 minutes reading relevant files, brief analysis/considerations; mention `/openspec-explore` is usable anytime. Next: create a change.
 
-```
-Before we create a change, let me quickly show you **explore mode**—it's how you think through problems before committing to a direction.
-```
-
-Spend 1-2 minutes investigating the relevant code:
-- Read the file(s) involved
-- Draw a quick ASCII diagram if it helps
-- Note any considerations
-
-```
-## Quick Exploration
-
-[Your brief analysis—what you found, any considerations]
-
-┌─────────────────────────────────────────┐
-│   [Optional: ASCII diagram if helpful]  │
-└─────────────────────────────────────────┘
-
-Explore mode (`/openspec-explore`) is for this kind of thinking—investigating before implementing. You can use it anytime you need to think through a problem.
-
-Now let's create a change to hold our work.
-```
-
-**PAUSE** - Wait for user acknowledgment before proceeding.
-
----
+**PAUSE** for user acknowledgment.
 
 ## Phase 4: Create the Change
 
-**EXPLAIN:**
-```
-## Creating a Change
+EXPLAIN: a change is a container for a piece of work's planning, at the `changeRoot` from `openspec status --change "<name>" --json`.
 
-A "change" in OpenSpec is a container for all the thinking and planning around a piece of work. It lives at the `changeRoot` reported by `openspec status --change "<name>" --json` and holds your artifacts—proposal, specs, design, tasks.
-
-Let me create one for our task.
-```
-
-**DO:** Create the change with a derived kebab-case name:
+DO (kebab-case derived name):
 ```bash
 openspec new change "<derived-name>"
 ```
-
-**SHOW:**
-```
-Created: <changeRoot from status JSON>
-
-The folder structure:
-```
-<changeRoot>/
-├── proposal.md    ← Why we're doing this (empty, we'll fill it)
-├── design.md      ← How we'll build it (empty)
-├── specs/         ← Detailed requirements (empty)
-└── tasks.md       ← Implementation checklist (empty)
-```
-
-Now let's fill in the first artifact—the proposal.
-```
-
----
+SHOW: `Created: <changeRoot>`; contents: `proposal.md` (why), `specs/` (requirements), `tasks.md` (checklist), optional `design.md`.
 
 ## Phase 5: Proposal
 
-**EXPLAIN:**
-```
-## The Proposal
+EXPLAIN: the proposal captures **why** and **what**, the elevator pitch.
 
-The proposal captures **why** we're making this change and **what** it involves at a high level. It's the "elevator pitch" for the work.
+DO: draft (don't save yet). `<capability-path>` = spec dir relative to `specs/` (e.g. `user-auth`, `identity/user-auth`); use the exact existing path for modified capabilities; follow project organization for new ones.
 
-I'll draft one based on our task.
-```
+Sections: Why (1-2 sentences), What Changes (bullets), Capabilities (New: `<capability-path>`; Modified: `<existing-capability-path>`), Impact (files).
+Ask whether it captures the intent. **PAUSE** for approval/feedback.
 
-**DO:** Draft the proposal content (don't save yet):
-
-`<capability-path>` is the spec directory relative to `specs/` (for example,
-`user-auth` or `identity/user-auth`). Use the exact existing path for modified
-capabilities. For new capabilities, follow the project's established spec
-organization.
-
-```
-Here's a draft proposal:
-
----
-
-# Proposal
-
-## Why
-
-[1-2 sentences explaining the problem/opportunity]
-
-## What Changes
-
-[Bullet points of what will be different]
-
-## Capabilities
-
-### New Capabilities
-- `<capability-path>`: [brief description]
-
-### Modified Capabilities
-<!-- If modifying existing behavior -->
-- `<existing-capability-path>`: [brief description]
-
-## Impact
-
-- `src/path/to/file.ts`: [what changes]
-- [other files if applicable]
-
----
-
-Does this capture the intent? I can adjust before we save it.
-```
-
-**PAUSE** - Wait for user approval/feedback.
-
-After approval, save the proposal:
+After approval:
 ```bash
 openspec instructions proposal --change "<name>" --json
 ```
-Then write the content to the `resolvedOutputPath` from `openspec instructions proposal --change "<name>" --json`.
-
-```
-Proposal saved. This is your "why" document—you can always come back and refine it as understanding evolves.
-
-Next up: specs.
-```
-
----
+Write the content to its `resolvedOutputPath`. Note the proposal can be refined later. Next: specs.
 
 ## Phase 6: Specs
 
-**EXPLAIN:**
-```
-## Specs
+EXPLAIN: specs define **what** in precise, testable requirement/scenario form; a small task may need only one spec file.
 
-Specs define **what** we're building in precise, testable terms. They use a requirement/scenario format that makes expected behavior crystal clear.
-
-For a small task like this, we might only need one spec file.
-```
-
-**DO:** Resolve where the spec file should be created:
+DO: resolve the file:
 ```bash
 openspec instructions specs --change "<name>" --json
-# Use resolvedOutputPath from the JSON. If it is a glob, choose the concrete file path using the schema instruction and the change's context.
+# Use resolvedOutputPath. If a glob, choose the concrete file path using the schema instruction and the change's context.
 ```
+Draft:
+Format: `# Spec Delta` > `## ADDED Requirements` > `### Requirement: <Name>` + description > `#### Scenario: <name>` with `- **WHEN**`, `- **THEN**`, `- **AND**` (optional) lines; reads as test cases. Save to the concrete path chosen from `resolvedOutputPath`.
 
-Draft the spec content:
+## Phase 7: Design (optional)
 
-```
-Here's the spec:
-
----
-
-# Spec Delta
-
-## ADDED Requirements
-
-### Requirement: <Name>
-
-<Description of what the system should do>
-
-#### Scenario: <Scenario name>
-
-- **WHEN** <trigger condition>
-- **THEN** <expected outcome>
-- **AND** <additional outcome if needed>
-
----
-
-This format—WHEN/THEN/AND—makes requirements testable. You can literally read them as test cases.
-```
-
-Save to the concrete file path chosen from `resolvedOutputPath`.
-
----
-
-## Phase 7: Design
-
-**EXPLAIN:**
-```
-## Design
-
-The design captures **how** we'll build it—technical decisions, tradeoffs, approach.
-
-For small changes, this might be brief. That's fine—not every change needs deep design discussion.
-```
-
-**DO:** Draft design.md:
-
-```
-Here's the design:
-
----
-
-# Design
-
-## Context
-
-[Brief context about the current state]
-
-## Goals / Non-Goals
-
-**Goals:**
-- [What we're trying to achieve]
-
-**Non-Goals:**
-- [What's explicitly out of scope]
-
-## Decisions
-
-### Decision 1: [Key decision]
-
-[Explanation of approach and rationale]
-
----
-
-For a small task, this captures the key decisions without over-engineering.
-```
-
-Save to the `resolvedOutputPath` from `openspec instructions design --change "<name>" --json`.
-
----
+design.md is OPTIONAL: only for cross-cutting changes or when a new ADR is warranted. For a small task, skip it and tell the user why (decisions fit in proposal/tasks). If needed, EXPLAIN it captures **how** (decisions, tradeoffs), draft with sections Context, Goals / Non-Goals, Decisions (each with rationale), and save to `resolvedOutputPath` from `openspec instructions design --change "<name>" --json`.
 
 ## Phase 8: Tasks
 
-**EXPLAIN:**
-```
-## Tasks
+EXPLAIN: tasks are checkboxes that drive apply; small, clear, in logical order.
 
-Finally, we break the work into implementation tasks—checkboxes that drive the apply phase.
+DO: generate from specs (and design if any):
+Format: `# Tasks`, `## 1. [Category or file]` with `- [ ] 1.1 [Specific task] — verify: [test, command, observable behavior, or delivered artifact]`; final `## N. Integration Verification` with `- [ ] N.1 Verify [broader behavior] with [end-to-end test or observable result]`.
+Ask if ready to implement. **PAUSE** for confirmation. Save to `resolvedOutputPath` from `openspec instructions tasks --change "<name>" --json`.
 
-These should be small, clear, and in logical order.
-```
+## Phase 9: Apply
 
-**DO:** Generate tasks based on specs and design:
+DO, for each task:
+1. Announce "Working on task N: [description]"
+2. Implement in the codebase
+3. Reference specs/design naturally ("The spec says X, so I'm doing Y")
+4. Mark complete in tasks.md: `- [ ]` -> `- [x]`
+5. Brief status: "Task N complete"
 
-```
-Here are the implementation tasks:
-
----
-
-# Tasks
-
-## 1. [Category or file]
-
-- [ ] 1.1 [Specific task] — verify: [test, command, observable behavior, or delivered artifact]
-- [ ] 1.2 [Specific task] — verify: [test, command, observable behavior, or delivered artifact]
-
-## 2. Integration Verification
-
-- [ ] 2.1 Verify [broader integration or system behavior] with [end-to-end test or observable result]
-
----
-
-Each checkbox becomes a unit of work in the apply phase. Ready to implement?
-```
-
-**PAUSE** - Wait for user to confirm they're ready to implement.
-
-Save to the `resolvedOutputPath` from `openspec instructions tasks --change "<name>" --json`.
-
----
-
-## Phase 9: Apply (Implementation)
-
-**EXPLAIN:**
-```
-## Implementation
-
-Now we implement each task, checking them off as we go. I'll announce each one and occasionally note how the specs/design informed the approach.
-```
-
-**DO:** For each task:
-
-1. Announce: "Working on task N: [description]"
-2. Implement the change in the codebase
-3. Reference specs/design naturally: "The spec says X, so I'm doing Y"
-4. Mark complete in tasks.md: `- [ ]` → `- [x]`
-5. Brief status: "✓ Task N complete"
-
-Keep narration light—don't over-explain every line of code.
-
-After all tasks:
-
-```
-## Implementation Complete
-
-All tasks done:
-- [x] Task 1
-- [x] Task 2
-- [x] ...
-
-The change is implemented! One more step—let's archive it.
-```
-
----
+Keep narration light. After all tasks, list them as done and say one step remains: archive.
 
 ## Phase 10: Archive
 
-**EXPLAIN:**
-```
-## Archiving
-
-When a change is complete, we archive it. The archive path is derived from `planningHome.changesDir` and the date.
-
-Archived changes become your project's decision history—you can always find them later to understand why something was built a certain way.
-```
-
-**DO:** Archive the change (`--yes` answers the confirmation prompts, which you cannot answer from a tool call):
+DO (`--yes` answers confirmation prompts, which you cannot answer from a tool call):
 ```bash
 openspec archive "<name>" --yes
 ```
-
-**SHOW:**
-```
-Archived to: `<planningHome.changesDir>/archive/<target-name>/` (the target name prepends today's date, unless the name already starts with a `YYYY-MM-DD-` prefix — then it is kept as-is, no second date)
-
-The change is now part of your project's history. The code is in your codebase, the decision record is preserved.
-```
-
----
+SHOW: `Archived to: <planningHome.changesDir>/archive/<target-name>/` (target name prepends today's date unless the name already starts with `YYYY-MM-DD-`, then kept as-is). Code is in the codebase, decision record preserved.
 
 ## Phase 11: Recap & Next Steps
 
-```
-## Congratulations!
+Congratulate; recap cycle (Explore, New, Proposal, Specs, Design if needed, Tasks, Apply, Archive). Show command reference:
 
-You just completed a full OpenSpec cycle:
+| Command | What it does |
+|---|---|
+| `/openspec-propose <name>` | Create a change and generate all artifacts |
+| `/openspec-explore` | Think through problems (no code changes) |
+| `/openspec-apply-change <name>` | Implement tasks |
+| `/openspec-archive-change <name>` | Archive a completed change |
+| `/openspec-new-change <name>` | Start a new change, one artifact at a time |
+| `/openspec-continue-change <name>` | Continue an existing change |
+| `/openspec-verify-change <name>` | Verify implementation matches artifacts |
 
-1. **Explore** - Thought through the problem
-2. **New** - Created a change container
-3. **Proposal** - Captured WHY
-4. **Specs** - Defined WHAT in detail
-5. **Design** - Decided HOW
-6. **Tasks** - Broke it into steps
-7. **Apply** - Implemented the work
-8. **Archive** - Preserved the record
+Suggest trying `/openspec-propose` on something they want to build.
 
-This same rhythm works for any size change—a small fix or a major feature.
+## Graceful Exit
 
----
-
-## Command Reference
-
-**The commands you have installed:**
-
- | Command          | What it does                               |
- |------------------|--------------------------------------------|
- | `/openspec-propose` | Create a change and generate all artifacts |
- | `/openspec-explore` | Think through problems before/during work  |
- | `/openspec-apply-change`   | Implement tasks from a change              |
- | `/openspec-archive-change` | Archive a completed change                 |
- | `/openspec-new-change`     | Start a new change, one artifact at a time |
- | `/openspec-continue-change` | Continue working on an existing change    |
- | `/openspec-verify-change`  | Verify implementation matches artifacts    |
-
----
-
-## What's Next?
-
-Try `/openspec-propose` on something you actually want to build. You've got the rhythm now!
-```
-
----
-
-## Graceful Exit Handling
-
-### User wants to stop mid-way
-
-If the user says they need to stop, want to pause, or seem disengaged:
-
-```
-No problem! Your change is saved at the `changeRoot` reported by `openspec status --change "<name>" --json`.
-
-To pick up where we left off later, `openspec status --change "<name>" --json` shows exactly where the change stands.
-- `/openspec-continue-change <name>` - Resume artifact creation
-- `/openspec-apply-change <name>` - Jump to implementation (if tasks exist)
-
-The work won't be lost. Come back whenever you're ready.
-```
-
-Exit gracefully without pressure.
-
-### User just wants command reference
-
-If the user says they just want to see the commands or skip the tutorial:
-
-```
-## OpenSpec Quick Reference
-
-**The commands you have installed:**
-
- | Command                  | What it does                               |
- |--------------------------|--------------------------------------------|
- | `/openspec-propose <name>`  | Create a change and generate all artifacts |
- | `/openspec-explore`         | Think through problems (no code changes)   |
- | `/openspec-apply-change <name>`    | Implement tasks                            |
- | `/openspec-archive-change <name>`  | Archive when done                          |
- | `/openspec-new-change <name>`      | Start a new change, step by step           |
- | `/openspec-continue-change <name>` | Continue an existing change                |
- | `/openspec-verify-change <name>`   | Verify implementation                      |
-
-Try `/openspec-propose` to start your first change.
-```
-
-Exit gracefully.
-
----
+- **User wants to stop/pause or seems disengaged:** change is saved at `changeRoot`; `openspec status --change "<name>" --json` shows where it stands. Resume with `/openspec-continue-change <name>` (artifact creation) or `/openspec-apply-change <name>` (if tasks exist). No pressure.
+- **User just wants the command reference / skip tutorial:** show the command table above, suggest `/openspec-propose`, exit gracefully.
 
 ## Guardrails
 
-- **Follow the EXPLAIN → DO → SHOW → PAUSE pattern** at key transitions (after explore, after proposal draft, after tasks, after archive)
-- **Keep narration light** during implementation—teach without lecturing
-- **Don't skip phases** even if the change is small—the goal is teaching the workflow
-- **Pause for acknowledgment** at marked points, but don't over-pause
-- **Handle exits gracefully**—never pressure the user to continue
-- **Use real codebase tasks**—don't simulate or use fake examples
-- **Adjust scope gently**—guide toward smaller tasks but respect user choice
+- EXPLAIN -> DO -> SHOW -> PAUSE at key transitions (after explore, proposal draft, tasks, archive); don't over-pause
+- Don't skip phases even if the change is small (design is the one optional artifact)
+- Handle exits gracefully; never pressure
+- Real codebase tasks only; steer toward smaller scope but respect user choice

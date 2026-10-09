@@ -4,316 +4,132 @@
 Define the repository-owned infrastructure that coding agents work through: worktree placement, skill paths, the coordinator guard, the inbox that feeds the board, and the GitHub-invoked agent.
 ## Requirements
 ### Requirement: Backend port is overridable via environment variable
-The backend server SHALL read its listening port from the `LEARNING_APP_PORT` environment variable when set, falling back to 8083 when absent.
+The backend server SHALL read its listening port from `LEARNING_APP_PORT` when set, falling back to 8083.
 
-#### Scenario: Backend starts with default port
-- **WHEN** `LEARNING_APP_PORT` is not set in the environment
-- **THEN** the backend listens on port 8083
+#### Scenario: Default port
+- **WHEN** `LEARNING_APP_PORT` is not set
+- **THEN** the backend listens on 8083
 
-#### Scenario: Backend starts on a custom port for a parallel worktree
-- **WHEN** `LEARNING_APP_PORT=8183` is set in the environment
-- **THEN** the backend listens on port 8183
+#### Scenario: Custom port for a parallel worktree
+- **WHEN** `LEARNING_APP_PORT=8183`
+- **THEN** the backend listens on 8183
 
 ### Requirement: Worktrees live where the agent tool puts them
-Worktrees SHALL be created only through the agent's built-in mechanism, which keeps them under `.claude/worktrees/`, except where that mechanism cannot reach the branch the work must land on: an agent pinned to a worktree SHALL create its linked worktree inside the worktree it was given, since a path outside it is refused. The repository SHALL NOT define a second location for ordinary work, and the only ignore rule it SHALL carry for worktrees is the one that keeps such a nested worktree from being committed, because staging everything in the parent records the inner checkout as an embedded repository.
-
-The choice between the main checkout and a worktree SHALL be a test on dependencies, not a match against a list of subsystems. Work SHALL run in the main checkout only where a concrete shared resource it depends on can be named — a live CouchDB, nginx routing, a migration against real data. Where none can be named, the work SHALL run in a worktree. Subsystem names SHALL appear only as examples of what usually needs the stand, never as the test itself: naming subsystems routes by what a task mentions rather than by what it needs, and a task only has to mention the dictionary to be sent to the main checkout without needing it.
-
-A worktree SHALL be treated as able to verify browser behaviour on fixture data. It shares the origin and serves on `localhost`, which is a secure context, so OPFS, Web Locks, service workers and workers all function there. Only what genuinely depends on the real data or the shared services — cold-start timing against the full dictionary, replication against a live CouchDB, nginx routing — SHALL require the main checkout.
+Worktrees SHALL be created only through the agent's built-in mechanism (under `.claude/worktrees/`), except that an agent pinned to a worktree SHALL create its linked worktree inside the one it was given. The only worktree ignore rule SHALL be the one keeping such a nested worktree from being committed. Work SHALL run in the main checkout only where a concrete shared resource can be named (live CouchDB, nginx routing, migration on real data); otherwise it SHALL run in a worktree, which can verify browser behaviour on fixture data.
 
 #### Scenario: Work needs isolation
 - **WHEN** a task is isolated in a worktree
-- **THEN** it is created by the built-in mechanism, and no worktree directory appears inside the repository tree
+- **THEN** it is created by the built-in mechanism and no worktree directory appears inside the repository tree
 
 #### Scenario: Work needs the full stand
-- **WHEN** a task depends on a shared resource that can be named — a live CouchDB, nginx routing, or a migration against real data
-- **THEN** it runs in the main worktree, because a worktree isolates files while ports, CouchDB and nginx stay shared
+- **WHEN** a task depends on a nameable shared resource
+- **THEN** it runs in the main checkout
 
-#### Scenario: A stand subsystem is touched but no shared resource is needed
-- **WHEN** a task touches a subsystem usually associated with the stand, such as the dictionary, but no live CouchDB, nginx routing or real-data migration can be named as a dependency
-- **THEN** it runs in a worktree, because the test is the dependency and not the subsystem it belongs to
+#### Scenario: A stand subsystem is touched without a shared resource
+- **WHEN** a task touches the dictionary but names no live CouchDB, nginx routing or real-data migration
+- **THEN** it runs in a worktree
 
-#### Scenario: Browser behaviour is verified on fixture data
-- **WHEN** a task must prove browser-runtime behaviour that needs only one origin and browser APIs, such as two tabs sharing an OPFS database through a Web Lock
-- **THEN** a worktree is sufficient, because `localhost` is a secure context and the fixture data the browser tests already use serves the check
-
-#### Scenario: A pinned agent creates the only worktree it can use
-- **WHEN** an agent pinned to a worktree adds a linked worktree inside it
-- **THEN** staging everything in the parent worktree cannot commit that checkout, and closeout removes it together with the branch
+#### Scenario: A pinned agent creates its nested worktree
+- **WHEN** a pinned agent adds a linked worktree inside its own
+- **THEN** staging the parent cannot commit it and closeout removes it with the branch
 
 ### Requirement: Repository-owned agent infrastructure covers the agents the repo relies on
+Agent infrastructure the repository's rules depend on (enforcement hooks, rules, settings, shared skills) SHALL be tracked for every agent used; personal local overrides SHALL stay ignored.
 
-The repository SHALL keep under version control the agent infrastructure its own rules
-depend on, for every agent used to work on it — not for one agent only. Files that record
-a developer's local preferences SHALL stay ignored.
+#### Scenario: Shared agent files are reviewed
+- **WHEN** repository-owned agent files are present
+- **THEN** they are tracked and reach every worktree through git
 
-The line is what the file is for, not which tool reads it: a hook that enforces the
-delivery flow, a rules file that carries it, and the skills both agents share are
-repository infrastructure and are tracked; a personal settings override is local and is
-ignored.
-
-#### Scenario: Shared repo agent files are reviewed
-
-- **WHEN** repository-owned agent files are present in the worktree
-- **THEN** the tracked set covers the rules, hooks, settings and skills the repo's own
-  workflow depends on
-- **AND** each is reviewable and reaches every worktree through git
-
-#### Scenario: A developer keeps local tooling preferences
-
-- **WHEN** local, developer-specific agent files are created in the working tree
-- **THEN** git ignores those local artifacts
-- **AND** repository-owned agent infrastructure remains visible for tracking and review
+#### Scenario: Local preferences
+- **WHEN** developer-specific agent files are created
+- **THEN** git ignores them
 
 ### Requirement: Skill invocations use a path that resolves in a worktree
-
-Documented invocations of repository skills SHALL use a path present in every checkout,
-including worktrees. A path that exists only in the main checkout SHALL NOT be the
-documented one.
+Documented invocations of repository skills SHALL use a path present in every checkout, including worktrees (`.skills/...`), not one existing only in the main checkout.
 
 #### Scenario: A skill is invoked from a worktree
-
-- **WHEN** an agent follows a documented command from a skill or from the repo agent rules
-  while working in a worktree
+- **WHEN** an agent follows a documented skill command in a worktree
 - **THEN** the path resolves and the script runs
 
-#### Scenario: A path outside the repository
-
-- **WHEN** an invocation refers to a user-global installation rather than a repository
-  file
-- **THEN** it is left as it is, since it is not a repository path
-
 ### Requirement: The coordinator rule is enforced, not only written
-
-The repository SHALL refuse repository edits made by the coordinating session, through a
-`PreToolUse` hook on the editor tools rather than by convention. The refusal SHALL name what
-to do instead, so the rule is actionable at the moment it is hit.
-
-The same hook SHALL also observe shell commands, because the editor matcher is the only
-guarded route and the unguarded one next to it gets used. A shell statement that looks like
-a write into the repository SHALL be put to the human. It SHALL NOT be refused outright: the
-target of an editor call arrives in the payload and is certain, while the target of a shell
-command is parsed out of a string and is a guess, and a hard refusal on a guess would fire
-on the compound commands that are run legitimately. Certainty earns a refusal; a guess earns
-a prompt.
-
-On the shell event the hook SHALL emit a prompt or nothing, and SHALL NOT emit an explicit
-allow, because another guard shares that event and an explicit allow could undercut its
-refusal. Silence SHALL be the way this hook defers.
-
-The set of shell write shapes SHALL be short, explicit and declared incomplete. It cannot be
-completed, and the hook's own comment SHALL say so, together with the fact that the guarantee
-is the stop-and-report rule and the hook is only the tripwire that makes a lapse visible.
-
-Writes outside the repository SHALL stay silent — scratch paths, device files, and paths
-under the home directory outside the project — so that ordinary scratch work does not train
-anyone to switch the guard off.
-
-Enforcement SHALL NOT stand in the executor's way: a subagent SHALL pass untouched, and the
-sequence that delivers tracked work — issue branch, worktree on that branch, edits in it —
-SHALL run without a refusal from this hook.
-
-Scratch outside the repository SHALL remain writable, as SHALL a developer's untracked local
-settings override. The exception list SHALL stay short and explicit.
-
-Where the hook cannot tell two situations apart, it SHALL record that in its own comment,
-naming which of its signals is measured and which is taken from documentation, so a later
-reader does not assume it is stronger than it is. A signal the hook cannot observe SHALL NOT
-be invented.
-
-The hook SHALL allow whenever it cannot decide. A missing dependency, a path it cannot place,
-or a failed lookup SHALL end in the normal permission flow rather than a refusal.
+A `PreToolUse` hook SHALL refuse repository edits by the coordinating session through the editor tools, with a refusal naming what to do instead. The same hook SHALL observe shell commands but only prompt on a statement that looks like a repository write, since a shell target is a guess; on the shell event it SHALL emit a prompt or nothing, never an explicit allow, so it cannot undercut another guard. Its list of shell write shapes SHALL be short and declared incomplete in the hook's comment, along with which signals are measured versus documented. Subagents, writes outside the repository (scratch, device files, home paths) and the untracked local settings override SHALL pass untouched, and the delivery sequence SHALL run without a refusal from it. When it cannot decide, it SHALL fall through to the normal permission flow.
 
 #### Scenario: The coordinating session edits the repository
-
-- **WHEN** the coordinating session tries to edit a file in the repository on a branch that
-  carries no issue number
-- **THEN** the call is refused, and the refusal names the workflow script that files the issue
-  and the executor that does the editing
+- **WHEN** the coordinating session edits a repository file on a branch with no issue number
+- **THEN** the call is refused, naming the workflow script and the executor
 
 #### Scenario: The executor edits in its worktree
+- **WHEN** a delegated agent edits in its worktree
+- **THEN** this hook does not refuse
 
-- **WHEN** an agent delegated the work edits files in the worktree it was given
-- **THEN** no refusal comes from this hook, and the delivery sequence runs to a pushed branch
+#### Scenario: The coordinating session edits inside an issue-branch worktree
+- **WHEN** the target's worktree is on an issue branch
+- **THEN** the call is put to the human, since the hook cannot separate this from full-stand work
 
-#### Scenario: The coordinating session edits inside a worktree
+#### Scenario: Shell write into the repository
+- **WHEN** the coordinating session runs an in-place edit, copy, move or redirection to a repository path
+- **THEN** the call is put to the human, naming both ways out
 
-- **WHEN** the coordinating session tries to edit a file whose worktree is on an issue branch
-- **THEN** the call is put to the human rather than allowed silently, because that shape is
-  both the failure the rule prevents and the full-stand work the repository sends to the main
-  checkout, and the hook cannot separate them
-
-#### Scenario: The coordinating session writes through the shell
-
-- **WHEN** the coordinating session runs a shell statement that writes into the repository —
-  an in-place edit, a copy, a move, an output redirection to a repository path
-- **THEN** the call is put to the human rather than refused, and the prompt names both ways
-  out: stop and report the refusal that led here, or hand the edit to an executor
-
-#### Scenario: A shell write outside the repository
-
-- **WHEN** the statement writes to a scratch path, a device file, or a path under the home
-  directory outside the project
-- **THEN** nothing is emitted, because a guard that interrupts ordinary scratch work is a
-  guard that gets switched off
-
-#### Scenario: The shell event is shared with another guard
-
-- **WHEN** the hook has nothing to say about a shell command
-- **THEN** it emits nothing at all rather than an explicit allow, so it can never weaken the
-  refusal another guard is returning for the same command
-
-#### Scenario: A write shape that is not on the list
-
-- **WHEN** a shell command reaches a repository file by a route the list does not name
-- **THEN** it passes unchallenged, and that is a known and stated property rather than a
-  defect, because the enforcement of last resort is the rule and not the hook
-
-#### Scenario: Scratch and local settings
-
-- **WHEN** the target is outside the repository, or is the untracked local settings override
-- **THEN** the write proceeds
+#### Scenario: Shell write outside the repository or unlisted shape
+- **WHEN** a statement writes to scratch or home paths, or reaches a repository file by a route not on the list
+- **THEN** nothing is emitted
 
 #### Scenario: The hook cannot decide
-
-- **WHEN** a dependency is missing, or the target cannot be placed in a repository
-- **THEN** the call proceeds through the normal permission flow, because a guard that denies
-  on its own error is a guard that gets removed
+- **WHEN** a dependency is missing or the target cannot be placed
+- **THEN** the call proceeds through the normal permission flow
 
 ### Requirement: Agent infrastructure names the repository's current coordinate
-
-Repository-owned agent infrastructure that spells out an `owner/repo` coordinate SHALL name the repository's current one. This covers the read-only command allowlist, documented `gh` recipes, skill configuration defaults and the text of guard refusals.
-
-The allowlist is the case that costs something: it matches invocations as exact strings, so an entry naming a former coordinate is dead weight — the command it was meant to pre-approve prompts instead. A redirect at the forge hides the breakage rather than repairing it.
-
-A coordinate that names something the transfer did not move SHALL be left alone. The project board is owned separately from the repository, so its owner and number do not follow a repository transfer.
-
-Archived changes SHALL be left as written. They record what was true when they were archived.
+Agent infrastructure spelling out an `owner/repo` coordinate (read-only allowlist, `gh` recipes, skill config defaults, guard refusal text) SHALL name the current one, because the allowlist matches exact strings. The project board's owner and number SHALL be left alone on a repository transfer, and archived changes SHALL be left as written.
 
 #### Scenario: The repository is transferred
-
 - **WHEN** the repository moves to a new owner
-- **THEN** the allowlist, the documented recipes, the skill config defaults and the guard refusal text name the new coordinate
-- **AND** a pre-approved read-only command still matches after the move
+- **THEN** those files name the new coordinate and pre-approved read-only commands still match
 
-#### Scenario: A coordinate the transfer did not move
-
-- **WHEN** agent infrastructure names the project board's owner and number
-- **THEN** those are left unchanged, because the board did not move with the repository
-
-#### Scenario: An archived change names the old coordinate
-
-- **WHEN** an archived change refers to the repository under its former name
-- **THEN** it is left as written, because it is a record of what was true then
+#### Scenario: Board or archive coordinates
+- **WHEN** infrastructure names the board's owner and number, or an archived change names the old repository
+- **THEN** they are left unchanged
 
 ### Requirement: A note captured outside the repository has a path onto the board
-
-The repository SHALL provide a command that reads notes captured in the external inbox the
-owner writes to from a phone, and SHALL state the rule that turns such a note into tracked
-work. Reading a note SHALL NOT be a separate decision procedure: a note becomes an issue only
-when it is work a pull request can close, a bug, or a decision worth recording, and otherwise
-becomes a comment on the issue that already hosts it — the same judgement the repository
-applies to a note typed by hand.
-
-An issue made from a note SHALL be filed through the workflow script that puts it on the
-board, never through a raw issue-creation command, since an issue on no board is work nobody
-can see.
-
-A note that has become tracked work SHALL be closed at the source, addressed by its stable
-identifier rather than by its position in the list, so that the same note is not read twice
-and so that a concurrent edit of the list cannot close the wrong one.
+The repository SHALL provide a command that reads open notes from the external inbox. A note SHALL become an issue only when a PR can close it, it is a bug, or it is a decision worth recording; otherwise it becomes a comment on the hosting issue. Issues SHALL be filed through the workflow script, and a note turned into tracked work SHALL be closed at the source by its stable identifier, not its list position.
 
 #### Scenario: A captured note is work
-
-- **WHEN** a pulled note describes something a pull request can close, a bug, or a decision
-  worth recording
-- **THEN** it is filed through the workflow script that creates the issue on the board with a
-  Status and a Priority
-- **AND** the source note is marked done, so the next pull does not return it
+- **WHEN** a pulled note is closable by a PR, a bug, or a decision
+- **THEN** it is filed through the workflow script with Status and Priority and the source note is marked done
 
 #### Scenario: A captured note is a finding
-
-- **WHEN** a pulled note is a finding, a measurement, or a design note about work already
-  tracked
-- **THEN** it becomes a comment on that issue rather than a new issue
-- **AND** the source note is marked done
+- **WHEN** a pulled note is a finding or design note about tracked work
+- **THEN** it becomes a comment on that issue and the source note is marked done
 
 #### Scenario: The same note is pulled twice
-
-- **WHEN** a note has already been turned into tracked work and marked done
-- **THEN** a later pull does not return it, because the command reads open notes only
+- **WHEN** a note was already marked done
+- **THEN** a later pull does not return it
 
 ### Requirement: Credentials for an external inbox live outside the repository
-
-The command that reaches an external account SHALL take its credentials and its account-specific
-settings from outside the repository, and the repository SHALL carry placeholders only. No
-client id, client secret, token, or account-specific list identifier SHALL be committed.
-
-The command SHALL be able to report its own readiness without being run for real: whether each
-dependency is present, whether the credential file exists, whether a token can be refreshed, and
-whether the configured default list resolves. That report SHALL name what is missing and where
-to put it, and SHALL print no secret.
-
-Failure SHALL be legible. A missing dependency, an absent credential file, and a rejected API
-call SHALL each end in a non-zero exit with a sentence a human can act on — never an unbound
-variable, a stack trace, or a raw response dump.
+The inbox command SHALL take credentials and account-specific settings from outside the repository; no client id, secret, token or list identifier SHALL be committed. It SHALL report its own readiness without a real run (dependencies, credential file, token refresh, default list resolution), naming what is missing and where to put it, printing no secret. Missing dependency, absent credential file and rejected API call SHALL each exit non-zero with an actionable sentence, never a stack trace or raw response dump.
 
 #### Scenario: Nothing is configured yet
-
-- **WHEN** the readiness check runs on a machine where no credential has been placed
-- **THEN** it exits non-zero and names the missing file, its expected location, and the setup
-  document that explains how to obtain it
-
-#### Scenario: The credential path is wrong
-
-- **WHEN** the configured credential file does not exist at the path given
-- **THEN** the failure names that path rather than failing later inside a dependency
+- **WHEN** the readiness check runs with no credential placed
+- **THEN** it exits non-zero naming the missing file, its location and the setup document
 
 #### Scenario: The API rejects a call
-
 - **WHEN** the remote API answers with an error
-- **THEN** the command prints the API's own error message and exits non-zero
+- **THEN** the command prints the API's error message and exits non-zero
 
-#### Scenario: A secret would be printed
-
-- **WHEN** the readiness check reports on credentials and tokens
-- **THEN** it reports their presence and usability without printing their contents
+#### Scenario: Readiness reports credentials
+- **WHEN** the check reports on credentials and tokens
+- **THEN** it reports presence and usability without printing contents
 
 ### Requirement: An agent invoked from GitHub can commit what it was asked to fix
-
-The repository SHALL keep a workflow that runs the coding agent when it is mentioned on an issue
-or a pull request, and that workflow SHALL grant the agent write access to the repository contents
-and to pull requests, because the work it is invoked for is a change to the branch under review.
-Read-only access SHALL NOT be the granted level: it turns a request to fix something into a
-comment describing the fix, which a person then has to apply by hand.
-
-The write access SHALL reach the branch of the pull request that invoked the agent and no further;
-`master` stays protected and is changed only through a reviewed pull request, as it is for a human.
-
-The workflow SHALL authenticate through a repository secret and SHALL NOT carry a credential in
-its own text.
+The workflow that runs the coding agent on issue or PR mentions SHALL grant write access to repository contents and pull requests (and read access to Actions for CI results), reaching only the invoking PR's branch; `master` SHALL change only through a reviewed PR. It SHALL authenticate through a repository secret and carry no credential in its text.
 
 #### Scenario: A review asks the agent for a fix
-
-- **WHEN** a comment on a pull request mentions the agent
-- **THEN** the job it starts holds write access to the repository contents and to pull requests
-- **AND** it can commit the fix to the branch under review instead of only describing it
-
-#### Scenario: The agent reads why the branch is failing
-
-- **WHEN** the agent is invoked on a pull request whose checks have run
-- **THEN** the job holds read access to Actions
-- **AND** the CI results are part of what it works from
+- **WHEN** a PR comment mentions the agent
+- **THEN** the job holds write access and Actions read access and can commit the fix to the branch under review
 
 #### Scenario: The agent is not a way around review
-
-- **WHEN** the agent has pushed to the branch of the pull request that invoked it
-- **THEN** `master` is unchanged
-- **AND** the work reaches `master` only by that pull request being reviewed and merged
+- **WHEN** the agent has pushed to the PR branch
+- **THEN** `master` is unchanged until the PR is reviewed and merged
 
 #### Scenario: The workflow needs a credential
-
 - **WHEN** the workflow authenticates the agent
-- **THEN** it reads a repository secret
-- **AND** the workflow file itself contains no token
-
+- **THEN** it reads a repository secret and the file contains no token

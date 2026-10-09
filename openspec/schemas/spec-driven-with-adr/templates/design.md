@@ -1,19 +1,8 @@
-## Context
-
-<!-- Background and current state -->
-
-## Goals / Non-Goals
-
-**Goals:**
-<!-- What this design aims to achieve -->
-
-**Non-Goals:**
-<!-- What is explicitly out of scope -->
-
+<!-- Optional: only for cross-cutting changes or a new ADR. Under 2000 characters. -->
 ## Decisions
 
-<!-- Key design decisions and rationale -->
+<!-- Choice — why X over Y. -->
 
-## Risks / Trade-offs
+## Risks
 
-<!-- Known risks and trade-offs -->
+<!-- [Risk] → Mitigation -->

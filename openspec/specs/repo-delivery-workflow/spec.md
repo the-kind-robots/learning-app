@@ -1,100 +1,82 @@
 # repo-delivery-workflow Specification
 
 ## Purpose
-Define what tracked delivery means in this repository: which reported work goes through an issue, a branch and a pull request, and when it also carries an OpenSpec change.
+Define what tracked delivery means in this repository: which work goes through an issue, a branch and a pull request, and when it also carries an OpenSpec change. Process rules live in `AGENTS.md`; this spec holds only the verifiable contract.
 ## Requirements
 ### Requirement: Likely repository changes default to tracked delivery
-The repository workflow SHALL treat newly reported problems or proposed changes that are likely to become committed repository edits as tracked work by default.
-
-Tracked delivery SHALL mean an issue on the board, a branch created from that issue, and a pull request. Those SHALL apply to every tracked edit without exception.
-
-An OpenSpec change SHALL be required only for work that alters product behaviour a reader can verify afterwards without reading the diff. The decision SHALL be stated as a test rather than a list of subsystems: name the behaviour the work alters that someone could check afterwards; when such a behaviour can be named the work SHALL carry an OpenSpec change, and when none can be named the work SHALL NOT carry one, because there is no requirement to state.
-
-Work on the repository's own process — agent rules, delivery hooks, skills, scripts, CI configuration, and documentation about how work is delivered — SHALL NOT be required to carry an OpenSpec change. A normative requirement SHALL NOT be manufactured so that `openspec validate` accepts a change; a change with no delta is a change that SHALL NOT have been created.
-
-The test SHALL live in the files loaded at session start, so it is in context before the decision is made, and process rules SHALL be recorded there rather than in a spec.
-
-#### Scenario: Warning likely leading to a fix starts tracked workflow
-- **WHEN** a user reports a warning, error, broken behavior, or proposed improvement that is likely to require a repo commit
-- **THEN** the workflow starts issue tracking before repository code edits begin
-- **AND** an OpenSpec change is started as well when the fix alters verifiable product behaviour
-- **AND** the assistant only skips tracked delivery when the user explicitly asks to avoid it
+Work likely to end in a committed edit SHALL be tracked: an issue on the board, a branch created from that issue, and a pull request, without exception. An OpenSpec change SHALL be required only when the work alters behaviour someone could check afterwards without reading the diff, and SHALL NOT be created otherwise. Repository process work (agent rules, hooks, skills, scripts, CI, delivery docs) SHALL NOT need a change, and a requirement SHALL NOT be invented to satisfy `openspec validate`. The test and process rules SHALL live in `AGENTS.md`, not in a spec.
 
 #### Scenario: The work changes what the product does
-- **WHEN** the work alters behaviour a reader could check afterwards without reading the diff
-- **THEN** it carries an OpenSpec change with a delta, archived on the delivery branch before the pull request
+- **WHEN** the work alters verifiable product behaviour
+- **THEN** it carries an OpenSpec change with a delta, archived on the branch before the pull request
 
 #### Scenario: The work changes how the repository is worked
-- **WHEN** the work touches only agent rules, hooks, skills, scripts, CI configuration or delivery documentation
-- **THEN** it carries no OpenSpec change, and it still carries its issue, its branch from that issue, and its pull request
-- **AND** any process rule it establishes is written where the session already loads it, not as a spec requirement
+- **WHEN** the work touches only process files
+- **THEN** it carries no OpenSpec change but still carries its issue, issue branch and pull request
 
 ### Requirement: Task boundaries reset after delivery closeout
-The repository workflow SHALL treat repo work that starts after issue/PR closeout as a new tracked task by default unless it is clearly just final closeout work for the finished task.
+Repo work that starts after issue/PR closeout SHALL be a new tracked task unless it is only closeout tail work.
 
-#### Scenario: New repo scope starts after the previous task was closed
-- **WHEN** the previous tracked task has already been merged or closed
-- **AND** the user switches to a new non-trivial repo scope
-- **THEN** the workflow starts a new tracked issue/change by default
-- **AND** it does not silently continue on the previous issue or branch unless the user is clearly finishing only closeout tail work
+#### Scenario: New scope after merge
+- **WHEN** the previous task is merged or closed and the user starts a new non-trivial scope
+- **THEN** a new issue is started rather than continuing the old issue or branch
 
 ### Requirement: Optional GitHub Project fields do not block start-work
-The GitHub Project start-work workflow SHALL continue when an optional configured single-select field is absent on the target project.
+The start-work workflow SHALL continue when an optional single-select field is absent on the project.
 
 #### Scenario: Project has Status but no Category
-- **WHEN** the start-work workflow runs against a project that exposes `Status` but not `Category`
-- **THEN** the issue and project item are still created successfully
-- **AND** missing optional fields are skipped with a warning instead of failing the workflow
+- **WHEN** start-work runs against a project without `Category`
+- **THEN** the issue and project item are created and the missing field is skipped with a warning
 
 ### Requirement: Visual UI work favors perceptual stability
-The repository workflow SHALL treat unnecessary visible UI jumps, jerks, or geometry shifts as quality regressions during visual interaction work.
+Unnecessary visible UI jumps or geometry shifts SHALL count as regressions, and verification SHALL use real browser evidence (measured geometry, traces) rather than DOM shape alone.
 
-#### Scenario: Verifying a UI change that affects layout or transitions
-- **WHEN** a task changes interactive UI layout, swapping, focus flow, keyboard flow, or footer/panel geometry
-- **THEN** the expected quality bar includes that the screen remains perceptually stable instead of visibly jumping or jerking
-- **AND** verification uses real browser evidence such as measured geometry, traces, or equivalent browser-level checks rather than DOM shape alone
+#### Scenario: A layout or transition change is verified
+- **WHEN** a task changes interactive layout, swapping, focus flow or panel geometry
+- **THEN** browser-level evidence shows the screen does not visibly jump
 
 ### Requirement: Repo-owned verification tooling is repaired before fallback
-The repository workflow SHALL treat failures in repo-owned verification tooling as task-relevant bugs to repair before relying on alternate verification stacks by default.
+Failures in repo-owned verification tooling SHALL be repaired as part of the tracked work before alternate stacks are used; a fallback SHALL be used only when the user allows it or repair is stated to be blocked.
 
-#### Scenario: Preferred CDP workflow is flaky during a browser/UI task
-- **WHEN** a browser or UI task is supposed to be verified through the repository's preferred CDP/browser workflow
-- **AND** that workflow fails because it attaches to the wrong target, loses route state, races setup, or otherwise gives untrustworthy results
-- **THEN** the workflow first repairs the repo-owned tooling or wrapper as part of the tracked work
-- **AND** alternate browser tooling is not used as the default workaround
-- **AND** a fallback path is used only when the user explicitly allows it or the assistant clearly states that repair of the preferred tooling is blocked
+#### Scenario: Preferred CDP workflow is flaky
+- **WHEN** the CDP workflow attaches to the wrong target, loses route state or races setup
+- **THEN** the repo-owned tooling is repaired rather than bypassed with alternate browser tooling
 
-### Requirement: Branches are created through the issue
-A branch for tracked work SHALL be created with `gh issue develop <number> --checkout`, which registers it against the issue on GitHub. Tracked work SHALL NOT start from a branch made with `git checkout -b` or `git worktree add -b`.
+### Requirement: A branch for tracked work is linked to its issue
+Branches for tracked work SHALL be created with `gh issue develop <number>`, including when work is isolated in a worktree, and SHALL NOT come from `git checkout -b`, `git switch -c` or `git worktree add -b`. The coordinating session SHALL stay in the main checkout and delegate repository edits to the `executor` agent (`.claude/agents/executor.md`), whose definition carries the worktree isolation and the branch recipe; `AGENTS.md` SHALL point at it rather than restate them. Delegated edits from a background coordinator SHALL be launched with worktree isolation.
 
-#### Scenario: Work starts
-- **WHEN** an issue exists and implementation is about to begin
-- **THEN** the branch is created from that issue and appears in its development links
+#### Scenario: Work is isolated in a worktree
+- **WHEN** a task needs a worktree
+- **THEN** the issue branch is created first and the worktree is placed on it, keeping the development link
 
-#### Scenario: A branch appears without an issue
+#### Scenario: A branch has no issue
 - **WHEN** a branch exists that no issue points to
-- **THEN** it is treated as untracked work: either an issue is created for it, or the branch is removed
+- **THEN** it is treated as untracked work: an issue is created for it or the branch is removed
+
+#### Scenario: The coordinating session needs an edit
+- **WHEN** a coordinating session needs a repository edit
+- **THEN** it delegates to the `executor` agent and stays in the main checkout
 
 ### Requirement: Delivery ends with cleanup
-Closeout SHALL include deleting the delivered branch locally and on the remote, and removing the worktree if the work ran in one.
+Closeout SHALL delete the delivered branch locally and on the remote and remove its worktree.
 
 #### Scenario: A pull request is merged
-- **WHEN** the pull request for tracked work is merged
-- **THEN** the branch is gone from both sides and no worktree is left behind for it
+- **WHEN** the pull request is merged
+- **THEN** the branch is gone from both sides and no worktree remains
 
 ### Requirement: Merge order is machine-enforced
-A PR declaring `Depends-on: #N` SHALL NOT be mergeable while any referenced issue or pull request is open; the enforcement SHALL come from branch protection, not from convention. A missing reference SHALL fail the same way, so a typo cannot silently unlock a merge.
+A PR declaring `Depends-on: #N` SHALL NOT be mergeable while any referenced issue or PR is open or missing; enforcement SHALL come from branch protection.
 
 #### Scenario: The blocker is open
-- **WHEN** a PR body contains `Depends-on: #N` and node N is open
-- **THEN** the required check fails and the merge button is disabled
+- **WHEN** a PR body contains `Depends-on: #N` and N is open
+- **THEN** the required check fails and merge is disabled
 
 #### Scenario: The blocker lands
-- **WHEN** a push to master closes node N
-- **THEN** the dependent's check is re-run automatically and turns green
+- **WHEN** a push to master closes N
+- **THEN** the dependent's check re-runs and turns green
 
 ### Requirement: A required check reports on every pull request
-Every PR SHALL receive a verdict from each required check — pass, fail, or skipped — regardless of which paths it touches. A required check that cannot start is a broken merge pipeline, not a passing one.
+Every PR SHALL receive a pass, fail or skipped verdict from each required check regardless of touched paths.
 
 #### Scenario: A PR outside the tested paths
 - **WHEN** a PR touches no path the heavy job cares about
@@ -102,272 +84,70 @@ Every PR SHALL receive a verdict from each required check — pass, fail, or ski
 
 #### Scenario: A PR inside the tested paths
 - **WHEN** a PR touches the application or its build inputs
-- **THEN** the full suite runs and its verdict gates the merge
+- **THEN** the full suite runs and gates the merge
 
 ### Requirement: The delivery rules are present in every session
-
-The repository SHALL state the delivery flow in files the agent loads at session start,
-not only inside a skill that must first be chosen. The statement SHALL name the
-entrypoint skill, the sequence, and the cases where the flow does not apply.
-
-The statement SHALL arrive once. `CLAUDE.md` imports `AGENTS.md`, which carries it; a
-second unconditional copy under `.claude/rules/` SHALL NOT exist, because it loads the same
-text twice into every session.
+The delivery flow, its entrypoint skill and its exceptions SHALL be stated once, in `AGENTS.md` (imported by `CLAUDE.md`), and SHALL NOT be duplicated in an unconditional rules file.
 
 #### Scenario: A session begins
-
-- **WHEN** an agent session starts in this repository, in the main checkout or in a
-  worktree
-- **THEN** the delivery flow and its entrypoint are already in context, without any file
-  being read first
-
-#### Scenario: A task arrives that will end in a commit
-
-- **WHEN** the user reports a bug or proposes a change likely to become a committed edit
-- **THEN** the agent enters the flow through the entrypoint skill rather than assembling
-  the GitHub and OpenSpec steps by hand
-
-#### Scenario: The rules arrive once
-
-- **WHEN** the files loaded at session start are listed
-- **THEN** the delivery flow appears in `AGENTS.md` through the `CLAUDE.md` import and in
-  no unconditional rules file
+- **WHEN** an agent session starts in the main checkout or a worktree
+- **THEN** the flow and entrypoint are already in context, and appear in no unconditional rules file
 
 ### Requirement: Commands that bypass tracked delivery are refused
-
-The repository SHALL refuse the commands that create work outside the board. A raw issue
-creation SHALL be denied. A pull request SHALL be denied from a branch that carries no
-issue number, and allowed from a branch created for an issue. Each refusal SHALL name the
-command to use instead.
-
-The guard SHALL judge only invocations that can create work. A statement carrying a
-standalone help flag prints documentation and mutates nothing, so it SHALL pass untouched —
-neither denied nor prompted — and that test SHALL live once, ahead of the per-command
-dispatch, so every rule the guard carries is covered by it rather than by a rule-specific
-exemption. The flag SHALL be matched as a whole word, because a statement reaches the guard
-already split on whitespace.
-
-Creating a branch by hand (`git checkout -b`, `git switch -c`) SHALL require approval.
-That prompt SHALL be a permission rule in `.claude/settings.json`, not a hook decision,
-because a permission rule expresses it exactly; the rule SHALL take precedence over the
-blanket `git` allow in the same file, and that precedence SHALL be measured rather than
-assumed. The hook SHALL keep only the decisions a permission rule cannot express: those
-that depend on the current branch and those that must carry a message naming the command
-to run instead.
-
-The branch a pull request is judged on SHALL be the branch the command names when it names
-one, and the current branch only when it does not. Judging a pull request by the working
-directory's own branch decides about something other than what the command does: under the
-coordinator rule the session that opens the pull request sits in the main checkout on the
-default branch, which is now the normal configuration, so the current-branch test refuses
-every correct invocation. Both the long and the short spelling of the flag SHALL be
-recognised, in their separated and joined forms, and a fork owner prefix SHALL be stripped
-before the branch is judged.
-
-The invariant SHALL NOT weaken: the branch, wherever its name came from, SHALL still carry
-an issue number, and a pull request named onto a branch without one SHALL be refused with
-the same explanation.
+The repository SHALL deny raw issue creation and deny a pull request from a branch carrying no issue number, each refusal naming the command to use instead. The guard SHALL judge only invocations that can create work: a statement with a standalone help flag (whole word) SHALL pass untouched, tested once ahead of per-command dispatch. Manual branch creation (`git checkout -b`, `git switch -c`) SHALL require approval via a permission rule in `.claude/settings.json` taking precedence over the blanket `git` allow. A pull request SHALL be judged on the branch the command names (long or short flag, separated or joined, fork prefix stripped), else on the current branch; a named branch without an issue number SHALL still be refused. `DELIVERY_GUARD=off` SHALL downgrade a refusal to an approval prompt and only on the owner's direct request.
 
 #### Scenario: Issue created by hand
-
 - **WHEN** an agent runs a raw issue-creation command
-- **THEN** the call is denied and the refusal names the workflow script that creates the
-  issue, places it on the board and sets its fields
+- **THEN** it is denied and the refusal names the workflow script
 
 #### Scenario: A command's documentation is read
-
-- **WHEN** a statement that would otherwise be refused or prompted carries a standalone help
-  flag, such as an issue-creation or pull-request command asked for its usage text
-- **THEN** the statement passes untouched, because reading documentation creates no issue,
-  no pull request and no branch
-
-#### Scenario: Help text quoted inside an argument
-
-- **WHEN** a help flag appears as a word inside a quoted argument rather than as a flag
-- **THEN** the guard's judgement is undefined for that statement, because word-splitting has
-  already erased the argument boundary by the time the guard sees it — the same blind spot
-  the branch-name test already documents
+- **WHEN** a statement carries a standalone help flag
+- **THEN** it passes untouched
 
 #### Scenario: Branch created by hand
-
 - **WHEN** an agent runs `git checkout -b` or `git switch -c`
-- **THEN** the permission rule asks for approval, ahead of the blanket `git` allow, and a
-  session that cannot ask treats the command as not permitted
+- **THEN** the permission rule asks for approval
 
 #### Scenario: Pull request from an untracked branch
+- **WHEN** a pull request is opened from, or names, a branch with no issue number
+- **THEN** the call is denied
 
-- **WHEN** an agent opens a pull request from a branch with no issue number
-- **THEN** the call is denied, because a pull request with no issue behind it is work the
-  board cannot see
-
-#### Scenario: Pull request from an issue branch
-
-- **WHEN** the branch was created for an issue
-- **THEN** opening the pull request by hand is allowed, which is what a dirty worktree
-  requires anyway
-
-#### Scenario: Pull request that names its source branch
-
-- **WHEN** the command names an issue branch explicitly while the working directory is on a
-  branch that carries no issue number
-- **THEN** the call is allowed, because the branch the pull request would actually be opened
-  from is the one that was named
-
-#### Scenario: Pull request named onto a branch with no issue
-
-- **WHEN** the command names a branch that carries no issue number
-- **THEN** the call is denied with the same explanation as an untracked current branch,
-  because moving where the name comes from does not move the invariant
-
-#### Scenario: The owner asks for the raw command
-
-- **WHEN** the user explicitly wants the bypassed command
-- **THEN** an explicit prefix downgrades the refusal to an approval prompt, so the human
-  confirms rather than the agent deciding alone
-
-### Requirement: A branch for tracked work is linked to its issue
-
-Tracked work SHALL happen on a branch created from its issue, including when the work is isolated in a worktree. The repository SHALL record, for each situation it puts agents in, an order that satisfies both the branch rule and the worktree rule and that runs to a pushed branch without a refused command. That record SHALL rest on one invariant — everything under an agent's own worktree root is reachable to it, and nothing outside that root is — and SHALL name the tool that must not be used and why. A session that coordinates tracked work SHALL delegate repository edits rather than making them and SHALL stay in the main checkout.
-
-Delegated edits SHALL go to a named agent definition, `.claude/agents/executor.md`, that carries the worktree isolation in its frontmatter and the branch recipe in its body: plain `git checkout <branch>` inside the agent's own worktree, and a nested linked worktree only when another worktree already holds that branch. `AGENTS.md` SHALL point at that definition rather than restating the isolation flag or the recipe, so the two cannot drift apart.
-
-Where the coordinating session runs in the background, the repository SHALL record that no third option exists, next to the delegation rule itself rather than leaving it to be discovered when a write is refused. The coordinator stays in the main checkout, and the harness refuses a background session's writes to the shared checkout; together those leave exactly one destination, so every delegated edit SHALL be placed in a worktree on the issue branch. An agent delegated such an edit SHALL be launched with worktree isolation; otherwise the agent stops on its first write having done nothing.
-
-#### Scenario: Work is isolated in a worktree
-
-- **WHEN** a task needs a worktree
-- **THEN** the issue branch is created first and the worktree is placed on that branch, so the issue keeps its development link
-
-#### Scenario: Work is delegated to an executor
-
-- **WHEN** work that must land its own issue branch is delegated to an agent
-- **THEN** that agent is launched as the `executor` agent, whose definition sets worktree isolation, because an agent launched without it can neither enter a worktree nor write into the repository through the editor tools
-
-#### Scenario: A pinned agent must deliver anyway
-
-- **WHEN** an agent already pinned to a worktree has to land a branch that another worktree holds
-- **THEN** it follows the recipe in its own definition: it creates the issue branch first, adds a linked worktree inside its own worktree, works there with plain directory changes, and reaches a pushed branch with no refused command
-
-#### Scenario: The session that coordinates the work
-
-- **WHEN** a coordinating session needs a repository edit
-- **THEN** it delegates that edit to the `executor` agent and stays in the main checkout
-
-#### Scenario: A background coordinating session delegates an edit
-
-- **WHEN** the coordinating session runs in the background and delegates a repository edit
-- **THEN** the edit is placed in a worktree, because writes to the shared checkout are refused for a background session and the coordinator does not make the edit itself
-- **AND** that constraint is already stated with the delegation rule, so it is not first learned from the refusal
+#### Scenario: Pull request names an issue branch
+- **WHEN** the command names an issue branch while the working directory is on the default branch
+- **THEN** the call is allowed
 
 ### Requirement: Filing an issue stays within a small share of the API budget
-
-The tracked-delivery workflow SHALL file an issue without consuming a disproportionate share
-of the hourly GraphQL budget, so that a batch of backlog work can be filed in one sitting.
-
-Lookups the workflow performs SHALL request only the data the workflow reads. Matching a board
-item needs its id, title, type and issue number; requesting every field value of every board
-item is not permitted merely because a convenience command offers it.
-
-Resolving a field is exempt from that rule when the CLI resolves the field and its option by
-name, because the workflow then names what it wants instead of fetching a catalogue to search.
-Hand-rolled id resolution SHALL NOT be kept once the CLI can do it, since a lookup layer that
-duplicates the tool is cost the workflow pays twice.
-
-Reducing the cost SHALL NOT cost behaviour: a same-titled draft item on the board is still
-found and converted into the issue rather than duplicated, and that dedupe has no equivalent
-in the CLI, so it stays.
+Issue filing SHALL request only the data it reads (board item id, title, type, issue number), SHALL resolve fields by name through the CLI instead of hand-rolled id lookups, SHALL keep reusing a same-titled draft item instead of duplicating it, and SHALL report the run's GraphQL cost.
 
 #### Scenario: Filing twenty issues in a row
+- **WHEN** twenty issues are filed through the start-work script
+- **THEN** each is created, placed on the board with Status and Priority, and the hourly GraphQL budget is not exhausted
 
-- **WHEN** twenty issues are filed one after another through the start-work script
-- **THEN** every one of them is created, placed on the board, and given Status and Priority
-- **AND** the hourly GraphQL budget is not exhausted
-
-#### Scenario: A same-titled draft is still reused
-
-- **WHEN** the board holds a draft item whose title matches the issue being filed
-- **THEN** that draft is converted into the issue
-- **AND** no second board item is created
-
-#### Scenario: The cost is visible
-
-- **WHEN** the script finishes a run
-- **THEN** it reports what that run cost against the GraphQL budget
+#### Scenario: A same-titled draft is reused
+- **WHEN** the board holds a draft with the same title
+- **THEN** it is converted into the issue and no second item is created
 
 ### Requirement: A refusal stops the work and is reported
-
-A refusal from a delivery guard or from workspace isolation SHALL stop the work that hit it
-and SHALL produce a report to the owner naming the action attempted, what was refused, and
-the verbatim text of the refusal. The owner decides what happens next.
-
-A refusal SHALL NOT be circumvented. In particular:
-
-- a commit SHALL NOT be assembled in a side or detached worktree and pushed straight to the
-  branch ref because ordinary writes were blocked;
-- a command SHALL NOT be reworded to slip past a static check instead of being run the
-  permitted way;
-- `DELIVERY_GUARD=off` SHALL NOT be set on the agent's own judgement, only on a direct
-  request from the owner.
-
-The guards inspect command text and the working directory, so they protect against accident,
-not against intent. An agent that circumvents one does not defeat the protection — it defeats
-the assurance that delivered work went down a verified path. Where the harness flags a move
-only after the fact rather than preventing it, the absence of prevention SHALL NOT be read as
-permission.
+A refusal from a delivery guard or workspace isolation SHALL stop the work and be reported to the owner with the action attempted, what was refused and its verbatim text. It SHALL NOT be circumvented: no commit assembled in a side worktree and pushed to the branch ref, no rewording past a static check, no `DELIVERY_GUARD=off` on the agent's own judgement. An unguarded route SHALL NOT be used to do what was just refused.
 
 #### Scenario: An agent hits a refusal
-
-- **WHEN** a guard or workspace isolation refuses a command or an edit
-- **THEN** the agent stops that line of work and reports the action, the refusal and its
-  verbatim text
-- **AND** it does not retry the same intent by another route
-
-#### Scenario: A route that is merely unguarded
-
-- **WHEN** a path exists that the guard does not cover, such as a tool the matcher never sees
-- **THEN** it is not used to accomplish what was just refused
+- **WHEN** a guard or isolation refuses a command or edit
+- **THEN** the agent stops, reports action and verbatim refusal, and does not retry by another route
 
 ### Requirement: Priority is set where the board reads it
+Priority SHALL be drawn from the organization's native issue field (`Urgent`, `High`, `Medium`, `Low`) and set with `setIssueFieldValue`, since `updateProjectV2ItemFieldValue` refuses a column backed by an issue field. Retired values (`Blocker`, `Critical`, `Major`, `Minor`, `Trivial`) SHALL be refused by name with the replacement stated. Reading it back SHALL use the `ProjectV2ItemIssueFieldValue` fragment.
 
-Tracked work SHALL carry a Priority drawn from the organization's native issue field, whose
-options are `Urgent`, `High`, `Medium` and `Low`. The board shows that field as a column and
-SHALL NOT be written through: `updateProjectV2ItemFieldValue` refuses a column backed by an
-issue field, and the project's own `Priority` field carries no options, so a project-field
-lookup fails with a message that reads like a broken script rather than a moved field. The
-start-work workflow SHALL therefore set Priority on the issue with `setIssueFieldValue`,
-while Status, Area and Size stay ordinary project fields.
+#### Scenario: Current priority
+- **WHEN** an issue is filed with a current priority
+- **THEN** the native field is written and the issue-field fragment reads it back
 
-The retired scale — `Blocker`, `Critical`, `Major`, `Minor`, `Trivial` — SHALL be refused by
-name, and the refusal SHALL state the replacement value, so a caller carrying the old
-vocabulary is corrected rather than left guessing.
-
-Reading Priority back SHALL use the `ProjectV2ItemIssueFieldValue` fragment. A plain
-single-select query returns nothing for it, which is indistinguishable from an unset value
-and is not the same thing.
-
-#### Scenario: An issue is filed with a current priority
-
-- **WHEN** the start-work workflow files an issue with a priority from the current scale
-- **THEN** the value is written to the issue's native Priority field
-- **AND** reading the board item back through the issue-field fragment reports that value
-
-#### Scenario: An issue is filed with a retired priority
-
-- **WHEN** the start-work workflow is given one of the retired priority values
-- **THEN** the run fails before creating anything further
-- **AND** the message names the value that replaced it
+#### Scenario: Retired priority
+- **WHEN** a retired priority is given
+- **THEN** the run fails before creating anything further and names the replacement
 
 ### Requirement: The board of record is named consistently
-
-Every file that tells an agent where work is tracked SHALL name the same board: the
-organization project `Learning app`, owner `the-kind-robots`, number `11`. That includes the
-workflow configuration, the delivery documentation loaded at session start, the workflow
-skills, and the text a delivery guard prints when it refuses a command. A guard that refuses
-a command while naming a board that is no longer the board of record sends the agent to the
-wrong place, so the guards' refusal text SHALL be kept current even though it is only text.
+Every file telling an agent where work is tracked, including guard refusal text, SHALL name the same board: organization project `Learning app`, owner `the-kind-robots`, number `11`.
 
 #### Scenario: A guard refuses a raw issue creation
-
-- **WHEN** a delivery guard refuses a command and prints the workflow invocation to use
-  instead
-- **THEN** that invocation names the current board and a priority from the current scale
+- **WHEN** a guard prints the workflow invocation to use instead
+- **THEN** it names the current board and a priority from the current scale

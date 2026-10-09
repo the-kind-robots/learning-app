@@ -1,9 +1,5 @@
-## 1. <!-- Task Group Name -->
+<!-- Hard limit: 1500 characters. Checklist only. -->
+## 1. <!-- Group -->
 
-- [ ] 1.1 <!-- Task description -->
-- [ ] 1.2 <!-- Task description -->
-
-## 2. <!-- Task Group Name -->
-
-- [ ] 2.1 <!-- Task description -->
-- [ ] 2.2 <!-- Task description -->
+- [ ] 1.1 <!-- Task -->
+- [ ] 1.2 <!-- Task -->
