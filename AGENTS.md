@@ -112,3 +112,11 @@ PRs merge by squash, so this governs the branch history the reviewer reads, not 
 - Install/relink tool locations with `.skills/install.sh --force`.
 - Expected links: `.codex/skills -> ../.skills` and `.claude/skills -> ../.skills`.
 - Invoke skill scripts by their real path, `.skills/...`. `.codex/` is gitignored and absent in worktrees, so a `.codex/skills/...` command works in the main checkout and fails everywhere else; `.claude/skills/...` is a tracked symlink to the same place.
+
+# Token hygiene
+
+- Never `cat` a whole file. Use Read with offset/limit, or `grep -n … | head -50`. `.claude/hooks/read-guard.sh` refuses `cat`/`less`/`more` of a file over 300 lines.
+- `git diff --stat` before a full diff; then diff only the files you need. History: `git log --oneline -20`.
+- Hand subagents file paths, not pasted contents (e.g. "review `openspec/changes/<x>/VERIFY.md`").
+- Run `openspec validate` once, right before archive — not after every edit.
+- Browser suite while iterating: `npx playwright test <spec> --max-failures=1`. The local reporter is `line`.

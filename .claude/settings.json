@@ -68,7 +68,21 @@
             "statusMessage": "Checking who is editing..."
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'g=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/read-guard.sh\"; [ -r \"$g\" ] || g=.claude/hooks/read-guard.sh; [ -r \"$g\" ] || exit 0; exec bash \"$g\"'",
+            "timeout": 10,
+            "statusMessage": "Checking read size..."
+          }
+        ]
       }
     ]
+  },
+  "env": {
+    "BASH_MAX_OUTPUT_LENGTH": "15000"
   }
 }

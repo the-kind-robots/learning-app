@@ -4,7 +4,8 @@ const { defineConfig } = require('@playwright/test');
 // (see test/browser/README.md); never against the shared dev stand.
 module.exports = defineConfig({
   testDir: './test/browser',
-  reporter: 'list',
+  // `line` locally keeps agent context small; CI keeps the per-test `list`.
+  reporter: process.env.CI ? 'list' : 'line',
   use: {
     baseURL: 'http://localhost:8301',
     channel: 'chrome',
