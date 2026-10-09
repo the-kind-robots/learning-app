@@ -120,3 +120,11 @@ PRs merge by squash, so this governs the branch history the reviewer reads, not 
 - Hand subagents file paths, not pasted contents (e.g. "review `openspec/changes/<x>/VERIFY.md`").
 - Run `openspec validate` once, right before archive — not after every edit.
 - Browser suite while iterating: `npx playwright test <spec> --max-failures=1`. The local reporter is `line`.
+
+# Tests
+
+- The Playwright e2e suite is the behaviour spec. `npm run test:catalog` regenerates `test/BEHAVIOR.md`, its table of contents. New behaviour first appears as a line there — a test title — before code.
+- Titles in Russian: `<actor> <action> → <result>`. Bodies use `test.step('Дано …')`, `test.step('Когда …')`, `test.step('Тогда …')`.
+- Assert on what the user sees: roles, labels, text, visibility. Helpers are actions only — no assertions inside helpers.
+- Unit tests only for pure domain algorithms: retention/scheduling, DB migrations, reconciliation/sync, parsers. `deftest` names are behaviour phrases; assert values with `=`; collapse near-duplicate cases with `are`.
+- No tests for agent tooling (hooks, skills, build stamps, dev instrumentation, test guards).

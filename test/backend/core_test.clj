@@ -347,13 +347,6 @@
          (is (not (str/includes? (:body response) "Der Hund bellt."))))))))
 
 
-(deftest the-build-and-the-server-agree-on-where-the-version-lives
-  (testing "the name is the only thing the two sides share, and nothing else checks it"
-    (is (str/includes? (slurp "build.clj")
-                       (str "\"" @#'sut/sw-version-resource "\""))
-        "build.clj writes the service worker version under a different name than core.clj reads")))
-
-
 (deftest the-precache-list-is-the-shell-and-not-whatever-is-on-disk
   (testing "an asset added to a shell directory joins with no edit here"
     (is (contains? (set (#'sut/shell-assets ["/css/blocks/brand-new.css"]))
