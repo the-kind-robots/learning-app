@@ -16,15 +16,6 @@
           :json (fn [] (js/Promise.resolve (clj->js data)))})))
 
 
-(defn mock-fetch-success-invalid-json
-  "Returns a mock fetch that resolves with ok=true but rejects while parsing JSON."
-  []
-  (fn [_url]
-    (js/Promise.resolve
-     #js {:ok   true
-          :json (fn [] (js/Promise.reject (js/Error. "Invalid JSON response")))})))
-
-
 (defn mock-fetch-error
   "Returns a mock fetch that resolves with error status."
   [status]
@@ -45,8 +36,3 @@
            :json    (fn [] (js/Promise.resolve (clj->js data)))}))))
 
 
-(defn mock-fetch-network-error
-  "Returns a mock fetch that rejects with network error."
-  []
-  (fn [_url]
-    (js/Promise.reject (js/Error. "Network error"))))

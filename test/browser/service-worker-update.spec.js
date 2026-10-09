@@ -1,4 +1,4 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, controlled, memoryFrom } = require('./fixtures');
 const shared = require('./service-worker.shared');
 
 // The worker's update path (ADR-0014). The backend prepends SW_VERSION to
@@ -51,112 +51,100 @@ async function developmentBuild(page) {
   return page.evaluate(() => typeof window.__metrics === 'function');
 }
 
-test('a changed worker waits, and the page reloads once onto it after the tap', async ({ context, page }) => {
-  const loads = [];
-  page.on('load', () => loads.push(Date.now()));
-  await registerWorkerVersion(context, 'test-v1');
-  await openControlled(page);
+test.describe('Обновление приложения', () => {
+  test('пользователь возвращается в приложение после выхода новой версии → кнопка «Обновить» появляется, а страница перезагружается один раз после нажатия', async ({ context, page }) => {
+    const loads = [];
+    const update = page.getByRole('button', { name: 'Обновить' });
+    let dev;
+    let reloaded;
+    page.on('load', () => loads.push(Date.now()));
 
-  // The first worker claimed a page that started uncontrolled: no reload.
-  expect(await page.evaluate(() => window.__firstLoad)).toBe(true);
-  expect(await cacheBuckets(page)).toEqual(['shell-test-v1']);
-  // The snapshot of memory, written once memory is loaded.
-  await expect.poll(() => page.evaluate(async () => !!(await (await caches.open('learner-memory')).match('/learner-memory/snapshot')))).toBe(true);
+    await test.step('Дано приложение открыто на старой версии, обновления нет', async () => {
+      await registerWorkerVersion(context, 'test-v1');
+      await openControlled(page);
+      // The first worker claimed a page that started uncontrolled: no reload.
+      expect(await page.evaluate(() => window.__firstLoad)).toBe(true);
+      expect(await cacheBuckets(page)).toEqual(['shell-test-v1']);
+      // The snapshot of memory, written once memory is loaded.
+      await expect.poll(() => page.evaluate(async () => !!(await (await caches.open('learner-memory')).match('/learner-memory/snapshot')))).toBe(true);
+      await recordWorkerStates(page);
+      // The update path does not differ between builds; only the check of
+      // where memory came from after the reload needs the development build.
+      dev = await developmentBuild(page);
+      await expect(update).toHaveCount(0);
+    });
 
-  await recordWorkerStates(page);
-  // Which build ran is part of the evidence. The update path does not differ
-  // between them; only the check of where memory came from after the reload
-  // needs the development build's metrics.
-  const dev = await developmentBuild(page);
-  console.log(`service-worker-update: ${dev ? 'development' : 'release'} build`);
+    await test.step('Когда он возвращается в приложение и выходит новая версия', async () => {
+      // Coming back to the app is what asks for the update check; the check
+      // brings the real build, which differs from test-v1.
+      reloaded = page.waitForEvent('load');
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    });
 
-  // Nothing is waiting yet, so nothing is offered.
-  const update = page.getByRole('button', { name: 'Обновить' });
-  await expect(update).toHaveCount(0);
+    await test.step('Тогда предлагается «Обновить», страница не перезагружена', async () => {
+      await expect(update).toBeVisible();
+      expect(loads.length).toBe(1);
+    });
 
-  // Coming back to the app is what asks for the update check; the check
-  // brings the real build, which differs from test-v1.
-  const reloaded = page.waitForEvent('load');
-  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await test.step('Когда он нажимает «Обновить»', async () => {
+      await update.click();
+      await reloaded;
+    });
 
-  // The new worker is offered, never taken by itself — in this build too:
-  // it waits, no page has reloaded, and the tap is what activates it.
-  await expect(update).toBeVisible();
-  expect(loads.length).toBe(1);
-  await update.click();
-  await reloaded;
-
-  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
-  await expect.poll(async () => (await cacheBuckets(page)).length).toBe(1);
-  expect(await cacheBuckets(page)).not.toEqual(['shell-test-v1']);
-  // The page after the reload started from the snapshot: activation kept it.
-  if (dev) {
-    await page.waitForFunction(() => typeof window.__metrics === 'function' && window.__metrics().memory['ready-ms']);
-    expect(await page.evaluate(() => window.__metrics().memory.from)).toBe('snapshot');
-  }
-  const states = await page.evaluate(() => JSON.parse(localStorage.getItem('sw-states')));
-  expect(states).toEqual(['installed', 'activating', 'activated']);
-  expect(await page.evaluate(() => window.__firstLoad)).toBeUndefined();
-
-  // One reload, not two: the bucket assertion above already let a second
-  // controller change — had there been one — fire, so this is not a race.
-  expect(loads.length).toBe(2);
-});
-
-// The build mark and the trace export exist in a development build only; on a
-// release build these three skip.
-const buildMark = (page) => page.getByRole('button', { name: 'Перезагрузить сборку' });
-const traceExport = (page) => page.getByRole('button', { name: 'Экспортировать трассу' });
-
-test('a tap on the build mark reloads onto a new build', async ({ context, page }) => {
-  await registerWorkerVersion(context, 'test-v1');
-  await openControlled(page);
-  test.skip(!(await developmentBuild(page)), 'the build mark exists in a development build only');
-
-  // The update check behind the tap brings the real build.
-  const reloaded = page.waitForEvent('load');
-  await buildMark(page).click();
-  await reloaded;
-
-  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
-  await expect.poll(async () => (await cacheBuckets(page)).length).toBe(1);
-  expect(await cacheBuckets(page)).not.toEqual(['shell-test-v1']);
-  expect(await page.evaluate(() => window.__firstLoad)).toBeUndefined();
-});
-
-test('a tap on the build mark with nothing new reloads the page', async ({ page }) => {
-  // No rewritten registration: the real build is registered, and the update
-  // check finds it unchanged.
-  await openControlled(page);
-  test.skip(!(await developmentBuild(page)), 'the build mark exists in a development build only');
-  const [bucket] = await cacheBuckets(page);
-
-  const reloaded = page.waitForEvent('load');
-  await buildMark(page).click();
-  await reloaded;
-
-  expect(await page.evaluate(() => window.__firstLoad)).toBeUndefined();
-  await expect.poll(() => cacheBuckets(page)).toEqual([bucket]);
-});
-
-test('a tap on the trace export in the actions row exports and does not reload', async ({ page }) => {
-  // Headless Chrome has no share sheet; the clipboard is stubbed so the
-  // export takes its second path and announces itself in an alert. The alert
-  // is recorded rather than shown: a blocking dialog raised from inside the
-  // tap deadlocks the after-action snapshot of `trace: retain-on-failure` —
-  // measured, the test hangs to its timeout with tracing on and passes with
-  // `--trace off` — and a dialog listener does not free it.
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText: () => Promise.resolve() } });
-    window.__alerts = [];
-    window.alert = (message) => { window.__alerts.push(message); };
+    await test.step('Тогда страница на новой версии, перезагрузка была одна', async () => {
+      await controlled(page);
+      await expect.poll(async () => (await cacheBuckets(page)).length).toBe(1);
+      expect(await cacheBuckets(page)).not.toEqual(['shell-test-v1']);
+      // The page after the reload started from the snapshot: activation kept it.
+      if (dev) {
+        expect(await memoryFrom(page)).toBe('snapshot');
+      }
+      expect(await page.evaluate(() => JSON.parse(localStorage.getItem('sw-states')))).toEqual(['installed', 'activating', 'activated']);
+      expect(await page.evaluate(() => window.__firstLoad)).toBeUndefined();
+      // One reload, not two: the bucket assertion above already let a second
+      // controller change — had there been one — fire, so this is not a race.
+      expect(loads.length).toBe(2);
+    });
   });
-  await openControlled(page);
-  test.skip(!(await developmentBuild(page)), 'the trace export exists in a development build only');
 
-  await traceExport(page).click();
-  await expect.poll(() => page.evaluate(() => window.__alerts)).toEqual(['Трасса скопирована']);
-  // The export is its own control, so nothing reloaded the page out from
-  // under it.
-  expect(await page.evaluate(() => window.__firstLoad)).toBe(true);
+  // The build mark exists in a development build only; on a release build
+  // this skips.
+  test('пользователь нажимает на метку сборки → страница перезагружается: на новую версию, если она вышла, иначе на ту же', async ({ context, page }) => {
+    const buildMark = page.getByRole('button', { name: 'Перезагрузить сборку' });
+    let bucket;
+
+    await test.step('Дано приложение на старой версии, вышла новая', async () => {
+      await registerWorkerVersion(context, 'test-v1');
+      await openControlled(page);
+      test.skip(!(await developmentBuild(page)), 'the build mark exists in a development build only');
+    });
+
+    await test.step('Когда он нажимает на метку сборки', async () => {
+      // The update check behind the tap brings the real build.
+      const reloaded = page.waitForEvent('load');
+      await buildMark.click();
+      await reloaded;
+    });
+
+    await test.step('Тогда страница перезагружена на новую версию', async () => {
+      await controlled(page);
+      await expect.poll(async () => (await cacheBuckets(page)).length).toBe(1);
+      expect(await cacheBuckets(page)).not.toEqual(['shell-test-v1']);
+      expect(await page.evaluate(() => window.__firstLoad)).toBeUndefined();
+      [bucket] = await cacheBuckets(page);
+    });
+
+    await test.step('Когда новой версии больше нет и он снова нажимает на метку', async () => {
+      // The registered build is now the real one; the check finds it unchanged.
+      await page.evaluate(() => { window.__secondLoad = true; });
+      const reloaded = page.waitForEvent('load');
+      await buildMark.click();
+      await reloaded;
+    });
+
+    await test.step('Тогда страница всё равно перезагружена, версия та же', async () => {
+      expect(await page.evaluate(() => window.__secondLoad)).toBeUndefined();
+      await expect.poll(() => cacheBuckets(page)).toEqual([bucket]);
+    });
+  });
 });

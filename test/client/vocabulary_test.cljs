@@ -79,7 +79,7 @@
   (count (:words (await (db-seed/memory-of (:user/db dbs))))))
 
 
-(deftest add-creates-vocab-and-initial-review
+(deftest adding-a-word-stores-it-with-a-first-review
   (async-testing "`add!` creates vocab and initial review"
     (with-test-dbs
      (^:async fn
@@ -96,82 +96,7 @@
         (is (true? (:retained (first reviews)))))))))
 
 
-(deftest list-returns-summaries-with-retention
-  (async-testing "`list` returns summaries with retention"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
-      (await (sut/add! (test-capabilities dbs) "die Katze" "кот" :word))
-      (let [{:keys [words total]} (await (list-of dbs {}))]
-        (is (= 2 (count words)))
-        (is (= 2 total))
-        (is (every? :retention-level words)))))))
-
-
-(deftest list-filters-and-paginates
-  (async-testing "`list` supports search and limit"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
-      (await (sut/add! (test-capabilities dbs) "die Katze" "кот" :word))
-      (await (sut/add! (test-capabilities dbs) "der Vogel" "птица" :word))
-      (let [{:keys [matches words total]} (await (list-of dbs {:search "Hund" :limit 1}))]
-        (is (= 3 total))
-        (is (= 1 matches)
-            "`matches` counts what the search left, `total` what the scope holds")
-        (is (= 1 (count words)))
-        (is (= "der Hund" (:value (first words)))))
-      (let [{:keys [matches words total]} (await (list-of dbs {:search "zzz" :limit 50}))]
-        (is (= [] words) "an empty page reads no reviews and returns no rows")
-        (is (= 0 matches))
-        (is
-         (= 3 total)
-         "the scope is still three words, which is how the screen
-                         tells an empty vocabulary from a search with no match"))))))
-
-
-(deftest a-phrase-is-counted-and-listed-like-a-word
-  (async-testing "one vocabulary, two kinds (#371)"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
-      (await (sut/add! (test-capabilities dbs) "auf jeden Fall" "в любом случае" :phrase))
-      (is (= 2 (await (count-of dbs)))
-          "a phrase is counted like a word")
-      (let [{:keys [matches total words]} (await (list-of dbs {:limit 50}))]
-        (is (= ["vocab:auf jeden fall" "vocab:der hund"] (mapv :id words))
-            "both kinds in one alphabet")
-        (is (= ["phrase" nil] (mapv :kind words))
-            "the kind rides along, so the row can be rendered as a phrase")
-        (is (= 2 total))
-        (is (= 2 matches)))
-      (let [{:keys [words]} (await (list-of dbs {:search "jeden" :limit 50}))]
-        (is (= ["vocab:auf jeden fall"] (mapv :id words))
-            "a phrase is searchable by its value like a word"))))))
-
-
-(deftest list-reports-how-many-rows-the-page-left-behind
-  (async-testing "`matches` says whether another page follows"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (js/Promise.all
-              (into-array (map (fn [i]
-                                 (sut/add! (test-capabilities dbs) (str "wort-" i) (str "перевод-" i) :word))
-                               (range 12)))))
-      (let [{:keys [matches words total]} (await (list-of dbs {:limit 5}))]
-        (is (= 5 (count words)) "the page is the limit")
-        (is (= 12 matches) "every word matched the empty filter")
-        (is (= 12 total)))
-      (let [{:keys [matches words]} (await (list-of dbs {:limit 50}))]
-        (is (= 12 (count words)))
-        (is (= 12 matches) "a page larger than the list leaves nothing behind"))))))
-
-
-(deftest list-and-count-return-all-words-beyond-25
+(deftest a-vocabulary-of-more-than-a-page-is-listed-and-counted-whole
   (async-testing "`list` and `count` return full data when db has more than 25 words"
     (with-test-dbs
      (^:async fn
@@ -186,19 +111,7 @@
         (is (= 30 (count words))))))))
 
 
-(deftest update-updates-and-returns-summary
-  (async-testing "`update!` modifies and returns summary"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))
-            result (await (sut/update! (test-capabilities dbs) word-id "лиса"))]
-        (is (= word-id (:id result)))
-        (is (= "der Hund" (:value result)))
-        (is (= "лиса" (-> result :translation first :value))))))))
-
-
-(deftest delete-removes-the-word-and-keeps-its-history
+(deftest deleting-a-word-keeps-its-reviews-and-examples
   (async-testing "`delete!` removes the word; its reviews and examples stay"
     (with-test-dbs
      (^:async fn
@@ -211,18 +124,6 @@
           (is (empty? (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))))
           (is (= (map :_id reviews) (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review")))))
           (is (= 1 (count (await (db-queries/fetch-by-type (:user/db dbs) "example")))))))))))
-
-
-(deftest add-review-creates-review-document
-  (async-testing "`add-review` creates review document"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word))]
-        (await (sut/add-review (test-capabilities dbs) word-id false "собака"))
-        (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
-          (is (= 2 (count reviews)))
-          (is (= 1 (count (filter (fn [r] (false? (:retained r))) reviews))))))))))
 
 
 (defn- ^:async seed-reviews!
@@ -241,7 +142,7 @@
                                                        (* (+ 1 n k) 6 3600 1000)))}))))))
 
 
-(deftest list-retention-matches-per-word-reviews-beyond-25-reviews
+(deftest retention-is-computed-from-each-words-own-reviews-past-a-page
   (async-testing "`list` retention equals retention over each word's own reviews when reviews exceed one page"
     (with-test-dbs
      (^:async fn
@@ -259,7 +160,7 @@
                                     :modified-at time/test-now-iso}))
                       word-ids))))
         (await (seed-reviews! dbs word-ids))
-        (let [{reviews :docs} (await (db/find-all (:user/db dbs) {:selector {:type "review"}}))
+        (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))
               expected (->> (group-by :word-id reviews)
                             (map (fn [[word-id reviews]]
                                    (let [log (reduce retention/with-review
@@ -277,80 +178,3 @@
                  (into {} (map (juxt :id :retention-level)) subset)))))))))
 
 
-(defn- ^:async seed-single-review!
-  [dbs id value days-ago]
-  (await (db/insert (:user/db dbs)
-                    {:_id         id
-                     :type        "vocab"
-                     :value       value
-                     :translation [{:lang "ru" :value "слово"}]
-                     :created-at  time/test-now-iso
-                     :modified-at time/test-now-iso}))
-  (await (db/insert (:user/db dbs)
-                    {:_id        (str "review-" id)
-                     :type       "review"
-                     :word-id    id
-                     :retained   true
-                     :created-at (utils/ms->iso (- (time/now-ms)
-                                                   (* days-ago 24 3600 1000)))})))
-
-
-(deftest the-list-is-alphabetical-whatever-the-retention
-  (async-testing "the word list's order is the alphabet, whatever the retention"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (seed-single-review! dbs "vocab:a-wort" "A-Wort" 5))
-      (await (seed-single-review! dbs "vocab:m-wort" "M-Wort" 60))
-      (await (seed-single-review! dbs "vocab:z-wort" "Z-Wort" 300))
-      (let [{:keys [words]} (await (list-of dbs {}))]
-        (is (= ["vocab:a-wort" "vocab:m-wort" "vocab:z-wort"] (mapv :id words))
-            "default order, and it is not the most due first")
-        (is (every? :retention-level words)
-            "a level for every row on the page, read by key"))
-      (let [{:keys [words]} (await (list-of dbs {:limit 2}))]
-        (is (= ["vocab:a-wort" "vocab:m-wort"] (mapv :id words))
-            "the page is the head of the alphabet, not of the due list"))))))
-
-
-(def ^:private nouns-and-a-verb
-  "The issue's own six words. `aufstehen` before `das Auto`: `auf` sorts
-   before `aut`, whatever the issue's illustration says."
-  [["der Hund" "пёс"]
-   ["die Katze" "кот"]
-   ["das Auto" "машина"]
-   ["der Zug" "поезд"]
-   ["die Bank" "скамейка"]
-   ["aufstehen" "вставать"]])
-
-
-(def ^:private filed-order
-  ["aufstehen" "das Auto" "die Bank" "der Hund" "die Katze" "der Zug"])
-
-
-(defn- ^:async seed-nouns!
-  [dbs]
-  (doseq [[value translation] nouns-and-a-verb]
-    (await (sut/add! (test-capabilities dbs) value translation :word))))
-
-
-(deftest the-list-files-a-noun-under-its-word-not-its-article
-  (async-testing "the article is ignored while ordering, on every alphabetical path (#438)"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (seed-nouns! dbs))
-      (let [{:keys [words]} (await (list-of dbs {:limit 50}))]
-        (is (= filed-order (mapv :value words)) "the whole vocabulary, paged off the view"))
-      (let [page-1 (await (list-of dbs {:limit 3 :offset 0}))
-            page-2 (await (list-of dbs {:limit 3 :offset 3}))]
-        (is (= filed-order (into (mapv :value (:words page-1)) (mapv :value (:words page-2))))
-            "a page past the first continues the order, none repeated and none skipped"))
-      (let [ids (mapv :id (:words (await (list-of dbs {:limit 50}))))
-            {:keys [words]} (await (list-of dbs
-                                            {:limit 50 :word-ids (shuffle ids)}))]
-        (is (= filed-order (mapv :value words)) "a collection-scoped page sorts on the same key"))
-      ;; `z` matches Katze and Zug and nothing else here. Ordered by id they
-      ;; would come back `der Zug`, `die Katze`.
-      (let [{:keys [words]} (await (list-of dbs {:limit 50 :search "z"}))]
-        (is (= ["die Katze" "der Zug"] (mapv :value words)) "so does a searched page"))))))

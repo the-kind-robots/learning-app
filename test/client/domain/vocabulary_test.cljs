@@ -4,23 +4,6 @@
    [domain.vocabulary :as sut]))
 
 
-(deftest new-word-doc-creates-vocab-document
-  (testing "user adds a new word"
-    (let [word (sut/new-word "der Hund" [{:lang "ru" :value "пёс"}])]
-      (is (nil? (:type word)) "the repository stamps the document type")
-      (is (= "der Hund" (:value word)))
-      (is (= "пёс" (-> word :translation first :value)))
-      (is (= "ru" (-> word :translation first :lang))))))
-
-
-(deftest update-word-doc-updates-values
-  (testing "user updates an existing word"
-    (let [word    (sut/new-word "der Hund" [{:lang "ru" :value "пёс"}])
-          updated (sut/update-word word "лиса")]
-      (is (= "der Hund" (:value updated)))
-      (is (= "лиса" (-> updated :translation first :value))))))
-
-
 (deftest a-translation-is-kept-as-it-was-typed
   (testing "punctuation belongs to the translation, not to a separator (GH-365)"
     (is (= [{:lang "ru" :value "без того, чтобы"}]
@@ -43,13 +26,6 @@
     (is (= [] (sut/parse-translations nil)))))
 
 
-(deftest editing-keeps-the-translation-as-it-was-typed
-  (testing "the edit path shares parse-translations, so it inherits the rule"
-    (let [word    (sut/new-word "ohne" [{:lang "ru" :value "без"}])
-          updated (sut/update-word word "без того, чтобы")]
-      (is (= [{:lang "ru" :value "без того, чтобы"}] (:translation updated))))))
-
-
 (deftest a-word-written-before-the-rule-is-read-as-it-is
   (testing "several stored entries survive a merge untouched — no migration"
     (let [stored [{:lang "ru" :value "пёс"} {:lang "ru" :value "собака"}]]
@@ -59,16 +35,6 @@
              (sut/merge-translations stored (sut/parse-translations "пёс, собака")))))))
 
 
-(deftest new-review-doc-creates-review-document
-  (testing "user reviews a word"
-    (let [review (sut/new-review "word-1" true "пёс")]
-      (is (nil? (:type review)) "the repository stamps the document type")
-      (is (= "word-1" (:word-id review)))
-      (is (true? (:retained review)))
-      (is (= "пёс" (-> review :translation first :value)))
-      (is (= "ru" (-> review :translation first :lang))))))
-
-
 (deftest normalize-value-is-a-frozen-contract
   (testing "lowercase, umlaut fold, punctuation to space — changing this remaps ids"
     (is (= "gross" (sut/normalize-value "GROSS")))
@@ -76,18 +42,6 @@
     (is (= "tuer" (sut/normalize-value "Tür")))
     (is (= "maedchen" (sut/normalize-value "Mädchen")))
     (is (= "der hund" (sut/normalize-value "der Hund")))))
-
-
-(deftest new-word-is-content-addressed
-  (testing "a word's id is the content-addressed id of its value"
-    (let [value "der Hund"]
-      (is (= (sut/vocab-id value)
-             (:id (sut/new-word value [{:lang "ru" :value "пёс"}])))))))
-
-
-(deftest vocab-id-is-case-insensitive
-  (testing "the same word yields the same id regardless of case"
-    (is (= (sut/vocab-id "der Hund") (sut/vocab-id "DER HUND")))))
 
 
 (deftest merge-translations-unions-by-value

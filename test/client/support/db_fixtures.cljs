@@ -48,16 +48,6 @@
       nil)))
 
 
-(defn db-fixture
-  [db-name]
-  {:before (fn []
-             (async done
-               (.finally (destroy-test-db db-name) done)))
-   :after  (fn []
-             (async done
-               (.finally (destroy-test-db db-name) done)))})
-
-
 (defn db-fixture-multi
   [db-names]
   {:before (fn []

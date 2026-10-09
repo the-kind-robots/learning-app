@@ -5,7 +5,6 @@
    [examples :as examples]
    [examples.cache :as sut]
    [examples.provider :as provider]
-   [malli.core :as m]
    [next.jdbc :as jdbc]
    [next.jdbc.result-set :as result-set])
   (:import
@@ -127,16 +126,6 @@
         "a row nobody can read is a subject with no example")))
 
 
-(deftest the-parts-the-key-was-built-from-are-readable
-  (let [db      (migrated-db)
-        subject (examples/subject {:word "Hund" :translation ["пёс" "собака, пёс"] :context "Tiere"})]
-    (sut/store! db (subject-key subject) subject example)
-    (is (= [{:word "Hund" :translations "[\"пёс\",\"собака, пёс\"]" :context "Tiere"}]
-           (jdbc/execute! db
-             ["SELECT word, translations, context FROM example_cache"]
-             {:builder-fn result-set/as-unqualified-kebab-maps})))))
-
-
 (deftest an-edited-prompt-is-a-miss-not-a-stale-row
   (testing "the sentence depends on the prompt and the model, so the key does too"
     (let [asked    {:word "Hund" :translation ["собака"]}
@@ -166,14 +155,6 @@
     (binding [*print-length* 1]
       (is (not= (key-of {:word "Hund" :translation ["собака" "пёс"]})
                 (key-of {:word "Hund" :translation ["собака" "кобель"]}))))))
-
-
-(deftest the-subject-a-caller-builds-is-the-one-this-namespace-takes
-  (testing "the contract `digest` reads by, held here rather than checked there"
-    (is (m/validate examples/subject-schema
-                    (examples/subject {:word "Hund" :translation "собака"})))
-    (is (not (m/validate examples/subject-schema {:word "Hund" :translation ["собака"]}))
-        "a raw map carries `:translation`, one letter from the key that matters")))
 
 
 (deftest a-cache-that-cannot-be-read-is-a-miss

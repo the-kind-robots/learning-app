@@ -1,4 +1,4 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, nothingHappensFor } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
 
 // One word is all a lesson needs to exist, and adding it is also what makes
@@ -8,80 +8,96 @@ const addHaus = async (page) => {
   await expect(page.getByRole('button', { name: 'НАЧАТЬ УРОК' })).toBeVisible();
 };
 
-test('Alt+Enter from the word field starts the lesson', async ({ page }) => {
-  await page.goto('/home');
-  await addHaus(page);
+test.describe('Горячие клавиши главной', () => {
+  test('пользователь нажимает Alt+Enter → начинается урок из любого места главной', async ({ page }) => {
+    const word = page.getByLabel('Слово (немецкий)');
+    const translation = page.getByLabel('Перевод (русский)');
 
-  await page.getByLabel('Слово (немецкий)').focus();
-  await page.keyboard.press('Alt+Enter');
+    await test.step('Дано главная с одним словом в словаре', async () => {
+      await page.goto('/home');
+      await addHaus(page);
+    });
 
-  await expect(page).toHaveURL(/\/lesson$/);
-  await expect(page.getByLabel('Ответ на немецком')).toBeVisible();
-});
+    await test.step('Когда он жмёт Alt+Enter в поле слова', async () => {
+      await word.focus();
+      await page.keyboard.press('Alt+Enter');
+    });
 
-test('Alt+Enter from the translation field starts the lesson', async ({ page }) => {
-  await page.goto('/home');
-  await addHaus(page);
+    await test.step('Тогда открыт урок с полем ответа', async () => {
+      await expect(page).toHaveURL(/\/lesson$/);
+      await expect(page.getByLabel('Ответ на немецком')).toBeVisible();
+    });
 
-  const translation = page.getByLabel('Перевод (русский)');
-  await translation.focus();
-  await translation.fill('черновик');
-  await page.keyboard.press('Alt+Enter');
+    await test.step('Когда он возвращается и жмёт Alt+Enter в поле перевода с черновиком', async () => {
+      await page.goto('/home');
+      await translation.focus();
+      await translation.fill('черновик');
+      await page.keyboard.press('Alt+Enter');
+    });
 
-  await expect(page).toHaveURL(/\/lesson$/);
+    await test.step('Тогда урок открыт, а черновик не сохранён как слово', async () => {
+      await expect(page).toHaveURL(/\/lesson$/);
+      await page.goto('/words');
+      await expect(page.getByRole('listitem').filter({ hasText: 'черновик' })).toHaveCount(0);
+      await expect(page.getByRole('listitem').filter({ hasText: 'Haus' })).toHaveCount(1);
+    });
 
-  // The keystroke started a lesson and nothing else: the draft translation
-  // sitting in the field was not submitted as a word.
-  await page.goto('/words');
-  await expect(
-    page.getByRole('listitem').filter({ hasText: 'черновик' })
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole('listitem').filter({ hasText: 'Haus' })
-  ).toHaveCount(1);
-});
+    await test.step('Когда он жмёт Alt+Enter вне полей, на кнопке «Список слов»', async () => {
+      await page.goto('/home');
+      await page.getByRole('button', { name: 'Список слов' }).focus();
+      await page.keyboard.press('Alt+Enter');
+    });
 
-test('Alt+Enter outside the fields starts the lesson', async ({ page }) => {
-  await page.goto('/home');
-  await addHaus(page);
+    await test.step('Тогда снова открыт урок', async () => {
+      await expect(page).toHaveURL(/\/lesson$/);
+    });
+  });
 
-  await page.getByRole('button', { name: 'Список слов' }).focus();
-  await page.keyboard.press('Alt+Enter');
+  test('пользователь нажимает Alt+Enter при пустом словаре → ничего не происходит', async ({ page }) => {
+    await test.step('Дано главная без слов, кнопки урока нет', async () => {
+      await page.goto('/home');
+      await expect(page.getByRole('button', { name: 'НАЧАТЬ УРОК' })).toBeHidden();
+    });
 
-  await expect(page).toHaveURL(/\/lesson$/);
-});
+    await test.step('Когда он жмёт Alt+Enter в поле слова', async () => {
+      await page.getByLabel('Слово (немецкий)').focus();
+      await page.keyboard.press('Alt+Enter');
+      await nothingHappensFor(page, 500);
+    });
 
-test('Alt+Enter does nothing while the vocabulary is empty', async ({ page }) => {
-  await page.goto('/home');
-  await expect(page.getByRole('button', { name: 'НАЧАТЬ УРОК' })).toBeHidden();
+    await test.step('Тогда он остаётся на главной', async () => {
+      await expect(page).toHaveURL(/\/home$/);
+    });
+  });
 
-  await page.getByLabel('Слово (немецкий)').focus();
-  await page.keyboard.press('Alt+Enter');
+  test('пользователь жмёт Enter и Ctrl+Enter в форме → Enter переходит к переводу, Ctrl+Enter добавляет слово', async ({ page }) => {
+    const word = page.getByLabel('Слово (немецкий)');
 
-  // Asserting that navigation never happens: auto-waiting can only wait for
-  // something to become true, so the only way to establish the negative is to
-  // let a navigation's worth of time pass first.
-  await page.waitForTimeout(500);
-  await expect(page).toHaveURL(/\/home$/);
-});
+    await test.step('Дано главная, поле слова заполнено', async () => {
+      await page.goto('/home');
+      await word.focus();
+      await word.fill('Haus');
+    });
 
-test('the screen keeps its other Enter keys', async ({ page }) => {
-  await page.goto('/home');
+    await test.step('Когда он жмёт Enter', async () => {
+      await page.keyboard.press('Enter');
+    });
 
-  // Enter on the word field moves on to the translation.
-  const word = page.getByLabel('Слово (немецкий)');
-  await word.focus();
-  await word.fill('Haus');
-  await page.keyboard.press('Enter');
-  await expect(page.getByLabel('Перевод (русский)')).toBeFocused();
+    await test.step('Тогда фокус в поле перевода', async () => {
+      await expect(page.getByLabel('Перевод (русский)')).toBeFocused();
+    });
 
-  // Ctrl+Enter on the translation field still adds the word.
-  await page.keyboard.type('дом');
-  await page.keyboard.press('Control+Enter');
-  await expect(page.getByRole('button', { name: 'НАЧАТЬ УРОК' })).toBeVisible();
+    await test.step('Когда он вводит перевод и жмёт Ctrl+Enter', async () => {
+      await page.keyboard.type('дом');
+      await page.keyboard.press('Control+Enter');
+    });
 
-  await page.goto('/words');
-  const item = page.getByRole('listitem').filter({ hasText: 'Haus' });
-  await expect(item).toBeVisible();
-  await expect(item).toContainText('дом');
+    await test.step('Тогда слово добавлено и видно в списке', async () => {
+      await expect(page.getByRole('button', { name: 'НАЧАТЬ УРОК' })).toBeVisible();
+      await page.goto('/words');
+      const item = page.getByRole('listitem').filter({ hasText: 'Haus' });
+      await expect(item).toBeVisible();
+      await expect(item).toContainText('дом');
+    });
+  });
 });

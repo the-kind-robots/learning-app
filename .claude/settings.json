@@ -68,7 +68,21 @@
             "statusMessage": "Checking who is editing..."
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/read-guard.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking read size..."
+          }
+        ]
       }
     ]
+  },
+  "env": {
+    "BASH_MAX_OUTPUT_LENGTH": "15000"
   }
 }

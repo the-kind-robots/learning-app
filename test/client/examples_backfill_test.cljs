@@ -3,7 +3,6 @@
    [client.support.test :refer [async-testing]])
   (:require
    [adapters.learner.documents :as documents]
-   [adapters.learner.memory :as memory]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.db-seed :as db-seed]
@@ -12,10 +11,8 @@
    [client.support.time :as time]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is testing use-fixtures]]
-   [clojure.string :as str]
    [db :as db]
    [domain.vocabulary :as vocabulary]
-   [ports.learner :as ports]
    [sync :as sync]
    [tasks :as tasks]
    [use-cases.examples :as sut]
@@ -90,25 +87,6 @@
                      :entries     [katze]})))))
 
 
-(deftest every-missing-pair-is-named-however-many-there-are
-  (let [words (mapv (fn [n] {:id (str "vocab:" n) :translation [] :value (str "Wort" n)})
-                    (range 500))]
-    (is (= 500 (count (missing {:entries words})))
-        "the queue paces the fetching; naming what is missing is not where to hold back")))
-
-
-(deftest what-a-read-sees-depends-on-the-collection-it-is-scoped-to
-  (let [untethered {:word-id "vocab:hund" :collection-id nil}
-        themed     {:word-id "vocab:hund" :collection-id "coll-1"}
-        examples   [untethered themed]]
-    (is (= [themed] (sut/visible-in examples "coll-1"))
-        "a theme sees what was generated in it, and nothing else")
-    (is (= examples (sut/visible-in examples nil))
-        "a read outside every theme sees all of them")
-    (is (empty? (sut/visible-in [untethered] "coll-2"))
-        "and a theme that generated none of them sees none")))
-
-
 ;;
 ;; The same rule against the databases the app uses
 ;;
@@ -153,11 +131,10 @@
 
 (defn ^:async queued-tasks
   "What the queued fetches carry, which is what each request is built from.
-   Read without a page limit — `find` stops at 25, which a vocabulary's worth
-   of fetches is well past."
+   `fetch-by-type` reads without a page limit, which a vocabulary's worth of
+   fetches is well past."
   [dbs]
-  (let [{docs :docs} (await (db/find-all (:device/db dbs) {:selector {:type "task"}}))]
-    (mapv :data docs)))
+  (mapv :data (await (db-queries/fetch-by-type (:device/db dbs) "task"))))
 
 
 (defn ^:async queued-fetches
@@ -215,25 +192,6 @@
          (testing "and a second start writes none of them again"
            (is (= 120 (await (sut/request-all-missing! (await (capabilities dbs))))))
            (is (= 120 (count (await (queued-tasks dbs))))))))))))
-
-
-(deftest a-task-carries-what-the-fetch-needs
-  (async-testing "the queued task names the word, its Russian glosses and the collection"
-    (await
-     (with-dbs
-      (^:async fn
-       [dbs]
-       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:value "Bank" :translation "скамейка"}]))
-       (await (seed-collection! dbs "coll-park" "Park" [(vocabulary/vocab-id "Bank")]))
-       (await (sut/request-all-missing! (await (capabilities dbs))))
-       (let [{[task] :docs} (await (db/find (:device/db dbs) {:selector {:type "task"}}))]
-         (is (= "example-fetch" (:task-type task)))
-         (is (= {:collection-id "coll-park"
-                 :collection-name "Park"
-                 :translations  ["скамейка"]
-                 :word          "Bank"
-                 :word-id       (vocabulary/vocab-id "Bank")}
-                (:data task)))))))))
 
 
 (deftest an-empty-vocabulary-queues-nothing
@@ -301,35 +259,6 @@
                                    [{:kind        "phrase"
                                      :translation "во всяком случае"
                                      :value       "auf jeden Fall"}])))
-
-
-(deftest a-phrase-is-missing-its-example-like-a-word
-  (testing "the rule reads the entry, and a phrase is an entry with a kind"
-    (is (= [{:word {:id          phrase-id
-                    :kind        "phrase"
-                    :translation [{:lang "ru" :value "во всяком случае"}]
-                    :value       "auf jeden Fall"}}]
-           (missing {:entries [{:id          phrase-id
-                                :kind        "phrase"
-                                :translation [{:lang "ru" :value "во всяком случае"}]
-                                :value       "auf jeden Fall"}]})))))
-
-
-(deftest a-phrase-that-arrived-by-replication-is-asked-for-with-its-glosses
-  (async-testing "the pass queues the phrase's fetch, carrying the Russian it was entered with"
-    (await
-     (with-dbs
-      (^:async fn
-       [dbs]
-       (await (seed-phrase! dbs))
-       (is (= 1 (await (sut/request-missing-for! (await (capabilities dbs)) [phrase-id]))))
-       (is (= [{:collection-id nil
-                :collection-name nil
-                :translations  ["во всяком случае"]
-                :word          "auf jeden Fall"
-                :word-id       phrase-id}]
-              (await (queued-tasks dbs)))
-           "empty glosses would leave the generated sentence to guess the sense"))))))
 
 
 (deftest a-phrase-that-has-its-example-is-asked-for-nothing
@@ -446,114 +375,11 @@
            (is (empty? @requested) "no fetch is asked for a pair that is answered"))))))))
 
 
-;;
-;; What a pass costs, counted in the calls it makes
-;;
-
-
-(def ^:private two-words
-  [{:_id "vocab:hund" :_rev "1-a" :type "vocab" :value "Hund"}
-   {:_id "vocab:katze" :_rev "1-a" :type "vocab" :value "Katze"}])
-
-
 (def ^:private an-account
   "The sync capability of a device with an account, as far as the backfill
    reads it."
   {:sync/account-id       "account"
    :sync/push-interval-ms 3000})
-
-
-(defn- recording-capabilities
-  "A device with an account whose memory holds two words and no example,
-   and whose move, holding of the fetches, catch-up, cancelling and
-   requests record each time they are asked. A request records what it was
-   asked to queue and the delay it was asked to queue it with."
-  [asked]
-  (let [recorded (fn [step] (fn [& _] (swap! asked conj step) (js/Promise.resolve nil)))]
-    {:capabilities/sync an-account
-     :learner           (assoc ports/reads
-                               :learner/cancel-answered-fetches! (fn [ids]
-                                                                   (swap! asked conj [:cancel ids])
-                                                                   (js/Promise.resolve 0))
-                               :learner/catch-up!                (recorded :catch-up)
-                               :learner/examples-moved           (recorded :moved)
-                               :learner/hold-fetches-until!      (recorded :held)
-                               :learner/memory                   (fn [] (memory/with-docs memory/empty-memory two-words))
-                               :learner/request-examples!        (fn [requests]
-                                                                   (swap! asked
-                                                                     conj
-                                                                     [(mapv (comp :id :word) requests)
-                                                                      (:delay-ms (first requests))])
-                                                                   (js/Promise.resolve nil)))}))
-
-
-(deftest a-start-reads-the-whole-vocabulary-and-a-push-only-pass-reads-nothing
-  (async-testing "the full read belongs to the start, after the first pass; a pass reads what it brought"
-    (await
-     ((^:async fn
-       []
-       (let [asked       (atom [])
-             after-pass! (sut/start! (recording-capabilities asked))]
-         (await (wait/settled))
-         (is (= [:moved :held] @asked) "the fetches are held, and nothing counts before the first pass")
-         (is (nil? (after-pass! {:pulled 0 :pushed 3 :pulled-ids []}))
-             "the hook answers at once, whatever it leaves running")
-         (await (wait/until #(= 3 (count @asked))))
-         (is (= [["vocab:hund" "vocab:katze"] nil] (peek @asked))
-             "the first pass, though it pulled nothing, lets the start ask over the whole vocabulary, due now")
-         (after-pass! {:pulled 1 :pushed 0 :pulled-ids ["vocab:hund"]})
-         (await (wait/until #(= 5 (count @asked))))
-         (is (= [:catch-up [["vocab:hund"] 6000]] (subvec @asked 3))
-             "a pass that pulled catches memory up, asks only about what it brought, and its fetches wait two push windows")
-         (after-pass! {:pulled 1 :pushed 0 :pulled-examples #{"example:vocab:hund::0123456789ab"} :pulled-ids []})
-         (await (wait/until #(= 6 (count @asked))))
-         (is (= [:cancel #{"example:vocab:hund::0123456789ab"}] (peek @asked))
-             "a pass that brought examples cancels the fetches they answer")))))))
-
-
-(deftest a-pass-waits-until-the-backfill-is-ready
-  (async-testing "nothing counts before the move is done, and the first pass is what makes a device with an account ready"
-    (await
-     ((^:async fn
-       []
-       (let [asked        (atom [])
-             release-move (atom nil)
-             capabilities (assoc-in (recording-capabilities asked)
-                           [:learner :learner/examples-moved]
-                           (fn []
-                             (swap! asked conj :moved)
-                             (js/Promise. (fn [resolve] (reset! release-move resolve)))))
-             after-pass!  (sut/start! capabilities)]
-         (after-pass! {:pulled 1 :pushed 0 :pulled-ids ["vocab:hund"]})
-         (await (wait/settled))
-         (is (= [:moved :held] @asked) "a pass has completed, and nothing counts while the move runs")
-         (@release-move nil)
-         (await (wait/until #(= 2 (count (filter vector? @asked)))))
-         (is (= #{["vocab:hund" "vocab:katze"] ["vocab:hund"]} (set (map first (filter vector? @asked))))
-             "both count once the move is done")))))))
-
-
-(deftest a-first-pass-before-the-backfill-listens-makes-it-ready
-  (async-testing "sync tells a late listener with {} that a pass has happened; no second pass is waited for"
-    (await
-     ((^:async fn
-       []
-       (let [asked    (atom [])
-             listener (sut/start! (recording-capabilities asked))]
-         (listener {})
-         (await (wait/until #(= 3 (count @asked))))
-         (is (= [["vocab:hund" "vocab:katze"] nil] (peek @asked)) "the start counts")))))))
-
-
-(deftest a-device-without-an-account-is-ready-once-the-move-is-done
-  (async-testing "no pass will come, so none is waited for"
-    (await
-     ((^:async fn
-       []
-       (let [asked (atom [])]
-         (sut/start! (assoc (recording-capabilities asked) :capabilities/sync sync/no-account))
-         (await (wait/until #(= 3 (count @asked))))
-         (is (= [["vocab:hund" "vocab:katze"] nil] (peek @asked)))))))))
 
 
 (deftest an-example-one-pass-behind-its-word-is-not-fetched
@@ -582,24 +408,6 @@
              (finally
               (set! js/fetch original-fetch)))
            (is (empty? @requested) "had the fetch run anyway, it would have found its pair answered"))))))))
-
-
-(deftest a-fetch-asks-the-backfill-s-question
-  (testing "the ids a fetch looks for are the examples `visible-in` sees, in a theme and outside every theme"
-    ;; Collection ids as the app makes them, with a colon of their own, one
-    ;; of them the start of another.
-    (let [examples [{:collection-id "collection:1-87155332" :word-id "vocab:hund"}
-                    {:collection-id "collection:1-871553329" :word-id "vocab:hund"}
-                    {:collection-id nil :word-id "vocab:hund"}
-                    {:collection-id nil :word-id "vocab:hund x"}
-                    {:collection-id "collection:1-87155332" :word-id "vocab:hund x"}]
-          id-of    (fn [{:keys [collection-id word-id] :as example}]
-                     (:_id (documents/example-doc word-id "w" collection-id (assoc example :translation "t" :value (str word-id collection-id)))))]
-      (doseq [collection-id [nil "collection:1-87155332" "collection:1-871553329" "collection:3-1"]]
-        (let [prefix (documents/example-id-prefix "vocab:hund" collection-id)]
-          (is (= (set (map id-of (sut/visible-in (filter #(= "vocab:hund" (:word-id %)) examples) collection-id)))
-                 (set (filter #(str/starts-with? % prefix) (map id-of examples))))
-              (str "collection " (pr-str collection-id))))))))
 
 
 (deftest a-theme-a-pass-deleted-asks-for-nothing

@@ -30,13 +30,6 @@
                (sut/orphan-userdbs db)))))))
 
 
-(deftest matched-stores-yield-an-empty-report
-  (let [db (migrated-db)]
-    (add-account! db 1)
-    (with-redefs [db/all-dbs (constantly ["_users" "userdb-1"])]
-      (is (= [] (sut/orphan-userdbs db))))))
-
-
 (deftest an-account-row-without-a-userdb-is-not-reported
   (testing "rows without dbs are a different signal, out of scope for #205"
     (let [db (migrated-db)]

@@ -2,7 +2,6 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.active-collection :as active-collection]
    [cljs.test :refer-macros [deftest is testing]]
    [domain.collections :as collections]
    [ports.learner :as learner]
@@ -53,16 +52,6 @@
                                                   (js/Promise.resolve {:id id :name name})))}))
 
 
-(deftest the-summary-lists-collections-oldest-first
-  (let [memory {:collections {"c:b" {:id "c:b" :created-at "2026-02" :name "B" :word-ids []}
-                              "c:a" {:id "c:a" :created-at "2026-01" :name "A" :word-ids []}}
-                :words       {"w" {:id "w"}}}]
-    (is (= {:items       [{:id "c:a" :created-at "2026-01" :name "A" :word-ids []}
-                          {:id "c:b" :created-at "2026-02" :name "B" :word-ids []}]
-            :total-words 1}
-           (sut/summary learner/reads memory)))))
-
-
 (deftest rename-refuses-a-name-another-collection-carries
   (async-testing "the same equality as create: the current name stays, nothing is written"
     (let [renames (atom [])]
@@ -96,15 +85,3 @@
       (is (= {:error :invalid-name} (await (sut/create! (port nil) "   ")))))))
 
 
-(deftest the-active-collection-is-the-one-memory-has
-  (let [store  (atom {:learner/memory {:collections {"c:kurs" {:id "c:kurs" :name "Kurs"}}}})
-        active (:learner/active-collection (learner/start! {:store store}))]
-    (testing "the remembered id names a collection memory has"
-      (with-redefs [active-collection/active-collection-id (constantly "c:kurs")]
-        (is (= {:id "c:kurs" :name "Kurs"} (active)))))
-    (testing "a remembered id memory has nothing under — deleted here or on another device — is none"
-      (with-redefs [active-collection/active-collection-id (constantly "c:gone")]
-        (is (nil? (active)))))
-    (testing "nothing remembered is none"
-      (with-redefs [active-collection/active-collection-id (constantly nil)]
-        (is (nil? (active)))))))

@@ -1,6 +1,6 @@
 ## Source
 
-Design artefacts live at `openspec/changes/archive/2026-05-28-themes-feature/design-source/` (UX spec, React prototype, CSS, screenshots), preserved alongside the functional change that shipped the underlying data model.
+Design artefacts live at `openspec/changes/archive/2026-05-28-themes-feature/design-source/` (removed from the tree; `git show 051051f:openspec/changes/archive/2026-05-28-themes-feature/design-source/`) (UX spec, React prototype, CSS, screenshots), preserved alongside the functional change that shipped the underlying data model.
 
 ## Constraints
 

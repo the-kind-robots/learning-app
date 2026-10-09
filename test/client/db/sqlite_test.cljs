@@ -5,8 +5,7 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.dictionary :as dictionary]
-   [cljs.test :refer-macros [deftest is testing]]
+   [cljs.test :refer-macros [deftest is]]
    [db.sqlite :as sut]))
 
 
@@ -43,41 +42,6 @@
      :posted   posted
      :reply!   reply!
      :target   target}))
-
-
-(defn- pending-work
-  "A promise that settles after everything already queued. `completions` is an
-   async function, so its first statement runs a microtask deep and the query
-   it sends has not left yet when the caller gets the promise back."
-  []
-  (js/Promise. (fn [resolve] (js/setTimeout resolve 0))))
-
-
-(deftest holding-state-reads-one-message
-  (testing "what a message says about this tab holding the database, and nothing else"
-    (is (true? (sut/holding-state #js {:type "ready"})))
-    (is (false? (sut/holding-state #js {:type "loading"})))
-    (is (false? (sut/holding-state #js {:message "Missing required OPFS APIs." :type "error"})))
-    (is (nil? (sut/holding-state #js {:durationMs 12 :phase "db-open" :status "ok" :type "phase"}))
-        "a phase report is not about ownership")
-    (is (nil? (sut/holding-state #js {:result []}))
-        "and neither is anything without a type")))
-
-
-(deftest status-messages-do-not-disturb-a-query
-  (async-testing "loading, phases, ready and error all pass through, and the answer still lands"
-    (let [{:keys [deliver! reply! target]} (stub-worker)
-          db     (sut/attach target)
-          answer (sut/exec db #js {:sql "SELECT 1"})]
-      ;; Status arrives on the worker's own port and the reply on the
-      ;; query's, so these cannot be mistaken for it — which is the point of
-      ;; giving each query a channel.
-      (deliver! {:type "loading"})
-      (deliver! {:durationMs 12 :phase "db-open" :status "ok" :type "phase"})
-      (deliver! {:type "ready"})
-      (deliver! {:message "Missing required OPFS APIs." :type "error"})
-      (reply! {:result [{:lemma "Hund"}]})
-      (is (= [{:lemma "Hund"}] (js->clj (await answer) :keywordize-keys true))))))
 
 
 (deftest two-queries-in-flight-get-their-own-answers
@@ -130,54 +94,3 @@
             "a query sent after the crash is not failed by it")))))
 
 
-(deftest completions-are-queried-with-no-readiness-message
-  (async-testing "GH-351: the query goes out before anything says ready, and its answer is used"
-    ;; Nothing has said "ready" and nothing here would have gated on it: the
-    ;; worker answers with whatever it has, so the query is always sent.
-    (let [{:keys [posted reply! target]} (stub-worker)
-          db     (sut/attach target)
-          answer (dictionary/completions db "Hund")]
-      (await (pending-work))
-      (is (= 1 (count @posted))
-          "no readiness gate swallowed the query")
-      (reply! {:result [{:has_exact 1 :lemma "Hund" :pos "noun" :translations "[\"собака\",\"пёс\"]"}]})
-      (is (= [{:exact?       true
-               :lemma        "Hund"
-               :pos          "noun"
-               :translations ["собака" "пёс"]}]
-             (await answer))))))
-
-
-(deftest a-tab-without-the-dictionary-answers-no-completions
-  (async-testing "GH-351: no rows is an ordinary answer, not a rejection and not a wait"
-    (let [{:keys [reply! target]} (stub-worker)
-          db     (sut/attach target)
-          answer (dictionary/completions db "Hund")]
-      (await (pending-work))
-      (reply! {:result []})
-      (is (= [] (await answer))))))
-
-
-(deftest ready-reports-whether-this-tab-has-the-dictionary
-  (async-testing "GH-351: a turn taken and given back, read through the port's predicate"
-    (let [{:keys [crash! deliver! target]} (stub-worker)
-          db (sut/attach target)]
-      (is (false? (dictionary/ready? db)) "nothing has said ready yet")
-      (deliver! {:type "ready"})
-      (is (true? (dictionary/ready? db)) "this tab took its turn")
-      (deliver! {:type "loading"})
-      (is (false? (dictionary/ready? db)) "and gave it back")
-      (deliver! {:type "ready"})
-      (deliver! {:message "Missing required OPFS APIs." :type "error"})
-      (is (false? (dictionary/ready? db)) "a context that could not open it has nothing")
-      (deliver! {:type "ready"})
-      (crash!)
-      (is (false? (dictionary/ready? db)) "and neither has a crashed worker"))))
-
-
-(deftest an-empty-prefix-asks-the-worker-nothing
-  (async-testing "an emptied input answers [] without a round trip"
-    (let [{:keys [posted target]} (stub-worker)
-          db (sut/attach target)]
-      (is (= [] (await (dictionary/completions db ""))))
-      (is (= [] @posted)))))

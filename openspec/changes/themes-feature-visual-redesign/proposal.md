@@ -2,7 +2,7 @@
 
 The functional collections feature shipped under `themes-feature` (archived 2026-05-28) lands the data model, navigation, lookup semantics, and backend prompt injection. The visual layer is currently a minimal grid of name+count cards. The accompanying design source (Safari Tab Grid metaphor, 9:16 cards, Duolingo palette, animated transitions) was not adapted in the first delivery to keep the merge boundary clean.
 
-This change adapts the UI to the committed design source at `openspec/changes/archive/2026-05-28-themes-feature/design-source/` (UX spec, React prototype, CSS, screenshots).
+This change adapts the UI to the committed design source at `openspec/changes/archive/2026-05-28-themes-feature/design-source/` (removed from the tree; `git show 051051f:openspec/changes/archive/2026-05-28-themes-feature/design-source/`) (UX spec, React prototype, CSS, screenshots).
 
 ## What Changes
 
@@ -36,4 +36,4 @@ This change adapts the UI to the committed design source at `openspec/changes/ar
 
 ## Source Design
 
-See `openspec/changes/archive/2026-05-28-themes-feature/design-source/` for the UX spec, React prototype, CSS, and screenshots that drive this redesign.
+See `openspec/changes/archive/2026-05-28-themes-feature/design-source/` (removed from the tree; `git show 051051f:openspec/changes/archive/2026-05-28-themes-feature/design-source/`) for the UX spec, React prototype, CSS, and screenshots that drive this redesign.

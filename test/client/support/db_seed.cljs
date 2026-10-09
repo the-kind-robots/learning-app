@@ -6,7 +6,8 @@
    [domain.vocabulary :as vocabulary]))
 
 
-(defn- ^:async insert-all!
+(defn ^:async insert-all!
+  "Inserts `docs` into a test db, all at once."
   [db docs]
   (await (js/Promise.all (into-array (map #(db/insert db %) docs)))))
 

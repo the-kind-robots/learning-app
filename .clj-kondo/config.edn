@@ -1,5 +1,11 @@
 {:lint-as {jdbc.core/on-connection clojure.core/with-open}
 
+ ;; Client layering rules live in layering/config.edn (CI gate).
+ :config-paths ["layering"]
+
+ ;; gen-class callbacks (prefix-named fns) are called from Java, not from Clojure.
+ :config-in-ns {sqlite.application-defined-functions {:linters {:unused-private-var {:level :off}}}}
+
  :linters
  {:unresolved-symbol {:exclude [await]}
 

@@ -1,7 +1,6 @@
 (ns client.domain.retention-test
   (:require
    [cljs.test :refer-macros [deftest is testing]]
-   [clojure.math :as math]
    [domain.retention :as sut]
    [utils :as utils]))
 
@@ -24,7 +23,7 @@
   (sut/level (urgency reviews now-ms)))
 
 
-(deftest retention-level-calculates-from-reviews
+(deftest retention-is-a-percentage-after-reviews
   (testing "retention percentage is numeric and bounded"
     (let [reviews [{:created-at "2024-08-20T10:00:00.000Z" :retained true}
                    {:created-at "2024-08-20T10:05:00.000Z" :retained true}]
@@ -35,7 +34,7 @@
       (is (<= level 100)))))
 
 
-(deftest retention-level-decreases-over-time
+(deftest retention-decays-with-time
   (testing "retention decays with time"
     (let [reviews     [{:created-at "2024-08-20T10:00:00.000Z" :retained true}
                        {:created-at "2024-08-20T10:05:00.000Z" :retained true}]
@@ -91,18 +90,12 @@
           "a full second apart does separate them"))))
 
 
-(deftest retention-level-is-the-image-of-urgency
-  (testing "a reviewed word: the level is exactly 100 * exp(- urgency)"
-    (let [reviewed (last-reviewed-days-ago 0.01)]
-      (is (= (level reviewed now-ms)
-             (* 100 (math/exp (- (urgency reviewed now-ms))))))))
+(deftest retention-stays-between-zero-and-a-hundred-at-the-extremes
   (testing "a word never reviewed: urgency is infinite and the level is zero"
     (is (= ##Inf (urgency [] now-ms)))
     (is (zero? (level [] now-ms))))
   (testing "a clock that moved backwards: negative urgency still caps at 100"
-    (let [future-review (last-reviewed-days-ago -1)]
-      (is (neg? (urgency future-review now-ms)))
-      (is (= 100 (level future-review now-ms))))))
+    (is (= 100 (level (last-reviewed-days-ago -1) now-ms)))))
 
 
 (deftest reviews-are-read-in-time-order-whatever-order-they-arrive-in

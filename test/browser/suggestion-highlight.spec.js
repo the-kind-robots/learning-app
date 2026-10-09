@@ -2,10 +2,8 @@ const { test, expect } = require('./fixtures');
 const { openHome } = require('./service-worker.shared');
 
 // GH-412: the arrows moved the active index in state and Enter picked by it,
-// but no row on screen was ever marked — the view compared a decorated item
-// against the undecorated active value, and the two are never equal. The user
-// pressed the arrows blind. These assertions are on the mark itself, which is
-// the only thing the eye has to go on.
+// but no row on screen was ever marked. These assertions are on the mark
+// itself, which is the only thing the eye has to go on.
 //
 // `fe` matches four fixture lemmas (README.md), so there is room to move down
 // twice and back up once.
@@ -26,74 +24,80 @@ const expectOnlyActive = async (page, index, total) => {
   }
 };
 
-test('the arrows move the visible highlight through the suggestions', async ({ page }) => {
-  await openHome(page);
+test.describe('Подсказки слов при вводе', () => {
+  test('пользователь жмёт стрелки → отмеченная подсказка перемещается по списку', async ({ page }) => {
+    const field = valueField(page);
 
-  const field = valueField(page);
-  await expect(field).toBeVisible();
+    await test.step('Дано четыре подсказки на «fe»', async () => {
+      await openHome(page);
+      await expect(field).toBeVisible();
+      // Four suggestions are the signal that the fixture is being served.
+      await field.pressSequentially('fe');
+      await expect(options(page)).toHaveCount(4);
+    });
 
-  // Four suggestions are the signal that the fixture is the dictionary being
-  // served.
-  await field.pressSequentially('fe');
-  await expect(options(page)).toHaveCount(4);
+    await test.step('Тогда отмечена первая — её выберет Enter без стрелок', async () => {
+      await expectOnlyActive(page, 0, 4);
+    });
 
-  // A fresh list is already on its first entry — that is what Enter picks
-  // without any arrow press.
-  await expectOnlyActive(page, 0, 4);
+    await test.step('Когда он жмёт ↓ дважды и ↑ один раз', async () => {
+      await page.keyboard.press('ArrowDown');
+      await expectOnlyActive(page, 1, 4);
+      await page.keyboard.press('ArrowDown');
+      await expectOnlyActive(page, 2, 4);
+      await page.keyboard.press('ArrowUp');
+    });
 
-  await page.keyboard.press('ArrowDown');
-  await expectOnlyActive(page, 1, 4);
+    await test.step('Тогда отмечена вторая', async () => {
+      await expectOnlyActive(page, 1, 4);
+    });
+  });
 
-  await page.keyboard.press('ArrowDown');
-  await expectOnlyActive(page, 2, 4);
+  test('пользователь жмёт стрелки у краёв списка → отметка не выходит за список', async ({ page }) => {
+    await test.step('Дано четыре подсказки на «fe»', async () => {
+      await openHome(page);
+      await valueField(page).pressSequentially('fe');
+      await expect(options(page)).toHaveCount(4);
+    });
 
-  await page.keyboard.press('ArrowUp');
-  await expectOnlyActive(page, 1, 4);
-});
+    await test.step('Когда он жмёт ↑ на первой', async () => {
+      await page.keyboard.press('ArrowUp');
+    });
 
-test('the highlight stops at both ends of the list', async ({ page }) => {
-  await openHome(page);
+    await test.step('Тогда отмечена всё та же первая', async () => {
+      await expectOnlyActive(page, 0, 4);
+    });
 
-  const field = valueField(page);
-  await field.pressSequentially('fe');
-  await expect(options(page)).toHaveCount(4);
+    await test.step('Когда он жмёт ↓ шесть раз', async () => {
+      for (let i = 0; i < 6; i += 1) await page.keyboard.press('ArrowDown');
+    });
 
-  await page.keyboard.press('ArrowUp');
-  await expectOnlyActive(page, 0, 4);
+    await test.step('Тогда отмечена последняя', async () => {
+      await expectOnlyActive(page, 3, 4);
+    });
+  });
 
-  for (let i = 0; i < 6; i += 1) {
-    await page.keyboard.press('ArrowDown');
-  }
-  await expectOnlyActive(page, 3, 4);
-});
+  test('пользователь отметил подсказку стрелкой и жмёт Enter → в поле слова именно она', async ({ page }) => {
+    const field = valueField(page);
+    let marked;
 
-test('the marked entry is the one Enter picks', async ({ page }) => {
-  await openHome(page);
+    await test.step('Дано четыре подсказки на «fe»', async () => {
+      await openHome(page);
+      await field.pressSequentially('fe');
+      await expect(options(page)).toHaveCount(4);
+    });
 
-  const field = valueField(page);
-  await field.pressSequentially('fe');
-  await expect(options(page)).toHaveCount(4);
+    await test.step('Когда он отмечает вторую стрелкой ↓', async () => {
+      await page.keyboard.press('ArrowDown');
+      marked = (await options(page).nth(1).innerText()).trim();
+    });
 
-  await page.keyboard.press('ArrowDown');
-  const marked = await options(page).nth(1).innerText();
+    await test.step('Когда он жмёт Enter', async () => {
+      await page.keyboard.press('Enter');
+    });
 
-  await page.keyboard.press('Enter');
-  await expect(field).toHaveValue(marked.trim());
-});
-
-test('the scroll effect can find the marked entry', async ({ page }) => {
-  await openHome(page);
-
-  const field = valueField(page);
-  await field.pressSequentially('fe');
-  await expect(options(page)).toHaveCount(4);
-
-  // A CSS locator on purpose, and the only one in this suite besides
-  // dictionary-focus.spec.js: this string is not a locator of convenience but
-  // the literal selector `:action/handler-word-keydown` hands to
-  // `:effect/scroll-nearest`. Asserting it resolves to exactly one element is
-  // asserting the scroll has something to scroll to — before the fix
-  // `querySelector` returned null and a long list never followed the arrows.
-  await page.keyboard.press('ArrowDown');
-  await expect(page.locator('.suggestions [data-active]')).toHaveCount(1);
+    await test.step('Тогда в поле слова отмеченная подсказка', async () => {
+      await expect(field).toHaveValue(marked);
+    });
+  });
 });

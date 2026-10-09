@@ -81,6 +81,7 @@ Always use `:reload` when requiring namespaces to pick up changes.
 - Branches come from `gh issue develop <number>` only, so the branch is linked to its issue. Never `git checkout -b` or `git switch -c` — a permission rule in `.claude/settings.json` asks on both — and never let the worktree mechanism make the branch: it branches from `master` and leaves the issue with no development link (#289).
 - The coordinating session stays in the main checkout and delegates every repository edit, including one it would rather make itself.
 - Hand work to the `executor` agent (`.claude/agents/executor.md`). Its definition carries the worktree isolation and the branch recipe.
+- Mechanical chores go to Haiku agents with an exact hand-off: `ops` (issue/board scripts, commit of staged work, push, draft PR, post-merge cleanup) and `log-reader` (digest of logs, CI and test output; runs a named test command and returns only failures). Decisions, review, debugging and conflicts stay with the coordinator or `executor`.
 - In the main checkout, `gh issue develop <number> --checkout` is enough.
 - A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared.
 - Where to work is a dependency test, not a topic match. Name the shared thing the work needs — a live CouchDB, nginx routing, a migration over real data — and it stays in the main checkout. Cannot name one? It goes to the executor. Subsystems are examples, never the test: #351 was sent to the main checkout for touching the dictionary and needed nothing shared.
@@ -112,3 +113,19 @@ PRs merge by squash, so this governs the branch history the reviewer reads, not 
 - Install/relink tool locations with `.skills/install.sh --force`.
 - Expected links: `.codex/skills -> ../.skills` and `.claude/skills -> ../.skills`.
 - Invoke skill scripts by their real path, `.skills/...`. `.codex/` is gitignored and absent in worktrees, so a `.codex/skills/...` command works in the main checkout and fails everywhere else; `.claude/skills/...` is a tracked symlink to the same place.
+
+# Token hygiene
+
+- Never `cat` a whole file. Use Read with offset/limit, or `grep -n … | head -50`. `.claude/hooks/read-guard.py` refuses `cat`/`less`/`more`/`head`/`tail`/`sed` on a file over 300 lines unless piped or redirected (`head`/`tail -n N` with N ≤ 300 pass).
+- `git diff --stat` before a full diff; then diff only the files you need. History: `git log --oneline -20`.
+- Hand subagents file paths, not pasted contents (e.g. "review `openspec/changes/<x>/VERIFY.md`").
+- Run `openspec validate` once, right before archive — not after every edit.
+- Browser suite while iterating: `npx playwright test <spec> --max-failures=1`. The local reporter is `line`.
+
+# Tests
+
+- The Playwright e2e suite is the behaviour spec. `npm run test:catalog` regenerates `test/BEHAVIOR.md`, its table of contents. New behaviour first appears as a line there — a test title — before code.
+- Titles in Russian: `<actor> <action> → <result>`. Bodies use `test.step('Дано …')`, `test.step('Когда …')`, `test.step('Тогда …')`.
+- Assert on what the user sees: roles, labels, text, visibility. Helpers are actions only — no assertions inside helpers.
+- Unit tests only for pure domain algorithms: retention/scheduling, DB migrations, reconciliation/sync, parsers. `deftest` names are behaviour phrases; assert values with `=`; collapse near-duplicate cases with `are`.
+- No tests for agent tooling (hooks, skills, build stamps, dev instrumentation, test guards).

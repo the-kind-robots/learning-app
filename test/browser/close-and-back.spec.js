@@ -1,4 +1,4 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, docsOfType } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
 
 // Every screen but home closes from the corner, and home has no app screen
@@ -25,120 +25,132 @@ async function openAppAfterAnotherPage(page) {
   await expect(homeHeading(page)).toBeVisible();
 }
 
-test('home has no close mark; words, themes and lesson each have one', async ({ page }) => {
-  await page.goto('/home');
-  await expect(homeHeading(page)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Открыть наборы' })).toBeVisible();
-  await expect(close(page)).toHaveCount(0);
+// Screens opened from home: what the user does to open each, the button for
+// it, and what shows the screen is up.
+const SCREENS_WITH_CLOSE = [
+  ['открывает список слов', 'Список слов', async (page) => {
+    await expect(page.getByPlaceholder('Поиск')).toBeVisible();
+  }],
+  ['открывает наборы', 'Открыть наборы', async (page) => {
+    await expect(page).toHaveURL(/\/collections$/);
+  }],
+  ['начинает урок', 'НАЧАТЬ УРОК', async (page) => {
+    await expect(page.getByRole('progressbar', { name: 'Прогресс урока' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Закрыть урок' })).toHaveCount(0);
+  }],
+];
 
-  await addWord(page, 'Haus', 'дом');
+test.describe('Закрытие экранов и кнопка «Назад»', () => {
+  test('пользователь открывает экраны → у главной нет ✕, у слов, тем и урока он есть и ведёт на главную', async ({ page }) => {
+    await test.step('Дано главная со словом «Haus»', async () => {
+      await page.goto('/home');
+      await expect(homeHeading(page)).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Открыть наборы' })).toBeVisible();
+      await addWord(page, 'Haus', 'дом');
+    });
 
-  await page.getByRole('button', { name: 'Список слов' }).click();
-  await expect(page.getByPlaceholder('Поиск')).toBeVisible();
-  await expect(close(page)).toHaveCount(1);
-  await close(page).click();
-  await expect(homeHeading(page)).toBeVisible();
+    await test.step('Тогда на главной нет ✕', async () => {
+      await expect(close(page)).toHaveCount(0);
+    });
 
-  await page.getByRole('button', { name: 'Открыть наборы' }).click();
-  await expect(page).toHaveURL(/\/collections$/);
-  await expect(close(page)).toHaveCount(1);
-  await close(page).click();
-  await expect(homeHeading(page)).toBeVisible();
+    for (const [opens, opener, shown] of SCREENS_WITH_CLOSE) {
+      await test.step(`Когда он ${opens}`, async () => {
+        await page.getByRole('button', { name: opener }).click();
+      });
 
-  await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
-  await expect(page.getByRole('progressbar', { name: 'Прогресс урока' })).toBeVisible();
-  await expect(close(page)).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Закрыть урок' })).toHaveCount(0);
-  await close(page).click();
-  await expect(homeHeading(page)).toBeVisible();
-  await expect(page).toHaveURL(/\/home$/);
-});
+      await test.step('Тогда есть один ✕, и он ведёт на главную', async () => {
+        await shown(page);
+        await expect(close(page)).toHaveCount(1);
+        await close(page).click();
+        await expect(homeHeading(page)).toBeVisible();
+        await expect(page).toHaveURL(/\/home$/);
+      });
+    }
+  });
 
-test('the words screen has no back button and no visible heading', async ({ page }) => {
-  await page.goto('/home');
-  await addWord(page, 'Haus', 'дом');
-  await page.getByRole('button', { name: 'Список слов' }).click();
-  await expect(page.getByRole('listitem').filter({ hasText: 'Haus' })).toBeVisible();
+  test('пользователь закрывает экран или жмёт «Назад» → под любым экраном только главная, а за ней страница до приложения', async ({ page }) => {
+    await test.step('Дано главная, открытая после другой страницы, и слово «Haus»', async () => {
+      await openAppAfterAnotherPage(page);
+      await addWord(page, 'Haus', 'дом');
+    });
 
-  await expect(page.getByRole('button', { name: /Назад/ })).toHaveCount(0);
-  // Kept for assistive technology, clipped to nothing on screen.
-  const heading = page.getByRole('heading', { level: 1, name: 'Мои слова' });
-  await expect(heading).toHaveCount(1);
-  const box = await heading.boundingBox();
-  expect(box.width).toBeLessThanOrEqual(1);
-  expect(box.height).toBeLessThanOrEqual(1);
-});
+    await test.step('Когда он открывает слова и закрывает ✕', async () => {
+      await openWords(page);
+      await close(page).click();
+    });
 
-test('closing a screen leaves nothing of the app behind home', async ({ page }) => {
-  await openAppAfterAnotherPage(page);
-  await addWord(page, 'Haus', 'дом');
+    await test.step('Тогда он на главной, а «Назад» уводит из приложения', async () => {
+      await expect(page).toHaveURL(/\/home$/);
+      await expect(homeHeading(page)).toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(/\/favicon\.ico$/);
+    });
 
-  await openWords(page);
-  await close(page).click();
-  await expect(page).toHaveURL(/\/home$/);
-  await expect(homeHeading(page)).toBeVisible();
+    await test.step('Когда он снова входит, открывает слова и жмёт «Назад»', async () => {
+      await page.goto('/home');
+      await openWords(page);
+      await page.goBack();
+    });
 
-  await page.goBack();
-  await expect(page).toHaveURL(/\/favicon\.ico$/);
-});
+    await test.step('Тогда он на главной, и ещё один «Назад» выходит из приложения', async () => {
+      await expect(page).toHaveURL(/\/home$/);
+      await expect(homeHeading(page)).toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(/\/favicon\.ico$/);
+    });
 
-test('Back from a screen is home, and Back from home leaves the app', async ({ page }) => {
-  await openAppAfterAnotherPage(page);
-  await addWord(page, 'Haus', 'дом');
+    await test.step('Когда он снова входит, открывает слова и из них начинает урок', async () => {
+      await page.goto('/home');
+      await openWords(page);
+      await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
+      await expect(page).toHaveURL(/\/lesson$/);
+      await expect(page.getByRole('progressbar', { name: 'Прогресс урока' })).toBeVisible();
+    });
 
-  await openWords(page);
-  await page.goBack();
-  await expect(page).toHaveURL(/\/home$/);
-  await expect(homeHeading(page)).toBeVisible();
+    await test.step('Тогда урок занял место слов: «Назад» ведёт на главную', async () => {
+      await page.goBack();
+      await expect(page).toHaveURL(/\/home$/);
+      await expect(homeHeading(page)).toBeVisible();
+    });
+  });
 
-  await page.goBack();
-  await expect(page).toHaveURL(/\/favicon\.ico$/);
-});
+  test('пользователь открывает экран по прямой ссылке → под ним главная, перезагрузка ничего не добавляет', async ({ page }) => {
+    await test.step('Дано страница до приложения, затем прямая ссылка на слова', async () => {
+      await page.goto('/favicon.ico');
+      await page.goto('/words');
+      await expect(page).toHaveURL(/\/words$/);
+      await expect(page.getByText('Слов пока нет')).toBeVisible();
+      await expect(close(page)).toHaveCount(1);
+    });
 
-test('a screen opened from a screen takes its place', async ({ page }) => {
-  await openAppAfterAnotherPage(page);
-  await addWord(page, 'Haus', 'дом');
+    await test.step('Когда он перезагружает страницу', async () => {
+      // A reload finds the entry already standing on home and adds nothing.
+      await page.reload();
+    });
 
-  await openWords(page);
-  await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
-  await expect(page).toHaveURL(/\/lesson$/);
-  await expect(page.getByRole('progressbar', { name: 'Прогресс урока' })).toBeVisible();
-  await page.goBack();
-  await expect(page).toHaveURL(/\/home$/);
-  await expect(homeHeading(page)).toBeVisible();
-});
+    await test.step('Тогда экран слов на месте', async () => {
+      await expect(page.getByText('Слов пока нет')).toBeVisible();
+      await expect(close(page)).toHaveCount(1);
+    });
 
-test('a screen opened directly has home beneath it, reload included', async ({ page }) => {
-  await page.goto('/favicon.ico');
-  await page.goto('/words');
-  await expect(page).toHaveURL(/\/words$/);
-  await expect(page.getByText('Слов пока нет')).toBeVisible();
-  await expect(close(page)).toHaveCount(1);
+    await test.step('Когда он жмёт «Назад»', async () => {
+      await page.goBack();
+    });
 
-  // A reload finds the entry already standing on home and adds nothing.
-  await page.reload();
-  await expect(page.getByText('Слов пока нет')).toBeVisible();
-  await expect(close(page)).toHaveCount(1);
-
-  await page.goBack();
-  await expect(page).toHaveURL(/\/home$/);
-  await expect(homeHeading(page)).toBeVisible();
-  await page.goBack();
-  await expect(page).toHaveURL(/\/favicon\.ico$/);
+    await test.step('Тогда он на главной, а ещё один «Назад» выходит из приложения', async () => {
+      await expect(page).toHaveURL(/\/home$/);
+      await expect(homeHeading(page)).toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(/\/favicon\.ico$/);
+    });
+  });
 });
 
 // Leaving a lesson ends it, whatever did the leaving: Back, the corner close,
 // the finish button (#484); entering again starts fresh. The lesson lives in
 // app state only, so no lesson document is ever written — read at the engine
 // level, as test/browser/README.md prescribes.
-async function storedLessons(page) {
-  return page.evaluate(async () => {
-    const kw = cljs.core.keyword;
-    const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
-    const found = await db.find(db.use('device-db'), toClj({ selector: { type: 'lesson' } }));
-    return cljs.core.count(cljs.core.get(found, kw('docs')));
-  });
-}
+const storedLessons = async (page) => (await docsOfType(page, 'device-db', 'lesson')).length;
 
 const ANSWERS = { дом: 'Haus', собака: 'Hund' };
 
@@ -166,45 +178,64 @@ async function answerCorrectly(page) {
   await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
 }
 
-test('Back out of a lesson ends it; entering again starts fresh', async ({ page }) => {
-  await page.goto('/home');
-  await addWords(page);
-  await startLesson(page);
-  await answerCorrectly(page);
-  await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await expect(progress(page)).not.toHaveAttribute('aria-valuenow', '0');
+const next = (page) => page.getByRole('button', { name: 'ДАЛЕЕ' });
 
-  await page.goBack();
-  await expect(page).toHaveURL(/\/home$/);
-  await expect(homeHeading(page)).toBeVisible();
-  expect(await storedLessons(page)).toBe(0);
+// Each way out of a lesson: how far the lesson got, and what leaves it.
+const EXITS = [
+  {
+    title: 'пользователь выходит из урока кнопкой «Назад» → урок закончен, новый начинается заново',
+    given: 'Дано урок, в котором он ответил на первое задание и перешёл дальше',
+    play: async (page) => {
+      await answerCorrectly(page);
+      await next(page).click();
+      await expect(progress(page)).not.toHaveAttribute('aria-valuenow', '0');
+    },
+    when: 'Когда он жмёт «Назад»',
+    leave: (page) => page.goBack(),
+  },
+  {
+    title: 'пользователь закрывает урок угловым ✕ → урок закончен, он на главной',
+    given: 'Дано урок с одним отвеченным заданием',
+    play: answerCorrectly,
+    when: 'Когда он жмёт ✕',
+    leave: (page) => close(page).click(),
+  },
+  {
+    title: 'пользователь заканчивает урок → он на главной, новый урок начинается заново',
+    given: 'Дано урок с двумя отвеченными заданиями',
+    play: async (page) => {
+      await answerCorrectly(page);
+      await next(page).click();
+      await answerCorrectly(page);
+    },
+    when: 'Когда он жмёт «ЗАКОНЧИТЬ»',
+    leave: (page) => page.getByRole('button', { name: 'ЗАКОНЧИТЬ' }).click(),
+  },
+];
 
-  await startLesson(page);
-});
+test.describe('Выход из урока', () => {
+  for (const { title, given, play, when, leave } of EXITS) {
+    test(title, async ({ page }) => {
+      await test.step(given, async () => {
+        await page.goto('/home');
+        await addWords(page);
+        await startLesson(page);
+        await play(page);
+      });
 
-test('closing a lesson from the corner ends it', async ({ page }) => {
-  await page.goto('/home');
-  await addWords(page);
-  await startLesson(page);
-  await answerCorrectly(page);
+      await test.step(when, async () => {
+        await leave(page);
+      });
 
-  await close(page).click();
-  await expect(homeHeading(page)).toBeVisible();
-  expect(await storedLessons(page)).toBe(0);
-});
+      await test.step('Тогда он на главной, а урок нигде не сохранён', async () => {
+        await expect(page).toHaveURL(/\/home$/);
+        await expect(homeHeading(page)).toBeVisible();
+        expect(await storedLessons(page)).toBe(0);
+      });
 
-test('finishing a lesson ends it and goes home', async ({ page }) => {
-  await page.goto('/home');
-  await addWords(page);
-  await startLesson(page);
-  await answerCorrectly(page);
-  await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await answerCorrectly(page);
-
-  await page.getByRole('button', { name: 'ЗАКОНЧИТЬ' }).click();
-  await expect(page).toHaveURL(/\/home$/);
-  await expect(homeHeading(page)).toBeVisible();
-  expect(await storedLessons(page)).toBe(0);
-
-  await startLesson(page);
+      await test.step('Тогда новый урок начинается с нулевого прогресса', async () => {
+        await startLesson(page);
+      });
+    });
+  }
 });

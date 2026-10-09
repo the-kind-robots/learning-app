@@ -1,4 +1,6 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, docsOfType } = require('./fixtures');
+const { fillTranslation } = require('./add-form.shared');
+const { token } = require('./lesson-answer.shared');
 
 // A phrase gets an example, like a word does (GH-371). The path CI does not
 // otherwise exercise: add form -> example-fetch task -> /api/examples -> stored
@@ -42,95 +44,111 @@ async function stubExampleEndpoint(page) {
   return requested;
 }
 
+// The form has no mode control: the label is how it says which kind it is
+// about to save, so waiting on the phrase label is also waiting for detection.
 async function addPhrase(page) {
   await page.getByLabel('Слово (немецкий)').fill(PHRASE);
-  // The form has no mode control: the label is how it says which kind it is
-  // about to save, so this is also the assertion that it detected a phrase.
-  await expect(page.getByLabel('Фраза (немецкий)')).toHaveValue(PHRASE);
-  await page.getByLabel('Перевод (русский)').fill(GLOSS);
+  await page.getByLabel('Фраза (немецкий)').waitFor();
+  await fillTranslation(page, GLOSS);
   await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
-  await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('');
+  await page.getByLabel('Слово (немецкий)').waitFor();
 }
 
 // The stored example is the only honest evidence that the answer landed: it is
 // written by the task runner, and nothing renders it until a lesson starts.
 // Read at the engine level, as test/browser/README.md prescribes.
-async function storedExampleValues(page) {
-  return page.evaluate(async () => {
-    const kw = cljs.core.keyword;
-    const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
-    const found = await db.find(db.use('user-db'), toClj({ selector: { type: 'example' } }));
-    const docs = cljs.core.get(found, kw('docs'));
-    return cljs.core.clj__GT_js(cljs.core.mapv((d) => cljs.core.get(d, kw('value')), docs));
-  });
-}
+const storedExampleValues = async (page) =>
+  (await docsOfType(page, 'user-db', 'example')).map((d) => d.value);
 
+// Adds the phrase and returns once its example is stored.
 async function addPhraseAndAwaitItsExample(page) {
   const requested = await stubExampleEndpoint(page);
   await page.goto('/home');
   await addPhrase(page);
-
   // The task runner decides when the fetch goes out, so wait for the
   // condition rather than for a duration.
   await expect.poll(() => requested.length, { timeout: 15000 }).toBeGreaterThan(0);
-  expect(decodeURIComponent(requested[0])).toContain(`word=${PHRASE}`);
   await expect.poll(() => storedExampleValues(page), { timeout: 15000 }).toEqual([SENTENCE]);
+  return requested;
 }
 
 const progressNow = (page) => page.getByRole('progressbar');
 
-test('a phrase asks for an example and the lesson locks it behind the phrase trial', async ({ page }) => {
-  await addPhraseAndAwaitItsExample(page);
+test.describe('Пример к фразе', () => {
+  test('пользователь добавляет фразу и начинает урок → сначала переводит фразу, и только потом открывается пример', async ({ page }) => {
+    await test.step('Когда он добавляет фразу «auf jeden Fall»', async () => {
+      const requested = await addPhraseAndAwaitItsExample(page);
+      expect(decodeURIComponent(requested[0])).toContain(`word=${PHRASE}`);
+    });
 
-  await page.goto('/lesson');
+    await test.step('Тогда урок открывается заданием перевести фразу, прогресс 0', async () => {
+      await page.goto('/lesson');
+      // Two trials exist, and the example is not one the lesson will offer
+      // yet: the only selectable trial is the phrase's own.
+      await expect(page.locator('.lesson__instruction')).toHaveText('Переведите фразу на немецкий');
+      await expect(page.locator('.lesson__prompt')).toHaveText(GLOSS);
+      await expect(progressNow(page)).toHaveAttribute('aria-valuenow', '0');
+    });
 
-  // Two trials exist, and the example is not one the lesson will offer yet:
-  // the only selectable trial is the phrase's own.
-  await expect(page.locator('.lesson__instruction')).toHaveText('Переведите фразу на немецкий');
-  await expect(page.locator('.lesson__prompt')).toHaveText(GLOSS);
-  await expect(progressNow(page)).toHaveAttribute('aria-valuenow', '0');
+    await test.step('Когда он верно переводит фразу', async () => {
+      await page.locator('#lesson-answer').fill(PHRASE);
+      await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
+    });
 
-  await page.locator('#lesson-answer').fill(PHRASE);
-  await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
-  await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
+    await test.step('Тогда видно «Правильно!» и прогресс 50 из 100', async () => {
+      await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
+      // Half, not all: the locked example counted as a lesson trial all along.
+      await expect(progressNow(page)).toHaveAttribute('aria-valuenow', '50');
+    });
 
-  // Half, not all: the locked example counted as a lesson trial all along. Had
-  // the phrase produced no example trial, this answer would have finished the
-  // lesson.
-  await expect(progressNow(page)).toHaveAttribute('aria-valuenow', '50');
+    await test.step('Когда он идёт дальше', async () => {
+      await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
+    });
 
-  // And now it is selectable — the unlock the correct phrase answer performed.
-  await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await expect(page.locator('.lesson__instruction')).toHaveText('Переведите предложение на немецкий');
-  await expect(page.locator('.lesson__prompt')).toHaveText(SENTENCE_RU);
+    await test.step('Тогда ему предлагают перевести предложение-пример', async () => {
+      await expect(page.locator('.lesson__instruction')).toHaveText('Переведите предложение на немецкий');
+      await expect(page.locator('.lesson__prompt')).toHaveText(SENTENCE_RU);
+    });
 
-  await page.locator('#lesson-answer').fill(SENTENCE);
-  await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
-  await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
-  await expect(progressNow(page)).toHaveAttribute('aria-valuenow', '100');
-});
+    await test.step('Когда он верно переводит предложение', async () => {
+      await page.locator('#lesson-answer').fill(SENTENCE);
+      await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
+    });
 
-test('the example is annotated word by word, with no trace of the construction', async ({ page }) => {
-  await addPhraseAndAwaitItsExample(page);
+    await test.step('Тогда «Правильно!» и прогресс 100', async () => {
+      await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
+      await expect(progressNow(page)).toHaveAttribute('aria-valuenow', '100');
+    });
+  });
 
-  await page.goto('/lesson');
-  await page.locator('#lesson-answer').fill(PHRASE);
-  await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
-  await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await expect(page.locator('.lesson__instruction')).toHaveText('Переведите предложение на немецкий');
-  await page.locator('#lesson-answer').fill(SENTENCE);
-  await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
+  test('пользователь смотрит разбор примера к фразе → слова размечены по одному, без следа фразы', async ({ page }) => {
+    await test.step('Дано разбор ответа на предложение-пример', async () => {
+      await addPhraseAndAwaitItsExample(page);
+      await page.goto('/lesson');
+      await page.locator('#lesson-answer').fill(PHRASE);
+      await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
+      await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
+      await expect(page.locator('.lesson__instruction')).toHaveText('Переведите предложение на немецкий');
+      await page.locator('#lesson-answer').fill(SENTENCE);
+      await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
+    });
 
-  // `structure` carries no membership, so the hover on a word of the
-  // construction shows that word's own lemma. `Fall` reads as «случай», and
-  // `auf` and `jeden` are plain words with no card at all.
-  const token = (index) => page.locator(`.lesson__answer-token[data-word-index="${index}"]`);
-  await expect(token(4)).toHaveText('Fall');
-  await expect(token(2)).toHaveCount(0);
-  await expect(token(3)).toHaveCount(0);
+    await test.step('Тогда «Fall» размечено, а «auf» и «jeden» — обычный текст', async () => {
+      // `structure` carries no membership, so a word of the construction shows
+      // its own lemma, and `auf` and `jeden` have no card at all.
+      await expect(token(page, 4)).toHaveText('Fall');
+      await expect(token(page, 2)).toHaveCount(0);
+      await expect(token(page, 3)).toHaveCount(0);
+    });
 
-  await token(4).click();
-  const card = page.locator('#popover').locator('.token-card__word');
-  await expect(card).toHaveText('der Fall');
-  await expect(card).not.toHaveText(PHRASE);
+    await test.step('Когда он нажимает на «Fall»', async () => {
+      await token(page, 4).click();
+    });
+
+    await test.step('Тогда карточка про «der Fall», а не про всю фразу', async () => {
+      const card = page.locator('#popover').locator('.token-card__word');
+      await expect(card).toHaveText('der Fall');
+      await expect(card).not.toHaveText(PHRASE);
+    });
+  });
 });

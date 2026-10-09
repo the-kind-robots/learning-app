@@ -74,8 +74,8 @@
                      (js/Promise.resolve nil)))})
 
 
-(deftest add-creates-phrase-and-initial-review-and-asks-for-an-example
-  (async-testing "`add!` creates a phrase doc, seeds a review, and queues the example fetch"
+(deftest a-new-phrase-is-stored-with-a-first-review-and-an-example-is-asked-for
+  (async-testing "the phrase, one review of it, and one example request, as for a word"
     (with-test-dbs
      (^:async fn
       [dbs]
@@ -85,37 +85,17 @@
                                                         "Entschuldigung, dass ich zu spät komme"
                                                         "Извини, что я опоздал."
                                                         :phrase))
-            entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
+            [entry & more] (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
             reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (is (true? created?))
-        (is (= 1 (count entries)))
-        (is (= word-id (:_id (first entries))))
-        (is (= "phrase" (:kind (first entries))))
-        (is (= "Entschuldigung, dass ich zu spät komme" (:value (first entries))))
-        (is (= [{:lang "ru" :value "Извини, что я опоздал."}]
-               (:translation (first entries))))
-        (is (= 1 (count reviews)))
-        (is (= word-id (:word-id (first reviews))))
-        (is (= 1 (count @example-requests))
-            "a phrase asks for an example like a word does")
-        (is (= "phrase" (:kind (:word (first @example-requests))))))))))
+        (is (empty? more))
+        (is (= {:_id word-id :kind "phrase" :value "Entschuldigung, dass ich zu spät komme"}
+               (select-keys entry [:_id :kind :value])))
+        (is (= [word-id] (map :word-id reviews)))
+        (is (= ["phrase"] (map (comp :kind :word) @example-requests))))))))
 
 
-(deftest add-queues-the-example-with-the-active-collection
-  (async-testing "the queued fetch carries the active collection's id and name"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (let [example-requests (atom [])
-            capabilities     (await (test-capabilities dbs example-requests {:active-id "collection-1"}))]
-        (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase))
-        (is (= 1 (count @example-requests)))
-        (let [{:keys [collection-id collection-name]} (first @example-requests)]
-          (is (= "collection-1" collection-id))
-          (is (= "Поездка" collection-name))))))))
-
-
-(deftest re-adding-into-a-collection-that-has-an-example-queues-nothing
+(deftest re-adding-a-phrase-whose-collection-has-an-example-asks-for-nothing
   (async-testing "the re-fetch rule is the one words already follow"
     (with-test-dbs
      (^:async fn

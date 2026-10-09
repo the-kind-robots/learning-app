@@ -20,11 +20,15 @@
 
 (defn provider-answering-in-turn
   "An `example-api-request` stub that answers with `responses` in turn, the
-   last one repeated. It counts the attempts in `calls`."
+   last one repeated. It counts the attempts in `calls`. A Throwable among
+   `responses` is a failed request: http-kit delivers it as `{:error e}`."
   [calls responses]
   (fn [& _]
-    (let [attempt (swap! calls inc)]
-      (answered (nth responses (min (dec attempt) (dec (count responses))))))))
+    (let [attempt  (swap! calls inc)
+          response (nth responses (min (dec attempt) (dec (count responses))))]
+      (answered (if (instance? Throwable response)
+                  {:error response}
+                  response)))))
 
 
 (defn completion
@@ -39,14 +43,19 @@
                          :message       message}]})}))
 
 
+(defn example-completion
+  "A provider 200 whose message carries `example` as the model's JSON answer."
+  [example]
+  (completion {:content (cheshire/generate-string example)}))
+
+
 (def rejected-candidate
   "A completion the checks reject: the asked word is nowhere in it."
-  (completion {:content (cheshire/generate-string
-                         {:value       "The dog barks."
-                          :translation "Собака лает."
-                          :structure   [{:usedForm       "dog"
-                                         :dictionaryForm "dog"
-                                         :translation    "собака"}]})}))
+  (example-completion {:value       "The dog barks."
+                       :translation "Собака лает."
+                       :structure   [{:usedForm       "dog"
+                                      :dictionaryForm "dog"
+                                      :translation    "собака"}]}))
 
 
 (defn with-joins-counted

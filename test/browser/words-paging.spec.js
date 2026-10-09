@@ -1,4 +1,4 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, nothingHappensFor } = require('./fixtures');
 
 // The requirement counts row elements in the document, so the locator is the
 // row class rather than a role: `listitem` also matches the end-of-list
@@ -62,140 +62,139 @@ const scrollToWithin = (page, gap) =>
     return sentinel.getBoundingClientRect().top - list.getBoundingClientRect().bottom;
   }, gap);
 
-test('the words list renders one page and grows as the reader reaches the bottom', async ({ page }) => {
+const seedAndOpen = async (page) => {
   await page.goto('/');
   await seedWords(page, SEEDED);
   await openWords(page);
+};
 
-  await expect(rows(page)).toHaveCount(PAGE_SIZE);
-  await expect(sentinel(page)).toHaveCount(1);
-  await page.screenshot({ path: 'test-results/words-paging/first-page.png', fullPage: false });
+test.describe('Постраничный список слов', () => {
+  test('пользователь листает список к концу → следующая страница подгружается заранее, пока слова не кончатся', async ({ page }) => {
+    await test.step('Дано 130 слов, открыт список', async () => {
+      await seedAndOpen(page);
+    });
 
-  await scrollToBottom(page);
-  await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
-  // The first page is still there — the next page is appended, not swapped.
-  await expect(rows(page).first()).toContainText('wort000');
-  await page.screenshot({ path: 'test-results/words-paging/second-page.png', fullPage: false });
+    await test.step('Тогда показана одна страница из 50 слов', async () => {
+      await expect(rows(page)).toHaveCount(PAGE_SIZE);
+      await expect(sentinel(page)).toHaveCount(1);
+    });
 
-  await scrollToBottom(page);
-  await expect(rows(page)).toHaveCount(SEEDED);
-  // Nothing left to load, so nothing left to observe.
-  await expect(sentinel(page)).toHaveCount(0);
-  await page.screenshot({ path: 'test-results/words-paging/last-page.png', fullPage: false });
-});
+    await test.step('Когда он листает, не доходя до конца страницы', async () => {
+      // GH-439: the observer's root has to be the box that clips the sentinel,
+      // or the page was asked for only once the sentinel was already on screen.
+      const gap = await scrollToWithin(page, 150);
+      expect(gap).toBeGreaterThan(100);
+    });
 
-test('a search starts again at the first page', async ({ page }) => {
-  await page.goto('/');
-  await seedWords(page, SEEDED);
-  await openWords(page);
+    await test.step('Тогда следующая страница уже добавлена к первой', async () => {
+      await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+      await expect(rows(page).first()).toContainText('wort000');
+    });
 
-  await scrollToBottom(page);
-  await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+    await test.step('Когда он доходит до конца', async () => {
+      await scrollToBottom(page);
+    });
 
-  // Matches every seeded word, so a list that kept its loaded count would
-  // still show 100.
-  await page.getByPlaceholder('Поиск').fill('wort');
-  await expect(rows(page)).toHaveCount(PAGE_SIZE);
-  // The reader was at the bottom: without the scroll back to the top they
-  // would be sitting on the sentinel and the second page would load itself.
-  expect(await listScrollTop(page)).toBe(0);
-  await page.screenshot({ path: 'test-results/words-paging/after-search.png', fullPage: false });
+    await test.step('Тогда показаны все 130 слов, больше грузить нечего', async () => {
+      await expect(rows(page)).toHaveCount(SEEDED);
+      await expect(sentinel(page)).toHaveCount(0);
+    });
+  });
 
-  await page.getByPlaceholder('Поиск').fill('');
-  await expect(rows(page)).toHaveCount(PAGE_SIZE);
-});
+  test('пользователь ищет слово после прокрутки → поиск начинается с первой страницы сверху', async ({ page }) => {
+    await test.step('Дано список, прокрученный до второй страницы', async () => {
+      await seedAndOpen(page);
+      await scrollToBottom(page);
+      await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+    });
 
-test('editing a word keeps the rows the reader had loaded', async ({ page }) => {
-  await page.goto('/');
-  await seedWords(page, SEEDED);
-  await openWords(page);
+    await test.step('Когда он вводит запрос, подходящий ко всем словам', async () => {
+      await page.getByPlaceholder('Поиск').fill('wort');
+    });
 
-  await scrollToBottom(page);
-  await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+    await test.step('Тогда показана одна страница, список прокручен наверх', async () => {
+      await expect(rows(page)).toHaveCount(PAGE_SIZE);
+      // At the bottom the reader would sit on the sentinel and the second
+      // page would load itself.
+      expect(await listScrollTop(page)).toBe(0);
+    });
 
-  await rows(page).nth(3).getByRole('button').click();
-  await page.getByRole('textbox', { name: 'Перевод' }).fill('исправленный перевод');
-  await page.getByRole('button', { name: 'Сохранить' }).click();
+    await test.step('Когда он стирает запрос', async () => {
+      await page.getByPlaceholder('Поиск').fill('');
+    });
 
-  await expect(rows(page).nth(3)).toContainText('исправленный перевод');
-  // The rows no longer close the dialog on their way in (GH-439), so the save
-  // closes it itself.
-  await expect(page.locator('dialog.word-edit-dialog')).toHaveCount(0);
-  await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
-  await page.screenshot({ path: 'test-results/words-paging/after-edit.png', fullPage: false });
-});
+    await test.step('Тогда снова одна страница', async () => {
+      await expect(rows(page)).toHaveCount(PAGE_SIZE);
+    });
+  });
 
-// GH-439. The margin the observer is built with only widens its root, and the
-// root has to be the box that clips the sentinel: left to the default it is the
-// viewport, which clips nothing here, so the page was asked for only once the
-// reader had scrolled the sentinel into view and could then watch the query
-// run.
-test('the next page is asked for before the end of the rows is on screen', async ({ page }) => {
-  await page.goto('/');
-  await seedWords(page, SEEDED);
-  await openWords(page);
+  test('пользователь правит слово из подгруженных → правка видна, подгруженные слова на месте', async ({ page }) => {
+    await test.step('Дано список с двумя страницами', async () => {
+      await seedAndOpen(page);
+      await scrollToBottom(page);
+      await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+    });
 
-  await expect(rows(page)).toHaveCount(PAGE_SIZE);
+    await test.step('Когда он правит перевод четвёртого слова и сохраняет', async () => {
+      await rows(page).nth(3).getByRole('button').click();
+      await page.getByRole('textbox', { name: 'Перевод' }).fill('исправленный перевод');
+      await page.getByRole('button', { name: 'Сохранить' }).click();
+    });
 
-  const gap = await scrollToWithin(page, 150);
-  expect(gap).toBeGreaterThan(100);
+    await test.step('Тогда слово показывает новый перевод, окно закрыто, 100 слов на месте', async () => {
+      await expect(rows(page).nth(3)).toContainText('исправленный перевод');
+      await expect(page.locator('dialog.word-edit-dialog')).toHaveCount(0);
+      await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+    });
+  });
 
-  await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
-  await page.screenshot({ path: 'test-results/words-paging/lookahead.png', fullPage: false });
-});
+  // GH-439, then #494: a page of the replaced query used to land after the
+  // matching rows and put the whole vocabulary back under a filled search box.
+  test('пользователь доходит до конца сразу после запроса → результаты поиска не пропадают', async ({ page }) => {
+    await test.step('Дано список с двумя страницами', async () => {
+      await seedAndOpen(page);
+      await scrollToBottom(page);
+      await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+    });
 
-// GH-439, then #494. Reaching the end during the 400 ms the search used to
-// wait asked for the next page of the query being replaced, which landed after
-// the matching rows and put the whole vocabulary back while the box kept the
-// query. The filter now reads memory on the keystroke: the matching rows are
-// on screen from their first row before the reader can scroll again, and no
-// page of the old query is left to arrive.
-test('reaching the end right after a query does not undo it', async ({ page }) => {
-  await page.goto('/');
-  await seedWords(page, SEEDED);
-  await openWords(page);
+    await test.step('Когда он вводит запрос на десять слов и сразу листает вниз', async () => {
+      // 'wort01' matches wort010..wort019 — well under a page, so an
+      // unfiltered page arriving afterwards is unmistakable.
+      await page.getByPlaceholder('Поиск').fill('wort01');
+      await expect(rows(page)).toHaveCount(10);
+      expect(await listScrollTop(page)).toBe(0);
+      await scrollToBottom(page);
+    });
 
-  await scrollToBottom(page);
-  await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+    await test.step('Тогда в списке по-прежнему только десять найденных слов', async () => {
+      await expect(page.getByPlaceholder('Поиск')).toHaveValue('wort01');
+      await expect(sentinel(page)).toHaveCount(0);
+      await nothingHappensFor(page, 1500);
+      await expect(rows(page)).toHaveCount(10);
+    });
+  });
 
-  // 'wort01' matches wort010..wort019 — ten rows, well under a page, so an
-  // unfiltered page arriving afterwards is unmistakable.
-  await page.getByPlaceholder('Поиск').fill('wort01');
-  await expect(rows(page)).toHaveCount(10);
-  expect(await listScrollTop(page)).toBe(0);
-  await scrollToBottom(page);
+  // GH-439: rows used to clear `:words/editing` on their way in, which became a
+  // dialog shutting itself once the sentinel started asking for pages.
+  test('пользователь правит слово, пока подгружается страница → окно правки не закрывается', async ({ page }) => {
+    const translation = page.getByRole('textbox', { name: 'Перевод' });
 
-  await expect(page.getByPlaceholder('Поиск')).toHaveValue('wort01');
-  await expect(sentinel(page)).toHaveCount(0);
+    await test.step('Дано открытое окно правки с введённым переводом', async () => {
+      await seedAndOpen(page);
+      await rows(page).nth(3).getByRole('button').click();
+      await translation.fill('печатаю прямо сейчас');
+    });
 
-  // Nothing is left to arrive. Auto-waiting says "wait until true" and there
-  // is nothing here to wait for, so the only way to establish that no page
-  // lands is to let time pass first.
-  await page.waitForTimeout(1500);
-  await expect(rows(page)).toHaveCount(10);
-  await page.screenshot({ path: 'test-results/words-paging/query-survives.png', fullPage: false });
-});
+    await test.step('Когда за окном подгружается следующая страница', async () => {
+      // The dialog is modal, so the list behind it is inert to a click but not
+      // to a scroll driven from script.
+      await scrollToWithin(page, 150);
+      await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
+    });
 
-
-// GH-439. Rows used to clear `:words/editing` on their way in, which was
-// invisible while only the reader's own actions brought rows and became a
-// dialog shutting itself once the sentinel started asking for them.
-test('a word stays open while the next page loads', async ({ page }) => {
-  await page.goto('/');
-  await seedWords(page, SEEDED);
-  await openWords(page);
-
-  await rows(page).nth(3).getByRole('button').click();
-  const translation = page.getByRole('textbox', { name: 'Перевод' });
-  await translation.fill('печатаю прямо сейчас');
-
-  // The dialog is modal, so the list behind it is inert to a click but not to
-  // a scroll driven from script — which is what a page arriving in the
-  // background looks like from the list's side.
-  await scrollToWithin(page, 150);
-
-  await expect(rows(page)).toHaveCount(2 * PAGE_SIZE);
-  await expect(page.locator('dialog.word-edit-dialog')).toBeVisible();
-  await expect(translation).toHaveValue('печатаю прямо сейчас');
-  await page.screenshot({ path: 'test-results/words-paging/dialog-survives-page.png', fullPage: false });
+    await test.step('Тогда окно открыто, а введённое осталось', async () => {
+      await expect(page.locator('dialog.word-edit-dialog')).toBeVisible();
+      await expect(translation).toHaveValue('печатаю прямо сейчас');
+    });
+  });
 });

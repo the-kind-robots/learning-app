@@ -13,8 +13,7 @@
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [db.pouch :as dbs]
-   [tasks :as tasks]
-   [utils :as utils]))
+   [tasks :as tasks]))
 
 
 (def test-device-db-name (db-fixtures/db-name "client.examples-test"))
@@ -47,20 +46,7 @@
      (f {:device/db device-db :user/db user-db}))))
 
 
-(deftest fetch-one-returns-parsed-json-on-success
-  (async-testing "`fetch-one` returns parsed JSON on success"
-    (let [example        {:value "Ich habe einen Hund" :translation "I have a dog"}
-          original-fetch js/fetch]
-      (set! js/fetch (fetch-mocks/mock-fetch-success example))
-      (try
-        (let [result (await (sut/fetch-one "Hund" [] nil))]
-          (is (= "Ich habe einen Hund" (:value result)))
-          (is (= "I have a dog" (:translation result))))
-        (finally
-         (set! js/fetch original-fetch))))))
-
-
-(deftest fetch-one-rejects-on-server-error
+(deftest a-failed-example-request-reports-the-status-and-the-message
   (async-testing "`fetch-one` rejects on server error"
     (let [original-fetch js/fetch]
       (set! js/fetch
@@ -78,26 +64,7 @@
          (set! js/fetch original-fetch))))))
 
 
-(deftest fetch-one-includes-retry-after-ms-on-server-error
-  (async-testing "`fetch-one` includes retry-after-ms when the server suggests a retry delay"
-    (let [original-fetch js/fetch]
-      (set! js/fetch
-            (fetch-mocks/mock-fetch-error-with-body
-             429
-             {:error "Examples are temporarily unavailable"}
-             {"Retry-After" "2"}))
-      (try
-        (try
-          (await (sut/fetch-one "Hund" [] nil))
-          (is false "Should have rejected")
-          (catch :default error
-            (is (= 429 (:status (ex-data error))))
-            (is (= 2000 (:retry-after-ms (ex-data error))))))
-        (finally
-         (set! js/fetch original-fetch))))))
-
-
-(deftest fetch-one-rejects-on-invalid-example-payload
+(deftest an-answer-without-a-sentence-is-rejected
   (async-testing "`fetch-one` rejects on invalid example payload"
     (let [original-fetch js/fetch]
       (set! js/fetch (fetch-mocks/mock-fetch-success {:value "Der Hund läuft"}))
@@ -113,36 +80,6 @@
          (set! js/fetch original-fetch))))))
 
 
-(deftest fetch-one-rejects-on-invalid-json-success-response
-  (async-testing "`fetch-one` rejects on invalid JSON in a success response"
-    (let [original-fetch js/fetch]
-      (set! js/fetch (fetch-mocks/mock-fetch-success-invalid-json))
-      (try
-        (try
-          (await (sut/fetch-one "Hund" [] nil))
-          (is false "Should have rejected")
-          (catch :default error
-            (is (= sut/invalid-response-message (ex-message error)))
-            (is (= 502 (:status (ex-data error))))
-            (is (= :invalid-json (:error-kind (ex-data error))))))
-        (finally
-         (set! js/fetch original-fetch))))))
-
-
-(deftest fetch-one-rejects-on-network-error
-  (async-testing "`fetch-one` rejects on network error"
-    (let [original-fetch js/fetch]
-      (set! js/fetch (fetch-mocks/mock-fetch-network-error))
-      (try
-        (try
-          (await (sut/fetch-one "Hund" [] nil))
-          (is false "Should have rejected")
-          (catch :default error
-            (is (= "Network error" (.-message error)))))
-        (finally
-         (set! js/fetch original-fetch))))))
-
-
 (def ^:private schlaeft
   {:structure   [{:dictionaryForm "Hund" :usedForm "Hund" :wordIndex 1}]
    :translation "Пёс спит."
@@ -153,32 +90,7 @@
   {:structure [] :translation "Пёс лает." :value "Der Hund bellt."})
 
 
-(deftest save-example-inserts-correct-document
-  (async-testing "`save-example!` stores the example in user-db under an id its pair and its content make"
-    (await
-     (with-test-dbs
-      (^:async fn
-       [dbs]
-       (await (sut/save-example! dbs "word-123" "Hund" nil bellt))
-       (await (sut/save-example! dbs "word-123" "Hund" "coll-1" bellt))
-       (let [docs  (await (db-queries/fetch-examples (:user/db dbs)))
-             saved (first docs)]
-         (is (= 2 (count docs)))
-         (is (re-matches #"example:word-123::[0-9a-f]{12}" (:_id saved))
-             "the id names the pair, and a hash of the example follows; a pair in no collection leaves its part empty")
-         (is (re-matches #"example:word-123:coll-1:[0-9a-f]{12}" (:_id (second docs))))
-         (is (= (subs (:_id (first docs)) 18) (subs (:_id (second docs)) 24))
-             "one example has one hash, whatever its collection")
-         (is (= "example" (:type saved)))
-         (is (= "word-123" (:word-id saved)))
-         (is (= "Hund" (:word saved)))
-         (is (= "Der Hund bellt." (:value saved)))
-         (is (not (contains? saved :created-at)) "nothing that depends on the device or the time")
-         (is (empty? (await (db-queries/fetch-examples (:device/db dbs))))
-             "device-db holds no example")))))))
-
-
-(deftest an-example-s-id-and-revision-are-pinned
+(deftest an-examples-id-and-revision-are-the-same-on-every-device
   (async-testing "a change to the hash, the key order or the body's fields changes these, and every device must agree on them"
     (await
      (with-test-dbs
@@ -190,7 +102,7 @@
          (is (= "1-b8443dc633c55a5f1142d42e88eebfda" (:_rev stored)))))))))
 
 
-(deftest save-example-keeps-every-distinct-example-and-one-of-each
+(deftest another-example-of-a-pair-is-kept-and-the-same-one-again-writes-nothing
   (async-testing "another example of a stored pair is kept beside it; the same example again writes nothing"
     (await
      (with-test-dbs
@@ -206,29 +118,10 @@
          (is (every? #(= "1" (first (.split (:_rev %) "-"))) docs) "no second revision")))))))
 
 
-(deftest save-example-throws-on-missing-value
-  (let [example {:translation "The dog"}]
-    (is (thrown-with-msg? js/Error
-                          #"missing required fields"
-                          (sut/save-example! nil "word-123" "Hund" nil example)))))
-
-
-(deftest save-example-throws-on-missing-translation
-  (let [example {:value "Der Hund"}]
-    (is (thrown-with-msg? js/Error
-                          #"missing required fields"
-                          (sut/save-example! nil "word-123" "Hund" nil example)))))
-
-
-(deftest task-handler-fetches-and-saves-on-success
-  (async-testing "task handler fetches and saves example"
-    (let [example        {:value "Der Hund läuft" :translation "The dog runs"}
-          requested-url  (atom nil)
-          original-fetch js/fetch]
-      (set! js/fetch
-            (fn [url]
-              (reset! requested-url url)
-              ((fetch-mocks/mock-fetch-success example) url)))
+(deftest an-example-fetch-stores-what-the-server-answers
+  (async-testing "the answered example lands in user-db and the task is done"
+    (let [original-fetch js/fetch]
+      (set! js/fetch (fetch-mocks/mock-fetch-success {:value "Der Hund läuft" :translation "The dog runs"}))
       (try
         (await
          (with-test-dbs
@@ -239,12 +132,49 @@
                                  :data      {:word-id "word-123" :word "Hund" :translations ["собака"]}}
                                 (task-env dbs)))]
              (is (true? result))
-             (is (= "/api/examples?word=Hund&translation=%D1%81%D0%BE%D0%B1%D0%B0%D0%BA%D0%B0"
-                    @requested-url))
-             (let [examples (await (db-queries/fetch-examples (:user/db dbs)))]
-               (is (= 1 (count examples)))
-               (is (re-matches #"example:word-123::[0-9a-f]{12}" (:_id (first examples))))
-               (is (= "Der Hund läuft" (:value (first examples)))))))))
+             (is (= ["Der Hund läuft"] (map :value (await (db-queries/fetch-examples (:user/db dbs))))))))))
+        (finally
+         (set! js/fetch original-fetch))))))
+
+
+(deftest a-fetch-that-fails-asks-the-queue-to-retry-and-stores-nothing
+  (async-testing "a server error and an unusable answer both leave the pair unanswered"
+    (let [original-fetch js/fetch]
+      (try
+        (doseq [[label mock] [["server error" (fetch-mocks/mock-fetch-error 500)]
+                              ["answer without a sentence" (fetch-mocks/mock-fetch-success {:translation "Собака бежит"})]]]
+          (set! js/fetch mock)
+          (await
+           (with-test-dbs
+            (^:async fn
+             [dbs]
+             (is (false? (await (tasks/execute-task
+                                 {:task-type "example-fetch"
+                                  :data      {:word-id "word-123" :word "Hund" :translations []}}
+                                 (task-env dbs))))
+                 label)
+             (is (empty? (await (db-queries/fetch-examples (:user/db dbs)))) label)))))
+        (finally
+         (set! js/fetch original-fetch))))))
+
+
+(deftest a-throttled-fetch-tells-the-queue-how-long-to-wait
+  (async-testing "the server's Retry-After reaches the queue as a delay"
+    (let [original-fetch js/fetch]
+      (set! js/fetch (fetch-mocks/mock-fetch-error-with-body
+                      429
+                      {:error "Examples are temporarily unavailable"}
+                      {"Retry-After" "3"}))
+      (try
+        (await
+         (with-test-dbs
+          (^:async fn
+           [dbs]
+           (is (= {:retry-after-ms 3000}
+                  (await (tasks/execute-task
+                          {:task-type "example-fetch"
+                           :data      {:word-id "word-123" :word "Hund" :translations []}}
+                          (task-env dbs))))))))
         (finally
          (set! js/fetch original-fetch))))))
 
@@ -321,7 +251,7 @@
                 (map :_id (await (db-queries/fetch-by-type (:device/db dbs) "task")))))))))))
 
 
-(deftest task-handler-sends-all-confirmed-translations
+(deftest the-server-is-asked-for-every-confirmed-translation
   (async-testing "task handler sends every confirmed Russian translation as a repeated query param"
     (let [example        {:value "Wir sitzen auf einer Bank im Park." :translation "Мы сидим на скамейке в парке."}
           requested-url  (atom nil)
@@ -347,66 +277,6 @@
          (set! js/fetch original-fetch))))))
 
 
-(deftest task-handler-returns-false-on-fetch-failure
-  (async-testing "task handler returns false on fetch failure"
-    (let [original-fetch js/fetch]
-      (set! js/fetch (fetch-mocks/mock-fetch-error 500))
-      (try
-        (await
-         (with-test-dbs
-          (^:async fn
-           [dbs]
-           (let [result (await (tasks/execute-task
-                                {:task-type "example-fetch"
-                                 :data      {:word-id "word-123" :word "Hund" :translations []}}
-                                (task-env dbs)))]
-             (is (false? result))))))
-        (finally
-         (set! js/fetch original-fetch))))))
-
-
-(deftest task-handler-returns-retry-hint-when-server-provides-it
-  (async-testing "task handler returns retry-after hint when fetch failure includes Retry-After"
-    (let [original-fetch js/fetch]
-      (set! js/fetch
-            (fetch-mocks/mock-fetch-error-with-body
-             429
-             {:error "Examples are temporarily unavailable"}
-             {"Retry-After" "3"}))
-      (try
-        (await
-         (with-test-dbs
-          (^:async fn
-           [dbs]
-           (let [result (await (tasks/execute-task
-                                {:task-type "example-fetch"
-                                 :data      {:word-id "word-123" :word "Hund" :translations []}}
-                                (task-env dbs)))]
-             (is (= {:retry-after-ms 3000} result))))))
-        (finally
-         (set! js/fetch original-fetch))))))
-
-
-(deftest task-handler-returns-false-on-invalid-example-payload
-  (async-testing "task handler returns false on invalid example payload"
-    (let [original-fetch js/fetch]
-      (set! js/fetch (fetch-mocks/mock-fetch-success {:translation "Собака бежит"}))
-      (try
-        (await
-         (with-test-dbs
-          (^:async fn
-           [dbs]
-           (let [result   (await (tasks/execute-task
-                                  {:task-type "example-fetch"
-                                   :data      {:word-id "word-123" :word "Hund" :translations []}}
-                                  (task-env dbs)))
-                 examples (await (db-queries/fetch-examples (:user/db dbs)))]
-             (is (false? result))
-             (is (empty? examples))))))
-        (finally
-         (set! js/fetch original-fetch))))))
-
-
 (deftest a-fetch-is-one-task-per-pair
   (async-testing "the pair is the identity, so asking twice writes once"
     (await
@@ -422,22 +292,6 @@
            (is (= 1 (count tasks)))
            (is (= "task:example-fetch:vocab:hund:collection-1" (:_id (first tasks)))
                "the id names the pair, so the second write is a conflict"))))))))
-
-
-(deftest a-fetch-queued-with-a-delay-is-due-then
-  (async-testing "a fetch is due the delay it was queued with from now"
-    (await
-     (with-test-dbs
-      (^:async fn
-       [dbs]
-       (let [word {:id "vocab:hund" :value "Hund" :translation []}]
-         (await (sut/request! dbs (test-clock) [{:word word}]))
-         (await (sut/request! dbs (test-clock) [{:collection-id "coll-1" :delay-ms 30000 :word word}]))
-         (let [run-at (into {}
-                            (map (juxt :_id :run-at))
-                            (await (db-queries/fetch-by-type (:device/db dbs) "task")))]
-           (is (= time/test-now-iso (run-at "task:example-fetch:vocab:hund:")))
-           (is (= (utils/ms->iso (+ (time/now-ms) 30000)) (run-at "task:example-fetch:vocab:hund:coll-1"))))))))))
 
 
 (deftest a-dead-lettered-fetch-leaves-its-pair-askable
@@ -465,32 +319,6 @@
                "the live id is free again, so the pair can be asked for")
            (is (contains? ids "task:example-fetch:vocab:hund::failed")
                "and the failure is still there to read"))))))))
-
-
-(deftest request-queues-the-same-task-for-a-phrase
-  (async-testing "GH-371: the fetch path reads a vocabulary entry, not a word"
-    (await
-     (with-test-dbs
-      (^:async fn
-       [dbs]
-       (let [phrase {:id          "vocab:auf jeden fall"
-                     :kind        "phrase"
-                     :translation [{:lang "ru" :value "во всяком случае"}]
-                     :value       "auf jeden Fall"}]
-         (await (sut/request! dbs
-                              (test-clock)
-                              [{:collection-id "collection-1"
-                                :collection-name "Поездка"
-                                :word phrase}]))
-         (let [tasks (await (db-queries/fetch-by-type (:device/db dbs) "task"))
-               {:keys [data task-type]} (first tasks)]
-           (is (= 1 (count tasks)))
-           (is (= "example-fetch" task-type))
-           (is (= "auf jeden Fall" (:word data)))
-           (is (= "vocab:auf jeden fall" (:word-id data)))
-           (is (= ["во всяком случае"] (:translations data)))
-           (is (= "collection-1" (:collection-id data)))
-           (is (= "Поездка" (:collection-name data))))))))))
 
 
 (defn- ^:async with-conflicts

@@ -111,14 +111,15 @@ In both branches, never create the root as a side effect: do not run `openspec i
 
 7. **Verify Coherence**
 
-   **Design Adherence**:
-   - If `contextFiles.design` exists:
-     - Extract key decisions (look for sections like "Decision:", "Approach:", "Architecture:")
+   **Design Adherence** (design.md is optional in this repo — only cross-cutting changes or a new ADR have one):
+   - Decisions source: `contextFiles.design` if it exists, else the proposal's `## Decisions` section
+   - If a decisions source exists:
+     - Extract key decisions (the `## Decisions` bullets)
      - Verify implementation follows those decisions
      - If contradiction detected:
        - Add WARNING: "Design decision not followed: <decision>"
        - Recommendation: "Update implementation or revise design.md to match reality"
-   - If no design.md: Skip design adherence check, note "No design.md to verify against"
+   - If neither exists: skip design adherence silently — a missing design.md is normal, not a gap
 
    **Code Pattern Consistency**:
    - Review new code for consistency with project patterns
@@ -174,8 +175,8 @@ In both branches, never create the root as a side effect: do not run `openspec i
 **Graceful Degradation**
 
 - If only tasks.md exists: verify task completion only, skip spec/design checks
-- If tasks + specs exist: verify completeness and correctness, skip design
-- If full artifacts: verify all three dimensions
+- If tasks + specs exist: verify completeness and correctness; check coherence against the proposal's Decisions
+- design.md present: also verify against it. Its absence is never a WARNING
 - Always note which checks were skipped and why
 
 **Output Format**

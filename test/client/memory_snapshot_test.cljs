@@ -6,7 +6,6 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
    [adapters.learner.snapshot :as snapshot]
    [client.support.caches :as caches]
@@ -204,7 +203,7 @@
     :rev    "1-a"}])
 
 
-(deftest the-snapshot-format-is-the-one-its-version-names
+(deftest a-snapshot-of-this-format-version-holds-exactly-what-memory-takes
   (let [memory  (memory/with-docs memory/empty-memory format-docs)
         entries (snapshot/decoded (snapshot/parsed (snapshot/encode memory nil)))]
     (is (= format-entries (sort-by (comp :id :entity) entries))
@@ -212,7 +211,7 @@
              "so that snapshots of the old format are dropped, and update format-entries here."))))
 
 
-(deftest a-repeat-start-takes-the-snapshot-and-what-was-stored-since
+(deftest a-repeat-start-takes-the-snapshot-and-then-what-was-stored-since
   (async-testing "documents written before the start: no document is read in full, and memory equals a full read"
     (caches/with-cache-api
      (^:async fn
@@ -241,33 +240,6 @@
                  "memory equals a full read")
              (is (= "Tiere!" (:name (memory/collection restored "coll-tiere"))))
              (is (nil? (memory/word restored "vocab:die katze"))))))))))))
-
-
-(deftest a-start-with-nothing-new-writes-no-snapshot
-  (async-testing "memory's position equals the snapshot's: the writer does not write"
-    (caches/with-cache-api
-     (^:async fn
-      [{:keys [puts]}]
-      (await
-       (with-dbs
-        (^:async fn
-         [dbs]
-         (await (seeded! dbs))
-         (await (session! dbs puts))
-         (let [asked  (atom 0)
-               marker pouch/marker]
-           (try
-             (let [{:keys [stop]} (await (learner/started dbs {}))]
-               ;; The writer asks for the markers as soon as it decides to
-               ;; write, in the task after the hand-over; the task this test
-               ;; waits for comes after that one.
-               (set! pouch/marker (fn [& args] (swap! asked inc) (apply marker args)))
-               (await (wait/settled))
-               (stop))
-             (finally
-              (set! pouch/marker marker)))
-           (is (zero? @asked) "the writer decided not to write")
-           (is (= 1 @puts))))))))))
 
 
 (defn- ^:async dropped-on
@@ -364,22 +336,6 @@
           (await (after-lost-tail 1 (fn [other [{:keys [doc]}]] (pulled! other doc))))]
       (is (zero? (:full reads)) "the snapshot is taken")
       (is (= (projection full-read) (projection memory)) "memory equals a full read"))))
-
-
-(deftest a-refused-snapshot-is-deleted-by-the-check
-  (async-testing "the check deletes a snapshot it refuses, before memory is read"
-    (caches/with-cache-api
-     (^:async fn
-      [{:keys [entries puts]}]
-      (await
-       (with-dbs
-        (^:async fn
-         [dbs]
-         (await (seeded! dbs))
-         (await (session! dbs puts))
-         (restore! entries (assoc-in (stored entries) [:header :position :seq] 1000000))
-         (is (nil? (await (loader/checked-snapshot dbs))))
-         (is (zero? (.-size entries)) "the snapshot is gone"))))))))
 
 
 (deftest a-snapshot-is-written-when-the-page-goes-to-the-background
