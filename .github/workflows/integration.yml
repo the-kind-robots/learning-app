@@ -83,7 +83,7 @@ jobs:
       - uses: DeLaGuardo/setup-clojure@13.6.1
         with:
           cli: latest
-          clj-kondo: latest
+          clj-kondo: 2026.05.25
 
       - id: cache-clojure
         uses: actions/cache/restore@v6.1.0
@@ -102,13 +102,10 @@ jobs:
           npx shadow-cljs compile node-test
           node target/node-tests.js
 
-      # Client layering (was test/client/layering_test.cljs). Only these rules
-      # gate: ^:replace drops every other linter, so unrelated findings pass.
-      - name: Check client layering
-        run: >
-          clj-kondo --lint src/client --config-dir .clj-kondo/layering
-          --config '{:linters ^:replace {:discouraged-namespace {:level :error}}}'
-          --fail-level error
+      # Lints src with .clj-kondo/config.edn; client layering rules come in
+      # through :config-paths (.clj-kondo/layering/config.edn).
+      - name: Lint (incl. client layering)
+        run: clj-kondo --lint src --fail-level error
 
       # BEHAVIOR.md is generated from the Playwright titles; `--list` needs no browser.
       - name: Check behaviour catalog is fresh

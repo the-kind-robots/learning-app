@@ -1,11 +1,10 @@
-;; Client storage barrier (was test/client/layering_test.cljs). CI gate:
-;;   clj-kondo --lint src/client --config-dir .clj-kondo/layering \
-;;     --config '{:linters ^:replace {:discouraged-namespace {:level :error}}}' --fail-level error
-;; This dir is the single source of the rules; ../config.edn pulls it in via
-;; :config-paths. The gate lints with this dir alone and ^:replace drops every
-;; other linter, so unrelated findings elsewhere in the tree do not decide it.
+;; Client storage barrier (was test/client/layering_test.cljs). Gated in CI by the
+;; `clj-kondo --lint src --fail-level error` step, see integration.yml. ../config.edn
+;; pulls this file in via :config-paths.
 ;;
-;; The engine (db.*, db-migrations, sync, tasks) is reached only by adapters.*,
+;; Engine namespaces (db.*, db-migrations, sync, tasks) are listed twice below, in
+;; `engine` and in `above-adapters`; keep both regexes in step.
+;; The engine is reached only by adapters.*,
 ;; main and ports.task-queue; use cases and pages reach adapters through ports;
 ;; only views require presenters. `above-adapters` is default-deny: every client
 ;; namespace is in it except the explicit allow-list of engine-side ones, so a
