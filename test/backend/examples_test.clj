@@ -388,3 +388,17 @@
   (with-redefs [db/request-sync (fn [_request]
                                   {:error (org.httpkit.client.TimeoutException. "read timeout")})]
     (is (sut/generation-failure? (sut/word-meta (sut/subject {:word "Fenster" :translation "окно"}))))))
+
+
+(deftest a-phrase-without-an-article-is-looked-up-by-surface-form-under-an-encoded-url
+  (let [urls (atom [])]
+    (with-redefs [db/request-sync (fn [{:keys [url]}]
+                                    (swap! urls conj url)
+                                    (if (re-find #"/_find$" url)
+                                      {:status 200 :body {:docs []}}
+                                      {:status 404 :body {}}))]
+      (is (= [] (vec (dictionary/lookup-dictionary-entries "Bezug auf etwas nehmen")))))
+    (let [surface-url (last @urls)]
+      (is (= "dictionary-db/sf:bezug%20auf%20etwas%20nehmen" surface-url))
+      (is (some? (java.net.URI. (str "http://localhost:5984/" surface-url)))
+          "a URL the HTTP client accepts"))))
