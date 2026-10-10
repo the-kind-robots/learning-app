@@ -1,33 +1,19 @@
 # example-backfill Specification
 
 ## Purpose
-Define how a device catches up on example sentences it is missing for its vocabulary, after replication and on start, without letting that work disturb sync.
+Define how a device asks for the example sentences memory is missing: which pairs, when, from which tab, at what pace, what each failure does, and when the answers are saved.
 
 ## Requirements
 
-### Requirement: A replication pass queues the example fetches the device owes
+### Requirement: The device asks for the examples memory is missing
 
-After a completed replication pass the device SHALL count what is missing over what that pass
-brought home, and SHALL NOT read the rest of the vocabulary. It SHALL count once memory holds every
-document the pass stored (`specs/learner-data-memory/spec.md`), and SHALL count from memory alone:
-examples replicate with the words they belong to, so an example the pass brought answers its pair,
-and a word or collection the pass deleted is gone from memory and asks for nothing.
+The device SHALL ask, eventually, for an example for every pair memory has no example for, and for
+nothing else, in any order and at any pace. It SHALL decide whether a pair has an example from memory
+as it stands when it looks, and SHALL keep no stored list of pairs: a pair answered since — by
+replication, by the move from `device-db`, by another tab — is no longer asked for, and a word or
+collection deleted since asks for nothing. It SHALL read memory in chunks, each well under a frame.
 
-A word often arrives a pass ahead of its example: the device that added it fetches the example and
-pushes it a push window later. A fetch a pass queues SHALL therefore not be due before two of the sync
-engine's push windows after the pass. A pass that brings an example SHALL delete the queued fetch of
-the pair that example was made for, so a fetch whose example arrives while it waits is never sent.
-
-What is missing is counted over vocabulary entries, and a phrase is one: words and phrases are the
-same document type and ask for an example alike (`specs/examples/spec.md`). Nothing in this
-requirement reads an entry's kind.
-
-A pass SHALL count the entries it brought, and SHALL unfold a collection it brought into the entries
-that collection names. A theme document is rewritten whole every time anyone adds an entry to it on
-any device, so a pass that brings one is how this device learns that an entry was themed elsewhere;
-what that costs is the size of the theme, which is the read a start does anyway.
-
-The pairs a fetch is owed for follow the lookup rules in `specs/examples-schema/spec.md`:
+The pairs follow the lookup rules in `specs/examples-schema/spec.md`:
 
 - for every named collection and every entry in it, when no example carries that entry and that
   collection — a named collection's lookup is strict by `collection-id`, so an example generated
@@ -35,240 +21,242 @@ The pairs a fetch is owed for follow the lookup rules in `specs/examples-schema/
 - for every entry that belongs to no collection, when no example carries that entry at all — the
   main card is a union view, so any example for the entry answers it.
 
-An entry already covered by an existing example SHALL NOT be queued. The same rule SHALL decide a
-single pair when an entry is added to a collection by hand, so both answers agree.
+What is missing is counted over vocabulary entries, and a phrase is one: words and phrases are the
+same document type and ask for an example alike (`specs/examples/spec.md`). Nothing in this
+requirement reads an entry's kind.
+
+The device SHALL look for a missing pair after each request and, while it has nothing to ask, when
+memory's words or collections change. Adding a word or a phrase, changing a translation and a word
+arriving by replication all change them, so the pair is asked for at once. A review or an example
+changes neither and SHALL NOT wake it. There is no periodic look.
 
 #### Scenario: A word arrived by replication without its example
 
-- **WHEN** a replication pass brings a word document
-- **AND** that word has no example document
-- **THEN** an example-fetch task is queued for it, due two push windows after the pass
+- **WHEN** memory takes a word from a replication pass
+- **AND** memory holds no example of it
+- **THEN** an example request is sent for it at once
 
 #### Scenario: A word arrived by replication with its example
 
-- **WHEN** a replication pass brings a word document and the example another device fetched for it
-- **THEN** no example-fetch task is queued for it
-- **AND** no example request is sent for it
+- **WHEN** memory takes a word and the example another device fetched for it
+- **THEN** no example request is sent for it
 
-#### Scenario: A word's example arrives one pass after the word
+#### Scenario: An example arrives before the request is sent
 
-- **WHEN** a replication pass brings a word without its example, and a fetch is queued for it
-- **AND** a later pass brings the example before the fetch is due
-- **THEN** that pass deletes the fetch, and no example request is sent
+- **WHEN** a pair is missing its example
+- **AND** memory takes an example of that pair before a request for it is sent
+- **THEN** no request is sent for it
 
-#### Scenario: A phrase arrived by replication without its example
+#### Scenario: A word added on this device
 
-- **WHEN** a replication pass brings a phrase document
-- **AND** that phrase has no example document
-- **THEN** an example-fetch task is queued for it, carrying the phrase's own Russian translations
+- **WHEN** the learner adds a word that has no example in the active collection
+- **THEN** an example request is sent for that word and that collection at once
+- **AND** no request is sent for the word outside every collection, although the word was written
+  before its place in the collection
 
-#### Scenario: A phrase in a named collection
+#### Scenario: A lesson answer
 
-- **WHEN** a phrase belongs to collection T and its only example carries a different collection, or none
-- **THEN** an example-fetch task is queued for that phrase with `collection-id = T` and T's name
+- **WHEN** the learner answers a card while nothing is missing
+- **THEN** the device does not look for a missing pair
 
-#### Scenario: A collection arrived naming an entry this device already held
+#### Scenario: A translation changed
 
-- **WHEN** a replication pass brings a collection document naming entry W
-- **AND** no example carries W and that collection
-- **THEN** an example-fetch task is queued for the pair (W, that collection)
+- **WHEN** the learner changes the translation of a word whose pair failed
+- **THEN** the pair is asked for again at once
 
-#### Scenario: A collection the pass deleted
+#### Scenario: A phrase without its example
 
-- **WHEN** a replication pass deletes a collection naming entry W
-- **THEN** no task is queued for the pair (W, that collection)
-
-#### Scenario: A word the pass did not bring
-
-- **WHEN** a replication pass completes
-- **AND** a word the pass did not bring, and that no collection the pass brought names, has no
-  example
-- **THEN** no task is queued for it by this pass
-
-#### Scenario: A pass that pulled nothing
-
-- **WHEN** a replication pass completes having written nothing on this device — a push-only pass
-- **THEN** nothing is counted and the vocabulary is not read
-
-#### Scenario: A word that already has its example
-
-- **WHEN** a replication pass brings a word whose example is already stored for the pair it is
-  looked up under
-- **THEN** no example-fetch task is queued for it
+- **WHEN** memory holds a phrase with no example
+- **THEN** an example request is sent for it, carrying the phrase's own Russian translations
 
 #### Scenario: A word in a collection whose example came from another collection
 
 - **WHEN** a word belongs to collection T and its only example carries a different collection, or none
-- **THEN** an example-fetch task is queued for that word with `collection-id = T` and T's name
+- **THEN** an example request is sent for the word in T, with T's name
 
 #### Scenario: A word in no collection with any example
 
 - **WHEN** a word belongs to no collection and an example exists for it under some collection
-- **THEN** no task is queued — the main card's union lookup already answers
+- **THEN** no request is sent for it — the main card's union lookup already answers
 
-#### Scenario: A word added by hand to a collection that has no example for it
+#### Scenario: A deleted collection
 
-- **WHEN** a word already in the vocabulary is added to a named collection
-- **AND** no example carries that word and that collection
-- **THEN** an example-fetch task is queued for that pair, as a backfill pass would queue it
+- **WHEN** a collection naming entry W is deleted before a request for W in it is sent
+- **THEN** no request is sent for W in that collection
 
-### Requirement: Backfill never fails the replication pass
+#### Scenario: Nothing to ask
 
-The backfill SHALL be contained: a failure while deciding or queueing SHALL be logged and SHALL NOT
-change what the pass reports to its caller. A pass SHALL NOT wait for the backfill either: what the
-pass reports is what it replicated, and the screen and the pass throttle follow the replication, not
-the queueing that comes after it. Queueing writes task documents locally and issues no network
-request of its own, so an unreachable backend delays the fetches, it does not break the pass.
+- **WHEN** every pair has its example
+- **THEN** no request is sent, and the device looks again only when memory's words or collections change
 
-#### Scenario: The backfill throws
+### Requirement: Nothing is asked for before the device knows what the account holds
 
-- **WHEN** reading local data or writing a task fails during backfill
-- **THEN** the pass still reports what it replicated
+The device SHALL send no example request before memory is loaded, the examples kept in `device-db`
+have moved to `user-db` (`specs/data-model/spec.md`), and the first replication pass of this session
+has completed. So an example the move brings, or one the account already holds on another device,
+answers its pair before anything is asked. When the first pass has not completed 60 s after the
+device began waiting, the device SHALL stop waiting for it.
 
-#### Scenario: The backfill is still running
-
-- **WHEN** a replication pass completes and the backfill it starts has not finished
-- **THEN** the pass reports what it replicated without waiting for it
-
-#### Scenario: The device is offline
-
-- **WHEN** a pass completes and the backend is unreachable
-- **THEN** the tasks are queued and wait, and the pass is unaffected
-
-### Requirement: A start queues the example fetches the device already owes
-
-On start the device SHALL count what is missing over every vocabulary entry it holds — words and
-phrases alike — and queue all of it. This is the one full reading: it closes whatever earlier runs
-left, whatever the reason — a device that was offline, a failure, an entry themed on another device.
-
-The backfill SHALL count only once memory is loaded, the examples kept on the device have moved to
-`user-db` (`specs/data-model/spec.md`), and this session's first replication pass has completed. A
-device without an account runs no pass, and counts once the move is done. So an example the move
-brings, or one the account already holds on another device, answers its pair before anything is
-counted. A pass that completes before then SHALL count after it too.
-
-#### Scenario: A device starts holding entries without examples
-
-- **WHEN** the application starts
-- **THEN** every entry it holds is considered, and an example-fetch task is queued for each missing
-  pair
-
-#### Scenario: A device starts owing nothing
-
-- **WHEN** the application starts and every pair already has its example or its queued task
-- **THEN** no task is queued
-
-#### Scenario: A device starts with examples kept on the device
-
-- **WHEN** the application starts on a device whose `device-db` holds the example of a word
-- **THEN** no example-fetch task is queued for that word's pair
+A device without an account SHALL send no example request: the endpoint answers only a session of
+an account (`specs/examples/spec.md`).
 
 #### Scenario: A device with an account starts
 
 - **WHEN** a device with an account starts holding entries whose examples the account holds on
   another device
-- **THEN** nothing is counted before the first pass of the session has completed
-- **AND** no example-fetch task is queued for those entries
+- **THEN** no example request is sent before the first pass of the session has completed
+- **AND** no request is sent for those entries once it has
 
-#### Scenario: The first pass completes before the backfill starts listening
+#### Scenario: A device starts with examples kept on the device
 
-- **WHEN** a device with an account completes its first pass before the backfill has started
-- **THEN** the backfill counts once the examples kept on the device have moved, without waiting for
-  another pass
+- **WHEN** the application starts on a device whose `device-db` holds the example of a word
+- **THEN** no request is sent for that word's pair
 
-### Requirement: A backfill queues every missing pair, and one pair is one task
+#### Scenario: A device without an account
 
-A backfill SHALL queue a task for every pair it finds missing, with no cap. Queueing writes task
-documents and generates nothing: the pace belongs to the task queue, which runs a few fetches at a
-time and backs off on the provider's terms, so a cap here would only leave a remainder nobody is
-responsible for.
+- **WHEN** a device without an account holds entries with no example
+- **THEN** no example request is sent
 
-A fetch task's identity SHALL be the pair it is for. Asking for a pair that is already queued SHALL
-therefore write nothing and SHALL NOT be an error — no reader has to know what the queue holds, and
-two backfills may run at once.
+#### Scenario: The first pass does not complete
 
-A task that was dead-lettered SHALL NOT hold the identity of the pair, so the pair can be asked for
-again; the failure SHALL be kept under an identity of its own for reading.
+- **WHEN** a device with an account starts and its first pass has not completed after 60 s
+- **THEN** the device asks for what memory is missing without waiting further
 
-The tasks of one backfill SHALL be written together rather than one at a time — a device catching up
-on a whole vocabulary queues as many as it is missing.
+### Requirement: Only a visible, online tab asks
 
-#### Scenario: A device is missing more pairs than any cap would allow
+A tab SHALL send example requests only while it is visible and the device is online. A tab that
+becomes hidden, or whose device goes offline, SHALL abort its request in flight, marking nothing. A tab
+that could not send SHALL look again once it is visible and the device is online; with nothing missing
+it looks again only when memory's words or collections change (Requirement: The device asks for the
+examples memory is missing). Two visible tabs MAY both send requests: the same example stored
+twice is one document (`specs/examples-schema/spec.md`).
 
-- **WHEN** a start finds a hundred and twenty missing pairs
-- **THEN** a hundred and twenty example-fetch tasks are queued
-- **AND** nothing is left for a later pass to pick up
+#### Scenario: A hidden tab
 
-#### Scenario: A pass repeated before the queue drains
+- **WHEN** a tab of the app is hidden and pairs are missing
+- **THEN** it sends no example request
 
-- **WHEN** a backfill runs while example-fetch tasks are still queued
-- **THEN** the pairs those tasks carry are named again and no second task is written for them
+#### Scenario: The tab is hidden mid-request
 
-#### Scenario: Two askers, one pair
+- **WHEN** the tab becomes hidden while a request is in flight
+- **THEN** the request is aborted and its pair stays eligible
 
-- **WHEN** a backfill queues the fetch for a pair
-- **AND** the reader adds that same entry to that same collection by hand
-- **THEN** the queue holds one task for the pair
+#### Scenario: The tab is shown again
 
-#### Scenario: A fetch that was dead-lettered
+- **WHEN** a hidden tab becomes visible and pairs are missing
+- **THEN** it sends a request
 
-- **WHEN** an example-fetch task has been dead-lettered for a pair
-- **AND** a backfill runs
-- **THEN** the pair counts as missing and a task is queued for it
-- **AND** the dead-lettered task is still there to read
+#### Scenario: Offline
 
-### Requirement: A throttled answer pauses the whole example-fetch queue
+- **WHEN** the device is offline and pairs are missing
+- **THEN** no request is sent until the `online` event
 
-When the examples endpoint answers that the device is throttled and names a Retry-After delay, the
-task queue SHALL start no further example fetch until that delay has passed. Fetches already in
-flight SHALL be allowed to finish. The refused fetch SHALL be queued again for the end of the delay;
-the other queued fetches SHALL keep their schedule.
+#### Scenario: The device goes offline mid-request
 
-A trigger that arrives before the delay has passed — a newly queued fetch, a resume, a flush — SHALL
-NOT start a fetch. When the delay has passed, the queue SHALL resume on its own and SHALL drain what
-is due.
+- **WHEN** the device goes offline while a request is in flight
+- **THEN** the request is aborted and its pair stays eligible
 
-#### Scenario: The endpoint throttles a queue of many fetches
+### Requirement: Example requests are paced
 
-- **WHEN** ten fetches are due and the first answer is a throttle with a Retry-After delay
-- **THEN** only the fetches already in flight are sent
-- **AND** no further fetch is sent until the delay has passed
+A tab SHALL have at most one example request in flight and SHALL start the next no sooner than 2 s
+after the previous one was answered. A request not answered within 110 s SHALL be aborted, and its
+pair SHALL be treated as when the generator is unavailable (Requirement: Each failure has one
+effect, and nothing is retried forever). The proxy in front of the backend gives up sooner, so a
+request is not aborted while the backend still generates.
 
-#### Scenario: A new fetch is queued during the pause
+#### Scenario: Many missing pairs
 
-- **WHEN** a fetch is queued while the queue is paused by a throttle
-- **THEN** it is not sent before the Retry-After delay has passed
+- **WHEN** ten pairs are missing and every request takes 5 s to answer
+- **THEN** never more than one request is in flight
+- **AND** no request starts less than 2 s after the previous one was answered
 
-#### Scenario: The delay passes
+#### Scenario: A request that hangs
 
-- **WHEN** the Retry-After delay has passed
-- **THEN** the queue resumes without any further trigger and sends every due fetch, the refused one
-  included
+- **WHEN** a request is not answered within 110 s
+- **THEN** it is aborted, and the device pauses as for an unavailable generator
+- **AND** the pair is asked for again after the pause
 
-### Requirement: A fetch whose pair is answered sends no request
+### Requirement: Each failure has one effect, and nothing is retried forever
 
-An example-fetch task SHALL NOT run before the backfill may count (Requirement: A start queues the
-example fetches the device already owes). It SHALL then ask whether its pair is answered, by the
-rule the backfill counts by: `user-db` holds an example of the entry that a read in the pair's
-collection sees (`specs/examples-schema/spec.md`). When it holds one — it arrived by replication,
-was moved from `device-db`, or was written by another tab after the task was queued — the task SHALL
-complete without sending an example request and SHALL write nothing. The task queue itself is not
-held: other tasks run once memory is loaded (`specs/task-runner/spec.md`).
+Each response to an example request SHALL have the effect its failure kind
+(`specs/example-fetch-error-clarity/spec.md`) gives it, and no other:
 
-#### Scenario: The example arrived after the task was queued
+| Response | Effect |
+|---|---|
+| a valid example | saved at once; the run of outages is over |
+| a subject that cannot be sent, an invalid body, or a refusal of the request itself (400, 404, 422, or any 4xx not named below) | the subject is not asked for again; nothing pauses; the run of outages is over |
+| an authentication refusal (401, 403) | the tab sends nothing until the page is reloaded |
+| a throttle (429) | the tab pauses; the pair is asked for again after the pause |
+| an unavailable generator (5xx, 503 among them; 408 and 425 count the same) or a timeout | the tab pauses; the pair is asked for again after the pause |
+| a network failure while online | the tab pauses; the pair is asked for again after the pause |
+| a request aborted because the tab was hidden | nothing |
 
-- **WHEN** an example-fetch task is queued for a pair
-- **AND** a replication pass then brings an example of that pair
-- **AND** the task runs
-- **THEN** no example request is sent and the task completes
+A throttle, an unavailable generator, a timeout, a network failure and an unexpected exception in a
+step are outages: they say
+nothing about the pair. The k-th outage in a row SHALL pause the tab for
+5 s × 2^(k−1), at most 5 min, or for the response's `Retry-After` when that is longer; no pause SHALL
+be longer than an hour. No number of outages in a row SHALL stop the tab. When the pause ends, the tab SHALL look again without any other trigger, and waking the tab
+SHALL NOT end a pause.
 
-#### Scenario: A fetch before the device is ready
+"Not asked for again" SHALL last for the life of the page and SHALL apply to the subject the request
+asked about — the entry's text, its Russian translations and the collection's name — so editing the
+entry or renaming the collection, even while the request is in flight, makes the pair eligible
+again, and so does a reload. Any response that is not an outage — a valid example, or a failure of the pair — SHALL end the run of outages. Showing the tab again
+SHALL NOT end a stop, a run of outages or a pause, and SHALL NOT make a subject that failed
+eligible again.
 
-- **WHEN** an example-fetch task is due while the examples kept on the device are still moving
-- **THEN** it sends nothing until the move is done, and then only when its pair is still unanswered
+#### Scenario: A throttle
 
-#### Scenario: An example of another collection
+- **WHEN** a request is answered 429 with `Retry-After: 30`
+- **THEN** no request is sent for 30 s
+- **AND** after that the tab sends again on its own, the throttled pair included
 
-- **WHEN** an example-fetch task for entry W in collection T runs
-- **AND** `user-db` holds an example of W in another collection only
-- **THEN** the example request is sent
+#### Scenario: The generator is unavailable
+
+- **WHEN** a request is answered 503 with `Retry-After: 30`
+- **THEN** no request is sent for 30 s
+- **AND** after that the same pair is asked for again
+
+#### Scenario: A pair the generator cannot answer
+
+- **WHEN** a request is answered 422
+- **THEN** that subject is not asked for again in this page's life
+- **AND** the next pair is asked for without a pause
+
+#### Scenario: An expired session
+
+- **WHEN** a request is answered 401
+- **THEN** the tab sends no further request until the page is reloaded
+
+#### Scenario: Many outages in a row
+
+- **WHEN** more than six requests in a row end in outages
+- **THEN** each pause is at most 5 min
+- **AND** after each pause the tab asks again, without a reload
+
+#### Scenario: A pair failure ends the run of outages
+
+- **WHEN** outages alternate with answers of 422
+- **THEN** every pause is the first back-off step, 5 s
+
+#### Scenario: A pair that failed, edited
+
+- **WHEN** a pair was not asked for again after an invalid response
+- **AND** the learner edits the entry's translation
+- **THEN** the pair is asked for again
+
+#### Scenario: A word added during a pause
+
+- **WHEN** the learner adds a word while the tab is paused
+- **THEN** its pair is asked for when the pause ends
+
+### Requirement: A received example is saved at once
+
+A tab SHALL save each example it receives in its own write, before it sends the next request. A save
+SHALL keep an example `user-db` holds already as it is (`specs/examples-schema/spec.md`). A save that
+fails SHALL be logged, and its subject SHALL NOT be asked for again in the page's life.
+
+#### Scenario: An example arrives
+
+- **WHEN** a request is answered with an example
+- **THEN** the example is saved before the next request is sent

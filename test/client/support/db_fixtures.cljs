@@ -1,9 +1,7 @@
 (ns client.support.db-fixtures
   (:require
    [clojure.string :as str]
-   [db :as db]
-   [db.pouch :as pouch]
-   [tasks :as tasks])
+   [db :as db])
   (:require-macros
    [cljs.test :refer [async]]))
 
@@ -58,32 +56,15 @@
                (.finally (js/Promise.all (into-array (map destroy-test-db db-names))) done)))})
 
 
-(defn- role
-  "Which of the app's databases a test database stands for, by the suffix
-   its test named it with: `.user` or `.device`. Any other name stands for
-   both, for a test that keeps every type in one database."
-  [db-name]
-  (cond
-    (str/ends-with? db-name ".user")   :user/db
-    (str/ends-with? db-name ".device") :device/db))
-
-
-(defn- ^:async prepared
-  "A test database. One that stands for device-db, or for both databases,
-   carries the task queue's index, as device-db has it once the queue has
-   started, so a test can run the queue without starting it."
-  [db-name]
-  (let [db (db/use db-name)]
-    (when-not (= :user/db (role db-name))
-      (await (pouch/ensure-index! {:device/db db} tasks/schema tasks/index)))
-    db))
-
-
 (defn with-test-db
+  "Calls `f` with the test database `db-name`. Returns a promise of what
+   `f` returns."
   [db-name f]
-  (.then (prepared db-name) f))
+  (.then (js/Promise.resolve (db/use db-name)) f))
 
 
 (defn with-test-dbs
+  "Calls `f` with the vector of the test databases `db-names`. Returns a
+   promise of what `f` returns."
   [db-names f]
-  (.then (js/Promise.all (into-array (map prepared db-names))) #(f (vec %))))
+  (.then (js/Promise.resolve (mapv db/use db-names)) f))

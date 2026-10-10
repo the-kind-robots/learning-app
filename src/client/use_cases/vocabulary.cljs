@@ -4,7 +4,6 @@
    [domain.phrase :as phrase]
    [domain.retention :as retention]
    [domain.vocabulary :as domain]
-   [use-cases.examples :as examples]
    [utils :as utils]))
 
 
@@ -39,25 +38,24 @@
 
 
 (defn ^:async add!
-  "Adds a vocabulary entry of `kind` — `:word` or `:phrase` — and queues a
-   collection-scoped example fetch. A phrase asks for an example like a
-   word does (#371); the kind decides only how the translation is read and
-   which document is built.
+  "Adds a vocabulary entry of `kind` — `:word` or `:phrase` — to the
+   vocabulary and to the active collection. The kind decides only how the
+   translation is read and which document is built. The example fetcher
+   then asks for the new pair; a phrase gets one like a word (#371).
 
    A new word gets an initial review, unless memory holds reviews of it
    already: a word deleted and added again comes back with its history,
    and its retention is computed from that history alone. A duplicate value
    is one entry whatever its kind: translations merge, and the kind is left
-   alone. Either way an example is fetched only when the active collection
-   has none for the word yet. Returns a promise of {:word-id id :created?
-   bool} or {:error :empty-translations}.
+   alone. Returns a promise of {:word-id id :created? bool} or {:error
+   :empty-translations}.
 
    `kind` has no default on purpose. Made optional, this becomes a two-arity
    function, and `:static-fns` then compiles every call site to
    `add_BANG_.cljs$core$IFn$_invoke$arity$4` — a property a plain test stub
    does not carry, so `with-redefs` stops intercepting and the effect throws
    where it used to run."
-  [{:keys [learner] :as capabilities} value translation kind]
+  [{:keys [learner]} value translation kind]
   (let [translation (entered-translation kind translation)
         entries     (translation-entries kind translation)]
     (if (empty? entries)
@@ -70,7 +68,6 @@
           (await ((:learner/add-review! learner) (:id word) true translation)))
         (when collection
           (await ((:learner/add-to-collection! learner) (:id word) (:id collection))))
-        (await (examples/request-example-if-missing! capabilities word collection))
         {:created? created? :word-id (:id word)}))))
 
 

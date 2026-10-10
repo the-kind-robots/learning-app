@@ -45,14 +45,19 @@
   (vocabulary/vocab-id "auf jeden Fall"))
 
 
+(defn- missing
+  "The pairs memory is missing an example for, as the example fetcher reads
+   them, over the learner port in `capabilities`."
+  [{:keys [learner]}]
+  (learner/missing-in ((:learner/memory learner))))
+
+
 (defn- ^:async test-capabilities
-  "What `add!` is handed: the learner port over `dbs`, with the example
-   requests recorded into `example-requests` rather than queued. With
-   `:active-id`, a
+  "What `add!` is handed: the learner port over `dbs`. With `:active-id`, a
    collection «Поездка» under that id is stored and active; with
    `:existing-example`, an example of «auf jeden Fall» made in that
    collection is stored. It resolves once memory has what it stored."
-  [dbs example-requests {:keys [active-id existing-example]}]
+  [dbs {:keys [active-id existing-example]}]
   (when active-id
     (await (db/insert (:user/db dbs) {:_id active-id :type "collection" :name "Поездка" :word-ids []})))
   (when existing-example
@@ -67,48 +72,40 @@
   {:clock   clock
    :learner (assoc (::learner dbs)
                    :learner/active-collection
-                   (fn [] (get-in ((:learner/memory (::learner dbs))) [:collections active-id]))
-                   :learner/request-examples!
-                   (fn [requests]
-                     (swap! example-requests into requests)
-                     (js/Promise.resolve nil)))})
+                   (fn [] (get-in ((:learner/memory (::learner dbs))) [:collections active-id])))})
 
 
-(deftest a-new-phrase-is-stored-with-a-first-review-and-an-example-is-asked-for
-  (async-testing "the phrase, one review of it, and one example request, as for a word"
+(deftest a-new-phrase-is-stored-with-a-first-review-and-is-missing-an-example
+  (async-testing "the phrase, one review of it, and memory missing one example, as for a word"
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [example-requests (atom [])
-            capabilities     (await (test-capabilities dbs example-requests {}))
+      (let [capabilities   (await (test-capabilities dbs {}))
             {:keys [word-id created?]} (await (sut/add! capabilities
                                                         "Entschuldigung, dass ich zu spät komme"
                                                         "Извини, что я опоздал."
                                                         :phrase))
             [entry & more] (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
-            reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
+            reviews        (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (is (true? created?))
         (is (empty? more))
         (is (= {:_id word-id :kind "phrase" :value "Entschuldigung, dass ich zu spät komme"}
                (select-keys entry [:_id :kind :value])))
         (is (= [word-id] (map :word-id reviews)))
-        (is (= ["phrase"] (map (comp :kind :word) @example-requests))))))))
+        (is (= ["phrase"] (map (comp :kind :word) (missing capabilities)))))))))
 
 
-(deftest re-adding-a-phrase-whose-collection-has-an-example-asks-for-nothing
+(deftest re-adding-a-phrase-whose-collection-has-an-example-misses-nothing
   (async-testing "the re-fetch rule is the one words already follow"
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [example-requests (atom [])
-            capabilities     (await (test-capabilities dbs
-                                                       example-requests
-                                                       {:active-id        "collection-1"
-                                                        :existing-example {:id "example-1"}}))]
+      (let [capabilities (await (test-capabilities dbs
+                                                   {:active-id        "collection-1"
+                                                    :existing-example {:id "example-1"}}))]
         (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase))
-        (reset! example-requests [])
         (await (sut/add! capabilities "auf jeden Fall" "обязательно" :phrase))
-        (is (empty? @example-requests)))))))
+        (is (empty? (missing capabilities)) "the collection has its example already"))))))
 
 
 (deftest add-duplicate-merges-translation-whole
@@ -116,8 +113,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [example-requests (atom [])
-            capabilities     (await (test-capabilities dbs example-requests {}))]
+      (let [capabilities (await (test-capabilities dbs {}))]
         (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase))
         (let [{:keys [created?]} (await (sut/add! capabilities "Auf jeden Fall" "обязательно, точно" :phrase))
               entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
@@ -134,8 +130,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [example-requests (atom [])
-            capabilities     (await (test-capabilities dbs example-requests {}))]
+      (let [capabilities (await (test-capabilities dbs {}))]
         (await (sut/add! capabilities "Guten Morgen" "доброе утро" :word))
         (let [{:keys [created?]} (await (sut/add! capabilities "guten Morgen" "доброго утра" :phrase))
               entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
@@ -152,13 +147,10 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [example-requests (atom [])
-            result (await (sut/add! (await (test-capabilities dbs example-requests {}))
-                                    "auf jeden Fall"
-                                    "   "
-                                    :phrase))]
+      (let [capabilities (await (test-capabilities dbs {}))
+            result       (await (sut/add! capabilities "auf jeden Fall" "   " :phrase))]
         (is (= {:error :empty-translations} result))
-        (is (empty? @example-requests)))))))
+        (is (empty? (missing capabilities))))))))
 
 
 (deftest add-collapses-line-breaks-in-a-phrase
@@ -166,11 +158,10 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [example-requests (atom [])]
-        (await (sut/add! (await (test-capabilities dbs example-requests {}))
-                         "auf jeden Fall"
-                         "во всяком\n   случае"
-                         :phrase))
-        (let [entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
-          (is (= [{:lang "ru" :value "во всяком случае"}]
-                 (:translation (first entries))))))))))
+      (await (sut/add! (await (test-capabilities dbs {}))
+                       "auf jeden Fall"
+                       "во всяком\n   случае"
+                       :phrase))
+      (let [entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
+        (is (= [{:lang "ru" :value "во всяком случае"}]
+               (:translation (first entries)))))))))

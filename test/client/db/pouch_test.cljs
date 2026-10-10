@@ -2,6 +2,7 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [browser :as browser]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is use-fixtures]]
@@ -56,16 +57,17 @@
        [local]
        (let [remote (db/use remote-name)]
          (await (db/insert local {:_id "vocab:hund" :type "vocab" :value "Hund"}))
+         (await (db/insert local {:_id "_design/local-only" :views {}}))
          (await (db/insert remote {:_id "_design/remote-only" :views {}}))
          (await (db/insert remote {:_id "vocab:katze" :type "vocab" :value "Katze"}))
          (await (sync-pass! local remote))
          (let [local-ids  (await (ids local))
                remote-ids (await (ids remote))]
-           (is (contains? local-ids "_design/by-type-run-at-created-at"))
+           (is (contains? local-ids "_design/local-only"))
            (is (contains? local-ids "vocab:katze"))
            (is (not (contains? local-ids "_design/remote-only")))
            (is (contains? remote-ids "vocab:hund"))
-           (is (empty? (filter #(re-find #"^_design/" %) (disj remote-ids "_design/remote-only"))))))))))
+           (is (not (contains? remote-ids "_design/local-only")))))))))
 
 
 (deftest a-revision-the-pull-wrote-is-recognised-on-the-feed-and-a-local-write-is-not
@@ -175,20 +177,20 @@
       (^:async fn
        [local]
        (await (db/bulk-docs local (vec (for [i (range 1005)] {:_id (str "a:" (+ 10000 i)) :type "x"}))))
-       (let [dbs       {:user/db local}
-             next-task sut/next-task
+       (let [dbs      {:user/db local}
+             yield    browser/yield
              ;; The 1000th id, the last of the first page.
-             boundary  "a:10999"]
-         (set! sut/next-task
+             boundary "a:10999"]
+         (set! browser/yield
                (fn ^:async between []
                  (await (db/remove local (await (db/get local boundary))))
-                 (await (next-task))))
+                 (await (yield))))
          (try
            (let [ids (set (map :_id (await (sut/read-docs dbs :user/db {:end "a:\ufff0" :start "a:"}))))]
              (is (contains? ids "a:11000") "the first document after the boundary")
              (is (= 1004 (count (disj ids boundary)))))
            (finally
-            (set! sut/next-task next-task))))))))
+            (set! browser/yield yield))))))))
 
 
 (deftest a-refused-write-is-a-conflict-and-nothing-else-is

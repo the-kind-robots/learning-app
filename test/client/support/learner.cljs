@@ -5,6 +5,7 @@
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
    [application]
+   [domain.examples :as examples]
    [nexus.registry :as nxr]
    [ports.learner :as learner]))
 
@@ -51,3 +52,16 @@
    learner (`adapters.learner.loader/catch-up!`)."
   [_dbs store]
   (await (loader/catch-up! store)))
+
+
+(defn missing-in
+  "The pairs `memory` is missing an example for, by the rule the example
+   fetcher uses (`domain.examples/missing-pairs`)."
+  [memory]
+  (let [collections (memory/collections memory)]
+    (into []
+          (mapcat (fn [{:keys [id] :as entry}]
+                    (examples/missing-pairs entry
+                                            (filter #(some #{id} (:word-ids %)) collections)
+                                            (memory/examples-of memory [id]))))
+          (memory/words memory))))

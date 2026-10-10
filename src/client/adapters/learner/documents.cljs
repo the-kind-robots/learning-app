@@ -97,23 +97,6 @@
       collection-id (assoc :collection-id collection-id))))
 
 
-(defn example-id-prefix
-  "What the ids begin with of every example of the entry `word-id` that a
-   read in the collection `collection-id` sees: in a collection, the
-   examples made in it; outside every collection, all of the entry's
-   examples. It is the lookup rule of `use-cases.examples/visible-in`,
-   asked of ids. A word id carries no colon after its `vocab:` prefix, so
-   the prefix outside every collection takes no other entry's examples. In
-   a collection, the prefix ends with the colon after the whole collection
-   id, so it takes no other collection's examples, though a collection id
-   carries colons of its own; no collection id is another one followed by
-   a colon."
-  [word-id collection-id]
-  (if collection-id
-    (str "example:" (pair-key word-id collection-id) ":")
-    (str "example:" word-id ":")))
-
-
 (def schemas
   "Every document type of the learner's data."
   [vocab-schema review-schema collection-schema example-schema])

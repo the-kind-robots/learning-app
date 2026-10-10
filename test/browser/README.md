@@ -42,7 +42,7 @@ await page.evaluate(async () => {
 ```
 - Examples: `adapters.learner.documents.example_doc(wordId, word, collectionId, toClj({value, translation, structure}))`.
 - Doc has own `type`, lives in owning db: `user-db` (vocab, review, collection,
-  example); `device-db` (lesson, task).
+  example); `device-db` (lesson).
 - Keys go through `clj->couch` (snake_case): `'word-id'` stored as `word_id`.
 
 ## Projects

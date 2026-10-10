@@ -25,10 +25,15 @@
 
 
 (defn- clamped
-  "`raw-name` trimmed and cut to `max-name-length`."
+  "`raw-name` trimmed and cut to `max-name-length`. A cut that would fall
+   inside a character written as two UTF-16 units, such as an emoji, falls
+   before it instead: half a character cannot be sent in a URL."
   [raw-name]
-  (let [trimmed (str/trim (or raw-name ""))]
-    (subs trimmed 0 (min (count trimmed) max-name-length))))
+  (let [trimmed (str/trim (or raw-name ""))
+        end     (min (count trimmed) max-name-length)
+        splits? (and (< 0 end (count trimmed))
+                     (<= 0xD800 (.charCodeAt trimmed (dec end)) 0xDBFF))]
+    (subs trimmed 0 (if splits? (dec end) end))))
 
 
 (defn- ^:async name-taken?

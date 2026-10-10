@@ -2,14 +2,16 @@
 
 ## Purpose
 Define how the client runtime owns its long-lived dependencies: their lifecycle and start order, the small capabilities they expose to features, and how migrations and background tasks stay behind those boundaries.
+
 ## Requirements
+
 ### Requirement: Runtime system owns client dependencies
 The client runtime MUST keep long-lived dependencies and implementation resources outside Nexus app state.
 
 #### Scenario: Runtime startup owns component values
 - **WHEN** the client app boots
 - **THEN** runtime startup creates a result containing started component `:values`, cleanup `:stops`, and the compiled startup `:plan`
-- **AND** long-lived resources such as workers, DB handles, task-runner state, listeners, and router startup are owned by runtime components
+- **AND** long-lived resources such as workers, DB handles, the example fetcher's state, listeners, and router startup are owned by runtime components
 - **AND** Nexus app state contains only reactive UI/domain facts
 
 #### Scenario: Nexus receives app context
@@ -59,8 +61,7 @@ The client runtime MUST start dependencies in declared order and stop them in re
 
 #### Scenario: Router starts after runtime dependencies
 - **WHEN** the frontend router starts
-- **THEN** app store, migrated PouchDB handle, the task runner component, dictionary port handle, app capabilities, Nexus dispatch, and rendering are already initialized
-- **AND** the task loop itself begins only once memory is loaded (`specs/task-runner/spec.md`)
+- **THEN** app store, migrated PouchDB handle, dictionary port handle, app capabilities, Nexus dispatch, and rendering are already initialized
 - **AND** route controller effects can read capabilities safely during the first page transition
 
 #### Scenario: Startup failure cleans up partial system
@@ -108,15 +109,14 @@ The capabilities map MUST expose small app capabilities instead of implementatio
 - **THEN** they receive data values only
 - **AND** they do not depend on runtime capabilities, ports, workers, DB handles, or browser APIs
 
-### Requirement: Tasks and migrations fit runtime boundaries
-Migrations and background tasks MUST be coordinated by runtime/adapters without leaking scheduling or schema details into feature logic.
+### Requirement: Background work and migrations fit runtime boundaries
+Migrations and background work MUST be coordinated by runtime/adapters without leaking scheduling or schema details into feature logic.
 
 #### Scenario: Migrations run before storage ports are ready
 - **WHEN** runtime starts PouchDB-backed storage
 - **THEN** required migrations complete before the PouchDB handle and dependent public storage capability are exposed as ready
 
-#### Scenario: Feature logic requests background work through a capability
-- **WHEN** feature logic needs background example generation
-- **THEN** it requests that work through the examples capability
-- **AND** it does not call task scheduler internals directly
-
+#### Scenario: Background example fetching goes through capabilities
+- **WHEN** the client fetches examples in the background
+- **THEN** it reaches the network through the examples capability and saves through the learner capability
+- **AND** it keeps its schedule in memory, with no stored task

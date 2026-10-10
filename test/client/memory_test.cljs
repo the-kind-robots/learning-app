@@ -87,6 +87,59 @@
              (state (cons word (reverse reviews))))))))
 
 
+(defn- collection-doc
+  [id rev word-ids]
+  {:_id id :_rev rev :type "collection" :name id :word-ids word-ids :created-at "2026-01-01"})
+
+
+(defn- names-of
+  [memory word-id]
+  (set (map :id (sut/collections-of memory word-id))))
+
+
+(deftest the-collections-that-name-a-word-follow-the-collections
+  (let [tiere  (collection-doc "coll-tiere" "1-a" ["vocab:der hund" "vocab:die katze"])
+        haus   (collection-doc "coll-haus" "1-a" ["vocab:der hund"])
+        both   (sut/with-docs sut/empty-memory [tiere haus])
+        joined (sut/with-docs both [(collection-doc "coll-haus" "2-b" ["vocab:der hund" "vocab:der igel"])])
+        left   (sut/with-docs both [(collection-doc "coll-tiere" "2-b" ["vocab:die katze"])])
+        gone   (sut/with-docs both [{:_deleted true :_id "coll-tiere" :_rev "2-b"}])]
+    (is (= #{"coll-tiere" "coll-haus"} (names-of both "vocab:der hund")))
+    (is (= {:id "coll-tiere" :name "coll-tiere" :word-ids ["vocab:der hund" "vocab:die katze"] :created-at "2026-01-01"}
+           (first (filter #(= "coll-tiere" (:id %)) (sut/collections-of both "vocab:die katze"))))
+        "the whole collection")
+    (is (= #{"coll-haus"} (names-of joined "vocab:der igel")) "a word joins")
+    (is (= #{"coll-haus"} (names-of left "vocab:der hund")) "a word leaves")
+    (is (= #{"coll-tiere"} (names-of left "vocab:die katze")))
+    (is (= #{"coll-haus"} (names-of gone "vocab:der hund")) "a collection is deleted")
+    (is (= [] (sut/collections-of gone "vocab:die katze")))
+    (is (not (contains? (:collections-by-word gone) "vocab:die katze")) "no empty entry stays")
+    (is (= (:collections-by-word both)
+           (:collections-by-word (sut/with-docs sut/empty-memory (map #(assoc % :_rev "9-z") [tiere haus]))))
+        "a rebuild from the same collections gives the same index")
+    (is (= (:collections-by-word both)
+           (:collections-by-word (sut/with-entries sut/empty-memory (sut/entries both))))
+        "entries restore the index")))
+
+
+(deftest a-revision-changing-one-word-leaves-the-other-words-as-they-were
+  (let [ids     ["vocab:a" "vocab:b" "vocab:c"]
+        before  (sut/with-docs sut/empty-memory [(collection-doc "coll-x" "1-a" ids)
+                                                 (collection-doc "coll-y" "1-a" ["vocab:a"])])
+        after   (sut/with-docs before [(collection-doc "coll-x" "2-b" ["vocab:a" "vocab:b" "vocab:d"])])]
+    (is (identical? (get-in before [:collections-by-word "vocab:b"])
+                    (get-in after [:collections-by-word "vocab:b"]))
+        "a word the revision keeps")
+    (is (= #{"coll-x" "coll-y"} (names-of after "vocab:a")))
+    (is (= [] (sut/collections-of after "vocab:c")) "the word that left")
+    (is (= #{"coll-x"} (names-of after "vocab:d")) "the word that joined")
+    (is (= (:collections-by-word after)
+           (:collections-by-word (sut/with-docs sut/empty-memory
+                                                [(collection-doc "coll-x" "2-b" ["vocab:a" "vocab:b" "vocab:d"])
+                                                 (collection-doc "coll-y" "1-a" ["vocab:a"])])))
+        "the same index as a build from the new versions")))
+
+
 (deftest a-document-memory-cannot-read-is-left-out
   (let [memory (sut/with-docs sut/empty-memory
                               [{:_id "vocab:odd" :_rev "1-a" :type "vocab" :value 42 :translation 7}
