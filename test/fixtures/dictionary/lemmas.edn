@@ -71,4 +71,13 @@
   :pos          "noun"
   :rank         840
   :forms        ["Hundes" "Hunde" "Hunden"]
-  :translations [{:lang "ru" :value "пёс"}]}]
+  :translations [{:lang "ru" :value "пёс"}]}
+
+ ;; The lemma of the report in #535: an umlaut and an article, both of which
+ ;; the kept list has to see through, and no other lemma under "rück", so a
+ ;; keystroke past it leaves nothing to tap.
+ {:value        "der Rücken"
+  :pos          "noun"
+  :rank         820
+  :forms        ["Rückens"]
+  :translations [{:lang "ru" :value "спина"}]}]

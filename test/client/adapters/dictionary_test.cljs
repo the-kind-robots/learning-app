@@ -44,20 +44,26 @@
       (is (= [[] []] (mapv :translations result))))))
 
 
-(deftest a-completion-carries-lemma-pos-and-exactness
-  (async-testing "the rest of the row survives the rewrite"
+(deftest a-completion-carries-lemma-pos-exactness-and-matched-forms
+  (async-testing "the rest of the row survives the rewrite; matched forms read as elements, a null cell as none"
     (let [rows   [{"lemma"        "Haus"
                    "pos"          "noun"
                    "has_exact"    1
-                   "translations" "[\"дом\"]"}
+                   "translations" "[\"дом\"]"
+                   "matched_forms" "[\"haus\",\"hause\",\"hauses\"]"}
                   {"lemma"        "Hausaufgabe"
                    "pos"          "noun"
                    "has_exact"    0
                    "translations" "[\"домашнее задание\"]"}]
           result (await (sut/completions (stub-db rows (atom [])) "haus"))]
-      (is (= [{:exact? true :lemma "Haus" :pos "noun" :translations ["дом"]}
+      (is (= [{:exact?       true
+               :lemma        "Haus"
+               :matched-forms ["haus" "hause" "hauses"]
+               :pos          "noun"
+               :translations ["дом"]}
               {:exact?       false
                :lemma        "Hausaufgabe"
+               :matched-forms []
                :pos          "noun"
                :translations ["домашнее задание"]}]
              (vec result))))))

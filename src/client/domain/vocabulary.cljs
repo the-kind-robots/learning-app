@@ -69,6 +69,20 @@
   [(str/replace (without-prefix id) article "") id])
 
 
+(defn completes?
+  "Whether a completion still reads as one of `typed`: the typed text is a
+   prefix of its lemma, with or without the article, or of one of the forms
+   the dictionary matched for it — `häus` of `haeuser`, so a reader who
+   types the inflected form keeps `das Haus` on screen (#535). Everything is
+   compared normalised as the dictionary query normalises; the matched forms
+   arrive normalised."
+  [typed {:keys [lemma matched-forms]}]
+  (let [typed (normalize-value typed)
+        lemma (normalize-value lemma)]
+    (boolean (some #(str/starts-with? % typed)
+                   (into [lemma (str/replace lemma article "")] matched-forms)))))
+
+
 (defn search-text
   "What the words filter matches a query against, normalised once: the value
    and every translation, one per line. A normalised query holds no line

@@ -25,12 +25,23 @@
    only as long as nobody's rebuild introduces the character, and nothing
    enforces that; an array has no separator to reserve. Measured against the
    shipped dictionary in #362: the aggregate costs +0.025 ms per call, which is
-   0.03% of the one-letter prefix, and the #179 shape above is untouched."
+   0.03% of the one-letter prefix, and the #179 shape above is untouched.
+
+   Each row also carries the forms of its lemma that fell in the range —
+   `ging`, `ginge` for gehen on `ging` — as a JSON array, so the kept list can
+   tell on the next keystroke whether the row still completes the field
+   (#535). They are gathered in the one range scan: GROUP BY lemma_id in
+   place of DISTINCT, with the same lemma set and the same ten winners. A
+   per-row subquery over the range would scan it ten times more; measured on
+   the shipped dictionary (JDBC, median of 100 warm runs): s 34 ms -> 29-30
+   with the group and 70 with the subquery, a 25 -> 20 and 52-57, hau 1.1 ->
+   1.4-1.5 and 2.3."
   "WITH top AS (
-     SELECT l.id, l.value, l.pos, l.rank
-     FROM (SELECT DISTINCT lemma_id
+     SELECT l.id, l.value, l.pos, l.rank, m.forms
+     FROM (SELECT lemma_id, json_group_array(normalized_form) AS forms
            FROM surface_forms
-           WHERE normalized_form >= ? AND normalized_form <= ?) m
+           WHERE normalized_form >= ? AND normalized_form <= ?
+           GROUP BY lemma_id) m
      JOIN lemmas l ON l.id = m.lemma_id
      WHERE l.pos NOT IN ('conj', 'particle', 'pron', 'prep')
      ORDER BY l.rank DESC, l.value ASC
@@ -45,7 +56,8 @@
              WHERE sf.normalized_form = ? AND sf.lemma_id = top.id) AS has_exact,
      (SELECT json_group_array(DISTINCT t.value ORDER BY t.rank ASC)
       FROM translations t
-      WHERE t.lemma_id = top.id) AS translations
+      WHERE t.lemma_id = top.id) AS translations,
+     top.forms AS matched_forms
    FROM top
    ORDER BY top.rank DESC, lemma ASC")
 
@@ -62,15 +74,18 @@
    built by completions-sql, so they are read as elements and passed on — a
    translation carrying a comma stays one translation, and a lemma with none
    gets none rather than a blank."
-  [{:keys [has_exact lemma pos translations]}]
+  [{:keys [has_exact lemma matched_forms pos translations]}]
   {:exact?       (pos? has_exact)
    :lemma        lemma
+   :matched-forms (js->clj (js/JSON.parse (or matched_forms "[]")))
    :pos          pos
    :translations (js->clj (js/JSON.parse (or translations "[]")))})
 
 
 (defn ^:async completions
-  "Returns a vec of completion maps {:lemma :translations :exact? :pos} from SQLite.
+  "Returns a vec of completion maps {:lemma :translations :exact? :pos
+   :matched-forms} from SQLite; `:matched-forms` are the lemma's normalised
+   forms that start with the prefix.
 
    No readiness gate in front of the query: a tab without the database answers
    with no rows on its own, so a gate here would only duplicate the decision
