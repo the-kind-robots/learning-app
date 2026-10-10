@@ -6,10 +6,10 @@
      {:type \"...\"     ; stored as the document's :type
       :db   :user/db}  ; the database the type lives in
 
-   `init!` opens the databases and builds no index. The code that queries
-   an index builds it with `ensure-index!`."
-  (:refer-clojure :exclude [get find remove])
+   `init!` opens the databases and builds no index; nothing queries one."
+  (:refer-clojure :exclude [get])
   (:require
+   [browser :as browser]
    [clojure.string :as str]
    [db :as db]
    [db-migrations :as db-migrations]
@@ -52,13 +52,6 @@
   "How many documents one transaction reads. Each page is its own read, so a
    write that waits for the database can run between two of them."
   1000)
-
-
-(defn ^:async next-task
-  "Resolves in a task of its own, after whatever is queued now, such as a
-   paint or a keystroke."
-  []
-  (await (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
 
 
 (def ^:private retry-ms
@@ -113,19 +106,18 @@
                          rows)]
       (if (< (.-length rows) page-size)
         docs
-        (do (await (next-task))
+        (do (await (browser/yield))
             (recur docs (.-id ^js (aget rows (dec (.-length rows))))))))))
 
 
 (defn ^:async read-page
   "One page of the documents of `db-key` with an id after `:after`, or from
-   the first when it is nil, up to `:end`: `{:docs :next}`. The page reads
+   the first when it is nil: `{:docs :next}`. The page reads
    `:limit` ids. `:docs` are the documents among them, only those of the
    types in `:types` when it is given. `:next` is the id to read the next
    page after, or nil when this page was the last."
-  [dbs db-key {:keys [after end limit types]}]
+  [dbs db-key {:keys [after limit types]}]
   (let [options  (cond-> #js {:include_docs true :limit limit}
-                   end   (doto (aset "endkey" end))
                    after (doto (aset "startkey" (str after "\u0000"))))
         ^js page (await (.allDocs ^js (db-key dbs) options))
         rows     (.-rows page)]
@@ -304,17 +296,6 @@
   (or (some-> direction .-docs_written) 0))
 
 
-(defn- written-ids-by-type
-  "The ids one batch wrote, grouped by the `type` their documents carry. The
-   type is read and not interpreted: which of them is worth anything is known
-   by whoever declared the schema, and this namespace declares none."
-  [^js change]
-  (reduce (fn [by-type ^js doc]
-            (update by-type (.-type doc) (fnil conj #{}) (.-_id doc)))
-          {}
-          (some-> change .-docs)))
-
-
 (defn- written-revisions
   "The `[id rev]` pairs one batch wrote."
   [^js change]
@@ -333,25 +314,17 @@
 (defn sync-once!
   "Runs one bidirectional replication pass of db-key against the account's copy
    on the server. Resolves with what the pass did — `{:pulled n :pushed n
-   :pulled-ids {type #{id}} :pulled-revs #{[id rev]}}`, documents written on
-   each side, the ids the pull wrote here, grouped by the type their documents
-   carry, and the exact revisions it wrote, which is how the change feed tells
-   the pull's own writes from local ones — and never
-   rejects: a failed pass resolves nil, so a caller can fire it on a trigger
-   without guarding every one.
+   :pulled-revs #{[id rev]}}`, documents written on each side and the exact
+   revisions the pull wrote here, which is how the change feed tells the
+   pull's own writes from local ones — and never rejects: a failed pass
+   resolves nil, so a caller can fire it on a trigger without guarding every
+   one.
 
-   Grouped rather than listed, so a reader takes the types it owns and nothing
-   is read for the rest: a keyed read over ids that name nothing it knows costs
-   a lookup per id and answers none of them.
-
-   The ids come from the pass's own `change` events, where PouchDB hands over
-   the batch it has just written; the `complete` result carries the counters
-   alone. Reading them back off the changes feed afterwards would mean keeping
-   a sequence number across passes and would answer with this device's own
-   writes as well."
+   The revisions come from the pass's own `change` events, where PouchDB
+   hands over the batch it has just written; the `complete` result carries
+   the counters alone."
   [dbs db-key account-id]
-  (let [pulled-ids  (atom {})
-        pulled-revs (atom #{})
+  (let [pulled-revs (atom #{})
         remote      (str (.. js/globalThis -location -origin)
                          "/db/"
                          ((db->remote-name db-key) account-id))]
@@ -361,13 +334,10 @@
          (.on "change"
               (fn [^js info]
                 (when (= "pull" (.-direction info))
-                  (swap! pulled-ids
-                    #(merge-with into % (written-ids-by-type (.-change info))))
                   (swap! pulled-revs into (written-revisions (.-change info))))))
          (.on "complete"
               (fn [^js info]
                 (resolve {:pulled      (docs-written (some-> info .-pull))
-                          :pulled-ids  @pulled-ids
                           :pulled-revs @pulled-revs
                           :pushed      (docs-written (some-> info .-push))})))
          (.on "error"
@@ -388,30 +358,6 @@
   (let [doc (assoc doc :type (:type schema))
         {:keys [id rev]} (await (db/insert (database dbs schema) doc))]
     (assoc doc :_id id :_rev rev)))
-
-
-(defn ^:async insert-if-absent
-  "Writes `doc` as one of `schema`'s type under its `:_id`, unless the
-   database holds a document under that id. Resolves with the document as
-   written, or with nil when one was there. A document deleted earlier is
-   not there."
-  [dbs schema doc]
-  (let [doc (assoc doc :type (:type schema))]
-    (when-let [{:keys [id rev]} (await (db/insert-if-absent (database dbs schema) doc))]
-      (assoc doc :_id id :_rev rev))))
-
-
-(defn ^:async id-with-prefix?
-  "Whether the database of `schema` holds a document whose id begins with
-   `prefix`. One read of ids, no document; a deleted document is not
-   held."
-  ;; Only a stored example fetch asks this: it re-checks, when it runs, a
-  ;; decision made when it was queued. It goes when example fetching runs
-  ;; from memory instead of a stored queue (#523, client part).
-  [dbs schema prefix]
-  (let [^js answer (await (.allDocs ^js (database dbs schema)
-                                    #js {:endkey (str prefix "\uffff") :limit 1 :startkey prefix}))]
-    (pos? (.-length (.-rows answer)))))
 
 
 (defn ^:async insert-all-if-absent
@@ -478,42 +424,9 @@
                                        {:_deleted true :_id (.-id row) :_rev (.. row -value -rev)})))
                              (.-rows answer))]
         (when more
-          (await (next-task)))
+          (await (browser/yield)))
         (recur docs more))
       docs)))
-
-
-(defn remove
-  [dbs schema doc]
-  (db/remove (database dbs schema) doc))
-
-
-(defn- typed
-  [schema query]
-  (assoc-in query [:selector :type] (:type schema)))
-
-
-(defn find
-  "Documents of `schema`'s type matching the query's selector; the type is
-   added to the selector here."
-  [dbs schema query]
-  (db/find (database dbs schema) (typed schema query)))
-
-
-(defn find-all
-  "Like `find`, without a page limit."
-  [dbs schema query]
-  (db/find-all (database dbs schema) (typed schema query)))
-
-
-(defn ensure-index!
-  "Creates `index`, `{:name :fields}`, in the database `schema`'s documents
-   live in, or brings it up to date with the documents written since it was
-   last used. That reads every such document, so the caller decides when the
-   cost is paid. The promise rejects when the index cannot be built, because
-   a query that names a missing index fails."
-  [dbs schema {:keys [fields] index-name :name}]
-  (db/create-index (database dbs schema) fields {:name index-name :ddoc index-name}))
 
 
 (defn ^:async init!

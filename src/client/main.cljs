@@ -1,9 +1,9 @@
 (ns main
   (:require
-   [adapters.learner.documents :as documents]
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
    [application]
+   [db-migrations]
    [db.pouch :as pouch]
    [db.sqlite :as sqlite]
    [install-guide.core]
@@ -24,9 +24,10 @@
    [ports.backup :as backup]
    [ports.clock :as clock]
    [ports.dictionary :as dictionary]
+   [ports.examples :as examples]
    [ports.learner :as learner]
    [ports.navigation :as navigation]
-   [ports.task-queue :as task-queue]
+   [ports.page :as page]
    [reitit.frontend :as rf]
    [reitit.frontend.controllers :as rfc]
    [reitit.frontend.easy :as rfe]
@@ -76,6 +77,11 @@
     :db/pouch              {:after [:identity/incoming]
                             :start (fn [_] (pouch/init!))}
 
+    ;; The once-per-device migrations that need no waiting run once the
+    ;; databases are open.
+    :db/background-migrations {:after [:db/pouch]
+                               :start (fn [_] (db-migrations/run-in-background!))}
+
     ;; The learner's data is read into memory as soon as the databases are
     ;; open: the read needs no dispatch, and the splash waits for it;
     ;; :learner/memory hands it over. The value holds, under :checked, a
@@ -86,31 +92,20 @@
                             :start    (fn [{:keys [db store]}]
                                         {:checked (loader/start-reading! db store)})}
 
-    ;; Starting it loads the stored identity and, when the device has an
-    ;; account, drives replication: it hands back the pull a route entry or a
-    ;; poke asks for, and `:sync/on-pass`, where a listener such as
-    ;; :examples/backfill registers to hear what each completed pass brought.
-    ;; Its passes wait for the snapshot check (ADR-0018); the components after
-    ;; it do not.
+    ;; Starting it loads the stored identity, writes the session cookie and,
+    ;; when the device has an account, drives replication: it hands back the
+    ;; pull a route entry or a poke asks for, and `:sync/first-pass`, which
+    ;; resolves once the first pass of this start has completed. Its passes
+    ;; wait for the snapshot check (ADR-0018); the components after it do
+    ;; not.
     :sync/identity         {:requires {:db   :db/pouch
+                                       :page :port/page
                                        :read :learner/read}
-                            :start    (fn [{:keys [db read]}]
-                                        (sync/start! {:db db :passes-wait-for (:checked read)}))
+                            :start    (fn [{:keys [db page read]}]
+                                        (sync/start! {:db db :page page :passes-wait-for (:checked read)}))
                             :stop     sync/stop!}
 
     :port/clock            {:start clock/start!}
-
-    ;; After :sync/identity, not beside it: that component writes the auth
-    ;; cookie, and the first task off the queue may be an example fetch, which
-    ;; the backend answers 401 without it. Same layer meant that race was a
-    ;; coin toss on every boot. The runner itself starts once memory is
-    ;; loaded, so that the queue's queries do not compete with the load.
-    :worker/task-runner    {:after    [:sync/identity]
-                            :requires {:clock   :port/clock
-                                       :db      :db/pouch
-                                       :learner :port/learner}
-                            :start    task-queue/start!
-                            :stop     task-queue/stop!}
 
     :port/dictionary       {:requires {:db :db/sqlite}
                             :start    dictionary/start!}
@@ -126,41 +121,33 @@
     :port/backup           {:requires {:db :db/pouch}
                             :start    backup/start!}
 
+    :port/examples         {:start examples/start!}
+
     :port/navigation       {:start navigation/start!}
+
+    :port/page             {:start page/start!}
 
     :app/capabilities      {:requires {:capabilities/sync :sync/identity
                                        :backup            :port/backup
                                        :clock             :port/clock
                                        :dictionary        :port/dictionary
+                                       :examples          :port/examples
                                        :learner           :port/learner
-                                       :navigation        :port/navigation}
+                                       :navigation        :port/navigation
+                                       :page              :port/page}
                             :start    identity}
 
-    ;; Starting it asks for every example this device is still missing, once
-    ;; the backfill may count, and it subscribes for what each later pass
-    ;; brings. The engine publishes ids grouped by document type and
-    ;; interprets none of them (#432); the types the backfill has anything to
-    ;; say about are named here, by the schemas that own them: the entries
-    ;; and collections it counts over, and the examples that answer queued
-    ;; fetches.
-    :examples/backfill     {:requires {:capabilities :app/capabilities}
-                            :start
-                            (fn [{:keys [capabilities]}]
-                              (let [listen   (get-in capabilities
-                                                     [:capabilities/sync :sync/on-pass])
-                                    backfill (use-cases.examples/start! capabilities)
-                                    ours     (fn [pulled-ids]
-                                               (into (get pulled-ids
-                                                          (:type documents/vocab-schema)
-                                                          #{})
-                                                     (get pulled-ids
-                                                          (:type documents/collection-schema)
-                                                          #{})))]
-                                (listen (fn [{:keys [pulled-ids]}]
-                                          (backfill {:pulled-examples (get pulled-ids
-                                                                           (:type documents/example-schema)
-                                                                           #{})
-                                                     :pulled-ids      (ours pulled-ids)})))))}
+    ;; Fetches the examples memory is missing (`use-cases.examples`). Through
+    ;; :app/capabilities it starts after :sync/identity, which writes the
+    ;; session cookie: a request without the cookie is answered 401. A
+    ;; device without an account sends nothing; one with an account sends
+    ;; nothing before memory is loaded, device-db is tidied and the first
+    ;; pass has completed. Its value is the function that stops it.
+    :examples/fetcher      {:requires {:capabilities :app/capabilities}
+                            :start    (fn [{:keys [capabilities]}]
+                                        (use-cases.examples/start! capabilities))
+                            :stop     (fn [stop]
+                                        (stop))}
 
     :app/render            {:requires {:capabilities   :app/capabilities
                                        :service-worker :worker/service-worker
@@ -217,8 +204,7 @@
                                           (dispatch [[:effect/load-account]])
                                           ;; A reconnect after offline flushes
                                           ;; what was written while offline.
-                                          (js/window.addEventListener
-                                           "online"
+                                          ((:page/on-online (:page capabilities))
                                            #(dispatch [[:effect/sync-pull :poke]]))
                                           ;; Push channel (ADR-0009): a poke pulls
                                           ;; through the normal path. A waiting
@@ -227,6 +213,7 @@
                                           ;; dialog's nonce.
                                           (when (get-in capabilities [:capabilities/sync :sync/account-id])
                                             (sync/connect-push!
+                                             (:page capabilities)
                                              #(dispatch [[:effect/sync-pull :poke]])))))}
 
     :app/router            {:requires {:render :app/render}

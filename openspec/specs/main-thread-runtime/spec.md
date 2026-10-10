@@ -15,7 +15,7 @@ The system SHALL initialise the application from a main-thread ClojureScript ent
 - **AND** it creates the app-state store outside the DOM
 - **AND** it runs PouchDB migrations before storage-backed ports are exposed
 - **AND** it starts the dictionary worker proxy and stable dictionary port handle
-- **AND** it starts the task runner component through the runtime lifecycle, whose loop begins once memory is loaded (`specs/task-runner/spec.md`)
+- **AND** it starts the example fetcher component through the runtime lifecycle, after the component that writes the session cookie; the fetcher sends nothing before it is ready (`specs/example-backfill/spec.md`)
 - **AND** it installs Nexus dispatch, Replicant rendering, document listeners, PWA init, and passive Service Worker registration
 - **AND** it starts the frontend router last
 

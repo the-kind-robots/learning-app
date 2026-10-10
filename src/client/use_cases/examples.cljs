@@ -1,281 +1,287 @@
 (ns use-cases.examples
-  "Filling in the examples the account has none for.
-
-   An example is generated on the device that added the word, and it
-   replicates with the word. So a word that arrived by replication usually
-   brings its example, and this device asks only for the pairs memory still
-   has no example for once it has taken what arrived. Such a pair is one whose
-   example was never fetched anywhere, or a word themed on a device that has
-   not fetched for the theme yet. Adding a word is the only other trigger.
-
-   No backfill counts, and no fetch runs, before the examples an earlier
-   build kept in device-db have moved to user-db, so that a moved example
-   answers its pair (`backfill-ready`)."
+  "Fetches the examples memory is missing, one request at a time. The rules
+   are in `specs/example-backfill/spec.md`."
   (:require
+   [abort]
+   [browser :as browser]
+   [domain.examples :as examples]
    [lambdaisland.glogi :as log]
    [utils :as utils]))
 
 
-(defn- memory
-  [{:keys [learner]}]
-  ((:learner/memory learner)))
+(def ^:private limits
+  {:backoff-ms         5000
+   :chunk-size         200
+   :first-pass-wait-ms 60000
+   :max-backoff-ms     300000
+   :max-pause-ms       3600000
+   :spacing-ms         2000
+   ;; Longer than nginx's 100 s, so the proxy ends a long generation.
+   :timeout-ms         110000})
 
 
-(defn- examples-request!
-  [{:keys [learner]} requests]
-  ((:learner/request-examples! learner) requests))
+(def ^:private initial-state
+  "A fetcher is `:status/running` or `:status/halted` (a refused session; only
+   a page reload runs it again). `stop` closes it by aborting its signal, not
+   through the status."
+  {:controller      nil
+   :failed-subjects #{}
+   :outages         0
+   :status          :status/running})
 
 
-(defn visible-in
-  "Which of `examples` a read scoped to `collection-id` sees. An example
-   generated in a theme is visible only there, so a named collection sees the
-   examples carrying its own id; a read outside every theme — a nil collection
-   — sees all of them.
-
-   About data, not about a screen: the scope is what was asked for, and what a
-   view does with the answer is its own business. The one statement of the
-   rule, read by a lesson to find the example it has for an entry and by the
-   backfill to find the entries it has none for; stated twice, the two would
-   disagree about what is already there.
-
-   Pure, so the rule is checkable without a database."
-  [examples collection-id]
-  (filterv #(or (nil? collection-id) (= collection-id (:collection-id %))) examples))
+(defn- subject
+  "What a request for `pair` asks the backend about."
+  [{:keys [collection-name word]}]
+  {:collection-name collection-name
+   :translations (into []
+                       (comp (filter #(= "ru" (:lang %)))
+                             (map :value)
+                             (filter utils/non-blank))
+                       (:translation word))
+   :word (:value word)})
 
 
-(defn ^:async request-example-if-missing!
-  "Queues a fetch of an example for `word` in `collection` when memory has
-   none that a read in that collection sees.
-
-   It does not wait for the examples an earlier build kept in device-db to
-   move: adding a word must not wait on device-db. The fetch it queues
-   waits for the move, and finds its pair answered when the move brought
-   an example for it (`start!`).
-
-   A fetch already queued is not read for: the queue holds one task per pair
-   by construction, so asking twice writes the same id twice and the second
-   write is refused."
-  [{:keys [learner] :as capabilities} word {collection-id :id collection-name :name}]
-  (try
-    (when (empty? (visible-in ((:learner/examples-of learner) (memory capabilities) [(:id word)]) collection-id))
-      (await (examples-request! capabilities
-                                [{:collection-id collection-id
-                                  :collection-name collection-name
-                                  :word word}])))
-    ;; `:default` rather than `js/Error`: a rejected PouchDB call answers with
-    ;; a plain object, which `js/Error` does not catch.
-    (catch :default err
-      (log/warn :examples/request-failed {:error (ex-message err)}))))
+(defn first-missing
+  "The first pair of `entries` without an example whose subject has not
+   failed, or nil."
+  [{:keys [collections-of examples-of failed-subjects]} entries]
+  (some (fn [entry]
+          (->> (examples/missing-pairs entry (collections-of entry) (examples-of entry))
+               (remove (comp failed-subjects subject))
+               first))
+        entries))
 
 
-(defn missing-examples
-  "Every pair this device has no example for, as
-   `{:collection-id :collection-name :word}`, out of what it was handed: the
-   `:collections` it has, the `:entries` under consideration and the
-   `:examples` it has for them.
-
-   Every entry in a named collection wants an example carrying that
-   collection; an entry in no collection wants one only when it has none at
-   all. Both follow from `visible-in`.
-
-   All of them, uncapped: this writes task documents and generates nothing —
-   the pace belongs to the task queue, which runs three at a time and backs off
-   on the provider's own terms. A pair already queued is named again and the
-   write for it is refused, which is cheaper than reading the queue to find
-   out.
-
-   Pure, so the rule is checkable without a database."
-  [{collections :collections examples :examples entries :entries}]
-  (let [by-word   (group-by :word-id examples)
-        by-id     (utils/index-by :id entries)
-        collected (into #{} (mapcat :word-ids) collections)
-        missing?  (fn [word-id collection-id]
-                    (empty? (visible-in (by-word word-id) collection-id)))
-        themed    (for [{:keys [id name word-ids]} collections
-                        word-id word-ids
-                        :when   (and (by-id word-id) (missing? word-id id))]
-                    {:collection-id   id
-                     :collection-name name
-                     :word            (by-id word-id)})
-        loose     (for [{:keys [id] :as entry} entries
-                        :when (and (not (collected id)) (missing? id nil))]
-                    {:word entry})]
-    (vec (concat themed loose))))
+(defn- backoff-ms
+  [failures]
+  (min (:max-backoff-ms limits) (* (:backoff-ms limits) (js/Math.pow 2 (dec failures)))))
 
 
-(defn entries-of-pass
-  "The entries one replication pass put in question: the ids it wrote, plus
-   every entry named by a collection among them. A collection is recognised by
-   its id matching one this device has — no document type is named here.
-
-   A theme document is rewritten whole whenever an entry joins it anywhere, so
-   a pass that brings one has to ask about the entries it names: that is how a
-   word themed on another device gets that theme's example without waiting for
-   the next start. The cost is the size of the theme, not of the vocabulary.
-
-   Pure, so what a pass brought is read off what the pass carried."
-  [pulled-ids collections]
-  (let [arrived (set pulled-ids)]
-    (into arrived
-          (comp (filter (comp arrived :id))
-                (mapcat :word-ids))
-          collections)))
+(defn pause-ms
+  "How long to wait after the `outages`th outage in a row: the back-off, or
+   the `retry-after-ms` the server asked for if that is longer, at most an
+   hour."
+  [outages retry-after-ms]
+  (min (:max-pause-ms limits) (max (backoff-ms outages) (or retry-after-ms 0))))
 
 
-(def ^:private entries-per-task
-  "How many entries the backfill weighs in one task, so that a vocabulary's
-   worth after a large pass does not hold up a keystroke."
-  500)
+(defn after-response
+  "`state` after `response` to the request about `subject`. A failure of the
+   pair marks its subject; a failure of the server or the network counts as
+   an outage (`pause-ms` says how long it waits); a refused session stops
+   the fetcher. Any answer that is not an outage ends the run of outages."
+  [state subject {:keys [failure]} active?]
+  (if-not failure
+    (assoc state :outages 0)
+    (case failure
+      (:failure/invalid-subject :failure/invalid-response :failure/rejected)
+      (-> state
+          (update :failed-subjects conj subject)
+          (assoc :outages 0))
+
+      :failure/unauthorized
+      (assoc state :status :status/halted)
+
+      (:failure/throttled :failure/unavailable :failure/timeout)
+      (update state :outages inc)
+
+      :failure/network
+      (cond-> state
+        active? (update :outages inc))
+
+      :failure/aborted
+      state)))
 
 
-(defn- ^:async request-missing!
-  "Queues a fetch for every pair without an example among `entries`, given
-   `collections` and the examples memory has, and returns how many it
-   queued. With `delay-ms`, the fetches become due that long from now. It
-   weighs the entries a chunk per task. One write, however many pairs: a
-   first synchronisation is a vocabulary's worth of task documents and has
-   no business being that many inserts."
-  [{:keys [learner] :as capabilities} collections entries & [delay-ms]]
-  (if (empty? entries)
-    0
-    (let [requests (loop [requests []
-                          chunks   (partition-all entries-per-task entries)]
-                     (if-let [[chunk & more] (seq chunks)]
-                       (let [requests (into requests
-                                            (missing-examples
-                                             {:collections collections
-                                              :entries     chunk
-                                              :examples    ((:learner/examples-of learner)
-                                                            (memory capabilities)
-                                                            (map :id chunk))}))]
-                         (await (js/Promise. (fn [resolve] (js/setTimeout resolve 0))))
-                         (recur requests more))
-                       requests))]
-      (await (examples-request! capabilities
-                                (cond->> requests
-                                  delay-ms (mapv #(assoc % :delay-ms delay-ms)))))
-      (when (seq requests)
-        (log/info :examples/missing-requested {:count (count requests)}))
-      (count requests))))
+(defn- running?
+  [{:keys [signal state]}]
+  (and (not (.-aborted ^js signal))
+       (= :status/running (:status @state))))
 
 
-(defn- ^:async contained
-  "Resolves to what `request` resolves to, or to 0 when it fails.
-
-   Contained on purpose: this runs off the back of a replication pass, and a
-   pass reports what it replicated whether or not this got anywhere. Queueing
-   writes task documents locally and makes no request of its own, so an
-   unreachable backend leaves the tasks waiting rather than failing here."
-  [request]
-  (try
-    (await (request))
-    ;; `:default` rather than `js/Error`: a rejected PouchDB call answers with
-    ;; a plain object, which `js/Error` does not catch (`db.pouch` catches the
-    ;; same way for the same reason).
-    (catch :default err
-      (log/warn :examples/missing-request-failed {:error (ex-message err)})
-      0)))
+(defn- unless-closed
+  "`promise`, or the end of the wait when the fetcher is stopped."
+  [{:keys [signal]} promise]
+  (js/Promise.
+   (fn [resolve reject]
+     (let [unlisten (abort/on-abort signal #(resolve nil))]
+       (.then promise
+              (fn [value]
+                (unlisten)
+                (resolve value))
+              (fn [err]
+                (unlisten)
+                (reject err)))))))
 
 
-(defn ^:async request-all-missing!
-  "Asks for every example this device is missing, over every entry memory
-   has. What a start does once, and what leaves nothing over."
-  [{:keys [learner] :as capabilities}]
-  (await (contained
-          (fn []
-            (let [memory (memory capabilities)]
-              (request-missing! capabilities
-                                ((:learner/collections learner) memory)
-                                (vec ((:learner/words learner) memory))))))))
+(defn- ^:async missing-pair
+  "The next pair to ask for in `memory`, or nil. It reads 200 entries per task."
+  [{:keys [learner state]} memory]
+  (let [{:learner/keys [collections-of examples-of words]} learner
+        ctx {:collections-of  #(collections-of memory (:id %))
+             :examples-of     #(examples-of memory [(:id %)])
+             :failed-subjects (:failed-subjects @state)}]
+    (loop [chunks (partition-all (:chunk-size limits) (words memory))]
+      (when-let [[chunk & more] (seq chunks)]
+        (if-let [pair (first-missing ctx chunk)]
+          pair
+          (do (await (browser/yield))
+              (recur more)))))))
 
 
-(defn- pass-fetch-delay-ms
-  "How long a fetch that a pass queued waits before it runs: two of the
-   sync engine's push windows. A word often arrives a pass ahead of its
-   example: the device that added it pushes the word, fetches the example
-   and pushes that a push window later, and the poke brings it here within
-   another. The pass that brings the example deletes the waiting fetch
-   (`start!`). Without a push window, as for a device with no account, the
-   fetch does not wait."
-  [{:capabilities/keys [sync]}]
-  (some-> (:sync/push-interval-ms sync) (* 2)))
+(defn- ^:async ask
+  "The response to the request about `subject`. A request unanswered for
+   110 s counts as a timeout."
+  [{:keys [clock examples state]} subject]
+  (let [{:clock/keys [after]} clock
+        {:examples/keys [fetch]} examples
+        controller (js/AbortController.)
+        timed-out? (volatile! false)
+        cancel     (after
+                    (:timeout-ms limits)
+                    (fn []
+                      (vreset! timed-out? true)
+                      (.abort controller)))]
+    (swap! state assoc :controller controller)
+    (try
+      (let [response (await (fetch subject (.-signal controller)))]
+        (cond-> response
+          (and @timed-out? (= :failure/aborted (:failure response))) (assoc :failure :failure/timeout)))
+      (finally
+       (cancel)
+       (swap! state assoc :controller nil)))))
 
 
-(defn ^:async request-missing-for!
-  "Asks for the examples missing among the entries one replication pass
-   brought — `pulled-ids` are the ids that pass wrote here. It first catches
-   memory up with user-db, which then holds every document the pass stored:
-   the words, the collections, and the examples that came with them. So an
-   example the pass brought answers its pair, and a word or a collection the
-   pass deleted is gone from memory and asks for nothing. Everything after
-   that is read from memory. Ids that name neither a word, a phrase nor a
-   collection in memory fall out. The fetches it queues wait
-   `pass-fetch-delay-ms` before they run.
-
-   A collection among them is unfolded into the entries it names
-   (`entries-of-pass`), so an entry themed on another device gets that
-   theme's example now rather than at the next start.
-
-   A pass is not a reason to read the whole vocabulary again: with a throttle
-   of half a minute that is regular work proportional to how much the device
-   has."
-  [{:keys [learner] :as capabilities} pulled-ids]
-  (await (contained
-          (fn ^:async request []
-            (await ((:learner/catch-up! learner)))
-            (let [memory (memory capabilities)
-                  colls  ((:learner/collections learner) memory)]
-              (await (request-missing! capabilities
-                                       colls
-                                       (into []
-                                             (keep #((:learner/word learner) memory %))
-                                             (entries-of-pass pulled-ids colls))
-                                       (pass-fetch-delay-ms capabilities))))))))
+(defn- ^:async save!
+  "Saves the `example` of `pair`. A save that fails marks the subject failed."
+  [{:keys [learner state]} pair subject example]
+  (let [{:learner/keys [save-example!]} learner
+        saved? (try
+                 (await (save-example! {:collection-id (:collection-id pair)
+                                        :example       example
+                                        :word          (:value (:word pair))
+                                        :word-id       (:id (:word pair))}))
+                 (catch :default err
+                   (log/warn :examples/save-failed {:error (ex-message err)})
+                   false))]
+    (when-not saved?
+      (swap! state update :failed-subjects conj subject))))
 
 
-(defn- ^:async backfill-ready
-  "Resolves once the backfill may count, and the fetches may run: the
-   examples an earlier build kept in device-db have moved to user-db, which
-   waits for memory to load, and `first-pass`, a promise of this session's
-   first completed replication pass, has resolved."
-  [{:keys [learner]} first-pass]
-  (await ((:learner/examples-moved learner)))
-  (await first-pass))
+(defn- ^:async step
+  "Asks for one missing example and saves it. Resolves with what the loop
+   waits for next: `[:wait/pause ms]` after a request, `[:wait/active]`
+   when the page is not active, `[:wait/memory-change memory]` when nothing is
+   missing in `memory`, which holds only its words and collections."
+  [{:keys [learner page state] :as fetcher}]
+  (let [{read-memory :learner/memory} learner
+        {:page/keys [active?]}        page]
+    (if-not (active?)
+      [:wait/active]
+      (let [memory (read-memory)]
+        (if-let [pair (await (missing-pair fetcher memory))]
+          (let [subject  (subject pair)
+                response (await (ask fetcher subject))
+                before   (:outages @state)
+                after    (:outages (swap! state after-response subject response (active?)))]
+            (when (and (:failure response) (not= :failure/aborted (:failure response)))
+              (log/warn :examples/fetch-failed
+                        (assoc (select-keys response [:failure :message :status]) :word (:word subject))))
+            (when-let [example (:example response)]
+              (await (save! fetcher pair subject example)))
+            ;; Only an outage waits longer than the spacing: it is the one answer
+            ;; that adds to the outages.
+            [:wait/pause
+             (max (:spacing-ms limits)
+                  (if (< before after)
+                    (pause-ms after (:retry-after-ms response))
+                    0))])
+          [:wait/memory-change (select-keys memory [:words :collections])])))))
+
+
+;; Plain, like `waiting`: an async function awaits the promise `sleep` returns,
+;; and the race would be over before it began.
+(defn- first-pass-or-timeout
+  "Resolves ::timed-out once `ms` pass without `first-pass`, or with nil when
+   the fetcher stops; `waited` aborts the timer."
+  [{:keys [clock] :as fetcher} first-pass ms ^js waited]
+  (let [{:clock/keys [sleep]} clock]
+    (unless-closed fetcher
+                   (js/Promise.race #js [first-pass
+                                         (.then (sleep ms (.-signal waited)) (constantly ::timed-out))]))))
+
+
+(defn- ^:async ready
+  "Resolves once memory is loaded, device-db is tidied and the session's
+   first pass has completed or been waited for long enough. Stopping the
+   fetcher ends the wait, and the timer is cancelled whichever ends it."
+  [{:keys [learner] :as fetcher} {:capabilities/keys [sync]}]
+  (let [{:learner/keys [catch-up! examples-moved loaded]} learner
+        waited (js/AbortController.)]
+    (try
+      (await (loaded))
+      (await (examples-moved))
+      (when (= ::timed-out
+               (await (first-pass-or-timeout fetcher (:sync/first-pass sync) (:first-pass-wait-ms limits) waited)))
+        (log/info :examples/gave-up-waiting-for-sync {:waited-ms (:first-pass-wait-ms limits)}))
+      (finally
+       (.abort waited)))
+    (await (catch-up!))))
+
+
+;; Not inside `fetch-loop`: an async function awaits a promise its `case`
+;; returns, and the wait would be over before `unless-closed` saw it. A port
+;; called as `((:k m))` is awaited too; call it through a local name.
+(defn- waiting
+  "The promise for the `wait` a step asked for, with its `arg`."
+  [{:keys [clock learner page signal]} wait arg]
+  (let [{:learner/keys [changed-since]} learner
+        {:clock/keys [sleep]}       clock
+        {:page/keys [until-active]} page]
+    (case wait
+      :wait/pause         (sleep arg signal)
+      :wait/active        (until-active signal)
+      :wait/memory-change (changed-since arg signal))))
+
+
+(defn- ^:async fetch-loop
+  "Runs steps while the fetcher is running. Each step says what to wait for
+   before the next: a pause, an active page, or a change in memory."
+  [fetcher capabilities]
+  (await (ready fetcher capabilities))
+  (loop []
+    (when (running? fetcher)
+      (let [[wait arg] (try
+                         (await (step fetcher))
+                         (catch :default err
+                           (log/error :examples/step-failed {:error (ex-message err)})
+                           [:wait/pause (pause-ms (:outages (swap! (:state fetcher) update :outages inc)) nil)]))]
+        (log/info :examples/waiting {:for wait})
+        (await (unless-closed fetcher (waiting fetcher wait arg)))
+        (recur)))))
 
 
 (defn start!
-  "Asks for everything this device is missing once the backfill is ready
-   (`backfill-ready`), holds the example fetches back until then, and
-   returns the listener a completed replication pass calls with what it
-   brought home: `:pulled-ids`, the entries and collections it wrote here,
-   and `:pulled-examples`, the examples it wrote here.
-
-   The first pass is the first call of that listener. A device without an
-   account runs no pass, and is ready once the move is done.
-
-   A pass deletes the queued fetches of the pairs its examples answer, at
-   once, and counts what its entries are missing once the backfill is
-   ready. A pass that wrote no entry counts nothing.
-
-   The listener answers at once and leaves the work running: a pass is what the
-   screen and the throttle wait for, and it is over when the replication is,
-   not when this device has finished writing task documents.
-
-   Two of them may run at once. A pair is one task id, so the second write for
-   it is refused by the database rather than by anything this has to remember."
-  [{:keys [learner] :capabilities/keys [sync] :as capabilities}]
-  (let [passed     (atom nil)
-        first-pass (if (:sync/account-id sync)
-                     (js/Promise. (fn [resolve] (reset! passed resolve)))
-                     (js/Promise.resolve nil))
-        ready      (backfill-ready capabilities first-pass)]
-    ((:learner/hold-fetches-until! learner) ready)
-    (.then ready #(request-all-missing! capabilities))
-    (fn [{:keys [pulled-examples pulled-ids]}]
-      (when-let [resolve @passed]
-        (resolve nil))
-      (when (seq pulled-examples)
-        (contained #((:learner/cancel-answered-fetches! learner) pulled-examples)))
-      (when (seq pulled-ids)
-        (.then ready #(request-missing-for! capabilities pulled-ids)))
-      nil)))
+  "Starts fetching and returns the function that stops it. A device without
+   an account fetches nothing."
+  [{:keys [learner page] :capabilities/keys [sync] :as capabilities}]
+  (let [{:learner/keys [move-examples!]} learner]
+    (move-examples!))
+  (if-not (:sync/account-id sync)
+    (do (log/info :examples/no-account {})
+        (fn stop []))
+    (let [{:page/keys [on-inactive]} page
+          state   (atom initial-state)
+          closing (js/AbortController.)
+          fetcher (assoc (select-keys capabilities [:clock :examples :learner :page])
+                         :signal (.-signal closing)
+                         :state  state)]
+      (on-inactive #(some-> (:controller @state) .abort) (.-signal closing))
+      (-> (fetch-loop fetcher capabilities)
+          (.catch (fn [err]
+                    (log/error :examples/fetcher-failed {:error (ex-message err)}))))
+      (fn stop
+        []
+        (some-> (:controller @state) .abort)
+        (.abort closing)))))

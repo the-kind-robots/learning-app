@@ -4,6 +4,7 @@
 
      {:cards            [{:word word :reviews domain.retention/Reviews}]
       :collections      {id collection}
+      :collections-by-word {word-id #{collection-id}}
       :examples         {id example}
       :examples-by-word {word-id #{example-id}}
       :slot-of          {word-id slot}
@@ -39,6 +40,7 @@
 (def empty-memory
   {:cards            []
    :collections      {}
+   :collections-by-word {}
    :examples         {}
    :examples-by-word {}
    :slot-of          {}
@@ -96,19 +98,80 @@
   (update-in memory [:cards (get-in memory [:slot-of word-id]) :reviews] retention/without-review id))
 
 
+;; `:collections-by-word` changes with `:collections` alone, so a review or
+;; an example leaves both of them as they were (`adapters.learner/changed-since`).
+(defn- index-add
+  "The key -> set `index` with `v` in the set of `k`."
+  [index k v]
+  (update index k (fnil conj #{}) v))
+
+
+(defn- index-remove
+  "The key -> set `index` without `v` in the set of `k`; a key whose set empties is dropped."
+  [index k v]
+  (let [left (disj (get index k) v)]
+    (if (empty? left) (dissoc index k) (assoc index k left))))
+
+
+(defn- differing
+  "The middle of the vectors `before` and `after`, each without the words
+   they share at the start and at the end. An edit of a collection changes a
+   few words, so the middles are small and a set of each is cheap."
+  [before after]
+  (let [before (vec before)
+        after  (vec after)
+        limit  (min (count before) (count after))
+        start  (or (first (filter #(not= (before %) (after %)) (range limit))) limit)
+        room   (- limit start)
+        tail   (or (first (filter #(not= (before (- (count before) 1 %)) (after (- (count after) 1 %)))
+                                  (range room)))
+                   room)]
+    [(subvec before start (- (count before) tail))
+     (subvec after start (- (count after) tail))]))
+
+
+(defn- add-collection
+  "Memory with `collection`. A collection memory holds already is replaced:
+   only the words that differ between the two versions are touched, because
+   a collection can hold thousands. One memory does not hold yet, as at the
+   load, only names its words."
+  [memory {:keys [id word-ids] :as collection}]
+  (if-let [previous (get-in memory [:collections id])]
+    (let [[before after] (differing (:word-ids previous) word-ids)
+          held           (set before)
+          now            (set after)]
+      (-> memory
+          (assoc-in [:collections id] collection)
+          (update :collections-by-word #(reduce (fn [index word-id] (index-remove index word-id id))
+                                                % (remove now held)))
+          (update :collections-by-word #(reduce (fn [index word-id] (index-add index word-id id))
+                                                % (remove held now)))))
+    (-> memory
+        (assoc-in [:collections id] collection)
+        (update :collections-by-word #(reduce (fn [index word-id] (index-add index word-id id))
+                                              % word-ids)))))
+
+
+(defn- remove-collection
+  [memory {:keys [id word-ids]}]
+  (-> memory
+      (update :collections dissoc id)
+      (update :collections-by-word #(reduce (fn [index word-id] (index-remove index word-id id))
+                                            % word-ids))))
+
+
 (defn- add-example
   [memory {:keys [id word-id] :as example}]
   (-> memory
       (assoc-in [:examples id] example)
-      (update-in [:examples-by-word word-id] (fnil conj #{}) id)))
+      (update :examples-by-word index-add word-id id)))
 
 
 (defn- remove-example
   [memory {:keys [id word-id]}]
-  (let [left (disj (get-in memory [:examples-by-word word-id]) id)]
-    (-> memory
-        (update :examples dissoc id)
-        (update :examples-by-word #(if (empty? left) (dissoc % word-id) (assoc % word-id left))))))
+  (-> memory
+      (update :examples dissoc id)
+      (update :examples-by-word index-remove word-id id)))
 
 
 (def ^:private doc-types
@@ -138,7 +201,7 @@
   (if-not entry
     memory
     (-> (case kind
-          :collection (assoc-in memory [:collections (:id entity)] entity)
+          :collection (add-collection memory entity)
           :example    (add-example memory entity)
           :review     (add-review memory entity)
           :word       (add-word memory entity))
@@ -151,7 +214,7 @@
   (if-not entry
     memory
     (-> (case kind
-          :collection (update memory :collections dissoc (:id entity))
+          :collection (remove-collection memory entity)
           :example    (remove-example memory entity)
           :review     (remove-review memory entity)
           :word       (remove-word memory entity))
@@ -160,12 +223,15 @@
 
 (defn- with-doc
   "Memory after `doc` arrives: the version memory has is removed, and `doc`
-   is added. If memory has this revision already, nothing changes."
+   is added. If memory has this revision already, nothing changes. A
+   collection is not removed first: adding the new version replaces it."
   [memory {id :_id rev :_rev :as doc}]
-  (let [old (get-in memory [::entries id])]
-    (if (= rev (:rev old))
-      memory
-      (-> memory (removed old) (added (entry doc))))))
+  (let [old (get-in memory [::entries id])
+        new (entry doc)]
+    (cond
+      (= rev (:rev old)) memory
+      (= :collection (:kind old) (:kind new)) (added memory new)
+      :else (-> memory (removed old) (added new)))))
 
 
 (defn- with-taken-doc
@@ -286,6 +352,12 @@
   "Every collection, in no particular order."
   [memory]
   (vals (:collections memory)))
+
+
+(defn collections-of
+  "The collections that name the word `word-id`, in no particular order."
+  [memory word-id]
+  (into [] (map (:collections memory)) (get-in memory [:collections-by-word word-id])))
 
 
 (defn examples-of

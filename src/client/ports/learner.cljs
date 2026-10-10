@@ -10,15 +10,16 @@
   "The reads of memory, each a function of a memory value: what the use
    cases and pages ask of the learner's data. The port hands them out, so
    nothing above the adapters requires the memory namespace."
-  {:learner/collection       memory/collection
+  {:learner/collection     memory/collection
    :learner/collection-cards memory/collection-cards
    :learner/collection-words memory/collection-words
-   :learner/collections      memory/collections
-   :learner/examples-of      memory/examples-of
-   :learner/review-history   memory/review-history
-   :learner/word             memory/word
-   :learner/word-count       memory/word-count
-   :learner/words            memory/words})
+   :learner/collections    memory/collections
+   :learner/collections-of memory/collections-of
+   :learner/examples-of    memory/examples-of
+   :learner/review-history memory/review-history
+   :learner/word           memory/word
+   :learner/word-count     memory/word-count
+   :learner/words          memory/words})
 
 
 (defn start!
@@ -26,8 +27,12 @@
   (let [learner {:clock clock
                  :dbs   db
                  :store store}
-        ;; One move per port, started by whoever asks first.
-        moved   (delay (learner/examples-moved! learner))]
+        started (atom false)
+        resolve (atom nil)
+        reject  (atom nil)
+        moved   (js/Promise. (fn [res rej]
+                               (reset! resolve res)
+                               (reset! reject rej)))]
     (merge
      reads
      {:learner/memory (fn memory
@@ -72,15 +77,21 @@
       :learner/remove-from-collection! (fn remove-from-collection!
                                          [word-id collection-id]
                                          (learner/remove-from-collection! learner word-id collection-id))
+      ;; Starts the move of the examples, once per port.
+      :learner/move-examples! (fn move-examples!
+                                []
+                                (when-not @started
+                                  (reset! started true)
+                                  (-> (learner/examples-moved! learner)
+                                      (.then @resolve @reject)))
+                                nil)
+      ;; Waits for the move to finish, and never starts it.
       :learner/examples-moved (fn examples-moved
                                 []
-                                @moved)
-      :learner/hold-fetches-until! (fn hold-fetches-until!
-                                     [ready]
-                                     (learner/hold-fetches-until! learner ready))
-      :learner/cancel-answered-fetches! (fn cancel-answered-fetches!
-                                          [example-ids]
-                                          (learner/cancel-answered-fetches! learner example-ids))
-      :learner/request-examples! (fn request-examples!
-                                   [requests]
-                                   (learner/request-examples! learner requests))})))
+                                moved)
+      :learner/changed-since (fn changed-since
+                               [seen signal]
+                               (learner/changed-since learner seen signal))
+      :learner/save-example! (fn save-example!
+                               [example]
+                               (learner/save-example! learner example))})))

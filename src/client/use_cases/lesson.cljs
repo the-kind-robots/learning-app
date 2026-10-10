@@ -1,8 +1,8 @@
 (ns use-cases.lesson
   (:require
+   [domain.examples :as examples]
    [domain.lesson :as domain]
    [lambdaisland.glogi :as log]
-   [use-cases.examples :as examples]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -53,11 +53,11 @@
       (let [vocab    (mapv lesson-vocab selected)
             word-ids (set (map :id vocab))]
         ;; Which examples a read in this collection sees is one rule, and it
-        ;; lives in `use-cases.examples`.
+        ;; lives in `domain.examples`.
         {:lesson-state (domain/initial-state
                         vocab
-                        (-> ((:learner/examples-of learner) memory word-ids)
-                            (examples/visible-in (:id collection)))
+                        (->> ((:learner/examples-of learner) memory word-ids)
+                             (examples/visible-in (:id collection)))
                         trial-selector)}))))
 
 

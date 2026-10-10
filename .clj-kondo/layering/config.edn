@@ -2,18 +2,18 @@
 ;; `clj-kondo --lint src --fail-level error` step, see integration.yml. ../config.edn
 ;; pulls this file in via :config-paths.
 ;;
-;; Engine namespaces (db.*, db-migrations, sync, tasks) are listed twice below, in
+;; Engine namespaces (db.*, db-migrations, sync) are listed twice below, in
 ;; `engine` and in `above-adapters`; keep both regexes in step.
 ;; The engine is reached only by adapters.*,
-;; main and ports.task-queue; use cases and pages reach adapters through ports;
+;; main; use cases and pages reach adapters through ports;
 ;; only views require presenters. `above-adapters` is default-deny: every client
 ;; namespace is in it except the explicit allow-list of engine-side ones, so a
 ;; new top-level namespace is checked without being registered.
-{:ns-groups [{:name engine :pattern "^(db\\..*|db-migrations|sync|tasks)$"}
+{:ns-groups [{:name engine :pattern "^(db\\..*|db-migrations|sync)$"}
              {:name adapters :pattern "^adapters\\..*$"}
              {:name presenters :pattern "^.*\\.presenter$"}
              {:name above-adapters
-              :pattern "^(?!(db\\..*|db-migrations|sync|tasks|adapters\\..*|main|ports\\.task-queue)$).*$"}
+              :pattern "^(?!(db\\..*|db-migrations|sync|adapters\\..*|main)$).*$"}
              {:name use-cases-and-pages :pattern "^(use-cases|pages)\\..*$"}
              {:name presenter-free :pattern "^(use-cases\\..*|.*\\.actions|.*\\.effects)$"}]
 

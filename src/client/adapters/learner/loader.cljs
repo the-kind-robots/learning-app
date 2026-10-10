@@ -9,6 +9,7 @@
    [adapters.learner.documents :as documents]
    [adapters.learner.memory :as memory]
    [adapters.learner.snapshot :as snapshot]
+   [browser :as browser]
    [db.pouch :as dbs]
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]))
@@ -17,7 +18,7 @@
 (def ^:private db-key
   "The database memory is read from. Every document type memory keeps
    lives in user-db (`adapters.learner.documents`); device-db holds the
-   task queue, the identity and the migration records, and memory neither
+   identity and the migration records, and memory neither
    reads nor follows it (ADR-0020)."
   :user/db)
 
@@ -29,9 +30,9 @@
    not; otherwise user-db is asked (`db.pouch/holds-position?`)."
   [dbs stored at]
   (cond
-    (= stored at)                             (js/Promise.resolve true)
+    (= stored at) (js/Promise.resolve true)
     (and stored (<= (:seq stored) (:seq at))) (dbs/holds-position? dbs db-key stored)
-    :else                                     (js/Promise.resolve false)))
+    :else (js/Promise.resolve false)))
 
 
 (def ^:private kept-types
@@ -60,7 +61,7 @@
          pages  (partition-all ingest-page items)]
     (if-let [[page & more] (seq pages)]
       (let [memory (add memory page)]
-        (await (dbs/next-task))
+        (await (browser/yield))
         (recur memory more))
       memory)))
 
@@ -78,7 +79,7 @@
                           (seq changes) (memory/with-changes (mapv :doc changes) last-position))]
       (if (< (count changes) ingest-page)
         memory
-        (do (await (dbs/next-task))
+        (do (await (browser/yield))
             (recur memory (await (dbs/read-changes dbs db-key (:seq last-position) ingest-page))))))))
 
 
@@ -176,7 +177,7 @@
    whoever waits for the snapshot check goes on before the snapshot is
    decoded."
   [dbs snapshot]
-  (await (dbs/next-task))
+  (await (browser/yield))
   (try
     (await (restored dbs snapshot))
     (catch :default err
@@ -285,7 +286,7 @@
             write!   (snapshot-writer dbs store stored stopped?)]
         (.set followers store (:catch-up! feed))
         (dispatch [[:effect/memory-loaded (skip-interpolation memory)]])
-        (.then (dbs/next-task) write!)
+        (.then (browser/yield) write!)
         (let [stop-visibility (on-visibility! #(-> (catch-up! store)
                                                    (.catch (fn [err]
                                                              (log/error :memory/catch-up-failed {:error (str err)}))))

@@ -16,21 +16,22 @@
    reviews and its examples stay, and come back with the word when it is
    added again. Deleting a collection removes the collection only.
 
-   Examples an earlier build kept in device-db move to user-db
-   (`examples-moved!`).
+   Examples an earlier build kept in device-db move to user-db, and the
+   task queue it kept there is swept away by a migration
+   (`db-migrations`). Fetched examples are saved by `save-example!`.
 
    `learner` is `{:clock :dbs :store}`: the clock, the databases, and the
    app store that keeps memory under `:learner/memory`."
   (:require
+   [abort]
    [adapters.active-collection :as active-collection]
-   [adapters.example-fetch :as example-fetch]
    [adapters.learner.documents :as documents]
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
+   [browser :as browser]
    [db.pouch :as dbs]
    [domain.vocabulary :as vocabulary]
-   [lambdaisland.glogi :as log]
-   [tasks :as tasks]))
+   [lambdaisland.glogi :as log]))
 
 
 (defn current-memory
@@ -55,20 +56,34 @@
   (active-collection/set-active-collection! collection-id))
 
 
-(defn loaded
-  "Resolves once memory has everything user-db held at start."
-  [{:keys [store]}]
+(defn- until-store
+  "A promise that resolves once `(pred state)` holds for the store's state,
+   at once if it holds now. When `signal`, an AbortSignal, aborts first, the
+   promise stays pending and the watch on the store is gone. A nil `signal`
+   never aborts."
+  [store pred signal]
   (js/Promise.
    (fn [resolve]
-     (if (:learner/loaded? @store)
+     (if (pred @store)
        (resolve nil)
-       (let [watch-key (gensym "loaded-")]
+       (let [watch-key (gensym "until-store-")
+             unlisten  (volatile! (fn []))]
+         ;; The watch goes in before the abort listener: an already aborted
+         ;; signal calls `on-abort` back at once, and must find the watch.
          (add-watch store
                     watch-key
                     (fn [_ _ _ state]
-                      (when (:learner/loaded? state)
+                      (when (pred state)
                         (remove-watch store watch-key)
-                        (resolve nil)))))))))
+                        (@unlisten)
+                        (resolve nil))))
+         (vreset! unlisten (abort/on-abort signal #(remove-watch store watch-key))))))))
+
+
+(defn loaded
+  "Resolves once memory has everything user-db held at start."
+  [{:keys [store]}]
+  (until-store store :learner/loaded? nil))
 
 
 (defn ^:async catch-up!
@@ -315,8 +330,8 @@
 
 
 (def ^:private move-page-size
-  "How many device-db examples the move reads, writes and deletes in one
-   task."
+  "How many device-db documents the move reads, and how many examples it
+   writes and deletes, in one task."
   100)
 
 
@@ -331,24 +346,24 @@
                     (map (juxt :_id #(documents/example-doc (:word-id %) (:word %) (:collection-id %) %)))
                     docs)
         held  (await (dbs/insert-all-if-absent dbs documents/example-schema (vals moved)))]
-    (count (await (dbs/bulk-docs dbs
-                                 device-example-schema
-                                 (into [] (comp (filter #(held (:_id (moved (:_id %))))) (map documents/tombstone)) docs))))))
+    (count (await (dbs/bulk-docs
+                   dbs
+                   device-example-schema
+                   (into [] (comp (filter #(held (:_id (moved (:_id %))))) (map documents/tombstone)) docs))))))
 
 
-(defn ^:async move-device-examples!
-  "Moves the examples an earlier build kept in device-db to user-db, where
-   they replicate: every one of them, including the examples of a word or
-   a collection deleted since, which come back with it or show outside
-   every collection. Every distinct example of a pair is kept; identical
-   examples become one document. It reads, writes and deletes a page at a
-   time (`move-page!`), with a task between pages. When it moved anything,
-   it then catches memory up, so that memory holds what was moved.
+(defn ^:async tidy-device-db!
+  "Moves device-db's examples to user-db: what an earlier build kept in
+   device-db for the account. They move to user-db, where they replicate:
+   every one of them, including the examples of a word or a collection
+   deleted since, which come back with it or show outside every collection.
+   Every distinct example of a pair is kept; identical examples become one
+   document.
 
-   It reads device-db only up to the ids of the task queue
-   (`tasks/id-prefix`). The examples an earlier build kept there have
-   generated ids, which sort before them, so the move does not page
-   through the queue.
+   It reads device-db a page at a time, with a task between pages, and
+   moves the examples of each page as it reads it (`move-page!`). When it
+   moved anything, it then catches memory up, so that memory holds what was
+   moved.
 
    It is safe to run again and to interrupt. A run after an interrupted one
    writes nothing that user-db holds and deletes the copies left behind. A
@@ -360,12 +375,11 @@
                   (let [{:keys [docs next]} (await (dbs/read-page dbs
                                                                   (:db device-example-schema)
                                                                   {:after after
-                                                                   :end   tasks/id-prefix
                                                                    :limit move-page-size
                                                                    :types #{(:type device-example-schema)}}))
-                        deleted             (+ deleted (if (seq docs) (await (move-page! dbs docs)) 0))]
+                        deleted (+ deleted (if (seq docs) (await (move-page! dbs docs)) 0))]
                     (if next
-                      (do (await (dbs/next-task))
+                      (do (await (browser/yield))
                           (recur next deleted))
                       deleted)))]
     (when (pos? deleted)
@@ -375,35 +389,40 @@
 
 
 (defn ^:async examples-moved!
-  "Waits for memory to load, and then moves the examples an earlier build
-   kept in device-db to user-db (`move-device-examples!`). A failed move is
-   logged and run again after a wait, until one succeeds
-   (`db.pouch/retried`). Resolves nil
-   once one has."
+  "Waits for memory to load, and then empties device-db of the examples an
+   earlier build kept there: it moves them to user-db (`tidy-device-db!`).
+   A failed run is logged
+   and run again after a wait, until one succeeds (`db.pouch/retried`).
+   Resolves nil once one has."
   [learner]
   (await (loaded learner))
-  (await (dbs/retried #(move-device-examples! learner)
+  (await (dbs/retried #(tidy-device-db! learner)
                       (fn [err wait]
                         (log/warn :learner/examples-move-failed {:error (str err) :retry-ms wait}))))
   nil)
 
 
-(defn request-examples!
-  "Queues an example fetch for each of `requests`; see
-   `adapters.example-fetch/request!`."
-  [{:keys [clock dbs]} requests]
-  (example-fetch/request! dbs clock requests))
+(defn ^:async save-example!
+  "Writes `example`, `{:word-id :word :collection-id :example}`, to user-db
+   under the id its content gives it (`documents/example-doc`), and then
+   catches memory up. An example user-db holds already is kept as it is.
+   Resolves true when user-db holds the example afterwards, and false when
+   its write failed."
+  [{:keys [dbs] :as learner} {:keys [collection-id example word word-id]}]
+  (let [doc  (documents/example-doc word-id word collection-id example)
+        held (await (dbs/insert-all-if-absent dbs documents/example-schema [doc]))]
+    (await (catch-up! learner))
+    (boolean (held (:_id doc)))))
 
 
-(defn hold-fetches-until!
-  "Holds every example fetch back until the promise `ready` resolves; see
-   `adapters.example-fetch/hold-until!`."
-  [_learner ready]
-  (example-fetch/hold-until! ready))
-
-
-(defn cancel-answered-fetches!
-  "Deletes the queued fetches of the pairs the examples `example-ids`
-   answer; see `adapters.example-fetch/cancel-answered!`."
-  [{:keys [dbs]} example-ids]
-  (example-fetch/cancel-answered! dbs example-ids))
+(defn changed-since
+  "Resolves when memory's words or collections differ from `seen`, the ones
+   a look read. New reviews and examples don't count. Aborting `signal`
+   only drops the watch."
+  [{:keys [store]} seen signal]
+  (let [{:keys [words collections]} seen]
+    (until-store store
+                 (fn [{:learner/keys [memory]}]
+                   (not (and (identical? words (:words memory))
+                             (identical? collections (:collections memory)))))
+                 signal)))

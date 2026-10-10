@@ -21,34 +21,24 @@
 (defn- ^:async with-sync!
   "Starts sync for a stored account, online, with replication answered by
    `sync-once!`, and hands `f` the request, what the start returned, a way
-   to start sync again, and a way to play a change-feed event. The write throttle passes every call straight through, so an event
-   is judged when it is played.
-
-   The navigator is the test's own, not whatever the runtime has: Node grew a
-   global one only in 21, and none of its versions says `onLine`."
+   to start sync again, and a way to play a change-feed event. The write
+   throttle passes every call straight through, so an event is judged when
+   it is played. The page is the test's own: online."
   [sync-once! f]
-  (let [runtime-navigator (js/Object.getOwnPropertyDescriptor js/globalThis "navigator")
-        feed (atom nil)]
-    (js/Object.defineProperty js/globalThis
-                              "navigator"
-                              #js {:configurable true :value #js {:onLine true}})
-    (try
-      (with-redefs [gfn/throttle           (fn [g _] g)
-                    identity/load-identity! (fn [] (js/Promise.resolve {:id "account" :token "t"}))
-                    identity/use-identity! (fn [_] nil)
-                    pouch/on-change        (fn [_ _ handler]
-                                             (reset! feed handler)
-                                             (fn [] nil))
-                    pouch/sync-once!       sync-once!]
-        (let [{:sync/keys [pull!] :as started} (await (sut/start! {:db {}}))]
-          (await (f {:feed!        #(@feed (change %1 %2))
-                     :request!     pull!
-                     :start-again! #(sut/start! {:db {}})
-                     :started      started}))))
-      (finally
-       (if runtime-navigator
-         (js/Object.defineProperty js/globalThis "navigator" runtime-navigator)
-         (js/Reflect.deleteProperty js/globalThis "navigator"))))))
+  (let [feed (atom nil)
+        page {:page/online? (constantly true)}]
+    (with-redefs [gfn/throttle           (fn [g _] g)
+                  identity/load-identity! (fn [] (js/Promise.resolve {:id "account" :token "t"}))
+                  identity/use-identity! (fn [_] nil)
+                  pouch/on-change        (fn [_ _ handler]
+                                           (reset! feed handler)
+                                           (fn [] nil))
+                  pouch/sync-once!       sync-once!]
+      (let [{:sync/keys [pull!] :as started} (await (sut/start! {:db {} :page page}))]
+        (await (f {:feed!        #(@feed (change %1 %2))
+                   :request!     pull!
+                   :start-again! #(sut/start! {:db {} :page page})
+                   :started      started}))))))
 
 
 (defn- held-passes
@@ -83,7 +73,7 @@
 
 
 (def ^:private quiet-pass
-  {:pulled 0 :pulled-ids {} :pulled-revs #{} :pushed 1})
+  {:pulled 0 :pulled-revs #{} :pushed 1})
 
 
 (deftest requests-at-once-run-one-pass
@@ -115,7 +105,7 @@
          (let [answer (request!)]
            (await (settled))
            (finish! quiet-pass)
-           (is (= {:pulled 0 :pulled-ids {} :pulled-revs #{} :pushed 1} (await (answered answer)))
+           (is (= {:pulled 0 :pulled-revs #{} :pushed 1} (await (answered answer)))
                "nothing asked during it: the run is one pass")
            (is (= 1 @started))
            (let [first-run (request!)]
@@ -124,7 +114,6 @@
              (request!)
              (request!)
              (finish! {:pulled      1
-                       :pulled-ids  {"vocab" #{"vocab:hund"}}
                        :pulled-revs #{["vocab:hund" "1-a"]}
                        :pushed      0})
              (await (settled))
@@ -164,7 +153,6 @@
            (feed! "vocab:hund" "1-a")
            (feed! "vocab:katze" "2-b")
            (finish! {:pulled      2
-                     :pulled-ids  {"vocab" #{"vocab:hund" "vocab:katze"}}
                      :pulled-revs #{["vocab:hund" "1-a"] ["vocab:katze" "2-b"]}
                      :pushed      0})
            (await (answered answer))
@@ -191,7 +179,6 @@
            (feed! "review-1" "1-local")
            (is (= 1 @started) "judged when the pass ends, not while it runs")
            (finish! {:pulled      1
-                     :pulled-ids  {"vocab" #{"vocab:hund"}}
                      :pulled-revs #{["vocab:hund" "1-a"]}
                      :pushed      0})
            (await (settled))
@@ -201,3 +188,33 @@
            (is (= 2 @started)))))))))
 
 
+(deftest the-first-completed-pass-of-a-start-resolves-its-first-pass
+  (async-testing "a failed pass does not count, and a start after a stop has had no pass"
+    (let [{:keys [finish! sync-once]} (held-passes)]
+      (await
+       (with-sync!
+        sync-once
+        (^:async fn
+         [{:keys [request! start-again! started]}]
+         (let [first-pass (:sync/first-pass started)]
+           (is (= ::unanswered (await (answered first-pass))) "no pass has run")
+           (request!)
+           (await (settled))
+           (finish! nil)
+           (is (= ::unanswered (await (answered first-pass))) "a failed pass is not the first pass")
+           (request!)
+           (await (settled))
+           (finish! quiet-pass)
+           (is (nil? (await (answered first-pass))) "the first pass that completes resolves it")
+           (sut/stop! started)
+           (let [again (await (start-again!))]
+             (is (= ::unanswered (await (answered (:sync/first-pass again))))
+                 "a start after a stop waits for a pass of its own")))))))))
+
+
+(deftest a-device-without-an-account-has-no-pass-to-wait-for
+  (async-testing "its first pass is resolved at once"
+    (with-redefs [identity/load-identity! (fn [] (js/Promise.resolve nil))]
+      (let [started (await (sut/start! {:db {}}))]
+        (is (nil? (:sync/account-id started)))
+        (is (nil? (await (answered (:sync/first-pass started)))))))))

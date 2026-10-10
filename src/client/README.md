@@ -27,7 +27,6 @@ src/client/
 ├── build_identity.cljs       # Dev build stamp (commit + time); empty in release
 ├── service_worker.cljs       # Registers sw.js, announces and takes new builds (ADR-0014)
 ├── sync.cljs                 # user-db ↔ CouchDB replication, LWW vocab conflicts, pairing
-├── tasks.cljs                # Background task queue stored in device-db
 ├── db_migrations.cljs        # One-time data migrations (the local-db split)
 │
 ├── db/                       # Storage engine
@@ -36,14 +35,15 @@ src/client/
 │
 ├── domain/                   # Pure business logic (no side effects)
 │   ├── collections.cljs      # Collection names and folders (ADR-0013)
+│   ├── examples.cljs         # Which examples a read sees; which pairs of an entry have none
 │   ├── lesson.cljs           # Lesson logic
 │   ├── phrase.cljs           # Phrases: vocabulary documents with :kind "phrase"
 │   ├── retention.cljs        # Retention calculations
 │   └── vocabulary.cljs       # Vocabulary domain model
 │
 ├── ports/                    # Capabilities the system hands to use-cases and pages
-│   ├── backup.cljs  clock.cljs  dictionary.cljs  learner.cljs
-│   └── navigation.cljs  task_queue.cljs
+│   ├── backup.cljs  clock.cljs  dictionary.cljs  examples.cljs
+│   └── learner.cljs  navigation.cljs  page.cljs
 │
 ├── adapters/                 # Speak domain outward over storage and the backend
 │   ├── learner.cljs          # The learner's data for use cases: memory to read, every write
@@ -51,7 +51,8 @@ src/client/
 │   │   ├── memory.cljs       # The learner's data in memory, a projection of user-db
 │   │   ├── loader.cljs       # Loads memory and follows user-db's changes
 │   │   └── documents.cljs    # Document types (schemas) and doc ↔ entity
-│   ├── example_fetch.cljs    # Fetches an example from the backend, by a queued task
+│   ├── example_fetch.cljs    # One example request
+│   ├── page.cljs             # Whether the page is visible and online; waiting for it
 │   ├── dictionary.cljs       # SQL through the worker proxy
 │   ├── identity.cljs         # Device identity (account id + token) in device-db
 │   ├── data_export.cljs      # Export/import every user-db document
@@ -77,7 +78,7 @@ Shared code the client also compiles: `lib/db/src/db.cljc` (the PouchDB/CouchDB 
 
 **System** — `main.cljs` declares components (`:db/pouch`, `:db/sqlite`, `:sync/identity`, `:port/*`, …) and `runtime/system.cljs` starts them in dependency order. Ports are the capabilities; use-cases and pages reach storage only through them.
 
-**Layering** — the engine (`db`, `db.pouch`, `db.sqlite`, `db-migrations`, `sync`, `tasks`) knows documents, databases and replication. Adapters speak domain outward; the learner's data is one adapter, `adapters/learner.cljs` with `learner/memory`, `learner/loader` and `learner/documents`, which owns the document types. Use-cases, pages and domain never see a storage name. Use cases and pages require no adapter: they read memory through the learner port, whose reads (`ports.learner/reads`) are functions of the memory value. A page's presenter maps state to what its view renders, and nothing else: the view consumes presenter output, while actions, effects and use cases never require a presenter — a function or constant they need lives with them, or in `domain/`. `.clj-kondo/config.edn` (`:ns-groups` + `:discouraged-namespace`) enforces the require rules.
+**Layering** — the engine (`db`, `db.pouch`, `db.sqlite`, `db-migrations`, `sync`) knows documents, databases and replication. Adapters speak domain outward; the learner's data is one adapter, `adapters/learner.cljs` with `learner/memory`, `learner/loader` and `learner/documents`, which owns the document types. Use-cases, pages and domain never see a storage name. Use cases and pages require no adapter: they read memory through the learner port, whose reads (`ports.learner/reads`) are functions of the memory value. A page's presenter maps state to what its view renders, and nothing else: the view consumes presenter output, while actions, effects and use cases never require a presenter — a function or constant they need lives with them, or in `domain/`. `.clj-kondo/config.edn` (`:ns-groups` + `:discouraged-namespace`) enforces the require rules.
 
 **Dictionary worker** — SQLite WASM runs in a dedicated Web Worker (`resources/public/js/sqlite3-worker.js` + `sqlite3-dictionary.js`). The worker fetches `/dictionary/manifest` and the hashed `dict.*.sqlite` file into the OPFS pool. `ports/dictionary.cljs` exposes the app-facing capability; `adapters/dictionary.cljs` executes SQL through the worker proxy. Never query the dictionary from the main thread directly.
 
@@ -86,7 +87,7 @@ Every tab has a worker, but the dictionary belongs to the tab being typed into: 
 **User data** — PouchDB, split in two databases. Each schema in `adapters/learner/documents.cljs` names its database:
 
 - `user-db` — words, reviews, collections, examples. What follows the learner across devices: replicated to the account's CouchDB database `userdb-N` through `/db/` (ADR-0006). `sync.cljs` pushes on local changes (throttled) and pulls on data-page entry; vocab conflicts resolve last-writer-wins by `:modified-at`. A device without an account is local-only and makes no network call.
-- `device-db` — tasks, the device identity, migration records. Never replicated. Examples lived here until ADR-0020; a start moves any an earlier build left to user-db (`adapters.learner/move-device-examples!`).
+- `device-db` — the device identity and migration records. Never replicated. Examples lived here until ADR-0020, and a stored task queue until ADR-0021; a start moves any example an earlier build left to user-db (`adapters.learner/tidy-device-db!`), and a sweep that runs once per device, in the background after the databases open (`db-migrations/run-in-background!`, component `:db/background-migrations`), deletes its tasks and their indexes. A failed sweep is retried at the next start; the start never waits for it.
 
 **Learner's data in memory** — what screens show of the learner's data is kept in the app store under `:learner/memory`, a projection of user-db kept by `adapters/learner/memory.cljs` — the value, documents in and memory out — and loaded by `adapters/learner/loader.cljs` (ADR-0016, ADR-0017, ADR-0019, ADR-0020). What it guarantees is in `openspec/specs/learner-data-memory/spec.md`. The loader notes where user-db's change feed stands, reads it behind the splash, reads what was stored meanwhile and hands memory over once (`:effect/memory-loaded`); from then on it follows the change feed and hands each batch to `:effect/memory-changed`, and catches up by one read (`catch-up!`) when the page is shown again. A write catches memory up with user-db's change log once PouchDB has accepted it (ADR-0019); nothing else writes memory. A repeat start takes memory from a snapshot in the Cache API (`adapters/learner/snapshot.cljs`, ADR-0018) and catches up from the feed position memory keeps; what the snapshot must pass and when it is written is in the same spec.
 
@@ -95,6 +96,8 @@ Every tab has a worker, but the dictionary belongs to the tab being typed into: 
 `db_migrations.cljs` runs before `db.pouch` opens the databases; it once split the old single `local-db` into these two.
 
 **Service worker** — plain JS, `resources/public/js/sw.js`; does not run ClojureScript. The backend serves it at `/js/app/sw.js` and prepends `SW_VERSION` (the cache bucket name) and `PRECACHE_URLS` (`src/backend/core.clj`, `service-worker-handler`). It never skips waiting on its own; `service_worker.cljs` announces a new build and takes it only when asked (ADR-0014).
+
+**Examples** — `use-cases.examples`, started as the `:examples/fetcher` component, is a loop: one request at a time for the first pair of entry and collection that has no example (`domain/examples.cljs`), while the tab is visible and the device is online and has an account. After each request it pauses; with nothing missing it waits until memory's words or collections change; hidden or offline, until the page is active again (`ports/page.cljs`, shared with sync's push socket). There is no periodic look (ADR-0021). Memory and the vocabulary use case know nothing about it. What it must do is in `openspec/specs/example-backfill/spec.md`.
 
 ## Building
 

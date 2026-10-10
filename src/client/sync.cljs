@@ -1,14 +1,12 @@
 (ns sync
   (:require
-   [adapters.example-fetch :as example-fetch]
    [adapters.identity :as identity]
    [adapters.learner.documents :as documents]
    [db :as db]
    [db.pouch :as pouch]
    [domain.vocabulary :as domain]
    [goog.functions :as gfn]
-   [lambdaisland.glogi :as log]
-   [tasks :as tasks]))
+   [lambdaisland.glogi :as log]))
 
 
 (defn- lww-winner
@@ -80,48 +78,17 @@
       (log/warn :sync/conflict-resolution-failed {:error (ex-message err)}))))
 
 
-;; Who is told when a pass comes home. The engine publishes; what listens, and
-;; what it does with the news, is none of its business (#432).
-(defonce ^:private pass-listeners (atom #{}))
-
-
-(defn- announce-pass!
-  "Calls each of `listeners` with `result`, each inside a guard."
-  [listeners result]
-  (doseq [listener listeners]
-    (try
-      (listener result)
-      (catch :default err
-        (log/warn :sync/pass-listener-failed {:error (ex-message err)})))))
-
-
-(defn on-pass!
-  "Registers `listener`, called with each completed pass's own result. Returns
-   a function that unregisters it."
-  [listener]
-  (swap! pass-listeners conj listener)
-  #(swap! pass-listeners disj listener))
-
-
 (defn ^:async sync-once!
   "Runs one replication pass and resolves the conflicts it may have brought
-   home. Resolves with what the pass did, `{:pulled n :pushed n :pulled-ids
-   [...]}`, or nil when it failed; never rejects, so callers can fire it freely
+   home. Resolves with what the pass did, `{:pulled n :pushed n :pulled-revs
+   #{...}}`, or nil when it failed; never rejects, so callers can fire it freely
    on triggers.
    A pass that pulled nothing brought no conflict home, so nothing is
-   resolved and — for the caller — nothing has changed.
-
-   Listeners registered through `on-pass!` are told what the pass brought, ids
-   included, so what they do is bounded by this pass rather than by everything
-   the device holds. They answer nothing and are not awaited — the pass is what
-   the screen redraws after and what the throttle measures from, so it ends
-   when the replication does — and each is called inside a guard, so one that
-   throws still leaves a completed pass reporting what it replicated."
+   resolved and — for the caller — nothing has changed."
   [dbs account-id]
   (when-let [{:keys [pulled] :as result} (await (pouch/sync-once! dbs :user/db account-id))]
     (when (pos? pulled)
       (await (resolve-vocab-conflicts! (:user/db dbs))))
-    (announce-pass! @pass-listeners result)
     result))
 
 
@@ -141,16 +108,15 @@
 
 (def no-account
   "What `start!` returns for a device without an account. Such a device runs
-   no pass, so there is nothing to hear: the subscription is inert, like the
-   pull beside it."
+   no pass, so its pull is inert and there is no first pass to wait for."
   {:sync/account-id nil
-   :sync/on-pass    (constantly nil)
+   :sync/first-pass (js/Promise.resolve nil)
    :sync/pull!      (constantly nil)})
 
 
 (defn- merged-passes
-  "What a run of passes did, told as one pass: counts summed, ids and
-   revisions united. A caller asks whether anything was pulled, and a run whose
+  "What a run of passes did, told as one pass: counts summed, revisions
+   united. A caller asks whether anything was pulled, and a run whose
    first pass pulled and whose follow-up did not has pulled. Failed passes
    (nil) add nothing; a run with none that succeeded is nil."
   [a b]
@@ -158,7 +124,6 @@
     (nil? a) b
     (nil? b) a
     :else    {:pulled      (+ (:pulled a) (:pulled b))
-              :pulled-ids  (merge-with into (:pulled-ids a) (:pulled-ids b))
               :pulled-revs (into (:pulled-revs a) (:pulled-revs b))
               :pushed      (+ (:pushed a) (:pushed b))}))
 
@@ -200,14 +165,10 @@
    only what remains asks for a pass. A conflict resolution writes new
    revisions, so it does ask — that pass is what pushes it.
 
-   `:sync/on-pass` is where a listener registers to hear what each completed
-   pass brought; see `sync-once!`. A listener that subscribes after a pass
-   of this start has completed is called once at once with `{}`: it learns
-   that a pass has happened, and nothing that pass brought is delivered
-   again. A pass of an earlier start does not count, so a sync started again
-   for another account is not taken to have replicated anything yet.
-   `:sync/push-interval-ms` is how long a local write waits, at most, before
-   a pass pushes it.
+   `:sync/first-pass` is a promise that resolves, with nil, once the first
+   pass of this start has completed; a failed pass does not count. A pass of
+   an earlier start does not count either, so a sync started again for
+   another account is not taken to have replicated anything yet.
 
    `passes-wait-for`, a promise or nil, holds back every pass of this tab
    until it resolves. The start of the learner's memory checks its snapshot
@@ -215,15 +176,16 @@
    change at the snapshot's position after the database lost others below
    it, and the check would take a snapshot holding documents the database
    no longer has (ADR-0018)."
-  [{dbs :db passes-wait-for :passes-wait-for}]
+  [{dbs :db page :page passes-wait-for :passes-wait-for}]
   (try
     (if-let [{:keys [id] :as identity} (await (identity/load-identity!))]
       (do
         (identity/use-identity! identity)
         (let [wanted (atom false)
               running (atom nil)
-              ;; Whether a pass of this start has completed.
-              passed? (atom false)
+              ;; Resolves the first pass of this start once one completes.
+              passed! (atom nil)
+              first-pass (js/Promise. (fn [resolve] (reset! passed! resolve)))
               ;; `[id rev]` the passes pulled / the change feed reported.
               pulled (atom #{})
               written (atom #{})
@@ -251,14 +213,14 @@
                                 nil))
                       (.then (fn [result]
                                (when result
-                                 (reset! passed? true))
+                                 (@passed! nil))
                                (swap! pulled into (:pulled-revs result))
                                (when (local-writes?)
                                  (reset! wanted true))
                                (run! (merged-passes done result)))))))
               request!
               (fn [& _]
-                (when (.-onLine js/navigator)
+                (when ((:page/online? page))
                   (reset! wanted true)
                   (or @running
                       (reset! running (run! nil)))))
@@ -274,14 +236,9 @@
                                          (push!)))]
           (log/info :sync/ready {:user-id id})
           {:sync/account-id        id
-           :sync/on-pass           (fn [listener]
-                                     (let [unsubscribe (on-pass! listener)]
-                                       (when @passed?
-                                         (announce-pass! [listener] {}))
-                                       unsubscribe))
+           :sync/first-pass        first-pass
            :sync/pairing-confirmed! #(pairing-confirmed! dbs %)
            :sync/pull!             request!
-           :sync/push-interval-ms  push-interval-ms
            :sync/unwatch           unwatch}))
       (do
         (log/info :sync/local-only {})
@@ -301,7 +258,7 @@
    pull covers whatever was missed while the socket was down. Hidden pages
    close the socket: the radio sleeps when the user is elsewhere. Offline
    pages don't retry: reconnection resumes on the `online` event."
-  [on-poke]
+  [page on-poke]
   (letfn
     [(url []
        (str (if (= "https:" (.. js/location -protocol)) "wss://" "ws://")
@@ -309,8 +266,7 @@
             "/api/sync/updates"))
      (connect! []
        (when (and (nil? @push-socket)
-                  (.-onLine js/navigator)
-                  (= "visible" (.-visibilityState js/document)))
+                  ((:page/active? page)))
          (let [socket (js/WebSocket. (url))]
            (reset! push-socket socket)
            (set! (.-onopen socket) (fn [_] (on-poke)))
@@ -327,21 +283,19 @@
        (when-some [socket @push-socket]
          (reset! push-socket nil)
          (.close socket)))]
-    (.addEventListener js/document
-                       "visibilitychange"
-                       (fn [_]
-                         (if (= "visible" (.-visibilityState js/document))
-                           (connect!)
-                           (disconnect!))))
+    ((:page/on-visibility-change page)
+     (fn []
+       (if ((:page/visible? page))
+         (connect!)
+         (disconnect!))))
     ;; A socket that survived a network change is not trusted — it may be a
     ;; zombie holding a dead connection. Recycling is free: the reconnect
     ;; pulls anyway.
-    (.addEventListener js/window
-                       "online"
-                       (fn [_]
-                         (disconnect!)
-                         (connect!)))
-    (.addEventListener js/window "offline" (fn [_] (disconnect!)))
+    ((:page/on-online page)
+     (fn []
+       (disconnect!)
+       (connect!)))
+    ((:page/on-offline page) disconnect!)
     (connect!)))
 
 
@@ -355,29 +309,24 @@
 
 (defn- of-the-account?
   "Whether a device-db document was held on behalf of the account, rather than
-   on behalf of this device. The fetches still queued belong to the account,
-   and so do the examples an earlier build kept here that have not moved to
-   user-db yet (`adapters.learner/move-device-examples!`). The stored
-   identity and the migration records belong to the device and outlive any
-   account it carries.
+   on behalf of this device: an example an earlier build kept here that has
+   not moved to user-db yet (`adapters.learner/tidy-device-db!`).
+   The stored identity and the migration records belong to the device and
+   outlive any account it carries.
 
-   Asked of the schemas that own those documents, so a type renamed there is
+   Asked of the schema that owns those documents, so a type renamed there is
    renamed here."
-  [{:keys [task-type type]}]
-  (or (= (:type documents/example-schema) type)
-      (and (= (:type tasks/schema) type)
-           (= example-fetch/fetch-task-type task-type))))
+  [{:keys [type]}]
+  (= (:type documents/example-schema) type))
 
 
 (defn ^:async forget-account-data!
   "Deletes what device-db held for the account that was here. The account's
    examples in user-db go when user-db is destroyed.
 
-   Queued fetches would otherwise go out under the new session and write the
-   previous account's sentences, generated under its theme names, into the
-   new account's user-db. Vocabulary ids are content-addressed (ADR-0008), so
-   an example not moved yet would move into the new account the same way, and
-   the backfill, finding those pairs answered, would never ask for its own.
+   Vocabulary ids are content-addressed (ADR-0008), so an example not moved
+   yet would move into the new account, and the fetcher, finding those pairs
+   answered, would never ask for its own.
 
    Addressed rather than destroyed: device-db is also where the identity this
    device is about to store lives."

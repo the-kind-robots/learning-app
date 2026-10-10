@@ -110,47 +110,6 @@ Example:
 - **AND** another device of the account completes a replication pass
 - **THEN** the other device holds that example
 
-### Requirement: Task documents are stored
-The system SHALL store task documents for asynchronous work with ISO 8601 scheduling and creation timestamps.
-
-#### Scenario: Task document shape
-- **WHEN** a task is stored
-- **THEN** it includes `type`, `task-type`, `word-id`, `attempts`, `run-at`, and `created-at`
-
-Example:
-```json
-{
-  "type": "task",
-  "task-type": "example-fetch",
-  "word-id": "<vocab-id>",
-  "attempts": 0,
-  "run-at": "2026-01-20T10:05:00.000Z",
-  "created-at": "2026-01-20T10:00:00.000Z"
-}
-```
-
-### Requirement: Dead-lettered tasks are recorded
-The system SHALL record failed tasks as dead-lettered task documents with an ISO 8601 failure timestamp.
-
-#### Scenario: Dead-letter task shape
-- **WHEN** a task is dead-lettered
-- **THEN** it includes `status`, `failure-reason`, and `failed-at`
-
-Example:
-```json
-{
-  "type": "task",
-  "task-type": "example-fetch",
-  "word-id": "<vocab-id>",
-  "attempts": 1,
-  "run-at": "2026-01-20T10:05:00.000Z",
-  "created-at": "2026-01-20T10:00:00.000Z",
-  "status": "failed",
-  "failure-reason": "unknown-task-type",
-  "failed-at": "2026-01-20T10:06:00.000Z"
-}
-```
-
 ### Requirement: Lesson trial selection uses options
 The system SHALL use the trial-selector from lesson options to determine trial selection behavior.
 
@@ -185,26 +144,13 @@ user-db design documents SHALL NOT replicate: a sync pass SHALL carry user docum
 - **THEN** the remote copy holds no `_design/` documents
 - **AND** every user document written on either side is present on the other
 
-### Requirement: The splash waits for no index
-The app SHALL create no index in user-db and SHALL bring none up to date there. It SHALL create no secondary index and bring none up to date before memory is loaded (`specs/learner-data-memory/spec.md`). device-db SHALL carry the index the task queue selects its due tasks by; the task queue SHALL create it and bring it up to date when it starts, after memory is loaded.
-
-#### Scenario: A new installation
-- **WHEN** the app starts on a device with empty databases and memory is loaded
-- **THEN** `getIndexes()` on user-db lists `_all_docs` only
-
-#### Scenario: An index an earlier build left in user-db
-- **WHEN** the app starts on a device whose user-db holds `_design/by-type` from an earlier build
-- **THEN** the app neither queries that index nor brings it up to date
-
-#### Scenario: Tasks rewritten since the last start
-- **WHEN** the task queue rewrote its tasks before the app was closed, and the app starts again
-- **THEN** memory is loaded before the task queue's index is brought up to date
-
 ### Requirement: Examples kept on the device move to user-db
 
 Examples that an earlier build stored in `device-db` SHALL move to `user-db`. Every one of them SHALL be written to `user-db` under the id its content gives it (`specs/examples-schema/spec.md`): every distinct example is kept, and identical examples become one document. That includes the examples of a word or a collection deleted since, which are kept like any other (`specs/learner-data-memory/spec.md`, `specs/collections-data-model/spec.md`). An example `user-db` holds already SHALL NOT be written again. Each `device-db` example SHALL then be deleted once `user-db` holds it.
 
-The move SHALL run after memory is loaded and SHALL NOT hold up the start: no screen waits for it, and it is not a database migration that runs before the databases open. The example backfill and the example fetches wait for it (`specs/example-backfill/spec.md`). The move SHALL write and delete a page of examples at a time, and SHALL let other work run between pages. A failed move SHALL be logged and run again after a wait, until one succeeds; a `device-db` example that was not written stays for that run. The move SHALL be safe to run again and safe to interrupt at any point: run again, it writes nothing that is already there and deletes what an interrupted run left behind.
+A database migration, run once per device and recorded in `device-db`, SHALL delete every task document an earlier build's task queue left in `device-db`, whatever its id, a page per write with other work let run between writes, and SHALL remove the indexes earlier builds kept there: the task queue's (`_design/by-type-run-at-created-at`) and the `by-type` index builds before #526 made in every database. A task document carries nothing the learner entered: the pairs it asked for are read from memory again (`specs/example-backfill/spec.md`).
+
+The move of the examples SHALL run after memory is loaded and SHALL NOT hold up the start: no screen waits for it, and it is not a database migration that runs before the databases open. Example fetching waits for it (`specs/example-backfill/spec.md`). The move SHALL write and delete a page of examples at a time, and SHALL let other work run between pages. A failed move SHALL be logged and run again after a wait, until one succeeds; a `device-db` example that was not written stays for that run. The move SHALL be safe to run again and safe to interrupt at any point: run again, it writes nothing that is already there and deletes what an interrupted run left behind.
 
 #### Scenario: A device holding examples from an earlier build
 - **WHEN** the app starts on a device whose `device-db` holds examples
@@ -239,3 +185,27 @@ The move SHALL run after memory is loaded and SHALL NOT hold up the start: no sc
 #### Scenario: The start does not wait
 - **WHEN** the app starts on a device whose `device-db` holds examples
 - **THEN** the screen asked for is shown once memory is loaded, whether or not the move has finished
+
+#### Scenario: Leftover tasks
+- **WHEN** the app starts on a device whose `device-db` holds task documents — under `task:` ids and
+  under generated ids — the task queue's index and the `by-type` index
+- **THEN** the databases open and the screen asked for is shown without waiting for them to be deleted
+- **AND** shortly after the start, `device-db` holds no task document and no `_design/` document
+- **AND** a later start does not look for them again
+- **AND** the identity and the migration records stay
+
+#### Scenario: A failed sweep
+- **WHEN** deleting the leftover tasks or indexes fails
+- **THEN** the sweep is not recorded as done, and runs again at the next start
+
+### Requirement: The app keeps no index
+The app SHALL create no index in user-db or in device-db, and SHALL bring none up to date; so the splash waits for none. An index an earlier build left in user-db SHALL be neither queried nor brought up to date; the one an earlier build's task queue kept in device-db SHALL be removed by a sweep that runs once per device, in the background after the databases open, and never holds up the start (Requirement: Examples kept on the device move to user-db).
+
+#### Scenario: A new installation
+- **WHEN** the app starts on a device with empty databases and memory is loaded
+- **THEN** `getIndexes()` on user-db lists `_all_docs` only
+- **AND** `getIndexes()` on device-db lists `_all_docs` only
+
+#### Scenario: An index an earlier build left in user-db
+- **WHEN** the app starts on a device whose user-db holds `_design/by-type` from an earlier build
+- **THEN** the app neither queries that index nor brings it up to date

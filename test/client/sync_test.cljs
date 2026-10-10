@@ -228,8 +228,6 @@
               (into #{} (map :value) (:translation (await (db/get user-db "vocab:hase")))))))))))
 
 
-
-
 ;;
 ;; Adopting a key that belongs to another account
 ;;
@@ -243,15 +241,10 @@
 
 (defn- ^:async seed-device-db!
   "What a device holds after a while on one account: an example an earlier
-   build kept here and the move has not taken to user-db yet, a fetch still
-   queued, one that was dead-lettered, and the two documents that belong to
-   the device rather than to the account."
+   build kept here and the move has not taken to user-db yet, and the two
+   documents that belong to the device rather than to the account."
   [device-db]
   (await (db/insert device-db {:_id "example-hund" :type "example" :word-id "vocab:hund"}))
-  (await (db/insert device-db {:_id "task-queued" :type "task" :task-type "example-fetch"
-                               :data {:word-id "vocab:katze"}}))
-  (await (db/insert device-db {:_id "task-dead" :type "task" :task-type "example-fetch"
-                               :status "failed" :data {:word-id "vocab:maus"}}))
   (await (db/insert device-db {:_id "identity:local" :type "identity" :user-id 1 :token "old"}))
   (await (db/insert device-db {:_id "migration:001" :type "migration"})))
 
@@ -263,9 +256,9 @@
   [device-db user-db account-id]
   (set! (.-window js/globalThis) #js {:location #js {:hash "#key=token-of-the-other"}})
   (try
-    (with-redefs [db/use                  (fn [name] (if (= "device-db" name) device-db user-db))
+    (with-redefs [db/use (fn [name] (if (= "device-db" name) device-db user-db))
                   identity/load-identity! (fn [] (js/Promise.resolve {:id 1 :token "old"}))
-                  identity/account-id!    (fn [_] (js/Promise.resolve account-id))
+                  identity/account-id! (fn [_] (js/Promise.resolve account-id))
                   identity/save-identity! (fn [_] (js/Promise.resolve nil))]
       (await (sut/check-incoming-auth! nil)))
     (finally
@@ -273,7 +266,7 @@
 
 
 (deftest a-key-of-another-account-takes-the-old-account-s-examples-with-it
-  (async-testing "examples not moved yet and queued fetches are the account's; the identity is the device's"
+  (async-testing "examples not moved yet are the account's; the identity is the device's"
     (await
      (db-fixtures/with-test-dbs
       [user-db-name device-db-name]
@@ -284,8 +277,6 @@
        (let [ids (await (device-doc-ids device-db))]
          (is (not (contains? ids "example-hund"))
              "the move would carry it into the next account, under a content-addressed id")
-         (is (not (contains? ids "task-queued")))
-         (is (not (contains? ids "task-dead")))
          (testing "and what belongs to the device stays"
            (is (contains? ids "identity:local"))
            (is (contains? ids "migration:001")))))))))
@@ -301,9 +292,4 @@
        (await (seed-device-db! device-db))
        (await (adopt-key! device-db user-db 1))
        (let [ids (await (device-doc-ids device-db))]
-         (is (contains? ids "example-hund"))
-         (is (contains? ids "task-queued"))))))))
-
-
-
-
+         (is (contains? ids "example-hund"))))))))

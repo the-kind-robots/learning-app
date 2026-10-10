@@ -1,8 +1,10 @@
 # examples Specification
 
 ## Purpose
-Define how example sentences are generated and stored for vocabulary words, including task creation for fetching examples.
+Define how example sentences are generated and stored for vocabulary words, and how a request for one authenticates.
+
 ## Requirements
+
 ### Requirement: Example documents are stored
 The system SHALL store example documents defined in `specs/data-model/spec.md`. Per-collection scoping rules are defined in `specs/examples-schema/spec.md`.
 
@@ -43,40 +45,6 @@ request is not merely unauthorized, it is billable.
 - **WHEN** a request carries a session cookie whose token resolves to an account, and names a word
 - **THEN** the request is served exactly as before: a generated example, or the endpoint's own error
   status when generation fails
-
-### Requirement: The client sends its session with every example request
-
-The client SHALL send the session cookie with each example request. The request SHALL declare its
-credentials mode explicitly rather than depend on the browser default for same-origin URLs, because
-the default stops applying the moment the request URL becomes cross-origin, and the resulting failure
-is silent — examples stop arriving and nothing reports why.
-
-The client SHALL NOT run example fetch tasks before the session cookie has been written. A queued
-task from an earlier session would otherwise race the component that writes the cookie, and the
-outcome of that race decides whether the first example of the boot is answered or refused.
-
-#### Scenario: Fetching an example
-
-- **WHEN** the client requests an example for a word
-- **THEN** the request carries the session cookie
-- **AND** the endpoint authenticates it as the account that owns the session
-
-#### Scenario: A queued fetch task at boot
-
-- **WHEN** the app starts with an example fetch task already in the queue
-- **THEN** the task runner does not start until the session cookie has been written
-- **AND** the request it issues authenticates like any other
-
-### Requirement: Example fetch tasks are created on vocabulary entry creation
-The system SHALL create an example-fetch task whenever a vocabulary entry is created, whether it is a word or a phrase, carrying the active collection context (see `specs/examples-schema/spec.md`).
-
-#### Scenario: Word creation triggers example-fetch task
-- **WHEN** a word is added
-- **THEN** an example-fetch task document is persisted for that word via the examples module
-
-#### Scenario: Phrase creation triggers example-fetch task
-- **WHEN** a phrase is added
-- **THEN** an example-fetch task document is persisted for that phrase via the examples module, with the same payload shape a word's task has
 
 ### Requirement: A generated example for a phrase carries the whole construction
 When the target of generation is a phrase, the generated German sentence SHALL contain the whole construction. It MAY appear inflected and rearranged by German word order, and its words need not be adjacent in the sentence. A phrase that is already a complete sentence SHALL be placed in a sentence that extends or embeds it rather than returned verbatim. An example whose sentence does not carry the whole construction SHALL be rejected as invalid and regenerated.
@@ -146,3 +114,25 @@ scratch is queryable without a separate step.
 - **AND** a database that already has it is left unchanged
 - **AND** a dictionary database that cannot be reached SHALL NOT stop the system from starting
 
+### Requirement: Every example request carries the session, and none goes before it is written
+
+The client SHALL send the session cookie with each example request. The request SHALL declare its
+credentials mode explicitly rather than depend on the browser default for same-origin URLs, because
+the default stops applying the moment the request URL becomes cross-origin, and the resulting failure
+is silent — examples stop arriving and nothing reports why.
+
+The client SHALL NOT send an example request before the session cookie of this start has been
+written. A request sent earlier would race the component that writes the cookie, and the outcome of
+that race decides whether the first example of the boot is answered or refused.
+
+#### Scenario: Fetching an example
+
+- **WHEN** the client requests an example for a word
+- **THEN** the request carries the session cookie
+- **AND** the endpoint authenticates it as the account that owns the session
+
+#### Scenario: Missing examples at boot
+
+- **WHEN** the app starts holding entries without examples
+- **THEN** no example request is sent before the session cookie has been written
+- **AND** the requests it then sends authenticate like any other
