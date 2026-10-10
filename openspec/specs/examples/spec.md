@@ -80,6 +80,9 @@ Before it builds a generation request the system SHALL look the target up in the
 SHALL carry the found entry's part of speech and CEFR level in that request. A target the dictionary
 does not know SHALL be sent without a part of speech and at the default CEFR level.
 
+The lookup SHALL find a target of several words, spaces included, as it finds a single word: the
+surface-form document it reads is addressed by an encoded identifier.
+
 The lookup SHALL answer from an index over the field it selects on, and SHALL NOT read the whole
 dictionary to answer. The two outcomes the caller can observe — "the dictionary knows this word" and
 "it does not" — SHALL NOT depend on how large the dictionary is: a lookup that degrades into a full
@@ -100,6 +103,11 @@ scratch is queryable without a separate step.
 - **WHEN** an example is generated for a target with no dictionary entry
 - **THEN** the generation request carries no part of speech and the default CEFR level
 - **AND** generation proceeds
+
+#### Scenario: A phrase without an article
+
+- **WHEN** the dictionary is asked for a phrase of several words that has no article, such as "Bezug auf etwas nehmen"
+- **THEN** the lookup reads the surface-form document for it without error and answers as for any word
 
 #### Scenario: The lookup query is planned against an index
 

@@ -64,11 +64,18 @@
      (get-in response [:body :docs]))))
 
 
+(defn- path-segment
+  "`s` as one URL path segment: a space is %20, never +."
+  [s]
+  (-> (java.net.URLEncoder/encode ^String s "UTF-8")
+      (str/replace "+" "%20")))
+
+
 (defn- surface-form-lemma-ids
   [normalized]
   (let [response (db/request-sync
                   {:method :get
-                   :url    (str dictionary-db-name "/sf:" normalized)})]
+                   :url    (str dictionary-db-name "/sf:" (path-segment normalized))})]
     (if (= 404 (:status response))
       []
       (->> (get-in (assert-success! response) [:body :entries])
