@@ -23,18 +23,6 @@
   :user/db)
 
 
-(defn- held?
-  "Whether user-db still holds the change at `stored`, the position a
-   snapshot stored, given `at`, where its feed stands now. A feed that
-   stands at the stored position holds it; one that stands behind it does
-   not; otherwise user-db is asked (`db.pouch/holds-position?`)."
-  [dbs stored at]
-  (cond
-    (= stored at) (js/Promise.resolve true)
-    (and stored (<= (:seq stored) (:seq at))) (dbs/holds-position? dbs db-key stored)
-    :else (js/Promise.resolve false)))
-
-
 (def ^:private kept-types
   "The document types memory keeps; the load reads no other."
   (set (map :type documents/schemas)))
@@ -161,12 +149,23 @@
   nil)
 
 
+(defn- ^:async refusal
+  "Why the snapshot with `header` cannot start memory from user-db now, or nil."
+  [dbs {:keys [position version] :as header}]
+  (let [[feed-head db-id] (await (js/Promise.all #js [(dbs/feed-position dbs db-key) (dbs/id dbs db-key)]))]
+    (cond
+      (not= snapshot/format-version version) :version
+      (not= (:db/id header) db-id) :db-id
+      (> (:seq position) (:seq feed-head)) :position
+      (not (await (dbs/holds-position? dbs db-key position feed-head))) :change)))
+
+
 (defn ^:async checked-snapshot
   "The snapshot, `{:header :body :entries}`, when it can start memory from
    user-db as it stands now, or nil. It decodes the snapshot in the next task,
-   while user-db answers the marker and the feed position; `:entries` is a
+   while user-db answers its id and the feed position; `:entries` is a
    promise of the decoded entries. A snapshot that cannot start memory is deleted
-   (`adapters.learner.snapshot/refusal`). It never rejects; a failure is
+   (`refusal`). It never rejects; a failure is
    logged, the snapshot is deleted, and it resolves nil. The interval the
    development build reports as `:memory :load-ms` starts here."
   [dbs]
@@ -174,10 +173,9 @@
     (instrumentation/memory-start!))
   (try
     (when-let [{:keys [header] :as snapshot} (await (snapshot/read!))]
-      (let [entries     (.then (browser/yield) #(snapshot/decoded snapshot))
-            _           (.catch entries (fn [_]))
-            [at marked] (await (js/Promise.all #js [(dbs/feed-position dbs db-key) (dbs/marker dbs db-key)]))]
-        (if-let [reason (snapshot/refusal header at marked (await (held? dbs (:position header) at)))]
+      (let [entries (.then (browser/yield) #(snapshot/decoded snapshot))
+            _ (.catch entries (fn [_]))]
+        (if-let [reason (await (refusal dbs header))]
           (await (dropped! reason {}))
           (assoc snapshot :entries entries))))
     (catch :default err
@@ -239,24 +237,24 @@
 
 (defn- snapshot-writer
   "A function that writes the memory in `store` as the snapshot, with
-   user-db's marker, which it reads once. It writes nothing when memory's
+   user-db's id, which it reads once. It writes nothing when memory's
    feed position is that of the snapshot last written or read,
    `stored` at first, or once `stopped?` holds true. Writes run one after
    another, so an older memory is never stored over a newer one. A failed
    write is logged."
   [dbs store stored stopped?]
   (let [last-stored (volatile! stored)
-        marked      (volatile! nil)
+        db-id       (volatile! nil)
         queue       (volatile! (js/Promise.resolve))
         write       (fn ^:async write []
                       (let [memory (:learner/memory @store)
                             at     (memory/position memory)]
                         (when-not (or @stopped? (= at @last-stored))
                           (try
-                            (when-not @marked
-                              (vreset! marked (await (dbs/marker dbs db-key))))
+                            (when-not @db-id
+                              (vreset! db-id (await (dbs/id dbs db-key))))
                             (when-not @stopped?
-                              (await (snapshot/write! memory @marked))
+                              (await (snapshot/write! memory @db-id))
                               (vreset! last-stored at))
                             (catch :default err
                               (log/warn :memory/snapshot-write-failed {:error (str err)}))))))]

@@ -130,13 +130,13 @@
 (defn- ^:async lost-tail!
   "Makes `(:other/db dbs)` user-db as it would stand after it lost its last
    `n` changes: every change before them, under the same sequences, and the
-   same marker. Resolves with the changes it lost."
+   same id. Resolves with the changes it lost."
   [dbs n]
   (let [changes (await (pouch/read-changes dbs :user/db 0 nil))
         other   (:other/db dbs)]
     (doseq [{:keys [doc]} (drop-last n changes)]
       (await (.bulkDocs ^js other (db/clj->couch [doc]) #js {:new_edits false})))
-    (await (db/insert other {:_id pouch/marker-id :marker (await (pouch/marker dbs :user/db))}))
+    (await (db/insert other {:_id pouch/id-doc :id (await (pouch/id dbs :user/db))}))
     (take-last n changes)))
 
 
@@ -278,22 +278,22 @@
 
 
 (deftest a-snapshot-of-another-database-is-dropped
-  (async-testing "user-db's marker differs from the stored one: a full read"
-    (dropped-on "marker"
+  (async-testing "user-db's id differs from the stored one: a full read"
+    (dropped-on "db id"
                 (^:async fn
                  [dbs _]
-                 (let [local (await (db/get (:user/db dbs) pouch/marker-id))]
-                   (await (db/insert (:user/db dbs) (assoc local :marker "another"))))))))
+                 (let [local (await (db/get (:user/db dbs) pouch/id-doc))]
+                   (await (db/insert (:user/db dbs) (assoc local :id "another"))))))))
 
 
 (deftest a-damaged-snapshot-of-another-database-is-dropped
-  (async-testing "the body is damaged and the marker differs: a full read"
-    (dropped-on "damaged and marker"
+  (async-testing "the body is damaged and the id differs: a full read"
+    (dropped-on "damaged and db id"
                 (^:async fn
                  [dbs entries]
                  (await (restore! entries (update (stored entries) :body str " ")))
-                 (let [local (await (db/get (:user/db dbs) pouch/marker-id))]
-                   (await (db/insert (:user/db dbs) (assoc local :marker "another"))))))))
+                 (let [local (await (db/get (:user/db dbs) pouch/id-doc))]
+                   (await (db/insert (:user/db dbs) (assoc local :id "another"))))))))
 
 
 (deftest a-snapshot-ahead-of-its-database-is-dropped
