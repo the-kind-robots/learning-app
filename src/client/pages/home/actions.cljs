@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as str]
    [domain.phrase :as phrase]
+   [domain.vocabulary :as vocabulary]
    [nexus.registry :as nxr]))
 
 
@@ -147,17 +148,25 @@
     [[:effect/save {:home/suggestions empty-suggestions}]]))
 
 
-;; Suggestions are deliberately not cleared here: the previous list stays
-;; until :action/update-suggestions delivers the next answer (GH-178), so the
-;; list does not flash empty on every keystroke. An emptied input still clears
-;; it — the dictionary returns [] for an empty prefix.
+(defn- narrowed
+  "The shown suggestions that still complete `value`, in order, with the marked entry kept when it survives.
+   Returns nil when none are left."
+  [{:suggestions/keys [items active-idx]} value]
+  (let [active (get items (or active-idx 0))
+        kept   (filterv #(vocabulary/completes? value %) items)]
+    (when (seq kept)
+      (suggestions kept (max 0 (.indexOf kept active))))))
+
+
+;; Keeps the shown suggestions that still complete the new value; the next
+;; answer replaces them, and an emptied input clears them.
 (nxr/register-action! :action/update-word
   (fn update-word [state value]
-    ;; A prefilled translation belongs to the word that earned it: emptying the
-    ;; German field drops it, but it is no longer wiped on every keystroke —
-    ;; that made the field blink and resize while typing in this one.
+    ;; Emptying the German field drops a prefilled translation.
     [[:effect/save
       (cond-> {:home/word value}
+        (:home/suggestions state)
+        (assoc :home/suggestions (narrowed (:home/suggestions state) value))
         (and (str/blank? value) (not (:home/translation-typed? state)))
         (assoc :home/translation ""))]
      [:effect/suggest-completions value]]))

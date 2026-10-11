@@ -71,4 +71,11 @@
   :pos          "noun"
   :rank         840
   :forms        ["Hundes" "Hunde" "Hunden"]
-  :translations [{:lang "ru" :value "пёс"}]}]
+  :translations [{:lang "ru" :value "пёс"}]}
+
+ ;; Umlaut and article; the only lemma under "rück".
+ {:value        "der Rücken"
+  :pos          "noun"
+  :rank         820
+  :forms        ["Rückens"]
+  :translations [{:lang "ru" :value "спина"}]}]

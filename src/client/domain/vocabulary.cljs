@@ -69,6 +69,16 @@
   [(str/replace (without-prefix id) article "") id])
 
 
+(defn completes?
+  "Whether `typed` is a prefix of the completion's lemma, with or without its article, or of one of its `:matched-forms`.
+   Comparison is on normalised text."
+  [typed {:keys [lemma matched-forms]}]
+  (let [typed (normalize-value typed)
+        lemma (normalize-value lemma)]
+    (boolean (some #(str/starts-with? % typed)
+                   (into [lemma (str/replace lemma article "")] matched-forms)))))
+
+
 (defn search-text
   "What the words filter matches a query against, normalised once: the value
    and every translation, one per line. A normalised query holds no line
