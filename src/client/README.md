@@ -99,6 +99,8 @@ Every tab has a worker, but the dictionary belongs to the tab being typed into: 
 
 **Examples** — `use-cases.examples`, started as the `:examples/fetcher` component, is a loop: one request at a time for the first pair of entry and collection that has no example (`domain/examples.cljs`), while the tab is visible and the device is online and has an account. After each request it pauses; with nothing missing it waits until memory's words or collections change; hidden or offline, until the page is active again (`ports/page.cljs`, shared with sync's push socket). There is no periodic look (ADR-0021). Memory and the vocabulary use case know nothing about it. What it must do is in `openspec/specs/example-backfill/spec.md`.
 
+**Async pitfalls** — `^:async` fns await some forms without an `await`; see [docs/dev/cljs-async-pitfalls.md](../../docs/dev/cljs-async-pitfalls.md).
+
 ## Building
 
 ```bash
