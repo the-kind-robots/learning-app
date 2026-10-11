@@ -53,7 +53,8 @@
   [^string text]
   (let [n (.-length text)]
     (loop [i    0
-           hash 0x811c9dc5]
+           ;; int32 from the start, so V8 keeps the loop in int32 registers; same hash.
+           hash (bit-or 0x811c9dc5 0)]
       (if (< i n)
         (recur (inc i) (js/Math.imul (bit-xor hash (.charCodeAt text i)) 0x01000193))
         (unsigned-bit-shift-right hash 0)))))
