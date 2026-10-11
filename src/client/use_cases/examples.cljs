@@ -200,8 +200,8 @@
           [:wait/memory-change (select-keys memory [:words :collections])])))))
 
 
-;; Plain, like `waiting`: an async function awaits the promise `sleep` returns,
-;; and the race would be over before it began.
+;; Plain, like `waiting`: an async function awaits the promise `sleep` returns.
+;; See docs/dev/cljs-async-pitfalls.md.
 (defn- first-pass-or-timeout
   "Resolves ::timed-out once `ms` pass without `first-pass`, or with nil when
    the fetcher stops; `waited` aborts the timer."
@@ -230,9 +230,8 @@
     (await (catch-up!))))
 
 
-;; Not inside `fetch-loop`: an async function awaits a promise its `case`
-;; returns, and the wait would be over before `unless-closed` saw it. A port
-;; called as `((:k m))` is awaited too; call it through a local name.
+;; Plain: an async function awaits the promise a `case` or `((:k m))` returns.
+;; See docs/dev/cljs-async-pitfalls.md.
 (defn- waiting
   "The promise for the `wait` a step asked for, with its `arg`."
   [{:keys [clock learner page signal]} wait arg]
