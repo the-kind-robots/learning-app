@@ -1,6 +1,6 @@
 # 0018. A snapshot of memory starts the app; it is a guarded cache, never migrated
 
-- Status: accepted
+- Status: accepted; superseded in part by [ADR-0023](0023-a-snapshot-holds-built-memory.md) (what is stored)
 - Date: 2026-10-04
 
 ## Context

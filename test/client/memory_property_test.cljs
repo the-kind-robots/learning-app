@@ -10,6 +10,7 @@
   (:require
    [adapters.learner.memory :as sut]
    [adapters.learner.snapshot :as snapshot]
+   [client.support.memory-projection :as projection]
    [domain.collections :as collections]
    [ports.learner :as ports]
    [use-cases.vocabulary :as vocabulary]
@@ -34,15 +35,14 @@
 
 
 (def ^:private gen-review
-  (gen/let [n        (gen/choose 0 60)
-            word-id  (gen/elements word-ids)
-            retained gen/boolean
-            day      (gen/choose 1 28)]
-    {:_id        (str "review:" n)
-     :type       "review"
-     :word-id    word-id
-     :retained   retained
-     :created-at (str "2026-01-" (if (< day 10) (str "0" day) day) "T00:00:00.000Z")}))
+  "A review is never edited: its word, outcome and day follow from its number."
+  (gen/let [n (gen/choose 0 60)]
+    (let [day (inc (mod (* 5 n) 28))]
+      {:_id        (str "review:" n)
+       :type       "review"
+       :word-id    (nth word-ids (mod (* 7 n) (count word-ids)))
+       :retained   (even? (quot n 3))
+       :created-at (str "2026-01-" (if (< day 10) (str "0" day) day) "T00:00:00.000Z")})))
 
 
 (def ^:private gen-collection
@@ -71,7 +71,6 @@
   (gen/frequency [[6 (gen/one-of [gen-word gen-review gen-collection gen-example gen-other])]
                   [1
                    (gen/let [id (gen/one-of [(gen/elements word-ids)
-                                             (gen/fmap #(str "review:" %) (gen/choose 0 60))
                                              (gen/fmap #(str "collection:" %) (gen/choose 0 4))
                                              (gen/fmap #(str "example:" %) (gen/choose 0 8))])]
                      {:_deleted true :_id id})]]))
@@ -100,25 +99,6 @@
        (remove :_deleted)))
 
 
-(defn- snapshot
-  "Memory as plain data by word id, review histories as vectors. Slot
-   numbers are left out: they follow the order ids first arrived in, which
-   batching changes."
-  [memory]
-  (let [plain (fn [{:keys [ids retained seconds]}]
-                (vec (for [i (range (count ids))]
-                       [(aget seconds i) (aget retained i) (aget ids i)])))
-        cards (:cards memory)]
-    {:by-id    (into {}
-                     (keep (fn [[id slot]]
-                             (let [{:keys [word reviews]} (nth cards slot)]
-                               (when (or word (pos? (count (:ids reviews))))
-                                 [id [word (plain reviews)]]))))
-                     (:slot-of memory))
-     :examples [(:examples memory) (:examples-by-word memory)]
-     :other    [(:collections memory) (:words memory)]}))
-
-
 (defn- history
   "Each memory the batches go through, oldest first, with its snapshot taken
    when it was made."
@@ -126,11 +106,11 @@
   (loop [memory sut/empty-memory
          docs   docs
          [size & sizes] (cycle sizes)
-         seen   [[memory (snapshot memory)]]]
+         seen   [[memory (projection/of memory)]]]
     (if (empty? docs)
       seen
       (let [memory (sut/with-docs memory (take size docs))]
-        (recur memory (drop size docs) sizes (conj seen [memory (snapshot memory)]))))))
+        (recur memory (drop size docs) sizes (conj seen [memory (projection/of memory)]))))))
 
 
 (defn- expected-urgency
@@ -165,9 +145,9 @@
                       seen        (history docs sizes)
                       incremental (first (peek seen))
                       reviews     (group-by :word-id (filter #(= "review" (:type %)) finals))]
-                  (and (= (snapshot rebuilt) (snapshot incremental))
+                  (and (= (projection/of rebuilt) (projection/of incremental))
                        ;; An older memory is still what it was.
-                       (every? (fn [[memory taken]] (= taken (snapshot memory))) seen)
+                       (every? (fn [[memory taken]] (= taken (projection/of memory))) seen)
                        ;; A card has the word `:slot-of` names its slot for.
                        (every? (fn [[id slot]]
                                  (let [word (:word (nth (:cards incremental) slot))]
@@ -226,8 +206,8 @@
          pages   (sort-by #(hash [order %]) pages)
          loaded  (reduce sut/with-docs sut/empty-memory pages)
          memory  (sut/with-docs loaded (fed (drop start docs) latest-only?))]
-     (= (snapshot (sut/with-docs sut/empty-memory (final-docs docs)))
-        (snapshot memory)))))
+     (= (projection/of (sut/with-docs sut/empty-memory (final-docs docs)))
+        (projection/of memory)))))
 
 
 (deftest the-load-then-the-feed-equal-a-rebuild
@@ -250,10 +230,10 @@
 
 (defn- taken-again
   "The memory a start takes from the snapshot of `memory`: encoded, read
-   back, and its entries added to an empty memory."
+   back and restored."
   [memory]
   (let [stored (snapshot/parsed (snapshot/encode memory "u"))]
-    (sut/with-position (sut/with-entries sut/empty-memory (snapshot/decoded stored))
+    (sut/with-position (sut/restored (snapshot/decoded stored))
                        (:position (:header stored)))))
 
 
@@ -263,8 +243,7 @@
                 (let [memory (first (peek (history (revised changes []) sizes)))
                       memory (sut/with-position memory (count changes))
                       again  (taken-again memory)]
-                  (and (= (snapshot memory) (snapshot again))
-                       (= (set (sut/entries memory)) (set (sut/entries again)))
+                  (and (= (projection/of memory) (projection/of again))
                        (= (sut/position memory) (sut/position again))))))
 
 
@@ -285,8 +264,8 @@
          taken-at (min taken-at (count docs))
          memory   (sut/with-changes sut/empty-memory (take taken-at docs) taken-at)
          started  (sut/with-changes (taken-again memory) (fed (drop taken-at docs) latest-only?) (count docs))]
-     (= (snapshot (sut/with-docs sut/empty-memory (final-docs docs)))
-        (snapshot started)))))
+     (= (projection/of (sut/with-docs sut/empty-memory (final-docs docs)))
+        (projection/of started)))))
 
 
 (deftest a-snapshot-then-a-catch-up-equal-a-rebuild

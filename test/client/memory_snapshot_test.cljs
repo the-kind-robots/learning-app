@@ -13,10 +13,14 @@
    [client.support.db-seed :as db-seed]
    [client.support.document :as document]
    [client.support.learner :as learner]
+   [client.support.memory-projection :as projection]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
-   [db.pouch :as pouch]))
+   [db.pouch :as pouch]
+   [domain.lesson :as lesson]
+   [domain.retention :as retention]
+   [use-cases.vocabulary :as vocabulary]))
 
 
 (def user-db-name (db-fixtures/db-name "client.memory-snapshot-test.user"))
@@ -41,14 +45,6 @@
    [user-db-name device-db-name other-user-db-name]
    (fn [[user-db device-db other-user-db]]
      (f {:device/db device-db :other/db other-user-db :user/db user-db}))))
-
-
-(defn- projection
-  "What memory holds, as plain data that compares by value: every entry,
-   and the words in list order."
-  [memory]
-  {:entries (set (memory/entries memory))
-   :words   (mapv :id (memory/words memory))})
 
 
 (def ^:private haus
@@ -177,38 +173,89 @@
    {:_id "vocab:weg" :_rev "2-f" :_deleted true}])
 
 
-(def ^:private format-entries
-  "What a snapshot of `format-docs` holds in this format version, by id."
-  [{:entity {:id "coll-tiere" :created-at "2026-01-01" :name "Tiere" :word-ids []}
-    :kind   :collection
-    :rev    "1-c"}
-   {:entity {:id            "example:vocab:der hund:coll-tiere:0123456789ab"
-             :collection-id "coll-tiere"
-             :structure     []
-             :translation   "Пёс спит"
-             :value         "Der Hund schläft."
-             :word          "der Hund"
-             :word-id       "vocab:der hund"}
-    :kind   :example
-    :rev    "1-d"}
-   {:entity {:id "review-1" :created-at "2026-01-03T00:00:00.000Z" :retained true :word-id "vocab:der hund"}
-    :kind   :review
-    :rev    "1-b"}
-   {:entity {:id          "vocab:der hund"
-             :created-at  "2026-01-01T00:00:00.000Z"
-             :modified-at "2026-01-02T00:00:00.000Z"
-             :translation [{:lang "ru" :value "пёс"}]
-             :value       "der Hund"}
-    :kind   :word
-    :rev    "1-a"}])
+(defn- as-data
+  "The memory `stored` returned, with each review history as its three
+   columns in vectors."
+  [stored]
+  (update stored :cards (partial mapv #(update % :reviews (fn [reviews] (update-vals (into {} reviews) vec))))))
+
+
+(def ^:private format-body
+  "What a snapshot of `format-docs` holds in this format version."
+  {:cards            [{:reviews {:ids      ["review-1"]
+                                 :retained [1]
+                                 :seconds  [1767398400]}
+                       :word    {:id          "vocab:der hund"
+                                 :created-at  "2026-01-01T00:00:00.000Z"
+                                 :modified-at "2026-01-02T00:00:00.000Z"
+                                 :search      "der hund\nпёс"
+                                 :translation [{:lang "ru" :value "пёс"}]
+                                 :value       "der Hund"}}]
+   :collections      {"coll-tiere" {:id "coll-tiere" :created-at "2026-01-01" :name "Tiere" :word-ids []}}
+   :collections-by-word {}
+   :examples         {"example:vocab:der hund:coll-tiere:0123456789ab"
+                      {:id            "example:vocab:der hund:coll-tiere:0123456789ab"
+                       :collection-id "coll-tiere"
+                       :structure     []
+                       :translation   "Пёс спит"
+                       :value         "Der Hund schläft."
+                       :word          "der Hund"
+                       :word-id       "vocab:der hund"}}
+   :examples-by-word {"vocab:der hund" #{"example:vocab:der hund:coll-tiere:0123456789ab"}}
+   :slot-of          {"vocab:der hund" 0}})
 
 
 (deftest a-snapshot-of-this-format-version-holds-exactly-what-memory-takes
-  (let [memory  (memory/with-docs memory/empty-memory format-docs)
-        entries (snapshot/decoded (snapshot/parsed (snapshot/encode memory nil)))]
-    (is (= format-entries (sort-by (comp :id :entity) entries))
-        (str "What memory takes from a document changed. Change adapters.learner.snapshot/format-version, "
-             "so that snapshots of the old format are dropped, and update format-entries here."))))
+  (let [memory (memory/with-docs memory/empty-memory format-docs)
+        body   (snapshot/decoded (snapshot/parsed (snapshot/encode memory nil)))]
+    (is (= format-body (as-data body))
+        (str "What the snapshot holds changed. Change adapters.learner.snapshot/format-version, "
+             "so that snapshots of the old format are dropped, and update format-body here."))
+    (is (and (instance? js/Float64Array (:seconds (:reviews (first (:cards body)))))
+             (instance? js/Uint8Array (:retained (:reviews (first (:cards body))))))
+        "a review history comes back as typed arrays")))
+
+
+(defn- word-docs
+  "A word and `n` reviews of it, one a day from the start of the year, the
+   first `lapses` of them lapses."
+  [id n lapses]
+  (into [{:_id id :_rev "1-w" :type "vocab" :value id :translation [{:lang "ru" :value id}]}]
+        (map (fn [day]
+               {:_id        (str "review:" id ":" day)
+                :_rev       "1-r"
+                :type       "review"
+                :word-id    id
+                :retained   (>= day lapses)
+                :created-at (str "2026-01-" (if (< day 9) "0" "") (inc day) "T00:00:00.000Z")}))
+        (range n)))
+
+
+(deftest a-restored-memory-reads-as-the-rebuilt-one
+  (let [now      1790000000000
+        docs     (concat (word-docs "vocab:a" 3 0)
+                         (word-docs "vocab:b" 5 2)
+                         (word-docs "vocab:c" 1 1)
+                         (word-docs "vocab:d" 0 0)
+                         (word-docs "vocab:e" 9 4))
+        rebuilt  (memory/with-docs memory/empty-memory docs)
+        restored (memory/restored (snapshot/decoded (snapshot/parsed (snapshot/encode rebuilt nil))))
+        levels   (fn [m]
+                   (into {}
+                         (map (fn [{:keys [id]}]
+                                [id (retention/level (retention/urgency (memory/review-history m id) now))]))
+                         (memory/words m)))
+        picked   (fn [m]
+                   (into #{}
+                         (map (comp :id :word))
+                         (lesson/pick-vocab (memory/collection-cards m nil)
+                                            #(vocabulary/urgency-of % now)
+                                            2
+                                            2)))]
+    (is (= (levels rebuilt) (levels restored)) "retention levels")
+    (is (= (picked rebuilt) (picked restored)) "the words a lesson picks")
+    (is (= (map :id (memory/words rebuilt)) (map :id (memory/words restored))) "the word list")
+    (is (= (projection/of rebuilt) (projection/of restored)) "everything memory holds")))
 
 
 (deftest a-repeat-start-takes-the-snapshot-and-then-what-was-stored-since
@@ -236,7 +283,7 @@
              (stop)
              (is (zero? (:full reads)) "no document is read in full")
              (is (= {:user/db (:seq position)} (:since reads)) "the change log is read from the stored position")
-             (is (= (projection (await (full-read (:user/db dbs)))) (projection restored))
+             (is (= (projection/of (await (full-read (:user/db dbs)))) (projection/of restored))
                  "memory equals a full read")
              (is (= "Tiere!" (:name (memory/collection restored "coll-tiere"))))
              (is (nil? (memory/word restored "vocab:die katze"))))))))))))
@@ -261,7 +308,7 @@
         (await (spoil! dbs entries))
         (let [{:keys [memory reads]} (await (session! dbs puts))]
           (is (= 1 (:full reads)) (str label ": user-db is read in full"))
-          (is (= (projection (await (full-read (:user/db dbs)))) (projection memory))
+          (is (= (projection/of (await (full-read (:user/db dbs)))) (projection/of memory))
               (str label ": memory equals a full read"))
           (is (= snapshot/format-version (:version (:header (stored entries))))
               (str label ": a new snapshot is written"))))))))))
@@ -337,7 +384,7 @@
                                   (fn [other _]
                                     (db/insert other {:_id "vocab:der fremde" :type "vocab" :value "der Fremde"}))))]
       (is (= 1 (:full reads)) "user-db is read in full")
-      (is (= (projection full-read) (projection memory)) "memory equals a full read"))))
+      (is (= (projection/of full-read) (projection/of memory)) "memory equals a full read"))))
 
 
 (deftest a-pull-before-the-start-that-brings-the-lost-change-back-keeps-the-snapshot
@@ -345,7 +392,7 @@
     (let [{:keys [full-read memory reads]}
           (await (after-lost-tail 1 (fn [other [{:keys [doc]}]] (pulled! other doc))))]
       (is (zero? (:full reads)) "the snapshot is taken")
-      (is (= (projection full-read) (projection memory)) "memory equals a full read"))))
+      (is (= (projection/of full-read) (projection/of memory)) "memory equals a full read"))))
 
 
 (deftest a-snapshot-is-written-when-the-page-goes-to-the-background
@@ -370,5 +417,5 @@
               (.dispatchEvent document (js/Event. "visibilitychange"))
               (await (wait/until #(= 2 @puts)))
               (stop)
-              (is (some #(= "vocab:das haus" (get-in % [:entity :id])) (snapshot/decoded (stored entries))))
+              (is (some? (memory/word (memory/restored (snapshot/decoded (stored entries))) "vocab:das haus")))
               (is (= (memory/position (:learner/memory @store)) (stored-position entries))))))))))))))
