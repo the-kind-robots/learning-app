@@ -105,6 +105,7 @@ Important behavior:
 - After a successful merge, attempts to set the GitHub Project `Status` field to `Done`.
 - When a PR is created and merge is not skipped, attempts to set project `Status` to `In review` before merging.
 - After a successful merge, attempts to set project `Status` to `Done`.
+- After a successful merge, runs `scripts/prune_worktrees.sh` (skip with `--keep-worktrees`). Run it alone after a plain `gh pr merge`; `--dry-run` previews. It removes `.claude/worktrees/*` whose PR is merged or whose commits are in `origin/<base>` and deletes their branches; keeps locked, current, tracked-changes, open-PR and unmerged ones, with the reason.
 - Successful finish changes the task boundary: later repo work should be treated as a new issue/branch by default unless it is obviously just archive/deploy/closeout cleanup for the just-finished task.
 
 If the worktree contains unrelated local changes, prefer manual Git/PR steps instead of staging everything through the wrapper script.

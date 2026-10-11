@@ -26,6 +26,7 @@ Options:
   --no-pr                       Skip PR creation
   --no-merge                    Skip merge
   --keep-branch                 Do not delete branch on merge
+  --keep-worktrees              Do not prune merged worktrees after merge
   --help                        Show this help
 USAGE
 }
@@ -101,6 +102,7 @@ skip_push=0
 skip_pr=0
 skip_merge=0
 delete_branch=1
+prune=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -174,6 +176,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --keep-branch)
       delete_branch=0
+      shift
+      ;;
+    --keep-worktrees)
+      prune=0
       shift
       ;;
     --help|-h)
@@ -303,6 +309,9 @@ fi
 pr_state="$(gh pr view "$pr_url" -R "$repo" --json state --jq '.state' 2>/dev/null || true)"
 if [[ "$pr_state" == "MERGED" ]]; then
   mark_issue_status_in_project "$owner" "$project_number" "$issue_number" "$status_field" "$done_status"
+  if [[ "$prune" -eq 1 ]]; then
+    "$(dirname "${BASH_SOURCE[0]}")/prune_worktrees.sh" --base "$base_branch" || echo "warn: worktree prune failed" >&2
+  fi
 fi
 
 echo "Commit Message: $commit_message"
