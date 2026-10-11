@@ -135,14 +135,15 @@
 
 
 (defn- ^:async restored
-  "Memory from the snapshot `{:header :body}`: its entries, taken again,
-   with what user-db stored after its feed position. Resolves with
-   `{:memory :stored}`, that memory and the snapshot's feed position.
-   Rejects when the snapshot does not match its checksum, or when any step
+  "Memory from the snapshot `{:header :body :entries}`: its entries, a
+   promise of the decoded ones, taken again, with what user-db stored after
+   its feed position.
+   Resolves with `{:memory :stored}`, that memory and the snapshot's feed
+   position. Rejects when the snapshot did not decode, or when any step
    fails."
   [dbs snapshot]
   (let [stored (:position (:header snapshot))
-        memory (await (loaded memory/with-entries (snapshot/decoded snapshot)))]
+        memory (await (loaded memory/with-entries (await (:entries snapshot))))]
     {:memory (await (caught-up dbs memory stored))
      :stored stored}))
 
@@ -161,8 +162,10 @@
 
 
 (defn ^:async checked-snapshot
-  "The snapshot, `{:header :body}`, when it can start memory from user-db
-   as it stands now, or nil. A snapshot that cannot is deleted
+  "The snapshot, `{:header :body :entries}`, when it can start memory from
+   user-db as it stands now, or nil. It decodes the snapshot in the next task,
+   while user-db answers the marker and the feed position; `:entries` is a
+   promise of the decoded entries. A snapshot that cannot start memory is deleted
    (`adapters.learner.snapshot/refusal`). It never rejects; a failure is
    logged, the snapshot is deleted, and it resolves nil. The interval the
    development build reports as `:memory :load-ms` starts here."
@@ -171,10 +174,12 @@
     (instrumentation/memory-start!))
   (try
     (when-let [{:keys [header] :as snapshot} (await (snapshot/read!))]
-      (let [[at marked] (await (js/Promise.all #js [(dbs/feed-position dbs db-key) (dbs/marker dbs db-key)]))]
+      (let [entries     (.then (browser/yield) #(snapshot/decoded snapshot))
+            _           (.catch entries (fn [_]))
+            [at marked] (await (js/Promise.all #js [(dbs/feed-position dbs db-key) (dbs/marker dbs db-key)]))]
         (if-let [reason (snapshot/refusal header at marked (await (held? dbs (:position header) at)))]
           (await (dropped! reason {}))
-          snapshot)))
+          (assoc snapshot :entries entries))))
     (catch :default err
       (await (dropped! :unreadable {:error (str err)})))))
 
@@ -182,8 +187,7 @@
 (defn- ^:async from-snapshot
   "What `restored` resolves with, or nil when `snapshot` cannot be taken;
    that snapshot is then deleted. It starts in a task of its own, so that
-   whoever waits for the snapshot check goes on before the snapshot is
-   decoded."
+   whoever waits for the snapshot check goes on before memory is built."
   [dbs snapshot]
   (await (browser/yield))
   (try

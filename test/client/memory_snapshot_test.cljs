@@ -286,6 +286,16 @@
                    (await (db/insert (:user/db dbs) (assoc local :marker "another"))))))))
 
 
+(deftest a-damaged-snapshot-of-another-database-is-dropped
+  (async-testing "the body is damaged and the marker differs: a full read"
+    (dropped-on "damaged and marker"
+                (^:async fn
+                 [dbs entries]
+                 (await (restore! entries (update (stored entries) :body str " ")))
+                 (let [local (await (db/get (:user/db dbs) pouch/marker-id))]
+                   (await (db/insert (:user/db dbs) (assoc local :marker "another"))))))))
+
+
 (deftest a-snapshot-ahead-of-its-database-is-dropped
   (async-testing "a stored position past user-db's feed: a full read"
     (dropped-on "position"
