@@ -1,6 +1,6 @@
 # 0014. The service worker activates on request; every page reloads on controllerchange
 
-- Status: accepted
+- Status: accepted; superseded in part by [ADR-0022](0022-a-new-build-runs-after-every-window-closes.md) (the takeover on request and the reload on `controllerchange`)
 - Date: 2026-09-17
 
 ## Context
