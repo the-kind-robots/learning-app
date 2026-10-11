@@ -25,10 +25,10 @@ Details: `word-frequencies/README.md`
 
 ### 2. Build Dictionary — _mandatory_
 
-Requires `frequency.tsv` (Stage 1) or an existing file from a prior run. All files read and written to `../../resources/dictionary/` by default.
+Requires `frequency.tsv` (Stage 1) or an existing file from a prior run. Run from the repository root; the `:dictionary` alias reads `tools/dictionary/data/` and writes `resources/dictionary/`.
 
 ```bash
-clojure -T:build build
+clojure -X:dictionary build
 ```
 
 Writes:
@@ -78,7 +78,7 @@ Details: `enrich-translations/README.md`
 Patches `dictionary.sqlite` with translations from `enrichment-output.jsonl`. Gap-fill only: lemmas that already have translations are skipped.
 
 ```bash
-clojure -T:build apply-enrichment!
+clojure -X:dictionary apply-enrichment!
 ```
 
 ---

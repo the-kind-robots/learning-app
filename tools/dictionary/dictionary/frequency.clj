@@ -46,12 +46,23 @@
          count (assoc :count count))])))
 
 
+(defn- keep-best-ranked
+  "Adds `[key record]` to `index` unless it already holds a lower rank for that key."
+  [index [key record]]
+  (let [kept (get index key)]
+    (if (and kept (<= (:rank kept) (:rank record)))
+      index
+      (assoc index key record))))
+
+
 (defn read-frequency-file
   "Read optional TSV/CSV frequency data.
    Supported headers: word, count, rank, source.
    `count` is a normalized per-million word rate (linear, sums across
    surface forms).
-   Minimal format without header: word<TAB>count."
+   Minimal format without header: word<TAB>count.
+   Returns a map keyed by `normalize-german` of the word; spellings sharing a
+   key keep the best rank."
   [path]
   (if (str/blank? path)
     {}
@@ -72,7 +83,8 @@
                           (sort-by (fn [row]
                                      (- (or (parse-double-safe (or (second row) "0")) 0.0)))
                                    data-rows))]
-        (into {}
-              (keep-indexed (fn [index row]
-                              (row->record headers row (inc index))))
-              sorted)))))
+        (reduce keep-best-ranked
+                {}
+                (keep-indexed (fn [index row]
+                                (row->record headers row (inc index)))
+                              sorted))))))
