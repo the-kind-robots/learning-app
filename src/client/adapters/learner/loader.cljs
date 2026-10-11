@@ -52,17 +52,25 @@
   500)
 
 
+(def ^:private slice-ms
+  "How long memory is built before the page gets a turn."
+  12)
+
+
 (defn- ^:async loaded
   "Memory built from `items` by `add`, `memory/with-docs` or
-   `memory/with-entries`, a page at a time with a task between pages, so
-   that the splash keeps painting while it is built."
+   `memory/with-entries`, in slices of about `slice-ms` with a task between
+   them, so that the splash keeps painting while it is built."
   [add items]
   (loop [memory memory/empty-memory
-         pages  (partition-all ingest-page items)]
+         pages  (partition-all 100 items)
+         began  (js/performance.now)]
     (if-let [[page & more] (seq pages)]
       (let [memory (add memory page)]
-        (await (browser/yield))
-        (recur memory more))
+        (if (< (- (js/performance.now) began) slice-ms)
+          (recur memory more began)
+          (do (await (browser/yield))
+              (recur memory more (js/performance.now)))))
       memory)))
 
 
