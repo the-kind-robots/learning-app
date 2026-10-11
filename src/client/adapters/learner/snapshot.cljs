@@ -9,7 +9,7 @@
 
      {:version  format-version
       :checksum checksum of the body
-      :marker   user-db's marker
+      :db/id    user-db's id
       :position {:id :rev :seq}}
 
    The position is that of the memory the body was taken from
@@ -76,39 +76,15 @@
 
 
 (defn encode
-  "The snapshot of `memory`, as text. `marker` is the marker of user-db,
-   which memory was read from."
-  [memory marker]
+  "The snapshot of `memory`, as text. `db-id` is the id of user-db, which
+   memory was read from."
+  [memory db-id]
   (let [body (transit/write (transit/writer :json) (memory/entries memory))]
     (joined {:body   body
              :header {:checksum (checksum body)
-                      :marker   marker
+                      :db/id    db-id
                       :position (memory/position memory)
                       :version  format-version}})))
-
-
-(defn refusal
-  "Why the snapshot with `header` cannot start memory from user-db as it
-   stands, or nil when it can. `at` is where user-db's change feed
-   stands now (`db.pouch/feed-position`), `marked` user-db's marker, and
-   `held` whether user-db still holds the change at the stored position
-   (`db.pouch/holds-position?`). The reasons are:
-
-   - `:version` — the snapshot is of another format version;
-   - `:marker` — user-db is not the database the snapshot was taken from;
-   - `:position` — user-db's feed stands behind the stored position, as
-     when the database lost its last writes;
-   - `:change` — user-db no longer holds the change at the stored
-     position, as when it lost its last writes and stored others under
-     their sequences.
-
-   The body is checked when it is decoded (`decoded`)."
-  [{:keys [marker position version]} at marked held]
-  (cond
-    (not= format-version version)                  :version
-    (not= marker marked)                           :marker
-    (not (some-> (:seq position) (<= (:seq at))))  :position
-    (not held)                                     :change))
 
 
 (defn decoded
@@ -144,10 +120,10 @@
   "Stores the snapshot of `memory` (`encode`) in place of the one stored.
    The Cache API replaces an entry whole: a write that does not finish
    leaves the old one."
-  [memory marker]
+  [memory db-id]
   (when (cache-api?)
     (let [cache (await (.open js/caches cache-name))]
-      (await (.put cache snapshot-key (js/Response. (encode memory marker)))))))
+      (await (.put cache snapshot-key (js/Response. (encode memory db-id)))))))
 
 
 (defn ^:async delete!

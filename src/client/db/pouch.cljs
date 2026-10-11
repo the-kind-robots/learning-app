@@ -160,15 +160,17 @@
 
 
 (defn ^:async holds-position?
-  "Whether `db-key` still holds the change at `position`. When a change sits
-   at that sequence, it must be the same document at the same revision.
-   When none does any more, because a later change of the document
+  "Whether `db-key` still holds the change at `position`, given `feed-head`,
+   where its feed stands now. A feed that stands at `position` holds it. When
+   a change sits at that sequence, it must be the same document at the same
+   revision. When none does any more, because a later change of the document
    replaced it, the database must still know that revision. A database
    that lost its last writes and stored other changes under their
    sequences fails both."
-  [dbs db-key {:keys [id rev seq] :as position}]
+  [dbs db-key {:keys [id rev seq] :as position} feed-head]
   (let [^js db (db-key dbs)]
-    (or (zero? seq)
+    (or (= position feed-head)
+        (zero? seq)
         (let [^js change (aget (.-results (await (.changes db #js {:limit 1 :since (dec seq)}))) 0)]
           (if (and change (= seq (.-seq change)))
             (= position (js-change->position change))
@@ -262,23 +264,23 @@
                   (.cancel feed))}))
 
 
-(def marker-id
-  "The local document that holds a database's marker. Local documents do
-   not replicate and do not move the change feed."
-  "_local/database-marker")
+(def id-doc
+  "The local document that holds a database's id. Local documents do not
+   replicate and do not move the change feed."
+  "_local/database-id")
 
 
-(defn ^:async marker
-  "The marker of `db-key`: a random id that tells this database apart from
+(defn ^:async id
+  "The id of `db-key`: a random string that tells this database apart from
    one that was re-created or cleared under the same name. It is created
    the first time it is asked for. When another tab creates it at the same
-   moment, the one stored first is the marker."
+   moment, the one stored first is the id."
   [dbs db-key]
   (let [db   (db-key dbs)
-        read (fn ^:async read [] (:marker (await (db/get db marker-id))))]
+        read (fn ^:async read [] (:id (await (db/get db id-doc))))]
     (or (await (read))
         (let [made (str (random-uuid))]
-          (if (await (db/insert-if-absent db {:_id marker-id :marker made}))
+          (if (await (db/insert-if-absent db {:_id id-doc :id made}))
             made
             (await (read)))))))
 
