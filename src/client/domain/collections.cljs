@@ -58,3 +58,15 @@
          (mapcat :word-ids)
          distinct
          vec)))
+
+
+(defn reconcile
+  "The one of two versions of a collection that was renamed last, with the
+   word ids of both sorted. The order of the arguments, and how several
+   reconciliations are grouped, change nothing."
+  [a b]
+  (let [renamed-at (fn [version]
+                     (let [[generation hash] (str/split (:_rev version) #"-" 2)]
+                       [(or (:renamed-at version) (:created-at version)) (js/parseInt generation 10) hash]))
+        winner     (if (neg? (compare (renamed-at a) (renamed-at b))) b a)]
+    (assoc winner :word-ids (->> (concat (:word-ids a) (:word-ids b)) distinct sort vec))))

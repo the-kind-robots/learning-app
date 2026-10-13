@@ -86,16 +86,20 @@
          (await (db/insert account-db {:_id "review-1" :type "review" :word-id "vocab:katze"}))
          (set! (.-location js/globalThis) #js {:origin "target/pouch"})
          (try
-           (let [{:keys [pulled-revs]} (await (sut/sync-once! {:user/db local} :user/db account-id))]
+           (let [{:keys [pulled-ids pulled-revs]} (await (sut/sync-once! {:user/db local} :user/db account-id))]
              (await (wait/until #(<= 2 (count @seen))))
              (is (= 2 (count pulled-revs)))
+             (is (= {"vocab" #{"vocab:katze"} "review" #{"review-1"}} pulled-ids)
+                 "the pass reports the ids it pulled by document type")
              (is (= pulled-revs (set @seen))
                  "every feed event of the pull is a revision the pass reports")
              (reset! seen [])
              (await (db/insert local {:_id "vocab:hund" :type "vocab" :value "Hund"}))
              (await (wait/until #(= 1 (count @seen))))
              (is (= 1 (count @seen)))
-             (is (not-any? pulled-revs @seen) "a local write is none of them"))
+             (is (not-any? pulled-revs @seen) "a local write is none of them")
+             (is (= {} (:pulled-ids (await (sut/sync-once! {:user/db local} :user/db account-id))))
+                 "a pass that pulls nothing reports an empty map, never nil"))
            (finally
             (unwatch)
             (js/Reflect.deleteProperty js/globalThis "location"))))))))

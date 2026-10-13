@@ -316,8 +316,9 @@
 (defn sync-once!
   "Runs one bidirectional replication pass of db-key against the account's copy
    on the server. Resolves with what the pass did — `{:pulled n :pushed n
-   :pulled-revs #{[id rev]}}`, documents written on each side and the exact
-   revisions the pull wrote here, which is how the change feed tells the
+   :pulled-revs #{[id rev]} :pulled-ids {type #{id}}}`, documents written
+   on each side, the exact revisions the pull wrote here and their ids by
+   document type, which is how the change feed tells the
    pull's own writes from local ones — and never rejects: a failed pass
    resolves nil, so a caller can fire it on a trigger without guarding every
    one.
@@ -326,7 +327,8 @@
    hands over the batch it has just written; the `complete` result carries
    the counters alone."
   [dbs db-key account-id]
-  (let [pulled-revs (atom #{})
+  (let [pulled-ids  (atom {})
+        pulled-revs (atom #{})
         remote      (str (.. js/globalThis -location -origin)
                          "/db/"
                          ((db->remote-name db-key) account-id))]
@@ -336,10 +338,13 @@
          (.on "change"
               (fn [^js info]
                 (when (= "pull" (.-direction info))
-                  (swap! pulled-revs into (written-revisions (.-change info))))))
+                  (swap! pulled-revs into (written-revisions (.-change info)))
+                  (doseq [^js doc (some-> info .-change .-docs)]
+                    (swap! pulled-ids update (.-type doc) (fnil conj #{}) (.-_id doc))))))
          (.on "complete"
               (fn [^js info]
                 (resolve {:pulled      (docs-written (some-> info .-pull))
+                          :pulled-ids  @pulled-ids
                           :pulled-revs @pulled-revs
                           :pushed      (docs-written (some-> info .-push))})))
          (.on "error"
@@ -399,6 +404,15 @@
   "The document with `id` from `schema`'s database, or nil."
   [dbs schema id]
   (db/get (database dbs schema) id))
+
+
+(defn ^:async doc-versions
+  "Every version of the document `id` of `schema`'s type, a deleted one
+   too (`:_deleted true`). It is empty when the database never held the
+   document."
+  [dbs schema id]
+  (let [answer (await (db/get (database dbs schema) id {:open-revs "all"}))]
+    (->> answer (keep :ok) vec)))
 
 
 (def ^:private ids-page

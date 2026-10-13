@@ -4,6 +4,7 @@
    [adapters.learner.documents :as documents]
    [db :as db]
    [db.pouch :as pouch]
+   [domain.collections :as collections]
    [domain.vocabulary :as domain]
    [goog.functions :as gfn]
    [lambdaisland.glogi :as log]))
@@ -78,17 +79,43 @@
       (log/warn :sync/conflict-resolution-failed {:error (ex-message err)}))))
 
 
+(defn- ^:async resolve-collection!
+  "When a pull left a collection with several live versions, writes one that
+   holds them all and removes the others."
+  [dbs id]
+  (let [live (->> (await (pouch/doc-versions dbs documents/collection-schema id))
+                  (remove :_deleted))]
+    (when (next live)
+      (let [collection (reduce collections/reconcile live)
+            losers     (remove #(= (:_rev collection) (:_rev %)) live)
+            docs       (conj (mapv documents/tombstone losers) collection)
+            written    (await (pouch/bulk-docs dbs documents/collection-schema docs))]
+        (when (< (count written) (count docs))
+          (log/warn :sync/conflict-resolution-failed
+                    {:id id :refused (- (count docs) (count written))}))))))
+
+
+(defn ^:async resolve-collection-conflicts!
+  "Resolves the collections `ids` that have more than one live version."
+  [dbs ids]
+  (try
+    (await (all! (map #(resolve-collection! dbs %) ids)))
+    (catch js/Error err
+      (log/warn :sync/conflict-resolution-failed {:error (ex-message err)}))))
+
+
 (defn ^:async sync-once!
   "Runs one replication pass and resolves the conflicts it may have brought
-   home. Resolves with what the pass did, `{:pulled n :pushed n :pulled-revs
-   #{...}}`, or nil when it failed; never rejects, so callers can fire it freely
-   on triggers.
+   home. Resolves with what the pass did, `{:pulled n :pushed n :pulled-ids
+   {type #{id}} :pulled-revs #{...}}`, or nil when it failed; never rejects,
+   so callers can fire it freely on triggers.
    A pass that pulled nothing brought no conflict home, so nothing is
    resolved and — for the caller — nothing has changed."
   [dbs account-id]
-  (when-let [{:keys [pulled] :as result} (await (pouch/sync-once! dbs :user/db account-id))]
+  (when-let [{:keys [pulled pulled-ids] :as result} (await (pouch/sync-once! dbs :user/db account-id))]
     (when (pos? pulled)
-      (await (resolve-vocab-conflicts! (:user/db dbs))))
+      (await (resolve-vocab-conflicts! (:user/db dbs)))
+      (await (resolve-collection-conflicts! dbs (pulled-ids (:type documents/collection-schema)))))
     result))
 
 
@@ -124,6 +151,7 @@
     (nil? a) b
     (nil? b) a
     :else    {:pulled      (+ (:pulled a) (:pulled b))
+              :pulled-ids  (merge-with into {} (:pulled-ids a) (:pulled-ids b))
               :pulled-revs (into (:pulled-revs a) (:pulled-revs b))
               :pushed      (+ (:pushed a) (:pushed b))}))
 

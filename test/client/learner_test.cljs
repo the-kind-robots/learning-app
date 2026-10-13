@@ -163,6 +163,23 @@
             "memory has each change when the write resolves"))))))
 
 
+(deftest a-rename-to-the-same-name-writes-nothing
+  (async-testing "the stored revision stays, and a later add-word keeps the time of the rename"
+    (with-learner
+     [hund tiere]
+     (^:async fn
+      [{:keys [dbs learner]}]
+      (let [stored (fn ^:async f [] (await (db/get (:user/db dbs) "coll-tiere")))
+            rev-1  (:_rev (await (stored)))]
+        (await ((:learner/rename-collection! learner) "coll-tiere" "Tiere"))
+        (is (= rev-1 (:_rev (await (stored)))))
+        (await ((:learner/rename-collection! learner) "coll-tiere" "Haustiere"))
+        (let [renamed-at (:renamed-at (await (stored)))]
+          (is (some? renamed-at))
+          (await ((:learner/add-to-collection! learner) "vocab:die katze" "coll-tiere"))
+          (is (= renamed-at (:renamed-at (await (stored)))))))))))
+
+
 (deftest a-rename-keeps-a-change-made-elsewhere
   (async-testing "a collection written past the learner keeps that change when the learner renames it at once"
     (with-learner
