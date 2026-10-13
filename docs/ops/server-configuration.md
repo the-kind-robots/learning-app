@@ -109,8 +109,9 @@ override anything set here):**
 - `LEARNING_APP__DB_PATH` absolute path
 - Optional OpenRouter env vars:
   - `OPENROUTER_API_URL` — endpoint override
-  - `OPENROUTER_MODEL` — primary model id (default: `google/gemini-2.5-flash-lite`)
-  - `OPENROUTER_MODELS` — CSV fallback list, e.g. `google/gemini-2.5-flash-lite,deepseek/deepseek-chat-v3.1,openai/gpt-4o-mini`
+  - `OPENROUTER_MODEL` — primary model id (default: `mistralai/mistral-small-3.2-24b-instruct`)
+  - `OPENROUTER_MODELS` — CSV model list in fallback order (default: the primary model, then `google/gemini-3.5-flash-lite`)
+  - To compare candidate models on the production request and validator, run `clojure -M:dev -m example-models` with `OPENROUTER_API_KEY` set (paid; see `dev/example_models.clj`).
 - `BORG_REPO` for backups
 
 ## CouchDB

@@ -1,0 +1,49 @@
+;; Fixed word set for dev/example_models.clj. Generated once from the shipped
+;; dictionary; the last four phrases are not in it and carry hand-written glosses.
+[
+ {:group :noun :word "das Haus" :part-of-speech "noun" :cefr-level "a1" :translation ["дом"]}
+ {:group :noun :word "die Freundin" :part-of-speech "noun" :cefr-level "a1" :translation ["подруга" "любовница" "возлюбленная"]}
+ {:group :noun :word "die Entscheidung" :part-of-speech "noun" :cefr-level "b1" :translation ["решение"]}
+ {:group :noun :word "die Geduld" :part-of-speech "noun" :cefr-level "b1" :translation ["терпеливость" "терпение"]}
+ {:group :noun :word "der Anspruch" :part-of-speech "noun" :cefr-level "b1" :translation ["требование" "претензия" "притязание"]}
+ {:group :noun :word "die Verantwortung" :part-of-speech "noun" :cefr-level "b1" :translation ["ответственность"]}
+ {:group :verb :word "arbeiten" :part-of-speech "verb" :cefr-level "a1" :translation ["работать" "трудиться"]}
+ {:group :verb :word "verstehen" :part-of-speech "verb" :cefr-level "a2" :translation ["понимать" "разбирать" "различать"]}
+ {:group :verb :word "kochen" :part-of-speech "verb" :cefr-level "b1" :translation ["готовить" "варить" "кипеть"]}
+ {:group :verb :word "gehen" :part-of-speech "verb" :cefr-level "a2" :translation ["идти" "пойти" "ходить"]}
+ {:group :adjective :word "teuer" :part-of-speech "adj" :cefr-level "a1" :translation ["дорогой"]}
+ {:group :adjective :word "wichtig" :part-of-speech "adj" :cefr-level "a1" :translation ["важный"]}
+ {:group :adjective :word "kompliziert" :part-of-speech "adj" :cefr-level "b1" :translation ["сложный" "трудный" "запутанный"]}
+ {:group :adjective :word "müde" :part-of-speech "adj" :cefr-level nil :translation ["усталый" "уставший" "утомлённый"]}
+ {:group :adjective :word "schön" :part-of-speech "adj" :cefr-level "a2" :translation ["красивый" "приятный"]}
+ {:group :separable :word "ankommen" :part-of-speech "verb" :cefr-level "a2" :translation ["прибывать" "приезжать" "достигать"]}
+ {:group :separable :word "aussehen" :part-of-speech "verb" :cefr-level "a2" :translation ["выглядеть"]}
+ {:group :separable :word "aufstehen" :part-of-speech "verb" :cefr-level "a1" :translation ["встать" "восстать" "стоять открытым"]}
+ {:group :separable :word "einkaufen" :part-of-speech "verb" :cefr-level "b1" :translation ["делать покупки" "закупать" "покупать"]}
+ {:group :separable :word "abholen" :part-of-speech "verb" :cefr-level "a1" :translation ["встречать" "забирать"]}
+ {:group :separable :word "anrufen" :part-of-speech "verb" :cefr-level "a1" :translation ["позвать" "звонить" "позвонить"]}
+ {:group :separable :word "mitbringen" :part-of-speech "verb" :cefr-level "a1" :translation ["принести с собой" "привести с собой" "взять с собой"]}
+ {:group :separable :word "zurückkommen" :part-of-speech "verb" :cefr-level "a1" :translation ["возвращаться" "вернуться"]}
+ {:group :separable :word "zugehen" :part-of-speech "verb" :cefr-level "b1" :translation ["подходить" "направляться" "приближаться (по времени)"]}
+ {:group :separable :word "stattfinden" :part-of-speech "verb" :cefr-level "b1" :translation ["состояться" "иметь место"]}
+ {:group :placeholder :word "etwas in Kauf nehmen" :part-of-speech "phrase" :cefr-level "a1" :translation ["идти на риск"]}
+ {:group :placeholder :word "jemandem Bescheid geben" :part-of-speech "phrase" :cefr-level "a2" :translation ["сообщить" "поставить в известность"]}
+ {:group :placeholder :word "etwas im Auge haben" :part-of-speech "phrase" :cefr-level "a1" :translation ["иметь в виду" "нацелиться на" "присматривать за"]}
+ {:group :placeholder :word "etwas rückgängig machen" :part-of-speech "phrase" :cefr-level "a1" :translation ["отменять" "аннулировать"]}
+ {:group :placeholder :word "etwas satt haben" :part-of-speech "phrase" :cefr-level "a1" :translation ["быть сытым по горло"]}
+ {:group :placeholder :word "etwas ausbaden müssen" :part-of-speech "phrase" :cefr-level "a1" :translation ["расхлёбывать"]}
+ {:group :placeholder :word "mit jemandem gehen" :part-of-speech "phrase" :cefr-level "a1" :translation ["встречаться с кем-то" "ходить с кем-то" "быть в отношениях"]}
+ {:group :placeholder :word "etwas zur Seite legen" :part-of-speech "phrase" :cefr-level "a1" :translation ["отложить что-либо в сторону" "откладывать деньги" "копить"]}
+ {:group :placeholder :word "es jemandem recht machen" :part-of-speech "phrase" :cefr-level nil :translation ["угодить кому-либо" "сделать так, чтобы кто-то был доволен" "удовлетворить кого-либо"]}
+ {:group :placeholder :word "jemanden im Stich lassen" :part-of-speech "phrase" :cefr-level "a2" :translation ["бросать в беде" "оставлять без помощи" "покидать"]}
+ {:group :placeholder :word "jemandem den Kopf verdrehen" :part-of-speech "phrase" :cefr-level "a2" :translation ["вскружить голову" "влюблять в себя"]}
+ {:group :placeholder :word "mit etwas nichts zu tun haben" :part-of-speech "phrase" :cefr-level "a1" :translation ["не иметь отношения к чему-либо" "не быть причастным к чему-либо" "не быть связанным с чем-либо"]}
+ {:group :placeholder :word "jemandem auf die Finger klopfen" :part-of-speech "phrase" :cefr-level "a2" :translation ["делать выговор" "журить" "давать нагоняй"]}
+ {:group :placeholder :word "sich etwas zu Gemüte führen" :part-of-speech "phrase" :cefr-level "a1" :translation ["принять к сведению" "вкусить" "с наслаждением съесть или выпить"]}
+ {:group :placeholder :word "ein Auge auf etwas werfen" :part-of-speech "phrase" :cefr-level "a1" :translation ["положить глаз на что-либо"]}
+ {:group :placeholder :word "sich ein Bild von jemandem machen" :part-of-speech "phrase" :cefr-level "a1" :translation ["составить себе мнение о ком-либо" "составить представление о ком-либо" "получить впечатление о ком-либо"]}
+ {:group :placeholder :word "Anspruch auf etwas haben" :part-of-speech "phrase" :cefr-level nil :translation ["иметь право на что-либо"]}
+ {:group :placeholder :word "auf etwas angewiesen sein" :part-of-speech "phrase" :cefr-level nil :translation ["зависеть от чего-либо"]}
+ {:group :placeholder :word "auf jemanden zugehen" :part-of-speech "phrase" :cefr-level nil :translation ["подойти к кому-либо"]}
+ {:group :placeholder :word "sich auf etwas freuen" :part-of-speech "phrase" :cefr-level nil :translation ["радоваться чему-либо"]}
+]

@@ -83,16 +83,24 @@
           vec))
 
 
+(def ^:private default-model "mistralai/mistral-small-3.2-24b-instruct")
+
+
+(def ^:private fallback-model "google/gemini-3.5-flash-lite")
+
+
 (defn config
-  "OpenRouter request configuration assembled from env."
+  "OpenRouter request configuration assembled from env. Without
+   OPENROUTER_MODELS the list is the primary model, then the fallback."
   []
-  {:api-url        (env "OPENROUTER_API_URL" "https://openrouter.ai/api/v1/chat/completions")
-   :api-key        (env "OPENROUTER_API_KEY")
-   :model          (env "OPENROUTER_MODEL" "google/gemini-2.5-flash-lite")
-   :models         (models-from-env)
-   :provider-prefs {:require_parameters true
-                    :sort               {:by "price" :partition "none"}
-                    :data_collection    "deny"}})
+  (let [model (env "OPENROUTER_MODEL" default-model)]
+    {:api-url        (env "OPENROUTER_API_URL" "https://openrouter.ai/api/v1/chat/completions")
+     :api-key        (env "OPENROUTER_API_KEY")
+     :model          model
+     :models         (or (models-from-env) [model fallback-model])
+     :provider-prefs {:require_parameters true
+                      :sort               {:by "price" :partition "none"}
+                      :data_collection    "deny"}}))
 
 
 (defn request-options
