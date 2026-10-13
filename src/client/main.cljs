@@ -157,7 +157,7 @@
                                                          (nxr/dispatch system dispatch-data actions))]
                                           (nxr/register-system->state! #(-> % :store deref))
                                           (r/set-dispatch! dispatch)
-                                          (application/guard-double-clicks! store)
+                                          (application/guard-double-clicks!)
                                           ;; Nothing is rendered until memory is loaded, so the
                                           ;; server's splash stays until the first screen
                                           ;; replaces it. When the start read fails, the shell

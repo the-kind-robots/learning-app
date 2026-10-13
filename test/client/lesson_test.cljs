@@ -88,8 +88,8 @@
 
 
 (deftest an-answer-to-a-word-is-a-review-of-that-word
-  (async-testing "a right answer is written as retained, a wrong one as forgotten"
-    (doseq [[answer retained?] [["der Hund" true] ["wrong answer" false]]]
+  (async-testing "a right answer is written as retained, a wrong or blank one as forgotten"
+    (doseq [[answer retained?] [["der Hund" true] ["wrong answer" false] ["" false] ["  " false]]]
       ;; Each case starts from empty databases.
       (await (db-fixtures/destroy-test-db user-db-name))
       (await (db-fixtures/destroy-test-db device-db-name))
