@@ -138,7 +138,9 @@
 
 (defn doc->collection
   [doc]
-  (update (entity doc) :word-ids #(or % [])))
+  (-> (entity doc)
+      (dissoc :renamed-at)
+      (update :word-ids #(or % []))))
 
 
 (defn doc->example

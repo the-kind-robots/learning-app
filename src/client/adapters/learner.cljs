@@ -121,7 +121,8 @@
 (defn- ^:async update!
   "Writes the entity `id`, of `kind`, as `change` makes it out of the
    version PouchDB holds as the winner (`db.pouch/write-latest!`), and
-   catches memory up with it. `change` takes that entity, or nil when there
+   catches memory up with it. The fields the stored document has and the
+   entity does not are kept. `change` takes that entity, or nil when there
    is none, and returns the entity to write, or nil to write nothing.
    Resolves with `{:stored :written}`: the entity the change was made to,
    and the entity written; nil when nothing was written."
@@ -130,7 +131,10 @@
              (await (dbs/write-latest! (:dbs learner)
                                        schema
                                        id
-                                       #(some-> (change (some-> % from-doc)) documents/doc)))]
+                                       (fn [stored]
+                                         (when-let [changed (some-> (change (some-> stored from-doc)) documents/doc)]
+                                           (merge (apply dissoc stored (keys (documents/doc (some-> stored from-doc))))
+                                                  changed)))))]
     (await (catch-up! learner))
     {:stored  (some-> stored from-doc)
      :written (documents/entity written)}))
@@ -201,6 +205,7 @@
             documents/collection-schema
             {:created-at (now-iso learner)
              :name       name
+             :renamed-at (now-iso learner)
              :word-ids   []}))
 
 
@@ -223,7 +228,11 @@
   "Gives the collection `collection-id` the name `new-name`. Resolves with
    the collection as written, or nil when nothing was written."
   [learner collection-id new-name]
-  (update-collection! learner collection-id #(assoc % :name new-name)))
+  (update-collection! learner
+                      collection-id
+                      (fn [collection]
+                        (cond-> collection
+                          (not= new-name (:name collection)) (assoc :name new-name :renamed-at (now-iso learner))))))
 
 
 (defn add-to-collection!
@@ -312,15 +321,17 @@
 
 
 (defn ^:async delete-collection!
-  "Deletes the collection `collection-id`. Its words stay, and so do the
-   examples made for it: a collection made again has a new id, so they are
-   not shown in it. «Всё подряд» shows them like any other example."
+  "Deletes the collection `collection-id`, every live version of it. Its words
+   stay, and so do the examples made for it: a collection made again has a new
+   id, so they are not shown in it. «Всё подряд» shows them like any other
+   example."
   [learner collection-id]
-  (when (await (dbs/write-latest! (:dbs learner)
-                                  documents/collection-schema
-                                  collection-id
-                                  #(when % {:_deleted true})))
-    (await (catch-up! learner))))
+  (let [dbs        (:dbs learner)
+        schema     documents/collection-schema
+        versions   (await (dbs/doc-versions dbs schema collection-id))
+        tombstones (->> versions (remove :_deleted) (mapv documents/tombstone))]
+    (when (seq (await (dbs/bulk-docs dbs schema tombstones)))
+      (await (catch-up! learner)))))
 
 
 (def ^:private device-example-schema

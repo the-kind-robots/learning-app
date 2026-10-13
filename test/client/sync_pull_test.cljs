@@ -114,6 +114,7 @@
              (request!)
              (request!)
              (finish! {:pulled      1
+                       :pulled-ids  {}
                        :pulled-revs #{["vocab:hund" "1-a"]}
                        :pushed      0})
              (await (settled))
@@ -153,6 +154,7 @@
            (feed! "vocab:hund" "1-a")
            (feed! "vocab:katze" "2-b")
            (finish! {:pulled      2
+                     :pulled-ids  {}
                      :pulled-revs #{["vocab:hund" "1-a"] ["vocab:katze" "2-b"]}
                      :pushed      0})
            (await (answered answer))
@@ -179,6 +181,7 @@
            (feed! "review-1" "1-local")
            (is (= 1 @started) "judged when the pass ends, not while it runs")
            (finish! {:pulled      1
+                     :pulled-ids  {}
                      :pulled-revs #{["vocab:hund" "1-a"]}
                      :pushed      0})
            (await (settled))
