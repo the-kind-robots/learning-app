@@ -18,12 +18,11 @@
    `:search`, its text normalised for the filter.
 
    Memory adds and removes each document type with a pair of functions.
-   When a new revision of a document arrives, memory removes the old
-   version and adds the new one. Under `::entries` memory keeps what it took
-   from each document. So when the same revision arrives twice, the second
-   one changes nothing, and when a deletion arrives with only an id, memory
-   still knows what to remove. The same entries rebuild memory from a
-   snapshot (`adapters.learner.snapshot`).
+   When a new revision of a document arrives, memory finds the version it
+   holds by the document's id, removes it and adds the new one. A deletion
+   carries only an id, and that is enough. Memory without `:words` and
+   `::position` is what a snapshot stores (`adapters.learner.snapshot`);
+   `restored` gives memory back from it.
 
    Under `::position` memory keeps the feed position of user-db's last
    change that changed it (`db.pouch/change-position`). A batch and its
@@ -45,7 +44,6 @@
    :examples-by-word {}
    :slot-of          {}
    :words            (sorted-map)
-   ::entries         {}
    ::position        nil})
 
 
@@ -88,14 +86,13 @@
 
 
 (defn- add-review
-  [memory review]
-  (let [[memory slot] (card-slot memory (:word-id review))]
-    (update-in memory [:cards slot :reviews] retention/with-review review)))
-
-
-(defn- remove-review
-  [memory {:keys [id word-id]}]
-  (update-in memory [:cards (get-in memory [:slot-of word-id]) :reviews] retention/without-review id))
+  "Memory with `review` in its word's history. A review already there
+   changes nothing: reviews are never edited."
+  [memory {:keys [id word-id] :as review}]
+  (let [[memory slot] (card-slot memory word-id)]
+    (if (<= 0 (.indexOf (:ids (get-in memory [:cards slot :reviews])) id))
+      memory
+      (update-in memory [:cards slot :reviews] retention/with-review review))))
 
 
 ;; `:collections-by-word` changes with `:collections` alone, so a review or
@@ -188,11 +185,27 @@
 
 
 (defn- entry
-  "What memory keeps of `doc`: its kind, its entity and its rev. Returns nil
-   when `doc` is a deletion, or when memory does not keep its type."
-  [{rev :_rev :as doc}]
+  "What memory takes from `doc`: its kind and its entity. Returns nil when
+   `doc` is a deletion, or when memory does not keep its type."
+  [doc]
   (when-let [{:keys [kind entity]} (and (not (:_deleted doc)) (doc-types (:type doc)))]
-    {:kind kind :entity (entity doc) :rev rev}))
+    {:kind kind :entity (entity doc)}))
+
+
+(defn- card
+  "The card of `word-id`, or nil when it has none."
+  [memory word-id]
+  (some->> (get-in memory [:slot-of word-id]) (nth (:cards memory))))
+
+
+(defn- old-version
+  "The version of `doc` memory holds now, `{:kind :entity}`, or nil. It is a
+   collection, an example or a word, found by the id; a review is never
+   removed."
+  [memory {id :_id}]
+  (or (some->> (get-in memory [:collections id]) (hash-map :kind :collection :entity))
+      (some->> (get-in memory [:examples id]) (hash-map :kind :example :entity))
+      (some->> (card memory id) :word (hash-map :kind :word :entity))))
 
 
 (defn- added
@@ -200,38 +213,34 @@
   [memory {:keys [kind entity] :as entry}]
   (if-not entry
     memory
-    (-> (case kind
-          :collection (add-collection memory entity)
-          :example    (add-example memory entity)
-          :review     (add-review memory entity)
-          :word       (add-word memory entity))
-        (assoc-in [::entries (:id entity)] entry))))
+    (case kind
+      :collection (add-collection memory entity)
+      :example    (add-example memory entity)
+      :review     (add-review memory entity)
+      :word       (add-word memory entity))))
 
 
 (defn- removed
-  "Memory without `entry`. A nil entry removes nothing."
-  [memory {:keys [kind entity] :as entry}]
-  (if-not entry
+  "Memory without the `old` version. A nil `old` removes nothing."
+  [memory {:keys [kind entity] :as old}]
+  (if-not old
     memory
-    (-> (case kind
-          :collection (remove-collection memory entity)
-          :example    (remove-example memory entity)
-          :review     (remove-review memory entity)
-          :word       (remove-word memory entity))
-        (update ::entries dissoc (:id entity)))))
+    (case kind
+      :collection (remove-collection memory entity)
+      :example    (remove-example memory entity)
+      :word       (remove-word memory entity))))
 
 
 (defn- with-doc
-  "Memory after `doc` arrives: the version memory has is removed, and `doc`
-   is added. If memory has this revision already, nothing changes. A
-   collection is not removed first: adding the new version replaces it."
-  [memory {id :_id rev :_rev :as doc}]
-  (let [old (get-in memory [::entries id])
+  "Memory after `doc` arrives: the version memory holds is removed, and
+   `doc` is added. A collection is not removed first: adding the new version
+   replaces it."
+  [memory doc]
+  (let [old (old-version memory doc)
         new (entry doc)]
-    (cond
-      (= rev (:rev old)) memory
-      (= :collection (:kind old) (:kind new)) (added memory new)
-      :else (-> memory (removed old) (added new)))))
+    (if (= :collection (:kind old) (:kind new))
+      (added memory new)
+      (-> memory (removed old) (added new)))))
 
 
 (defn- with-taken-doc
@@ -246,15 +255,15 @@
     (with-doc memory doc)
     (catch :default err
       (log/error :memory/document-skipped {:error (str err) :id (:_id doc)})
-      (removed memory (get-in memory [::entries (:_id doc)])))))
+      (removed memory (old-version memory doc)))))
 
 
 (defn with-docs
-  "Memory after `docs` arrive, one after another. If memory already has a
-   document's revision, that document changes nothing. A deletion removes
-   the document. Memory ignores documents of a type it does not keep, and
-   leaves out, logged, one it cannot take. When no document changes
-   memory, this returns the same memory.
+  "Memory after `docs` arrive, one after another. A document replaces the
+   version memory holds, and a deletion removes it; a revision memory holds
+   already gives an equal memory. Memory ignores documents of a type it does
+   not keep, and leaves out, logged, one it cannot take. A batch that changes
+   nothing memory holds returns the same memory.
 
    Every document reaches memory through this function: the load, and the
    change feed's batches and catch-ups, which also bring this app's own
@@ -285,20 +294,21 @@
   (::position memory))
 
 
-(defn entries
-  "What memory took from each document, one entry per document:
-   `{:kind :entity :rev}`, in no particular order."
+(defn stored
+  "Memory as a snapshot stores it: all of it but the word list and the
+   feed position, which come from the words and the header."
   [memory]
-  (vals (::entries memory)))
+  (dissoc memory :words ::position))
 
 
-(defn with-entries
-  "Memory with `entries` added, as `entries` returns them. Each entry goes
-   through the same path as the entry of a document that arrives. An entry
-   memory cannot take throws: entries come from a snapshot, and a snapshot
-   with one bad entry is not used at all."
-  [memory entries]
-  (reduce added memory entries))
+(defn restored
+  "Memory from `stored`, as `stored` returned it, with no feed position."
+  [stored]
+  (assoc stored
+         ::position nil
+         :words     (into (sorted-map)
+                          (keep (fn [{word :word}] (when word [(sort-key (:id word)) word])))
+                          (:cards stored))))
 
 
 (defn with-position
@@ -319,7 +329,7 @@
   "The word or phrase `word-id`, or nil when memory has none. The word
    carries `:search`, its text normalised for the filter."
   [memory word-id]
-  (some->> (get-in memory [:slot-of word-id]) (nth (:cards memory)) :word))
+  (:word (card memory word-id)))
 
 
 (defn words
@@ -338,8 +348,7 @@
   "The review history of `word-id` (`domain.retention/Reviews`); an empty
    one when memory has no review of it."
   [memory word-id]
-  (or (some->> (get-in memory [:slot-of word-id]) (nth (:cards memory)) :reviews)
-      retention/empty-reviews))
+  (or (:reviews (card memory word-id)) retention/empty-reviews))
 
 
 (defn collection

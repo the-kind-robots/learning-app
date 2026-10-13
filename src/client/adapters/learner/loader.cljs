@@ -35,8 +35,7 @@
 
 
 (def ^:private ingest-page
-  "How many documents, entries or changes memory takes in one task while it
-   loads."
+  "How many changes memory takes in one task while it catches up."
   500)
 
 
@@ -46,15 +45,15 @@
 
 
 (defn- ^:async loaded
-  "Memory built from `items` by `add`, `memory/with-docs` or
-   `memory/with-entries`, in slices of about `slice-ms` with a task between
-   them, so that the splash keeps painting while it is built."
-  [add items]
+  "Memory built from the documents `docs`, in slices of about `slice-ms`
+   with a task between them, so that the splash keeps painting while it is
+   built."
+  [docs]
   (loop [memory memory/empty-memory
-         pages  (partition-all 100 items)
+         pages  (partition-all 100 docs)
          began  (js/performance.now)]
     (if-let [[page & more] (seq pages)]
-      (let [memory (add memory page)]
+      (let [memory (memory/with-docs memory page)]
         (if (< (- (js/performance.now) began) slice-ms)
           (recur memory more began)
           (do (await (browser/yield))
@@ -118,20 +117,19 @@
    Resolves with that memory, and rejects when any step fails."
   [dbs]
   (let [noted  (await (dbs/feed-position dbs db-key))
-        memory (await (loaded memory/with-docs (await (read-all dbs))))]
+        memory (await (loaded (await (read-all dbs))))]
     (await (caught-up dbs memory noted))))
 
 
 (defn- ^:async restored
-  "Memory from the snapshot `{:header :body :entries}`: its entries, a
-   promise of the decoded ones, taken again, with what user-db stored after
-   its feed position.
+  "Memory from the snapshot `{:header :body :memory}`: its memory, a promise
+   of the decoded one, with what user-db stored after its feed position.
    Resolves with `{:memory :stored}`, that memory and the snapshot's feed
    position. Rejects when the snapshot did not decode, or when any step
    fails."
   [dbs snapshot]
   (let [stored (:position (:header snapshot))
-        memory (await (loaded memory/with-entries (await (:entries snapshot))))]
+        memory (memory/restored (await (:memory snapshot)))]
     {:memory (await (caught-up dbs memory stored))
      :stored stored}))
 
@@ -161,10 +159,10 @@
 
 
 (defn ^:async checked-snapshot
-  "The snapshot, `{:header :body :entries}`, when it can start memory from
+  "The snapshot, `{:header :body :memory}`, when it can start memory from
    user-db as it stands now, or nil. It decodes the snapshot in the next task,
-   while user-db answers its id and the feed position; `:entries` is a
-   promise of the decoded entries. A snapshot that cannot start memory is deleted
+   while user-db answers its id and the feed position; `:memory` is a
+   promise of the decoded memory. A snapshot that cannot start memory is deleted
    (`refusal`). It never rejects; a failure is
    logged, the snapshot is deleted, and it resolves nil. The interval the
    development build reports as `:memory :load-ms` starts here."
@@ -173,11 +171,11 @@
     (instrumentation/memory-start!))
   (try
     (when-let [{:keys [header] :as snapshot} (await (snapshot/read!))]
-      (let [entries (.then (browser/yield) #(snapshot/decoded snapshot))
-            _ (.catch entries (fn [_]))]
+      (let [decoded (.then (browser/yield) #(snapshot/decoded snapshot))
+            _ (.catch decoded (fn [_]))]
         (if-let [reason (await (refusal dbs header))]
           (await (dropped! reason {}))
-          (assoc snapshot :entries entries))))
+          (assoc snapshot :memory decoded))))
     (catch :default err
       (await (dropped! :unreadable {:error (str err)})))))
 

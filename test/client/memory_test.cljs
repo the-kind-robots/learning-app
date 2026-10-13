@@ -9,6 +9,7 @@
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-seed :as db-seed]
    [client.support.learner :as learner]
+   [client.support.memory-projection :as projection]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is testing use-fixtures]]
    [db :as db]
@@ -58,18 +59,16 @@
     (is (nil? (word deleted "vocab:der hund")) "a deletion removes the word")))
 
 
-(deftest a-deleted-review-leaves-its-word
-  (testing "a deleted review carries no word id; memory's own record says which word it was"
-    (let [review {:_id        "r1"
-                  :_rev       "1-a"
-                  :type       "review"
-                  :word-id    "vocab:der hund"
-                  :created-at "2026-01-01T00:00:00Z"
-                  :retained   true}
-          memory (sut/with-docs sut/empty-memory [review])
-          gone   (sut/with-docs memory [{:_deleted true :_id "r1" :_rev "2-b"}])]
-      (is (= ["r1"] (review-ids memory "vocab:der hund")))
-      (is (empty? (review-ids gone "vocab:der hund"))))))
+(deftest a-review-stays-once-taken
+  (let [review {:_id        "r1"
+                :_rev       "1-a"
+                :type       "review"
+                :word-id    "vocab:der hund"
+                :created-at "2026-01-01T00:00:00Z"
+                :retained   true}
+        memory (sut/with-docs sut/empty-memory [review])]
+    (is (= ["r1"] (review-ids (sut/with-docs memory [(assoc review :_rev "2-b")]) "vocab:der hund")) "arriving again")
+    (is (= ["r1"] (review-ids (sut/with-docs memory [{:_deleted true :_id "r1" :_rev "2-b"}]) "vocab:der hund")) "a deletion")))
 
 
 (deftest reviews-of-the-same-second-give-one-retention-whatever-their-order
@@ -118,8 +117,8 @@
            (:collections-by-word (sut/with-docs sut/empty-memory (map #(assoc % :_rev "9-z") [tiere haus]))))
         "a rebuild from the same collections gives the same index")
     (is (= (:collections-by-word both)
-           (:collections-by-word (sut/with-entries sut/empty-memory (sut/entries both))))
-        "entries restore the index")))
+           (:collections-by-word (sut/restored (sut/stored both))))
+        "restored memory has the index")))
 
 
 (deftest a-revision-changing-one-word-leaves-the-other-words-as-they-were
@@ -152,7 +151,7 @@
   (let [odd    {:_id "vocab:der hund" :_rev "2-b" :type "vocab" :value 42 :translation 7}
         memory (sut/with-docs sut/empty-memory [(assoc hund :_rev "1-a") odd])]
     (is (nil? (sut/word memory "vocab:der hund")) "the older revision is not kept in its place")
-    (is (= (sut/entries (sut/with-docs sut/empty-memory [odd])) (sut/entries memory))
+    (is (= (projection/of (sut/with-docs sut/empty-memory [odd])) (projection/of memory))
         "memory holds what a full read gives")))
 
 
