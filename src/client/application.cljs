@@ -678,6 +678,21 @@
    #js {:capture true}))
 
 
+;; `Alt`+`Enter` starts the lesson from home even when nothing has focus, and
+;; then the keystroke's target is `body`, above the page. The action itself
+;; decides whether the screen is home.
+(defn listen-for-lesson-hotkey!
+  "Hands every keydown on the document to `:action/start-lesson-if-alt-enter`."
+  [dispatch]
+  (js/document.addEventListener
+   "keydown"
+   (fn [event]
+     (dispatch {:replicant/dom-event event}
+               [[:action/start-lesson-if-alt-enter
+                 {:alt? [:event.keyboard/alt?]
+                  :key  [:event.keyboard/key]}]]))))
+
+
 (defn- entered
   "A route's controllers: its screen computed from memory in the task that
    changed the route, the pull after the paint."

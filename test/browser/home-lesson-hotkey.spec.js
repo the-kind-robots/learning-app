@@ -53,6 +53,40 @@ test.describe('Горячие клавиши главной', () => {
     });
   });
 
+  test('пользователь нажимает Alt+Enter, когда ничего не в фокусе → начинается урок', async ({ page }) => {
+    await test.step('Дано главная с одним словом, фокус снят', async () => {
+      await page.goto('/home');
+      await addHaus(page);
+      await page.evaluate(() => document.activeElement.blur());
+    });
+
+    await test.step('Когда он жмёт Alt+Enter', async () => {
+      await page.keyboard.press('Alt+Enter');
+    });
+
+    await test.step('Тогда открыт урок', async () => {
+      await expect(page).toHaveURL(/\/lesson$/);
+    });
+  });
+
+  test('пользователь нажимает Alt+Enter на экране слов → урок не начинается', async ({ page }) => {
+    await test.step('Дано экран слов при непустом словаре', async () => {
+      await page.goto('/home');
+      await addHaus(page);
+      await page.getByRole('button', { name: 'Список слов' }).click();
+      await expect(page).toHaveURL(/\/words$/);
+    });
+
+    await test.step('Когда он жмёт Alt+Enter', async () => {
+      await page.keyboard.press('Alt+Enter');
+      await nothingHappensFor(page, 500);
+    });
+
+    await test.step('Тогда он остаётся на экране слов', async () => {
+      await expect(page).toHaveURL(/\/words$/);
+    });
+  });
+
   test('пользователь нажимает Alt+Enter при пустом словаре → ничего не происходит', async ({ page }) => {
     await test.step('Дано главная без слов, кнопки урока нет', async () => {
       await page.goto('/home');

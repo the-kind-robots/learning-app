@@ -158,6 +158,7 @@
                                           (nxr/register-system->state! #(-> % :store deref))
                                           (r/set-dispatch! dispatch)
                                           (application/guard-double-clicks!)
+                                          (application/listen-for-lesson-hotkey! dispatch)
                                           ;; Nothing is rendered until memory is loaded, so the
                                           ;; server's splash stays until the first screen
                                           ;; replaces it. When the start read fails, the shell
