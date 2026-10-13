@@ -72,23 +72,20 @@
         {:error :lesson-not-found :lesson-state nil})
       (let [current-trial (domain/current-trial current-state)
             lesson-state  (domain/check-answer current-state answer)]
-        (if (identical? lesson-state current-state)
-          ;; Blank: nothing graded, nothing written.
-          {:lesson-state current-state}
-          (try
-            ;; Every graded attempt is written, however many a lesson holds: a
-            ;; run of lapses is the log being honest, not noise. Example trials
-            ;; keep writing nothing — they grade a word already reviewed here.
-            (when-not (domain/example-trial? current-trial)
-              (await (vocabulary/add-review
-                      capabilities
-                      (:word-id current-trial)
-                      (-> lesson-state domain/last-result :correct?)
-                      (:prompt current-trial))))
-            {:lesson-state lesson-state}
-            (catch js/Error err
-              (log/error :lesson/check-answer-save-failed {:error (ex-message err)})
-              {:error :review-save-failed :lesson-state lesson-state})))))))
+        (try
+          ;; Every graded attempt is written, however many a lesson holds: a
+          ;; run of lapses is the log being honest, not noise. Example trials
+          ;; keep writing nothing — they grade a word already reviewed here.
+          (when-not (domain/example-trial? current-trial)
+            (await (vocabulary/add-review
+                    capabilities
+                    (:word-id current-trial)
+                    (-> lesson-state domain/last-result :correct?)
+                    (:prompt current-trial))))
+          {:lesson-state lesson-state}
+          (catch js/Error err
+            (log/error :lesson/check-answer-save-failed {:error (ex-message err)})
+            {:error :review-save-failed :lesson-state lesson-state}))))))
 
 
 (defn- token-state

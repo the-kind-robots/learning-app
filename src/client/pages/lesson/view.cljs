@@ -85,8 +85,10 @@
     :replicant/on-mount [[:action/focus-continue-button "#lesson-next"]]}
    [:div.lesson__footer.lesson__footer--error.page-footer
     [:div.lesson__answer
-     [:h3.lesson__answer-header "Ваш ответ:"]
-     [:p.lesson__answer-body {:lang "de"} (or user-answer "")]
+     (when user-answer
+       (list
+        [:h3.lesson__answer-header "Ваш ответ:"]
+        [:p.lesson__answer-body {:lang "de"} user-answer]))
      [:h3.lesson__answer-header "Правильно:"]
      (answer-body props)]
     [:div.lesson__action.page-footer__action

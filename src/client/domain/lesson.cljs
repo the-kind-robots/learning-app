@@ -205,24 +205,22 @@
 
 
 (defn check-answer
-  "The lesson after `answer` to its current trial. A blank answer is not an
-   answer: the lesson is returned as it was, nothing graded."
+  "The lesson after `answer` to its current trial. A blank answer is graded
+   like any wrong one."
   [state answer]
-  (if (str/blank? answer)
-    state
-    (let [current-trial  (:current-trial state)
-          correct-answer (expected-answer state)
-          correct?       (= (trial-normalized current-trial answer)
-                            (trial-normalized current-trial correct-answer))
-          unlock?        (and correct? (vocab-trial? current-trial))
-          remaining      (cond-> (:remaining-trials state)
-                           correct? (remove-trial current-trial)
-                           unlock?  (unlock-example-trials (:word-id current-trial)))]
-      (assoc state
-             :last-result      {:answer answer :correct? correct?}
-             :remaining-trials remaining
-             :trials           (cond-> (:trials state)
-                                 unlock? (unlock-example-trials (:word-id current-trial)))))))
+  (let [current-trial  (:current-trial state)
+        correct-answer (expected-answer state)
+        correct?       (= (trial-normalized current-trial answer)
+                          (trial-normalized current-trial correct-answer))
+        unlock?        (and correct? (vocab-trial? current-trial))
+        remaining      (cond-> (:remaining-trials state)
+                         correct? (remove-trial current-trial)
+                         unlock?  (unlock-example-trials (:word-id current-trial)))]
+    (assoc state
+           :last-result      {:answer answer :correct? correct?}
+           :remaining-trials remaining
+           :trials           (cond-> (:trials state)
+                               unlock? (unlock-example-trials (:word-id current-trial))))))
 
 
 (defn- available-trials

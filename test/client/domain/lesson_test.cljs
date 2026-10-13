@@ -149,7 +149,9 @@
                   (= cleared? (= (dec total) (count (:remaining-trials after))))
                   (= locked? (:locked? example))))
         right          true  true  false
-        "wrong answer" false false true))))
+        "wrong answer" false false true
+        ""             false false true
+        "  "           false false true))))
 
 
 (deftest an-answer-forgives-typography-only

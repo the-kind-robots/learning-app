@@ -1,5 +1,6 @@
 (ns pages.lesson.presenter
   (:require
+   [clojure.string :as str]
    [domain.lesson :as domain]))
 
 
@@ -63,5 +64,6 @@
                                     (answer-segments
                                      trial
                                      (:lesson/open-hint-index state)))
-         :user-answer    (:answer result)
+         :user-answer    (when-not (str/blank? (:answer result))
+                           (:answer result))
          :finished?      (domain/finished? lesson-state)}))))

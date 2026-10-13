@@ -665,23 +665,17 @@
 
 
 (defn guard-double-clicks!
-  "A screen is rendered in the task of the tap that opened it, so the second
-   click of a double click lands on the new screen, on whatever control sits
-   under the finger: «НАЧАТЬ УРОК» twice checks an empty answer, «ЗАКОНЧИТЬ»
-   twice starts another lesson, ✕ twice opens the themes. A click that
-   continues a multi-click (`detail` above 1) and finds another screen than
-   the click before it does nothing."
-  [store]
-  (let [page-before (volatile! nil)]
-    (js/window.addEventListener
-     "click"
-     (fn [^js event]
-       (let [page (:page/current @store)]
-         (when (and (> (.-detail event) 1) (not= page @page-before))
-           (.stopPropagation event)
-           (.preventDefault event))
-         (vreset! page-before page)))
-     #js {:capture true})))
+  "A double click is one activation: the second and later clicks of a series
+   (`detail` above 1) do nothing, wherever they land. A click from the keyboard
+   has `detail` 0 and passes."
+  []
+  (js/window.addEventListener
+   "click"
+   (fn [^js event]
+     (when (> (.-detail event) 1)
+       (.stopPropagation event)
+       (.preventDefault event)))
+   #js {:capture true}))
 
 
 (defn- entered

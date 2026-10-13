@@ -58,8 +58,11 @@ test.describe('Двойное нажатие', () => {
       expect(lessonErrors).toEqual([]);
     });
 
+    let reviewsBefore;
+
     await test.step('Когда он отвечает неверно и дважды кликает «ДАЛЕЕ»', async () => {
       await answerWrong(page);
+      reviewsBefore = await reviewCount(page);
       await page.getByRole('button', { name: 'ДАЛЕЕ' }).dblclick();
     });
 
@@ -67,7 +70,8 @@ test.describe('Двойное нажатие', () => {
       await expect(answer).toBeVisible();
       await nothingHappensFor(page, 1000);
       expect(await nextClicks(page)).toBe(2);
-      await expect(page.getByRole('heading', { name: 'Ваш ответ:' })).toHaveCount(0);
+      expect(await reviewCount(page)).toBe(reviewsBefore);
+      await expect(page.getByRole('heading', { name: 'Правильно:' })).toHaveCount(0);
       expect(lessonErrors).toEqual([]);
     });
 
@@ -104,13 +108,13 @@ test.describe('Двойное нажатие', () => {
       await expect(page).toHaveURL(/\/lesson$/);
       await expect(page.locator('#lesson-answer')).toBeVisible();
       await nothingHappensFor(page, 1000);
-      await expect(page.getByRole('heading', { name: 'Ваш ответ:' })).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: 'Правильно:' })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Правильно!' })).toHaveCount(0);
       expect(await reviewCount(page)).toBe(before);
     });
   });
 
-  test('пользователь жмёт «ПРОВЕРИТЬ» с пустым ответом → ответ не проверяется', async ({ page }) => {
+  test('ученик проверяет пустой ответ → видит правильный ответ и урок продолжается', async ({ page }) => {
     let before;
 
     await test.step('Дано урок с пустым полем ответа', async () => {
@@ -125,11 +129,23 @@ test.describe('Двойное нажатие', () => {
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
     });
 
-    await test.step('Тогда поле ответа на месте, результата нет', async () => {
-      await nothingHappensFor(page, 1000);
-      await expect(page.locator('#lesson-answer')).toBeVisible();
+    await test.step('Тогда виден правильный ответ, а не «Правильно!»', async () => {
+      await expect(page.getByRole('heading', { name: 'Правильно:' })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Ваш ответ:' })).toHaveCount(0);
-      expect(await reviewCount(page)).toBe(before);
+      await expect(page.locator('.lesson__answer-body').last()).toHaveText('Haus');
+      await expect(page.getByRole('heading', { name: 'Правильно!' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'ДАЛЕЕ' })).toBeVisible();
+    });
+
+    await test.step('И ответ записан как не вспомненный', async () => {
+      const reviews = await docsOfType(page, 'user-db', 'review');
+      expect(reviews.length).toBe(before + 1);
+      expect(reviews.some((review) => review.retained === false)).toBe(true);
+    });
+
+    await test.step('И по «ДАЛЕЕ» урок идёт дальше', async () => {
+      await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
+      await expect(page.locator('#lesson-answer')).toBeVisible();
     });
   });
 });

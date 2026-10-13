@@ -59,9 +59,7 @@ The browser history SHALL hold the home screen and at most one other app screen 
 - **THEN** the home screen is on display
 
 ### Requirement: A double click acts once
-A screen appears in the task of the tap that opens it, so the second click of a double
-click lands on the screen the first one opened. That second click SHALL do nothing: a
-double click is one activation of the control it started on.
+The second and later clicks of a series of clicks — a double click, a quick second tap on a phone — SHALL do nothing: a series is one activation of the control it started on. A click made from the keyboard is not part of a series.
 
 #### Scenario: Double click on «НАЧАТЬ УРОК»
 - **WHEN** the user double-clicks «НАЧАТЬ УРОК» on home
@@ -72,6 +70,11 @@ double click is one activation of the control it started on.
 - **WHEN** the user double-clicks «Закрыть» on a screen
 - **THEN** home is on display
 - **AND** no other screen is opened
+
+#### Scenario: Double click on «ДАЛЕЕ»
+- **WHEN** the user double-clicks «ДАЛЕЕ» in a lesson
+- **THEN** the lesson shows the next trial waiting for its answer
+- **AND** no answer is checked and no review is recorded
 
 ### Requirement: A malformed query does not stop the app
 An address whose query is not valid percent-encoding SHALL open the screen of its path. The query SHALL be dropped from the address.
