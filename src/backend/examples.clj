@@ -108,7 +108,8 @@
 
 (defn- plain-sentence?
   [text]
-  (not (re-find #"(?s)[\r\n`#\[\]{}*_:]" (or text ""))))
+  ;; A colon labels a note, except between digits: `20:00`.
+  (not (re-find #"(?s)[\r\n`#\[\]{}*_]|(?<!\d):|:(?!\d)" (or text ""))))
 
 
 (defn- german-sentence-text?
@@ -169,8 +170,7 @@
   (->
    generated-example-schema
    (mu/update :value with-constraint german-sentence-text? "German sentence required")
-   (mu/update :translation with-constraint russian-sentence-text? "Russian translation required")
-   (mu/update-in [:structure 0 :translation] with-constraint russian-text? "Structure translation must be Cyrillic")))
+   (mu/update :translation with-constraint russian-sentence-text? "Russian translation required")))
 
 
 (defn- normalize-text
@@ -186,13 +186,14 @@
 (def ^:private min-sentence-words 3)
 
 
-(def ^:private min-max-sentence-words 12)
+(def ^:private min-max-sentence-words 16)
 
 
 (def ^:private words-around-target
   "How much room a sentence gets beyond the target itself. A six-word phrase
-   cannot fit a flat twelve-word ceiling with anything around it."
-  6)
+   cannot fit a flat ceiling with anything around it, and a placeholder
+   becomes a noun phrase of several words."
+  10)
 
 
 (defn- sentence-length-bounds
@@ -239,36 +240,58 @@
 
 
 (defn- find-word-index
-  [words next-word-index used-form]
-  (loop [word-index next-word-index]
-    (when (< word-index (count words))
-      (if (same-word? (nth words word-index) used-form)
-        word-index
-        (recur (inc word-index))))))
+  "The index of the first word of `words` that is `used-form` and not in
+   `taken`: from `from` on when there is one, else from the start."
+  [words taken from used-form]
+  (let [free (fn [word-index]
+               (and (not (taken word-index))
+                    (same-word? (nth words word-index) used-form)))]
+    (or (first (filter free (range from (count words))))
+        (first (filter free (range 0 from))))))
+
+
+(defn- one-word-items
+  "The `structure` items of one word each. An item whose `usedForm` several
+   words make (`Genius Loci`) becomes one item per word, all with its
+   `dictionaryForm` and `translation`."
+  [item]
+  (map #(assoc item :usedForm %)
+       (or (not-empty (split-sentence-words (:usedForm item)))
+           [(:usedForm item)])))
 
 
 (defn- add-word-indexes-to-structure
+  "The structure items placed on the sentence's words, ordered by `wordIndex`.
+   An item takes the first matching word after the previous item's, else the
+   first matching word before it; an item no word matches, or whose
+   `translation` is not Russian, is left out. Nil when no item is placed."
   [sentence structure]
   (let [words (split-sentence-words sentence)]
-    (loop [items   (seq structure)
-           next-word-index 0
-           indexed []]
+    (loop [items  (seq (mapcat one-word-items (filter #(russian-text? (:translation %)) structure)))
+           from   0
+           taken  #{}
+           placed []]
       (if-let [item (first items)]
-        (when-let [word-index (find-word-index words next-word-index (:usedForm item))]
+        (if-let [word-index (find-word-index words taken from (:usedForm item))]
           (recur (next items)
-                 (inc word-index)
-                 (conj indexed (assoc item :wordIndex word-index))))
-        indexed))))
+                 (max from (inc word-index))
+                 (conj taken word-index)
+                 (conj placed (assoc item :wordIndex word-index)))
+          (recur (next items) from taken placed))
+        (when (seq placed)
+          (vec (sort-by :wordIndex placed)))))))
 
 
 (defn- add-word-indexes
   "No pair guard: a word the sentence genuinely says twice is ordinary German
    — `Zeit` in `Von Zeit zu Zeit …` — and with `structure` annotating words
    and not membership, nothing tells that apart from a separable prefix
-   doubled onto the preposition sharing its spelling. Rejecting both cost an
-   example for every construction of the first shape. The prompt's own rule
-   against annotating that preposition is what carries the second now, and
-   when the model disobeys it the cost is one wrong tooltip."
+   doubled onto the preposition sharing its spelling. The prompt's own rule
+   against annotating that preposition is what carries the second, and when
+   the model disobeys it the cost is one wrong tooltip.
+   Placement is just as forgiving: an item out of order, spelled as the lemma,
+   naming a word the sentence lacks or glossed in another language costs that
+   item's tooltip, never the example."
   [example]
   (let [example (strip-word-indexes example)]
     (when-let [structure (add-word-indexes-to-structure (:value example) (:structure example))]
@@ -323,17 +346,36 @@
   {:malformed-example
    "The generated example did not match the required JSON shape or text constraints. See `details` for the specific field errors."
    :structure-mismatch
-   "Items in `structure` must appear in strict left-to-right order as they occur in the German sentence, and each must match the word at its position. A `usedForm` is exactly one word of the sentence, spelled as the sentence spells it — the inflected form, never the lemma. An expression of several words is annotated one item per word, each with its own `dictionaryForm`, or left out of `structure` altogether — the sentence is where such an expression lives, not `structure`."
+   "Items in `structure` must appear left to right as they occur in the German sentence, and none of them matched a word of it. A `usedForm` is exactly one word of the sentence, spelled as the sentence spells it — the inflected form, never the lemma. An expression of several words is annotated one item per word, each with its own `dictionaryForm`, or left out of `structure` altogether — the sentence is where such an expression lives, not `structure`."
    :sentence-length-out-of-range
    "The German sentence is outside the accepted length. See `details` for the number of words it must contain."
    :target-lemma-missing
-   "The sentence must contain the whole target: a single lemma as a `dictionaryForm` entry in `structure`, and a multi-word target with every one of its words present, inflected as the sentence needs."})
+   "The sentence must contain the whole target: a single lemma as a `dictionaryForm` entry in `structure`, and a multi-word target with every one of its words present, inflected as the sentence needs. A placeholder (`etwas`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot the sentence fills with anything that fits, and an article may be any article."})
 
 
 (def ^:private single-lemma-prefixes
   "First tokens after which a two-token target is still one lemma: the
    articles a noun is listed with, and the reflexive marker."
   #{"der" "die" "das" "ein" "eine" "sich"})
+
+
+(def ^:private placeholder-words
+  "The words a phrase target writes for a slot the sentence fills with
+   anything that fits: a person, a thing, a reflexive pronoun, one's own.
+   Spellings and abbreviations are those the dictionary's phrases and the
+   learners' own use."
+  #{"etwas" "etw" "et"
+    "jemand" "jemanden" "jemandem" "jemandes"
+    "jd" "jdn" "jdm" "jds" "jmd" "jmdn" "jmdm" "jmds"
+    "sich"
+    "seine" "seinen" "seinem" "seiner" "seines"})
+
+
+(def ^:private determiner-words
+  "The articles a phrase target lists a noun with. The sentence puts whichever
+   determiner its noun needs."
+  #{"der" "die" "das" "den" "dem" "des"
+    "ein" "eine" "einen" "einem" "einer" "eines"})
 
 
 (defn- several-words?
@@ -347,31 +389,55 @@
                    (single-lemma-prefixes (str/lower-case (first tokens))))))))
 
 
+(defn- required-words
+  "The words of a multi-word target that the sentence must carry: all but the
+   placeholders (`etwas`, `jemandem`, `sich`, `einer Sache` …) and the
+   determiners, which the sentence fills in or inflects as it needs. A target
+   of nothing else keeps all its words."
+  [target]
+  (let [tokens   (split-sentence-words (str/replace target #"(?iu)\beiner\s+Sache\b" ""))
+        required (remove #(let [token (str/lower-case (strip-word-edges %))]
+                            (or (placeholder-words token) (determiner-words token)))
+                         tokens)]
+    (vec (or (not-empty required) tokens))))
+
+
 (defn- word-present?
   "A word of the target counts as present when the sentence says it, or when
    some item names it as a `dictionaryForm` — which is what carries inflection:
    `verlieren` is in `Er verliert den Kopf.` only through `{verliert,
-   verlieren}`."
+   verlieren}`. A word of a longer `dictionaryForm` counts too, for a model
+   that names the whole expression, and so does an adjective the target
+   writes with an ending (`gemeinsame` for `gemeinsam`)."
   [sentence-words structure target-word]
   (or (some #(same-word? % target-word) sentence-words)
-      (some #(dictionary/same-lemma? target-word (:dictionaryForm %)) structure)))
+      (some (fn [item]
+              (some (fn [form]
+                      (or (dictionary/same-lemma? target-word form)
+                          (dictionary/same-lemma? (str/replace target-word #"(?iu)(e|en|em|er|es)$" "") form)))
+                    (cons (:dictionaryForm item)
+                          (split-sentence-words (:dictionaryForm item)))))
+            structure)))
 
 
 (defn- target-present?
-  "One lemma must be named in `structure`, as before. Several words must be in
-   the sentence — every one of them — because with plain word-by-word
-   annotation nothing in `structure` says the construction was the target. An
+  "Several words: every one that is not a placeholder or a determiner must be
+   in the sentence or named by some item, because with plain word-by-word
+   annotation nothing in `structure` says the construction was the target.
+   One lemma: named in `structure` by its `dictionaryForm`, or said by the
+   sentence in the form the target is written in — a participle the model
+   lemmatised as a verb, a plural the model listed in the singular. An
    article pair takes whichever of the two answers yes: `die Leiter` is named
    by its own item, `das heißt` only by the sentence."
   [target sentence structure]
   (let [sentence-words (split-sentence-words sentence)
-        target-words   (split-sentence-words target)
-        all-words?     (every? #(word-present? sentence-words structure %) target-words)]
+        words          (if (several-words? target)
+                         (required-words target)
+                         (split-sentence-words target))]
     (boolean
-     (if (several-words? target)
-       all-words?
-       (or (dictionary/lemma-in-structure? target structure)
-           (and (< 1 (count target-words)) all-words?))))))
+     (or (and (not (several-words? target))
+              (dictionary/lemma-in-structure? target structure))
+         (every? #(word-present? sentence-words structure %) words)))))
 
 
 (defn- example-issue
@@ -430,7 +496,8 @@
     "SENTENCE"
     "- Produce one natural standard German sentence containing the whole target."
     "- A lemma may appear as a correct inflected form. A phrase may be inflected and rearranged by German word order, and its words need not be adjacent — `Ich komme auf jeden Fall mit.` is the phrase `auf jeden Fall`."
-    "- A phrase that is already a complete sentence is extended or embedded into a turn, never returned unchanged."
+    "- A placeholder in a phrase (`etwas`, `jemand`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot, not a word to repeat: fill it with a fitting noun phrase or pronoun, and put `sich` as the reflexive pronoun the subject needs (`mich`, `dich`, `sich`, `uns`, `euch`). Every other word of the phrase is required, inflected as the sentence needs; its article may be any article."
+    "- A phrase that is already a complete sentence is extended or embedded into a turn, never returned unchanged. A phrase that ends in `!` or `?` is used without that mark inside a longer sentence."
     "- Leave room around the target: roughly the target's own length plus a handful of words, and at least three words in all."
     "- German sentence only: no labels, notes, markdown, or meta commentary."
     "- `translation` must be one natural Russian sentence, not a calque."
@@ -552,13 +619,22 @@
                             :previousIssue   (previous-issue-payload retry-context))))]))
 
 
+(def ^:private first-attempt-temperature 0.1)
+
+
+(def ^:private retry-temperature
+  "Asked again at the same temperature, the model writes the sentence it was
+   just refused for."
+  0.7)
+
+
 (defn- request-body
   [word translations context word-meta retry-context]
   {:messages        [{:role    "system"
                       :content system-prompt}
                      {:role    "user"
                       :content (user-prompt word translations context word-meta retry-context)}]
-   :temperature     0.1
+   :temperature     (if retry-context retry-temperature first-attempt-temperature)
    :max_tokens      (example-max-tokens)
    :response_format {:type        "json_schema"
                      :json_schema {:name   "sentence_example"

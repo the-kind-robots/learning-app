@@ -49,7 +49,8 @@
                         (support.generation/example-completion good-example)]
                        #(generate "Leiter" "лестница" 2)))))
   (testing "when every attempt fails the caller gets no example"
-    (is (nil? (generating [(support.generation/example-completion too-short-example)] #(generate "Leiter" "лестница" 3))))
+    (is (nil? (generating [(support.generation/example-completion too-short-example)]
+                          #(generate "Leiter" "лестница" 3))))
     (is (sut/generation-failure?
          (generating [(ex-info "network down" {:status 0})] #(generate "Hund" "собака" 2)))
         "a provider that cannot be reached is its failure, not the pair's")))
@@ -85,28 +86,25 @@
 
 (deftest a-malformed-example-is-rejected-whatever-the-flaw
   (are [flaw example] (= :malformed-example (:issue (#'sut/example-issue "Hund" example)))
-    "English mixed into the translation"
+   "English mixed into the translation"
     (assoc dog :translation "The dog runs quickly in the park, собака.")
 
-    "a small Latin tail in the translation"
+   "a small Latin tail in the translation"
     (assoc dog :translation "Собака бежит fast.")
 
-    "Latin in a structure item's translation"
-    (assoc-in dog [:structure 2 :translation] "быстро fast")
-
-    "Cyrillic in the German sentence"
+   "Cyrillic in the German sentence"
     (assoc dog :value "Der Hund бежит по парку.")
 
-    "two sentences"
+   "two sentences"
     (assoc dog :value "Der Hund läuft. Er ist schnell." :translation "Собака бежит. Она быстрая.")
 
-    "a prefixed German explanation"
+   "a prefixed German explanation"
     (assoc dog :value "Sentence: Der Hund läuft im Park.")
 
-    "a prefixed Russian explanation"
+   "a prefixed Russian explanation"
     (assoc dog :translation "Перевод: Собака бежит в парке.")
 
-    "meta text everywhere"
+   "meta text everywhere"
     {:value       "The example for 'aufstehen' is ..."
      :translation "to stand up"
      :structure   [{:usedForm "aufstehen" :dictionaryForm "aufstehen" :translation "to stand up"}]}))
@@ -130,11 +128,12 @@
                      :dictionaryForm "der Park"
                      :translation    "парк"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (= :structure-mismatch
+        (is (= :target-lemma-missing
                (:issue (#'sut/example-issue "Leiter" example))))))))
 
-(deftest structure-items-out-of-sentence-order-are-rejected
-  (testing "structure items must stay in left-to-right sentence order"
+
+(deftest structure-items-out-of-sentence-order-are-placed-in-sentence-order
+  (testing "an item out of order still finds its word, and the structure comes back in sentence order"
     (let [example {:value "Pass auf deine Seele auf."
                    :translation "Береги свою душу."
                    :structure
@@ -148,8 +147,10 @@
                      :dictionaryForm "die Seele"
                      :translation    "душа"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (= :structure-mismatch
-               (:issue (#'sut/example-issue "aufpassen" example))))))))
+        (is (nil? (:issue (#'sut/example-issue "aufpassen" example))))
+        (is (= [0 1 3]
+               (mapv :wordIndex (:structure (#'sut/add-word-indexes example)))))))))
+
 
 (deftest a-doubled-separable-prefix-is-accepted-and-costs-a-tooltip
   (testing
@@ -176,6 +177,7 @@
         (is (= [0 1 3 4]
                (mapv :wordIndex (:structure (#'sut/add-word-indexes example)))))))))
 
+
 (deftest a-detached-prefix-at-the-sentence-end-is-indexed
   (testing "backend assigns the final token index for a detached prefix near punctuation"
     (let [example {:value "Pass gut auf das kleine Kind auf!"
@@ -195,6 +197,7 @@
                      :translation    "присматривать"}]}]
       (is (= [0 1 5 6]
              (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))))))
+
 
 (deftest a-multi-word-target-is-found-in-the-sentence
   (testing "`structure` annotates words, so the construction is checked against the sentence"
@@ -216,6 +219,7 @@
                (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))
             "nothing in the structure says those words were the target")))))
 
+
 (deftest an-inflected-target-word-is-found-through-its-dictionary-form
   (testing "`verlieren` is in `Er verliert den Kopf.` only through the item that names it"
     (let [example {:value       "Er verliert den Kopf."
@@ -228,6 +232,7 @@
                                   :translation    "голова"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
         (is (nil? (#'sut/example-issue "den Kopf verlieren" example)))))))
+
 
 (deftest a-word-the-sentence-says-twice-no-longer-costs-the-example
   (testing "two identical items are ordinary German, not a mistake to reject"
@@ -251,6 +256,7 @@
                (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))
             "each occurrence indexes its own position")))))
 
+
 (deftest a-multi-word-target-missing-from-the-sentence-is-rejected
   (testing "the construction must be in the sentence — every word of it"
     (let [example {:value       "Ich besuche meine Eltern."
@@ -264,6 +270,7 @@
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
         (is (= :target-lemma-missing
                (:issue (#'sut/example-issue "von Zeit zu Zeit" example))))))))
+
 
 (deftest a-partly-present-construction-is-rejected
   (testing "most of the words is not the construction"
@@ -283,6 +290,7 @@
                (:issue (#'sut/example-issue "auf jeden Fall" example)))
             "`auf` is there, `jeden` and `Fall` are not")))))
 
+
 (deftest an-article-pair-target-passes-on-the-sentence-when-structure-cannot-name-it
   (testing "`das heißt` is a construction the shape rule reads as an article pair"
     (let [example {:value       "Es regnet, das heißt, wir bleiben zu Hause."
@@ -301,6 +309,7 @@
                                   :translation    "дом"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
         (is (nil? (#'sut/example-issue "das heißt" example)))))))
+
 
 (deftest a-reflexive-dictionary-form-matches-its-bare-verb-target
   (testing "non-article target can match reflexive dictionary form"
@@ -325,6 +334,7 @@
                 "vorstellen"
                 example)))))))
 
+
 (deftest a-subject-reads-what-the-caller-sent
   (testing "one gloss as a bare string"
     (is (= ["собака"] (:translations (sut/subject {:word "Hund" :translation "собака"})))))
@@ -342,46 +352,47 @@
     (is (nil? (:context (sut/subject {:word "Hund" :context "   "}))))
     (is (= "Tiere" (:context (sut/subject {:word "Hund" :context " Tiere "}))))))
 
+
 (deftest a-bare-word-resolves-through-its-surface-form-to-the-lemma-entry
   (testing "bare words can resolve through surface-form docs to article-bearing lemma docs"
     (with-redefs [db/request-sync (fn [request]
-                                      (case (:url request)
-                                        "dictionary-db/_find"
-                                        {:status 200
-                                         :body   {:docs []}}
+                                    (case (:url request)
+                                      "dictionary-db/_find"
+                                      {:status 200
+                                       :body   {:docs []}}
 
-                                        "dictionary-db/sf:fenster"
-                                        {:status 200
-                                         :body   {:entries [{:lemma-id "lemma:das fenster:noun"
-                                                             :lemma    "das Fenster"}]}}
+                                      "dictionary-db/sf:fenster"
+                                      {:status 200
+                                       :body   {:entries [{:lemma-id "lemma:das fenster:noun"
+                                                           :lemma    "das Fenster"}]}}
 
-                                        "dictionary-db/_all_docs"
-                                        {:status 200
-                                         :body   {:rows [{:id  "lemma:das fenster:noun"
-                                                          :doc {:_id         "lemma:das fenster:noun"
-                                                                :type        "dictionary-entry"
-                                                                :value       "das Fenster"
-                                                                :translation [{:lang  "ru"
-                                                                               :value "окно"}]}}]}}
+                                      "dictionary-db/_all_docs"
+                                      {:status 200
+                                       :body   {:rows [{:id  "lemma:das fenster:noun"
+                                                        :doc {:_id         "lemma:das fenster:noun"
+                                                              :type        "dictionary-entry"
+                                                              :value       "das Fenster"
+                                                              :translation [{:lang  "ru"
+                                                                             :value "окно"}]}}]}}
 
-                                        (throw (ex-info "unexpected request" request))))]
-        (is (= ["das Fenster"]
-               (mapv :value (#'dictionary/lookup-dictionary-entries "Fenster")))))))
+                                      (throw (ex-info "unexpected request" request))))]
+      (is (= ["das Fenster"]
+             (mapv :value (#'dictionary/lookup-dictionary-entries "Fenster")))))))
 
 
 (deftest the-provider-retry-after-reads-seconds-and-dates
-  (let [now         (java.time.Instant/parse "1994-11-06T08:49:00Z")
+  (let [now (java.time.Instant/parse "1994-11-06T08:49:00Z")
         retry-after (fn [value] (provider/retry-after-ms {:headers {:retry-after value}} now))]
     (are [header delay-ms] (= delay-ms (retry-after header))
-      "7"                              7000
-      "0"                              0
-      "Sun, 06 Nov 1994 08:49:37 GMT"  37000
-      "Sunday, 06-Nov-94 08:49:37 GMT" 37000
-      "Sun Nov  6 08:49:37 1994"       37000
-      "Sun, 06 Nov 1994 08:00:00 GMT"  0
-      "86400"                          3600000
-      "soon"                           nil
-      "-5"                             nil)))
+     "7" 7000
+     "0" 0
+     "Sun, 06 Nov 1994 08:49:37 GMT" 37000
+     "Sunday, 06-Nov-94 08:49:37 GMT" 37000
+     "Sun Nov  6 08:49:37 1994" 37000
+     "Sun, 06 Nov 1994 08:00:00 GMT" 0
+     "86400" 3600000
+     "soon" nil
+     "-5" nil)))
 
 
 (deftest a-dictionary-that-cannot-be-read-is-a-failure-not-an-unknown-word
@@ -402,3 +413,233 @@
       (is (= "dictionary-db/sf:bezug%20auf%20etwas%20nehmen" surface-url))
       (is (some? (java.net.URI. (str "http://localhost:5984/" surface-url)))
           "a URL the HTTP client accepts"))))
+
+
+(defn- candidate
+  "An example of `value` whose `structure` is the `[used dictionary gloss]`
+   triples."
+  [value translation & items]
+  {:value       value
+   :translation translation
+   :structure   (mapv (fn [[used-form dictionary-form gloss]]
+                        {:usedForm used-form :dictionaryForm dictionary-form :translation gloss})
+                      items)})
+
+
+(def ^:private rejected-before
+  "Candidates a model wrote that the validator once rejected, each with the
+   target it was written for."
+  {:placeholder-filled
+   ["Anspruch auf etwas haben"
+    (candidate "Jeder Arbeitnehmer hat einen Anspruch auf Urlaub."
+               "Каждый работник имеет право на отпуск."
+               ["Arbeitnehmer" "der Arbeitnehmer" "работник"]
+               ["hat" "haben" "иметь"]
+               ["Anspruch" "der Anspruch" "право"]
+               ["Urlaub" "der Urlaub" "отпуск"])]
+
+   :reflexive-with-a-noun-slot
+   ["sich vor etwas drücken"
+    (candidate "Er versucht, sich vor der Verantwortung zu drücken."
+               "Он пытается уклониться от ответственности."
+               ["versucht" "versuchen" "пытаться"]
+               ["sich" "sich drücken" "уклоняться"]
+               ["Verantwortung" "die Verantwortung" "ответственность"]
+               ["drücken" "sich drücken" "уклоняться"])]
+
+   :dative-slot-and-the-verb-named-in-the-expression
+   ["jemandem Mut machen"
+    (candidate "Der Trainer versuchte, seinem Team Mut zu machen."
+               "Тренер пытался придать своей команде смелости."
+               ["Trainer" "der Trainer" "тренер"]
+               ["versuchte" "versuchen" "пытаться"]
+               ["Team" "das Team" "команда"]
+               ["Mut" "der Mut" "смелость"]
+               ["machen" "jemandem Mut machen" "придать кому-то смелости"])]
+
+   :another-article-than-the-targets
+   ["ein Versprechen brechen"
+    (candidate "Ich werde mein Versprechen nicht brechen."
+               "Я не нарушу свое обещание."
+               ["Versprechen" "das Versprechen" "обещание"]
+               ["brechen" "brechen" "нарушить"])]
+
+   :expression-named-whole
+   ["in einer Krise stecken"
+    (candidate "Die Firma steckt seit Monaten in einer Krise."
+               "Фирма переживает кризис уже несколько месяцев."
+               ["steckt" "in einer Krise stecken" "переживать кризис"]
+               ["Monaten" "der Monat" "месяц"]
+               ["einer" "ein" "один"]
+               ["Krise" "die Krise" "кризис"])]
+
+   :adjective-inflected-differently-from-the-target
+   ["der gemeinsame Nenner"
+    (candidate "Wir müssen einen gemeinsamen Nenner finden, um die Diskussion zu beenden."
+               "Нам нужно найти общий знаменатель, чтобы закончить дискуссию."
+               ["gemeinsamen" "gemeinsam" "общий"]
+               ["Nenner" "der Nenner" "знаменатель"]
+               ["finden" "finden" "находить"]
+               ["müssen" "müssen" "быть должным"]
+               ["Diskussion" "die Diskussion" "дискуссия"]
+               ["beenden" "beenden" "заканчивать"])]
+
+   :plural-listed-in-the-singular
+   ["Aufzeichnungen"
+    (candidate "Die Aufzeichnungen des Arztes waren sehr detailliert."
+               "Записи врача были очень подробными."
+               ["Aufzeichnungen" "die Aufzeichnung" "запись"]
+               ["Arztes" "der Arzt" "врач"]
+               ["waren" "sein" "быть"]
+               ["detailliert" "detailliert" "подробный"])]
+
+   :participle-said-as-a-verb
+   ["verzweifelt"
+    (candidate "Er verzweifelt an der Aufgabe."
+               "Он отчаивается из-за задания."
+               ["verzweifelt" "verzweifeln" "отчаиваться"]
+               ["Aufgabe" "die Aufgabe" "задание"])]
+
+   :separable-verb-with-items-out-of-order
+   ["abschaffen"
+    (candidate "Die Regierung will die alten Gesetze abschaffen."
+               "Правительство хочет отменить старые законы."
+               ["Regierung" "die Regierung" "правительство"]
+               ["will" "wollen" "хотеть"]
+               ["alte" "alt" "старый"]
+               ["Gesetze" "das Gesetz" "закон"]
+               ["abschaffen" "abschaffen" "упразднять"])]
+
+   :detached-prefix-after-its-sentence-neighbours
+   ["hervorgehen"
+    (candidate "Aus den Daten geht die Korrelation hervor."
+               "Из данных вытекает корреляция."
+               ["geht" "hervorgehen" "вытекать"]
+               ["Daten" "die Daten" "данные"]
+               ["Korrelation" "die Korrelation" "корреляция"]
+               ["hervor" "hervorgehen" "вытекать"])]
+
+   :two-words-in-one-item
+   ["der Genius Loci"
+    (candidate "Der Genius Loci prägt die Atmosphäre dieses Ortes."
+               "Гений места формирует атмосферу этого места."
+               ["Genius Loci" "der Genius Loci" "гений места"]
+               ["prägt" "prägen" "формировать"]
+               ["Atmosphäre" "die Atmosphäre" "атмосфера"]
+               ["Ortes" "der Ort" "место"])]
+
+   :lemma-where-the-sentence-has-an-inflected-form
+   ["der Widerstand"
+    (candidate "Der Widerstand gegen die neue Regel war groß."
+               "Сопротивление новому правилу было большим."
+               ["Widerstand" "der Widerstand" "сопротивление"]
+               ["gegen" "gegen" "против"]
+               ["neu" "neu" "новый"]
+               ["Regel" "die Regel" "правило"]
+               ["war" "sein" "быть"]
+               ["groß" "groß" "большой"])]
+
+   :item-glossed-in-english
+   ["annehmen"
+    (candidate "Ich nehme an, dass er die Wahrheit sagt."
+               "Я предполагаю, что он говорит правду."
+               ["nehme" "annehmen" "предполагать"]
+               ["dass" "dass" "что"]
+               ["er" "er" "он"]
+               ["die" "die" "the"]
+               ["Wahrheit" "die Wahrheit" "правда"]
+               ["sagt" "sagen" "говорить"])]
+
+   :time-in-the-translation
+   ["die Tagesschau"
+    (candidate "Die Tagesschau beginnt um 20 Uhr."
+               "Ежедневный выпуск новостей начинается в 20:00."
+               ["Tagesschau" "die Tagesschau" "ежедневный выпуск новостей"]
+               ["beginnt" "beginnen" "начинается"]
+               ["Uhr" "die Uhr" "час"])]
+
+   :sentence-longer-than-a-handful-around-the-target
+   ["jemanden an der Backe haben"
+    (candidate "Ich habe ihn wirklich an der Backe, aber ich muss mit ihm arbeiten."
+               "Я действительно вынужден иметь с ним дело, но мне приходится с ним работать."
+               ["habe" "haben" "иметь"]
+               ["ihn" "er" "он"]
+               ["Backe" "die Backe" "щека"]
+               ["muss" "müssen" "быть вынужденным"]
+               ["ihm" "er" "он"]
+               ["arbeiten" "arbeiten" "работать"])]})
+
+
+(deftest a-correct-sentence-the-validator-once-rejected-is-accepted
+  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+    (doseq [[reason [target example]] rejected-before]
+      (testing (name reason)
+        (is (nil? (#'sut/example-issue target example)))))))
+
+
+(deftest a-placeholder-is-a-slot-the-sentence-fills-however-it-likes
+  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+    (let [fixed     (candidate "Wir legen den Termin bald fest."
+                               "Мы скоро назначим срок."
+                               ["legen" "festlegen" "назначать"]
+                               ["Termin" "der Termin" "срок"]
+                               ["bald" "bald" "скоро"]
+                               ["fest" "festlegen" "назначать"])
+          reflexive (fn [pronoun]
+                      (candidate (str "Ich stelle " pronoun " morgen bei den Kollegen vor.")
+                                 "Я представляюсь коллегам завтра."
+                                 ["stelle" "sich vorstellen" "представляться"]
+                                 ["Kollegen" "der Kollege" "коллега"]
+                                 ["vor" "sich vorstellen" "представляться"]))]
+      (are [target example] (nil? (#'sut/example-issue target example))
+       "etwas festlegen"         fixed
+       "etw. festlegen"          fixed
+       "sich vorstellen"         (reflexive "mich")
+       "sich bei jdm vorstellen" (reflexive "mich")
+       "sich bei jemandem vorstellen" (reflexive "uns")))))
+
+
+(deftest a-word-of-the-phrase-that-is-no-placeholder-is-still-required
+  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+    (let [example (candidate "Jeder Arbeitnehmer hat einen Anspruch auf Urlaub."
+                             "Каждый работник имеет право на отпуск."
+                             ["Arbeitnehmer" "der Arbeitnehmer" "работник"]
+                             ["hat" "haben" "иметь"]
+                             ["Anspruch" "der Anspruch" "право"]
+                             ["Urlaub" "der Urlaub" "отпуск"])]
+      (are [target] (= :target-lemma-missing (:issue (#'sut/example-issue target example)))
+       "Anspruch auf etwas verlieren"
+       "Bezug auf etwas nehmen"
+       "etwas zur Folge haben"))))
+
+
+(deftest a-structure-item-that-fits-no-word-costs-its-tooltip-not-the-example
+  (let [example (candidate "Der Widerstand gegen die neue Regel war groß."
+                           "Сопротивление новому правилу было большим."
+                           ["Widerstand" "der Widerstand" "сопротивление"]
+                           ["neu" "neu" "новый"]
+                           ["Regel" "die Regel" "правило"]
+                           ["Gericht" "das Gericht" "суд"])]
+    (is (= [["Widerstand" 1] ["Regel" 5]]
+           (mapv (juxt :usedForm :wordIndex)
+                 (:structure (#'sut/add-word-indexes example)))))))
+
+
+(deftest an-item-of-two-words-is-indexed-word-by-word
+  (let [example (candidate "Der Genius Loci prägt die Atmosphäre dieses Ortes."
+                           "Гений места формирует атмосферу этого места."
+                           ["Genius Loci" "der Genius Loci" "гений места"]
+                           ["prägt" "prägen" "формировать"])]
+    (is (= [["Genius" 1] ["Loci" 2] ["prägt" 3]]
+           (mapv (juxt :usedForm :wordIndex)
+                 (:structure (#'sut/add-word-indexes example)))))))
+
+
+(deftest a-structure-with-no-word-of-the-sentence-is-a-structure-mismatch
+  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+    (is (= :structure-mismatch
+           (:issue (#'sut/example-issue
+                    "Leiter"
+                    (candidate "Der Hund läuft schnell im Park."
+                               "Собака быстро бежит по парку."
+                               ["Leiter" "die Leiter" "лестница"])))))))
