@@ -206,9 +206,9 @@ typed into and the panel heading above it SHALL NOT move.
 ### Requirement: The home screen starts a lesson from the keyboard
 
 `Alt`+`Enter` (`Option`+`Enter` on a Mac) on the home screen SHALL start the
-lesson — the same action the `НАЧАТЬ УРОК` button performs. The handler SHALL
-belong to the home page, so the keystroke works wherever the focus sits on that
-screen and has no meaning on any other screen. The keystroke's default action
+lesson — the same action the `НАЧАТЬ УРОК` button performs. The keystroke SHALL
+work wherever the focus sits on that screen, including when no element has
+focus, and has no meaning on any other screen. The keystroke's default action
 SHALL be suppressed, so it starts one lesson. When the vocabulary is empty the
 lesson footer is hidden, and the keystroke SHALL do nothing.
 
@@ -234,6 +234,19 @@ lesson footer is hidden, and the keystroke SHALL do nothing.
 - **AND** focus is on one of the screen's buttons rather than on a field
 - **AND** the user presses `Enter` while `Alt` is held
 - **THEN** the lesson screen opens
+
+#### Scenario: Alt+Enter with nothing focused
+
+- **WHEN** the home screen is open with a non-empty vocabulary
+- **AND** no element has focus
+- **AND** the user presses `Enter` while `Alt` is held
+- **THEN** the lesson screen opens
+
+#### Scenario: Alt+Enter on another screen
+
+- **WHEN** a screen other than home is open
+- **AND** the user presses `Enter` while `Alt` is held
+- **THEN** no lesson is started by the keystroke
 
 #### Scenario: An empty vocabulary offers no lesson
 
