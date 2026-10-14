@@ -17,26 +17,28 @@ The backend already finds the file: `core.clj` serves it from `LEARNING_APP__DIC
 - The SQLite dictionary is read-only for the backend; nothing in the backend writes to it.
 - The dictionary tool pipeline (`clojure -X:dictionary build`) stays; only the CouchDB import branch is cut.
 
-## Open decisions
+## Decided
+
+The owner took every recommendation: 1A, 2A, 3A, 4A, 5B, 6A.
 
 1. **How the backend obtains `dictionary.sqlite`.**
    (A) The source the client route already uses: `LEARNING_APP__DICTIONARY_DIR` if set, else the jar resource copied once to a temp file. (B) A path populated by deploy outside the jar.
-   Recommend A: one source for both readers, no new deploy step, and the file is already in the jar.
+   Decided A: one source for both readers, no new deploy step, and the file is already in the jar.
 2. **How the `sf:` lookup maps to SQLite.**
    (A) Existing `surface_forms`, queried by `normalize-german` of the word, then `lemmas` by id. (B) A new table.
-   Recommend A: it holds the same forms, keyed for a clustered lookup. The folding is wider than the old lowercase key (`abhängen` and `abhaengen` meet); to confirm against the old `sf:` documents.
+   Decided A: it holds the same forms, keyed for a clustered lookup. The old `sf:` keys and `normalized_value` were `normalize-german` too (checked in the deleted importer's history), but the old lookup sent only a lowercased word, so a word with an umlaut never matched; the new lookup folds the word the same way and finds it.
 3. **How the normalized-value (exact) lookup maps to SQLite.**
    (A) Candidates from `surface_forms`, then keep lemmas whose `lower(value)` equals the word, so "die Leiter" stays distinct from "der Leiter". (B) Add an index on `lower(value)` in the artifact.
-   Recommend A: no artifact change; B changes the file every client downloads.
+   Decided A: no artifact change; B changes the file every client downloads.
 4. **An existing `dictionary-db` on a deployed server.**
    (A) Left in place; `postinst` stops creating it and the runbook says how an operator drops it. (B) Dropped by `postinst`.
-   Recommend A: deleting data from a package script is irreversible, and nothing reads it once the route is gone.
+   Decided A: deleting data from a package script is irreversible, and nothing reads it once the route is gone.
 5. **Dictionary file missing or unreadable.**
    (A) Warn and treat every word as unknown. (B) Fail fast at boot.
-   Recommend B: with a local file nothing is transiently down, and A is the silent loss of part of speech and CEFR the old spec warned about. The delta spec states B.
+   Decided B: with a local file nothing is transiently down, and A is the silent loss of part of speech and CEFR the old spec warned about. The delta spec states B.
 6. **CEFR level, absent from the SQLite file** (found while checking; not in the brief).
    (A) Add a nullable `cefr_level` column to `lemmas` at build time. (B) Backend reads `enrichment-meta.jsonl` and matches by value + pos. (C) A backend-only sidecar file.
-   Recommend A: one file, one join; B matches homographs by guesswork and loads 40 MB into memory. Cost of A: the artifact hash changes, so clients download the dictionary once more when it ships.
+   Decided A: one file, one join; B matches homographs by guesswork and loads 40 MB into memory. Cost of A: the artifact hash changes, so clients download the dictionary once more when it ships.
 
 ## Risks
 

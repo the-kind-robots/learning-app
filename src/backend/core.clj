@@ -372,17 +372,7 @@
 ;;
 
 
-(defn- configured-dictionary-dir
-  "Filesystem directory to serve the dictionary from, when set. Production
-   leaves it unset and answers from its own classpath resource — the only
-   artifact a deployment can be held to. The browser suite points it at a small
-   fixture (#289) so a spec waits milliseconds for the SQLite worker instead of
-   importing 37 MB into a fresh OPFS on every test."
-  [env]
-  (some-> (get env "LEARNING_APP__DICTIONARY_DIR") not-empty io/file))
-
-
-(def ^:private dictionary-dir (configured-dictionary-dir (System/getenv)))
+(def ^:private dictionary-dir (dictionary/configured-dictionary-dir (System/getenv)))
 
 
 (def ^:private dictionary-manifest
@@ -863,9 +853,9 @@
     (migrations/ensure-migrated! db-spec)
     ;; Report orphan userdbs; CouchDB being down logs a warning, never blocks boot.
     (reconciliation/report! db-spec)
-    ;; Example generation reads the dictionary through an index; create it under
-    ;; the same rule — CouchDB being down logs a warning, never blocks boot.
-    (dictionary/ensure-word-lookup-index!)
+    ;; Example generation reads the dictionary file; a missing or broken one
+    ;; stops the boot rather than reading as words nobody knows.
+    (dictionary/open! (System/getenv))
     (restart-server! #'ring-handler port)
     ;; Examples stored under the old key are re-keyed once the server listens:
     ;; the table's size is unbounded and each row costs a dictionary read. A

@@ -18,4 +18,4 @@ The `:dictionary-import` alias names `dictionary.import`, a namespace that no lo
 ## Decisions
 
 - Read the SQLite file already built and served to clients, over restoring an importer.
-- Open choices are listed in [design.md](design.md#open-decisions); the delta specs state the recommended option and move with the owner's answers.
+- The open choices were settled by the owner; see [design.md](design.md#decided).

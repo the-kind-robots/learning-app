@@ -1,108 +1,125 @@
 (ns examples.dictionary
   (:require
+   [clojure.java.io :as io]
    [clojure.set :as set]
    [clojure.string :as str]
-   [db :as db]
-   [taoensso.telemere :as t]
+   [next.jdbc :as jdbc]
+   [next.jdbc.result-set :as rs]
    [utils :as utils]))
 
 
-(def ^:private dictionary-db-name "dictionary-db")
+;; =============================================================================
+;; The dictionary file
+;; =============================================================================
 
 
-(defn- assert-success!
-  "Returns response on HTTP 200; throws ex-info with :status/:body on failure."
-  [response]
-  (if (= 200 (:status response))
-    response
-    (throw (ex-info "Dictionary DB error"
-                    {:status (:status response)
-                     :body   (:body response)}))))
+(defn configured-dictionary-dir
+  "Filesystem directory to read and serve the dictionary from, when set.
+   Production leaves it unset and answers from its own classpath resource — the
+   only artifact a deployment can be held to. The browser suite points it at a
+   small fixture (#289) so a spec waits milliseconds for the SQLite worker
+   instead of importing 37 MB into a fresh OPFS on every test."
+  [env]
+  (some-> (get env "LEARNING_APP__DICTIONARY_DIR") not-empty io/file))
 
 
-(def ^:private word-lookup-index
-  "The index `exact-dictionary-entry-docs` selects through. Both of its fields
-   are constrained by equality there, so a composite index answers the selector
-   as a key range. Without it CouchDB plans the query against the `_all_docs`
-   special index — a read of the whole dictionary, which outlives the request
-   timeout and leaves every word looking unknown."
-  {:ddoc  "dictionary-entry-normalized-value"
-   :index {:fields ["type" "meta.normalized_value"]}
-   :name  "dictionary-entry-normalized-value"
-   :type  "json"})
+(def ^:private resource-name "dictionary/dictionary.sqlite")
 
 
-(defn ensure-word-lookup-index!
-  "Creates the index the word lookup reads by. CouchDB's `_index` is idempotent:
-   an identical definition answers `exists` and rebuilds nothing, so this runs on
-   every boot. A dictionary database that does not answer is logged and nothing
-   more — an app that cannot generate examples still serves."
-  []
-  (try
-    (assert-success!
-     (db/request-sync
-      {:method :post
-       :url    (str dictionary-db-name "/_index")
-       :body   word-lookup-index}))
-    (t/event! ::word-lookup-index-ensured {:level :info})
-    (catch Exception error
-      (t/event! ::word-lookup-index-unavailable
-                {:level :warn
-                 :data  (merge {:error (.getMessage error)} (ex-data error))}))))
+(def ^:private resource-file
+  "The classpath dictionary as a file. A jar entry cannot be opened by JDBC, so
+   it is copied out once per process."
+  (delay
+   (if-let [url (io/resource resource-name)]
+     (if (= "file" (.getProtocol url))
+       (io/file url)
+       (let [copy (java.io.File/createTempFile "dictionary" ".sqlite")]
+         (.deleteOnExit copy)
+         (with-open [in (io/input-stream url)]
+           (io/copy in copy))
+         copy))
+     (throw (ex-info "Dictionary file not found on the classpath"
+                     {:resource resource-name})))))
 
 
-(defn- exact-dictionary-entry-docs
-  [normalized]
-  (let [response (assert-success!
-                  (db/request-sync
-                   {:method :post
-                    :url    (str dictionary-db-name "/_find")
-                    :body   {:selector {"type" "dictionary-entry"
-                                        "meta.normalized_value" normalized}
-                             :limit    20}}))]
-    (vec
-     (get-in response [:body :docs]))))
+(defn- dictionary-file
+  [env]
+  (if-let [dir (configured-dictionary-dir env)]
+    (io/file dir "dictionary.sqlite")
+    @resource-file))
 
 
-(defn- path-segment
-  "`s` as one URL path segment: a space is %20, never +."
-  [s]
-  (-> (java.net.URLEncoder/encode ^String s "UTF-8")
-      (str/replace "+" "%20")))
+(defonce ^:private connection (atom nil))
 
 
-(defn- surface-form-lemma-ids
-  [normalized]
-  (let [response (db/request-sync
-                  {:method :get
-                   :url    (str dictionary-db-name "/sf:" (path-segment normalized))})]
-    (if (= 404 (:status response))
-      []
-      (->> (get-in (assert-success! response) [:body :entries])
-           (keep #(or (:lemma-id %) (:lemma_id %)))
-           (distinct)
-           (vec)))))
+(defn open!
+  "Points lookups at the dictionary file named by `env`, over one read-only
+   connection, and reads it once. Throws, naming the file, when it is missing or
+   is not a dictionary: a broken dictionary must not pass for words the
+   dictionary does not know."
+  [env]
+  (let [file (dictionary-file env)]
+    (when-not (.isFile file)
+      (throw (ex-info (str "Dictionary file not found: " file) {:file (str file)})))
+    (let [opened (jdbc/get-connection {:jdbcUrl   (str "jdbc:sqlite:" (.getAbsolutePath file))
+                                       :open_mode 1})]
+      (try
+        (jdbc/execute-one! opened ["SELECT cefr_level FROM lemmas LIMIT 1"])
+        (jdbc/execute-one! opened ["SELECT 1 FROM surface_forms LIMIT 1"])
+        (catch Exception error
+          (.close opened)
+          (throw (ex-info (str "Dictionary file unreadable: " file)
+                          {:file (str file)} error))))
+      (when-let [previous (first (reset-vals! connection opened))]
+        (.close ^java.sql.Connection previous))
+      opened)))
 
 
-(defn- dictionary-entry-docs-by-id
+(defn- query
+  "Rows for `sql-params`. The one connection serves every request thread, and a
+   JDBC connection is not safe for concurrent use, so queries take turns."
+  [sql-params]
+  (let [opened (or @connection (open! (System/getenv)))]
+    (locking opened
+      (jdbc/execute! opened sql-params {:builder-fn rs/as-unqualified-lower-maps}))))
+
+
+;; =============================================================================
+;; Lookup by form
+;; =============================================================================
+
+
+(defn- lemmas-of-form
+  "Lemma rows whose surface forms include `form`, by the form index."
+  [form]
+  (query ["SELECT l.id, l.value, l.pos, l.cefr_level
+           FROM surface_forms s JOIN lemmas l ON l.id = s.lemma_id
+           WHERE s.normalized_form = ?
+           ORDER BY l.rank DESC, l.id
+           LIMIT 20"
+          form]))
+
+
+(defn- translations-by-lemma
   [ids]
   (if (empty? ids)
-    []
-    (let [response (assert-success!
-                    (db/request-sync
-                     {:method :post
-                      :url    (str dictionary-db-name "/_all_docs")
-                      :body   {:keys ids
-                               :include_docs true}}))]
-      (->> (get-in response [:body :rows])
-           (keep :doc)
-           (filter #(= "dictionary-entry" (:type %)))
-           (vec)))))
+    {}
+    (->> (query (into [(str "SELECT lemma_id, value FROM translations WHERE lemma_id IN ("
+                            (str/join "," (repeat (count ids) "?"))
+                            ") ORDER BY lemma_id, rank")]
+                      ids))
+         (group-by :lemma_id))))
 
 
-(defn- surface-form-dictionary-entry-docs
-  [normalized]
-  (dictionary-entry-docs-by-id (surface-form-lemma-ids normalized)))
+(defn- entry
+  "A lemma row in the shape callers read."
+  [translations {:keys [id value pos cefr_level]}]
+  {:id          id
+   :value       value
+   :pos         pos
+   :translation (mapv (fn [row] {:lang "ru" :value (:value row)})
+                      (get translations id))
+   :meta        {:cefr_level cefr_level}})
 
 
 (defn- merge-dictionary-entry-docs
@@ -110,7 +127,7 @@
   (->> doc-groups
        (remove nil?)
        (apply concat)
-       (utils/distinct-by :_id)
+       (utils/distinct-by :id)
        (vec)))
 
 
@@ -212,20 +229,31 @@
 ;; =============================================================================
 
 
+(defn- exact-form?
+  "Whether the lemma is written as `key`: with its article when `key` carries
+   one, with or without it when `key` is bare."
+  [key article? row]
+  (let [written (utils/normalize-german (:value row))]
+    (or (= key written)
+        (and (not article?)
+             (= key (utils/normalize-german (strip-article (:value row))))))))
+
+
 (defn lookup-dictionary-entries
-  "Dictionary entries for `dictionary-form`, by exact and surface-form match.
-   Throws when the dictionary cannot be read."
+  "Dictionary entries for `dictionary-form`, those written exactly so first, then
+   those reached by a surface form. A form with an article finds only its own
+   lemma. Throws when the dictionary cannot be read."
   [dictionary-form]
-  (let [normalized (normalize-dictionary-form dictionary-form)]
-    (when (utils/non-blank normalized)
-      (let [exact-docs (exact-dictionary-entry-docs normalized)]
-        (if (has-article? dictionary-form)
-          exact-docs
-          (let [surface-docs (surface-form-dictionary-entry-docs normalized)]
-            (cond
-              (nil? exact-docs)   nil
-              (nil? surface-docs) exact-docs
-              :else               (merge-dictionary-entry-docs exact-docs surface-docs))))))))
+  (let [form-key (some-> dictionary-form utils/normalize-german utils/non-blank)]
+    (when form-key
+      (let [article?   (has-article? dictionary-form)
+            candidates (lemmas-of-form form-key)
+            exact      (filterv #(exact-form? form-key article? %) candidates)
+            chosen     (if article?
+                         exact
+                         (merge-dictionary-entry-docs exact candidates))
+            by-lemma   (translations-by-lemma (mapv :id chosen))]
+        (mapv #(entry by-lemma %) chosen)))))
 
 
 (defn- dictionary-entry-matches-gloss?
@@ -245,7 +273,7 @@
    is one of `translations`. Nil when the dictionary has no entry; throws when
    it cannot be read."
   [word translations]
-  (let [entries (lookup-dictionary-entries (normalize-dictionary-form word))
+  (let [entries (lookup-dictionary-entries word)
         matches-any-gloss? (fn [entry]
                              (some #(dictionary-entry-matches-gloss? entry %)
                                    translations))]

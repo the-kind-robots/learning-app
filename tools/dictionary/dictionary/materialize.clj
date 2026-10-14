@@ -156,8 +156,10 @@
                                               [(inc idx) lemma])))
         lemma-rows        (->> indexed-lemmas
                                (map (fn [[id lemma]]
-                                      (-> (assoc lemma :id id)
-                                          (select-keys [:id :value :pos :rank])))))
+                                      (-> (assoc lemma
+                                                 :id         id
+                                                 :cefr-level (-> lemma :enrichment :cefr-level))
+                                          (select-keys [:id :value :pos :rank :cefr-level])))))
         translations      (->> indexed-lemmas
                                (mapcat (fn [[lemma-id lemma]]
                                          (map-indexed (fn [idx translation]
