@@ -45,19 +45,28 @@
   (.localeCompare (str a) (str b) js/undefined #js {:sensitivity "base"}))
 
 
-(defn scope-word-ids
-  "Takes every collection and
-   the id of one of them; returns the distinct word ids in that one's
-   scope — its own and every child's by name (ADR-0013). nil when no
-   collection carries that id."
+(defn family
+  "Takes every collection and the id of one of them; returns that one and
+   every child of it by name (ADR-0013). nil when no collection carries
+   that id."
   [all-collections coll-id]
   (when-let [own (some #(when (= coll-id (:id %)) %) all-collections)]
     (->> all-collections
          (filter #(child-of? (:name own) (:name %)))
          (cons own)
-         (mapcat :word-ids)
-         distinct
          vec)))
+
+
+(defn family-word-ids
+  "Takes every collection and
+   the id of one of them; returns the distinct word ids in that one's
+   scope — its own and every child's by name (ADR-0013). nil when no
+   collection carries that id."
+  [all-collections coll-id]
+  (some->> (family all-collections coll-id)
+           (mapcat :word-ids)
+           distinct
+           vec))
 
 
 (defn reconcile

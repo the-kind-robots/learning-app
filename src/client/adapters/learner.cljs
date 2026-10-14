@@ -30,6 +30,7 @@
    [adapters.learner.memory :as memory]
    [browser :as browser]
    [db.pouch :as dbs]
+   [domain.collections :as domain-collections]
    [domain.vocabulary :as vocabulary]
    [lambdaisland.glogi :as log]))
 
@@ -246,14 +247,17 @@
                           (not (some #{word-id} word-ids)) (update :word-ids conj word-id)))))
 
 
-(defn remove-from-collection!
-  "Takes the word `word-id` out of the collection `collection-id`. The word
-   itself stays."
+(defn ^:async remove-from-collection!
+  "Takes the word `word-id` out of the collection `collection-id` and out of
+   every child of it, the scope its word list shows. The word itself stays."
   [learner word-id collection-id]
-  (update-collection! learner
-                      collection-id
-                      (fn [collection]
-                        (update collection :word-ids (partial filterv #(not= word-id %))))))
+  (let [scope (domain-collections/family (memory/collections (current-memory learner))
+                                         collection-id)]
+    (doseq [id (or (seq (map :id scope)) [collection-id])]
+      (await (update-collection! learner
+                                 id
+                                 (fn [collection]
+                                   (update collection :word-ids (partial filterv #(not= word-id %)))))))))
 
 
 (defn- ^:async word-deletion

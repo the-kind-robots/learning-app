@@ -64,25 +64,6 @@ The system SHALL remember the id of the active collection across restarts. The a
 - **WHEN** the app starts and the remembered id names a collection the learner's data no longer holds
 - **THEN** home, the words list, a lesson, the themes screen, removing a word and adding a word all act as with «Всё подряд» active
 
-### Requirement: A collection's scope is the union of its own words and its children's
-The scope of a named collection — the words a lesson on it draws from and the words its vocabulary list shows — SHALL be the distinct union of its own `word-ids` and the `word-ids` of every collection whose folder key equals the collection's name. The folder key of a name is the text before its first `/`, trimmed; the comparison is trimmed and case-insensitive. Nesting is one level: `Kurs / A / B` is a child of `Kurs`, not of `Kurs / A`. A word added to a child SHALL appear in the parent's scope with no write to the parent document. Removing a word from the parent SHALL remove it from the parent document only.
-
-#### Scenario: Lesson on a parent draws from the union
-- **WHEN** `Kurs` is active, holds word a, and `Kurs / Kapitel 1` holds word b
-- **THEN** a lesson on `Kurs` may draw both a and b
-
-#### Scenario: A deeper slash stays with the first folder
-- **WHEN** `Kurs`, `Kurs / A` and `Kurs / A / B` exist
-- **THEN** `Kurs / A / B` is in the scope of `Kurs` and not in the scope of `Kurs / A`
-
-#### Scenario: A word added to a child appears in the parent
-- **WHEN** a word is added while `Kurs / Kapitel 1` is active
-- **THEN** the vocabulary list on `Kurs` shows it, and the `Kurs` document is unchanged
-
-#### Scenario: Removing from the parent leaves the child untouched
-- **WHEN** word b is in `Kurs` and in `Kurs / Kapitel 1`, and the user removes b while `Kurs` is active
-- **THEN** b leaves the `Kurs` document and stays in `Kurs / Kapitel 1`
-
 ### Requirement: Collection names are compared trimmed and case-insensitively
 A collection's name SHALL be unique after trimming, case-insensitively. Creating a collection SHALL refuse a name that equals an existing collection's name by that comparison, renaming a collection SHALL refuse a name that equals another collection's name by it — the current name stays and nothing is written — and the parent of a folder SHALL be found by the same comparison. A collection's own name in another case is a rename, not a duplicate.
 
@@ -137,3 +118,26 @@ A collection SHALL carry `renamed-at`, the time it was created or last renamed. 
 #### Scenario: A change on the version that lost
 - **WHEN** a change was written to a version that another device's version then outranked
 - **THEN** the merged collection lists what that change added
+
+### Requirement: A collection's scope is the union of its own words and its children's, and removal covers both
+The scope of a named collection — the words a lesson on it draws from and the words its vocabulary list shows — SHALL be the distinct union of its own `word-ids` and the `word-ids` of every collection whose folder key equals the collection's name. The folder key of a name is the text before its first `/`, trimmed; the comparison is trimmed and case-insensitive. Nesting is one level: `Kurs / A / B` is a child of `Kurs`, not of `Kurs / A`. A word added to a child SHALL appear in the parent's scope with no write to the parent document. Removing a word while the parent is active SHALL remove it from the parent document and from every child that lists it, so that it leaves the list the user is looking at.
+
+#### Scenario: Lesson on a parent draws from the union
+- **WHEN** `Kurs` is active, holds word a, and `Kurs / Kapitel 1` holds word b
+- **THEN** a lesson on `Kurs` may draw both a and b
+
+#### Scenario: A deeper slash stays with the first folder
+- **WHEN** `Kurs`, `Kurs / A` and `Kurs / A / B` exist
+- **THEN** `Kurs / A / B` is in the scope of `Kurs` and not in the scope of `Kurs / A`
+
+#### Scenario: A word added to a child appears in the parent
+- **WHEN** a word is added while `Kurs / Kapitel 1` is active
+- **THEN** the vocabulary list on `Kurs` shows it, and the `Kurs` document is unchanged
+
+#### Scenario: Removing from the parent removes it from the children
+- **WHEN** word b is in `Kurs` and in `Kurs / Kapitel 1`, and the user removes b while `Kurs` is active
+- **THEN** b leaves both documents, the vocabulary list on `Kurs` no longer shows it, and «Всё подряд» still does
+
+#### Scenario: A word held only by a child is removed
+- **WHEN** word b is only in `Kurs / Kapitel 1`, and the user removes b while `Kurs` is active
+- **THEN** b leaves `Kurs / Kapitel 1` and the vocabulary list on `Kurs` no longer shows it

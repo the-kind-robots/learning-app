@@ -21,12 +21,12 @@
 
 
 (deftest the-scope-is-the-distinct-union-of-the-collection-and-its-children
-  (is (= ["a" "b" "c" "d" "e"] (collections/scope-word-ids items "c:kurs"))
+  (is (= ["a" "b" "c" "d" "e"] (collections/family-word-ids items "c:kurs"))
       "own words first, then the children's, b once; Kursus is not a child")
-  (is (= ["b" "c"] (collections/scope-word-ids items "c:k1"))
+  (is (= ["b" "c"] (collections/family-word-ids items "c:k1"))
       "a child has no children of its own")
-  (is (= ["g"] (collections/scope-word-ids items "c:gram")))
-  (is (nil? (collections/scope-word-ids items "c:gone"))))
+  (is (= ["g"] (collections/family-word-ids items "c:gram")))
+  (is (nil? (collections/family-word-ids items "c:gone"))))
 
 
 (deftest names-are-compared-trimmed-and-case-insensitively
