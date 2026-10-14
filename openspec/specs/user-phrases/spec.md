@@ -55,7 +55,7 @@ The words page SHALL show phrases in the same list as words, sorted by the same 
 - **THEN** the row wraps the phrase text and the retention indicator works as for words
 
 ### Requirement: Phrase translations are edited as a whole string
-The edit dialog SHALL edit a phrase's translation as one multi-line string; saving SHALL NOT split it on punctuation. The German text of a phrase SHALL be immutable, as for words.
+The edit dialog SHALL edit a phrase's translation as one multi-line string; saving SHALL NOT split it on punctuation. The German text of a word or a phrase SHALL be editable in the dialog as `specs/learner-data-memory/spec.md` states. The dialog's delete button SHALL read «Удалить слово».
 
 #### Scenario: Editing keeps sentence punctuation
 - **WHEN** the user saves the translation "Извини, что я опоздал."

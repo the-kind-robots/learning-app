@@ -49,7 +49,7 @@
   [wording error]
   (case error
     nil nil
-    :empty-translations "Добавьте перевод."
+    :failure/empty-translations "Добавьте перевод."
     (:save-failed wording)))
 
 
@@ -65,7 +65,7 @@
      :placeholder (:placeholder wording)
      :suggestions (suggestions-props state)
      :translation (:home/translation state)
-     :translation-invalid? (= :empty-translations error)
+     :translation-invalid? (= :failure/empty-translations error)
      :value-label (:value-label wording)
      :word        (:home/word state)}))
 

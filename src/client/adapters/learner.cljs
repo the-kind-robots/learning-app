@@ -325,6 +325,92 @@
           false))))
 
 
+(defn- ^:async word-renaming
+  "The documents that turn the word `word-id` into the word `entry`, in one
+   bulk write, as PouchDB holds them now: every collection that lists the
+   word, listing `entry` instead; a deletion of every live version of the
+   word, as `word-deletion` makes it; and `entry` itself as a new word, with
+   an initial review of `translation` unless memory has reviews of it. The
+   new word is left out when PouchDB holds it already, so that writing again
+   after a refusal repeats only what is missing. Empty when PouchDB holds no
+   live version of the word."
+  [{:keys [dbs] :as learner} word-id entry translation]
+  (await (catch-up! learner))
+  (let [new-id   (:id entry)
+        memory   (current-memory learner)
+        listing  (into []
+                       (comp (filter #(some #{word-id} (:word-ids %))) (map :id))
+                       (memory/collections memory))
+        stored   (await (dbs/read-ids dbs :user/db listing))
+        versions (remove :_deleted (await (dbs/doc-versions dbs documents/vocab-schema word-id)))
+        present  (await (dbs/read-ids dbs :user/db [new-id]))
+        created? (not-any? (complement :_deleted) present)
+        reviewed? (pos? (count (:ids (memory/review-history memory new-id))))]
+    (if (empty? versions)
+      []
+      (-> (into []
+                (keep (fn [{:keys [_deleted word-ids] :as doc}]
+                        (when (and (not _deleted) (some #{word-id} word-ids))
+                          (assoc doc :word-ids (into [] (distinct) (replace {word-id new-id} word-ids))))))
+                stored)
+          (into (map documents/tombstone) versions)
+          (cond-> created? (conj (assoc (documents/doc (stamped learner entry)) :type (:type documents/vocab-schema))))
+          (cond-> (and created? (not reviewed?))
+            (conj (assoc (vocabulary/new-review new-id true translation)
+                         :created-at (now-iso learner)
+                         :type (:type documents/review-schema))))))))
+
+
+(defn- ^:async attempt-word-renaming!
+  "Writes the renaming of the word `word-id` once, and catches memory up with
+   what it wrote. Resolves with `{:docs :written}`, as
+   `attempt-word-deletion!` does."
+  [{:keys [dbs] :as learner} word-id entry translation]
+  (let [docs    (await (word-renaming learner word-id entry translation))
+        written (await (dbs/bulk-docs dbs documents/vocab-schema docs))]
+    (await (catch-up! learner))
+    {:docs docs :written written}))
+
+
+(defn ^:async rename-word!
+  "Turns the word `word-id` into the new word `entry`, in one write: the new
+   word takes the old one's place in every collection, and the old one is
+   deleted as `delete-word!` deletes it, its reviews and examples staying.
+   The new word gets an initial review of `translation` unless it has
+   reviews already.
+
+   A refused document is handled as `delete-word!` does: the write is made
+   once more, and refused again, it has failed. While the old word lives,
+   the failure puts the collections back and removes the new word; the
+   failure is logged and this resolves false. Otherwise it resolves true when
+   PouchDB had the word, and nil when it had none."
+  [learner word-id entry translation]
+  (let [complete? (fn [{:keys [docs written]}] (= (count docs) (count written)))
+        deleted?  (fn [{:keys [written]}] (boolean (some #(and (= word-id (:_id %)) (:_deleted %)) written)))
+        first-try (await (attempt-word-renaming! learner word-id entry translation))
+        result    (if (complete? first-try) first-try (await (attempt-word-renaming! learner word-id entry translation)))]
+    (cond
+      (complete? result)
+      (when (seq (:docs first-try)) true)
+
+      (or (deleted? first-try) (deleted? result))
+      (do (log/error :learner/word-rename-incomplete {:word-id word-id})
+          false)
+
+      :else
+      (let [written (into (:written first-try) (:written result))]
+        (doseq [collection-id (into [] (comp (remove :_deleted) (filter #(= "collection" (:type %))) (map :_id)) written)]
+          (await (update-collection! learner
+                                     collection-id
+                                     (fn [collection]
+                                       (update collection :word-ids (partial replace {(:id entry) word-id}))))))
+        (when-let [created (seq (filter #(= (:id entry) (:_id %)) written))]
+          (await (dbs/bulk-docs (:dbs learner) documents/vocab-schema (map documents/tombstone created)))
+          (await (catch-up! learner)))
+        (log/error :learner/word-rename-failed {:word-id word-id})
+        false))))
+
+
 (defn ^:async delete-collection!
   "Deletes the collection `collection-id`, every live version of it. Its words
    stay, and so do the examples made for it: a collection made again has a new

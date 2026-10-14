@@ -73,6 +73,22 @@
     [[:effect/save {:words/editing word}]]))
 
 
+(nxr/register-action! :action/type-word-value
+  (fn type-word-value [_ text]
+    [[:effect/enter :action/show-word-value text]]))
+
+
+(nxr/register-action! :action/show-word-value
+  ;; The text typed into the dialog's word field, kept with whether it is the
+  ;; spelling of another word: the presenter reads both.
+  (fn show-word-value [state {:keys [learner]} text]
+    (let [{:keys [id] :as editing} (:words/editing state)]
+      [[:effect/save
+        {:words/editing (assoc editing
+                               :draft-value text
+                               :spelling-taken? (vocabulary/spelling-taken? learner (:learner/memory state) id text))}]])))
+
+
 (nxr/register-action! :action/close-word-edit
   (fn close-word-edit [_]
     [[:effect/save {:words/editing nil}]]))
@@ -117,11 +133,11 @@
 ;; list is then computed again at the row count already on screen, so neither
 ;; throws the reader back to the first page.
 (nxr/register-action! :action/save-word
-  (fn save-word [_ {:keys [id translation]}]
+  (fn save-word [_ {:keys [id translation value]}]
     ;; Saving closes the dialog; rows arriving for any other reason do not
     ;; (#439).
     [[:effect/save {:words/editing nil}]
-     [:effect/update-word {:id id :translation translation}]]))
+     [:effect/update-word {:id id :translation translation :value value}]]))
 
 
 (nxr/register-action! :action/remove-word

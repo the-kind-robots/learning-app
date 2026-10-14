@@ -246,6 +246,34 @@
             "the word has an example in «Всё подряд» already"))))))
 
 
+(deftest a-word-is-renamed-in-one-write
+  (async-testing "the new word takes the old one's place in every collection; the old one goes, its reviews and examples stay"
+    (with-learner
+     [hund review tiere example {:_id "vocab:die katze" :type "vocab" :value "die Katze" :translation [{:lang "ru" :value "кошка"}]}
+      (assoc tiere :_id "coll-haus" :name "Haus" :word-ids ["vocab:der hund" "vocab:die katze"])]
+     (^:async fn
+      [{:keys [dbs learner store]}]
+      (let [capabilities {:learner learner}]
+        (is (true? (await (vocabulary/rename! capabilities "vocab:der hund" "der Hundd" "пёс"))))
+        (is (= {"coll-tiere" ["vocab:der hundd"] "coll-haus" ["vocab:der hundd" "vocab:die katze"]}
+               (into {} (map (juxt :_id :word-ids)) (await (db-queries/fetch-by-type (:user/db dbs) "collection")))))
+        (is (= #{"vocab:der hundd" "vocab:die katze"} (into #{} (map :_id) (await (db-queries/fetch-by-type (:user/db dbs) "vocab")))))
+        (is (= {:value "der Hundd" :translation [{:lang "ru" :value "пёс"}]}
+               (select-keys (stored-word store "vocab:der hundd") [:value :translation])))
+        (is (nil? (stored-word store "vocab:der hund")))
+        (is (= #{"review-1"}
+               (into #{} (map :_id) (filter #(= "vocab:der hund" (:word-id %)) (await (db-queries/fetch-by-type (:user/db dbs) "review")))))
+            "the old word's review stays")
+        (is (= 1 (count (filter #(= "vocab:der hundd" (:word-id %)) (await (db-queries/fetch-by-type (:user/db dbs) "review")))))
+            "the new word starts with its initial review")
+        (is (= ["example-1"] (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "example")))))
+        (is (= {:error :failure/spelling-taken}
+               (await (vocabulary/rename! capabilities "vocab:der hundd" "die Katze" "кошка")))
+            "a spelling of another word writes nothing")
+        (is (nil? (await ((:learner/rename-word! learner) "vocab:der hund" {:id "vocab:x" :value "x" :translation []} "x")))
+            "a word PouchDB does not have is nothing to rename"))))))
+
+
 (deftest a-collection-is-deleted-alone
   (async-testing
     "the collection goes; its words and examples stay; a collection made again does not show them, «Всё подряд» does"
