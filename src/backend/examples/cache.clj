@@ -3,6 +3,7 @@
    account. A database that is away reads as a miss and drops the write."
   (:require
    [cheshire.core :as cheshire]
+   [clojure.string :as str]
    [next.jdbc :as jdbc]
    [next.jdbc.result-set :as result-set]
    [taoensso.telemere :as t]
@@ -90,14 +91,19 @@
     {:builder-fn result-set/as-unqualified-kebab-maps}))
 
 
-(defn- row-subject
-  "The subject a stored row was made for, or nil when its glosses are not the
-   JSON array that rows have been stored with."
+(defn- row-request
+  "What a stored row was asked for, shaped like a request so the caller
+   normalizes it the way a request is: `:translation` is the JSON array of
+   glosses, or the plain string older rows hold. Nil when it is neither."
   [{:keys [context translations word]}]
-  (let [glosses (try (cheshire/parse-string translations)
-                     (catch Exception _ nil))]
-    (when (and (sequential? glosses) (every? string? glosses))
-      {:context context :translations (vec glosses) :word word})))
+  (let [parsed (try (cheshire/parse-string translations)
+                    (catch Exception _ nil))
+        gloss  (if (sequential? parsed)
+                 (when (every? string? parsed) (vec parsed))
+                 (when (and (string? translations) (not (str/blank? translations)))
+                   translations))]
+    (when gloss
+      {:context context :translation gloss :word word})))
 
 
 (defn- move-row!
@@ -131,9 +137,11 @@
 
 (defn rekey!
   "Gives every row that still waits the key `subject-key` computes from its
-   own word, glosses and context. When two rows land on one key, the one
-   stored first stays. A row whose glosses cannot be read is skipped and
-   left waiting.
+   own word, glosses and context. `subject-key` takes the row as a request
+   (`:word`, `:translation`, `:context`) and normalizes it as a request is,
+   so a row and a fresh request for one word land on one key. When two rows
+   land on one key, the one stored first stays. A row whose glosses are
+   neither a JSON array nor a non-blank string is skipped and left waiting.
 
    Rows go in batches of `rekey-batch-size`, each in one transaction: the
    dictionary reads, which are slow, stay outside the transaction, and a stop
@@ -158,7 +166,7 @@
           (if (empty? batch)
             (report! {:collapsed dropped :moved moved :skipped skipped})
             (let [keyed   (vec (for [row batch
-                                     :let [subject (row-subject row)]
+                                     :let [subject (row-request row)]
                                      :when subject]
                                  [row (subject-key subject)]))
                   dropped-here

@@ -47,6 +47,12 @@
   (examples/subject-key subject nil))
 
 
+(defn- row-key
+  "The key the re-key gives a row, which it hands over shaped as a request."
+  [row]
+  (subject-key (examples/subject row)))
+
+
 (defn- key-of
   [asked]
   (subject-key (examples/subject asked)))
@@ -180,7 +186,7 @@
         subject (examples/subject {:word "Hund" :translation ["собака"]})]
     (insert-waiting-row! db "old-key" subject 100)
     (is (nil? (sut/lookup db (subject-key subject))))
-    (sut/rekey! db subject-key)
+    (sut/rekey! db row-key)
     (is (= {:value "old-key"} (sut/lookup db (subject-key subject))))))
 
 
@@ -190,7 +196,7 @@
     (insert-waiting-row! db "newer" subject 300)
     (insert-waiting-row! db "oldest" subject 100)
     (insert-waiting-row! db "middle" subject 200)
-    (is (= {:collapsed 2 :moved 1 :skipped 0} (dissoc (sut/rekey! db subject-key) :elapsed-ms)))
+    (is (= {:collapsed 2 :moved 1 :skipped 0} (dissoc (sut/rekey! db row-key) :elapsed-ms)))
     (is (= {:value "oldest"} (sut/lookup db (subject-key subject))))
     (is (= 1 (count (keys-in db))))))
 
@@ -200,7 +206,7 @@
         subject (examples/subject {:word "Hund" :translation ["собака"]})]
     (sut/store! db (subject-key subject) subject example)
     (insert-waiting-row! db "waiting" subject 1)
-    (sut/rekey! db subject-key)
+    (sut/rekey! db row-key)
     (is (= {:value "waiting"} (sut/lookup db (subject-key subject)))
         "the waiting row was stored first")))
 
@@ -209,7 +215,7 @@
   (let [db      (migrated-db)
         subject (examples/subject {:word "Hund" :translation ["собака"]})
         reads   (atom 0)
-        counted (fn [s] (swap! reads inc) (subject-key s))]
+        counted (fn [row] (swap! reads inc) (row-key row))]
     (insert-waiting-row! db "old-key" subject 100)
     (sut/rekey! db counted)
     (sut/rekey! db counted)
@@ -222,7 +228,7 @@
     (insert-waiting-row! db "old-key" subject 100)
     (is (nil? (sut/rekey! db (fn [_] (throw (ex-info "away" {}))))))
     (is (= #{"old-key"} (keys-in db)))
-    (sut/rekey! db subject-key)
+    (sut/rekey! db row-key)
     (is (= {:value "old-key"} (sut/lookup db (subject-key subject))))))
 
 
@@ -232,7 +238,7 @@
       (insert-waiting-row! db (str "old-" n)
                            (examples/subject {:word (str "Wort" n) :translation ["x"]})
                            n))
-    (is (= {:collapsed 0 :moved 1203 :skipped 0} (dissoc (sut/rekey! db subject-key) :elapsed-ms)))))
+    (is (= {:collapsed 0 :moved 1203 :skipped 0} (dissoc (sut/rekey! db row-key) :elapsed-ms)))))
 
 
 (deftest the-digest-material-does-not-depend-on-how-clojure-prints
@@ -264,11 +270,33 @@
     (is (= example (sut/lookup db (subject-key subject))))))
 
 
-(deftest a-row-with-unreadable-glosses-is-skipped-and-counted
+(defn- insert-raw-row!
+  [db key translations]
+  (jdbc/execute! db
+    ["INSERT INTO example_cache (question_sha256, word, translations, context, example)
+      VALUES (?, 'Hund', ?, NULL, '{}')" key translations]))
+
+
+(deftest a-row-with-a-plain-string-gloss-is-found-by-a-request-for-it
   (let [db (migrated-db)]
-    (jdbc/execute! db
-      ["INSERT INTO example_cache (question_sha256, word, translations, context, example)
-        VALUES ('legacy', 'Hund', 'собака, пёс', NULL, '{}')"])
-    (is (= {:collapsed 0 :moved 0 :skipped 1}
-           (dissoc (sut/rekey! db subject-key) :elapsed-ms)))
-    (is (= #{"legacy"} (keys-in db)))))
+    (insert-raw-row! db "legacy" "собака")
+    (is (= {:collapsed 0 :moved 1 :skipped 0}
+           (dissoc (sut/rekey! db row-key) :elapsed-ms)))
+    (is (= {} (sut/lookup db (key-of {:word "Hund" :translation "собака"}))))))
+
+
+(deftest a-plain-string-with-commas-is-one-gloss
+  (let [db (migrated-db)]
+    (insert-raw-row! db "legacy" "собака, пёс")
+    (sut/rekey! db row-key)
+    (is (= {} (sut/lookup db (key-of {:word "Hund" :translation "собака, пёс"}))))
+    (is (nil? (sut/lookup db (key-of {:word "Hund" :translation ["собака" "пёс"]}))))))
+
+
+(deftest a-row-with-no-readable-glosses-is-skipped-and-counted
+  (let [db (migrated-db)]
+    (insert-raw-row! db "blank" "  ")
+    (insert-raw-row! db "numbers" "[1, 2]")
+    (is (= {:collapsed 0 :moved 0 :skipped 2}
+           (dissoc (sut/rekey! db row-key) :elapsed-ms)))
+    (is (= #{"blank" "numbers"} (keys-in db)))))

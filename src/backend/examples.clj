@@ -580,8 +580,9 @@
    quietly when the dictionary cannot be read; the next start continues."
   [db]
   (cache/rekey! db
-                (fn [subject]
-                  (let [reading (word-meta subject)]
+                (fn [row]
+                  (let [subject (subject row)
+                        reading (word-meta subject)]
                     (if (generation-failure? reading)
                       (throw (ex-info "Dictionary cannot be read" reading))
                       (subject-key subject reading))))))
