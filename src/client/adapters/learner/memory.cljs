@@ -4,6 +4,7 @@
    taken, arriving with its batch (`with-changes`); a snapshot stores memory without `:words` and it."
   (:require
    [adapters.learner.documents :as documents]
+   [clojure.string :as str]
    [domain.collections :as domain-collections]
    [domain.retention :as retention]
    [domain.vocabulary :as vocabulary]
@@ -396,7 +397,8 @@
 (defn matching-words
   "The words of `collection` (`collection-words`) whose search text holds
    `query`, or all of them when `query` is nil. The result is kept for the
-   last scope and query, because the next page cuts the same matches."
+   last scope and query: the next page cuts the same matches, and a longer
+   query on the same scope searches only them."
   [memory collection query]
   (let [scope (collection-words memory collection)]
     (if-not query
@@ -404,7 +406,11 @@
       (let [[cached-scope cached-query cached] @matches-cache]
         (if (and (identical? cached-scope scope) (= cached-query query))
           cached
-          (let [matched (into [] (filter #(vocabulary/matches? (:search %) query)) scope)]
+          (let [searched (if (and (identical? cached-scope scope)
+                                  (str/starts-with? query cached-query))
+                           cached
+                           scope)
+                matched  (into [] (filter #(vocabulary/matches? (:search %) query)) searched)]
             (vreset! matches-cache [scope query matched])
             matched))))))
 
