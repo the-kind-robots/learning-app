@@ -45,6 +45,30 @@ const watchStartup = `
 // build asks for a frame in every frame, so the count of frames waiting never
 // drops to zero.
 
+
+// The splash comes down only once the first screen's fonts are loaded, so the
+// screen is drawn in Nunito from its first paint and no font is fetched after
+// it (#561). The init script records, in the batch that removes the splash,
+// whether the regular and the bold face are loaded for Cyrillic and Latin text
+// and when that was, to compare with the start of each font request.
+
+const watchFonts = `
+  window.__atSplashGone = null;
+  let seen = false;
+  new MutationObserver(() => {
+    const body = document.body;
+    if (!body) return;
+    if (body.querySelector('.splash')) { seen = true; return; }
+    if (seen && !window.__atSplashGone) {
+      window.__atSplashGone = {
+        at: performance.now(),
+        regular: document.fonts.check('400 1rem Nunito', 'Аa'),
+        bold: document.fonts.check('700 1rem Nunito', 'Аa'),
+      };
+    }
+  }).observe(document, { childList: true, subtree: true });
+`;
+
 const FRAME_DELAY_MS = 1000;
 
 const delayFrames = (delayMs) => {
@@ -82,6 +106,50 @@ test.describe('Старт приложения', () => {
     await test.step('Тогда между заставкой сервера и главной ничего не показывалось', async () => {
       await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
       expect(await page.evaluate(() => window.__shown)).toEqual(['splash', 'home']);
+    });
+  });
+
+  test('пользователь открывает приложение → первый экран сразу показан шрифтом Nunito', async ({ page }) => {
+    await test.step('Когда он открывает главную', async () => {
+      await page.addInitScript(watchFonts);
+      await page.goto('/home');
+      await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    });
+
+    await test.step('Тогда в момент смены заставки обычное и жирное начертания уже загружены', async () => {
+      const atSplashGone = await page.evaluate(() => window.__atSplashGone);
+      expect(atSplashGone, 'the splash was never seen going').not.toBeNull();
+      expect(atSplashGone).toMatchObject({ regular: true, bold: true });
+    });
+
+    await test.step('Тогда ни один шрифт не запрошен после смены заставки', async () => {
+      const { gone, starts } = await page.evaluate(() => ({
+        gone: window.__atSplashGone?.at,
+        starts: performance.getEntriesByType('resource')
+          .filter((entry) => entry.name.includes('/fonts/'))
+          .map((entry) => entry.startTime),
+      }));
+      expect(gone, 'the splash was never seen going').toBeDefined();
+      expect(starts.length, 'no font was requested at all').toBeGreaterThan(0);
+      expect(Math.max(...starts), 'a font was requested after the splash went').toBeLessThan(gone);
+    });
+  });
+
+  test('пользователь открывает приложение, а шрифты не загружаются → главная показана не позже чем через секунду с запасом', async ({ page }) => {
+    await test.step('Дано: файлы шрифтов не отвечают', async () => {
+      await page.route('**/fonts/**', () => {});
+      await page.addInitScript(watchFonts);
+    });
+
+    await test.step('Когда он открывает главную', async () => {
+      await page.goto('/home', { waitUntil: 'commit' });
+    });
+
+    await test.step('Тогда заставка сменяется главной, не дожидаясь шрифтов', async () => {
+      await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+      const atSplashGone = await page.evaluate(() => window.__atSplashGone);
+      expect(atSplashGone, 'the splash was never seen going').not.toBeNull();
+      expect(atSplashGone.at).toBeLessThan(2000);
     });
   });
 
