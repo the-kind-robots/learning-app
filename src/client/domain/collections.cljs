@@ -37,10 +37,16 @@
   (some-> (folder-key name) (same-name? parent-name)))
 
 
+(def ^:private name-collator
+  "One collator for every comparison: V8 builds a fresh one on each
+   `localeCompare` that is given options."
+  (js/Intl.Collator. js/undefined #js {:sensitivity "base"}))
+
+
 (defn compare-names
   "Locale-aware, case-insensitive order for names on screen."
   [a b]
-  (.localeCompare (str a) (str b) js/undefined #js {:sensitivity "base"}))
+  (.compare name-collator (str a) (str b)))
 
 
 (defn family

@@ -65,8 +65,14 @@
 
 
 (defn- union-count
+  "How many distinct word ids `collections` hold together. A JS Set, since
+   the ids are strings that V8 has already hashed."
   [collections]
-  (count (distinct (mapcat :word-ids collections))))
+  (let [seen (js/Set.)]
+    (doseq [collection collections
+            word-id    (:word-ids collection)]
+      (.add seen word-id))
+    (.-size seen)))
 
 
 (defn- folder-tile
