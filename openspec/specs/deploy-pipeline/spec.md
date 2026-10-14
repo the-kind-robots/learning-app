@@ -1,8 +1,10 @@
 # deploy-pipeline Specification
 
 ## Purpose
-Define how a built artifact travels from CI to the server: one jar recipe for every consumer, integrity checks on each download, an atomic swap of the live jar, and restarts that put shipped configuration and a reloaded dictionary into effect.
+Define how a built artifact travels from CI to the server: one jar recipe for every consumer, integrity checks on each download, an atomic swap of the live jar, and restarts that put shipped configuration into effect.
+
 ## Requirements
+
 ### Requirement: Live app jar is replaced only by verified atomic rename
 The deploy pipeline SHALL write the new jar to a temporary path on the same filesystem as `/opt/learning-app/learning-app.jar`, verify the upload's integrity against a checksum recorded at build time, and install it with a single rename. The live jar SHALL never be written in place, and no torn artifact SHALL ever become the live jar.
 
@@ -102,37 +104,19 @@ Every job that downloads the build artifact SHALL verify its integrity as part o
 - **WHEN** the digest matches
 - **THEN** the download succeeds and the job proceeds unchanged, including the deploy's own sha256 verification on the server
 
-### Requirement: A dictionary reload leaves the app reading the dictionary through its index
+### Requirement: The dictionary ships with the app
 
-A successful dictionary import SHALL restart the application, with no human step and whoever started
-the import — the deploy, or an operator following the runbook. The import drops and rebuilds the
-database, a database rebuilt from scratch carries no index, and the application is what creates the
-indexes it queries through.
+A deploy SHALL need no dictionary import: no separate dictionary job, no import service and no
+dictionary database. The dictionary the application reads SHALL be the one that arrives with the app
+artifact.
 
-The dictionary deploy SHALL then prove the result rather than assume it: it SHALL ask the database
-how it plans the lookup's own selector, and SHALL fail when the answer is a full read of the
-dictionary instead of that index. A deploy that leaves the lookup unindexed is a deploy that has
-silently taken a feature away, and it SHALL NOT report success.
+#### Scenario: An ordinary deploy
 
-#### Scenario: An import succeeds
+- **WHEN** the app is deployed
+- **THEN** the application reads the dictionary delivered with that artifact
+- **AND** no step loads a dictionary into a database
 
-- **WHEN** the dictionary import finishes successfully
-- **THEN** the application is restarted, and creates the index as it starts
+#### Scenario: A server is provisioned
 
-#### Scenario: An import fails
-
-- **WHEN** the dictionary import fails
-- **THEN** the application is not restarted
-
-#### Scenario: The deploy checks the plan
-
-- **WHEN** the dictionary deploy has run the import
-- **THEN** it asks the database to explain the lookup's selector and reads back which index answers it
-- **AND** the deploy succeeds only once that answer names the lookup's index
-
-#### Scenario: The plan is a full read
-
-- **WHEN** the explained plan still names the all-documents scan after the deploy has waited for the
-  restarted application
-- **THEN** the deploy fails and says which index answered instead
-
+- **WHEN** the package is installed on a server
+- **THEN** it creates no dictionary database and exposes no route to one
