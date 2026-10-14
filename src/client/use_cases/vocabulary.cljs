@@ -23,7 +23,7 @@
 
 (defn- translation-entries
   "One entered translation is one entry, for either kind. Blank gives none,
-   which is what `add!` answers `:empty-translations` to."
+   which is what `add!` answers `:failure/empty-translations` to."
   [kind translation]
   (if (= :phrase kind)
     (if (str/blank? translation) [] [(phrase/translation-entry translation)])
@@ -48,7 +48,7 @@
    and its retention is computed from that history alone. A duplicate value
    is one entry whatever its kind: translations merge, and the kind is left
    alone. Returns a promise of {:word-id id :created? bool} or {:error
-   :empty-translations}.
+   :failure/empty-translations}.
 
    `kind` has no default on purpose. Made optional, this becomes a two-arity
    function, and `:static-fns` then compiles every call site to
@@ -59,7 +59,7 @@
   (let [translation (entered-translation kind translation)
         entries     (translation-entries kind translation)]
     (if (empty? entries)
-      {:error :empty-translations}
+      {:error :failure/empty-translations}
       (let [collection ((:learner/active-collection learner))
             {:keys [created? word]} (await ((:learner/add-word! learner)
                                             (new-entry kind value translation entries)))
@@ -127,6 +127,59 @@
      (if (phrase/phrase-doc? word)
        (phrase/update-phrase word translation)
        (domain/update-word word translation)))))
+
+
+(defn spelling-taken?
+  "True when `value` is the spelling of a word other than `word-id`, as
+   `memory` has it."
+  [learner memory word-id value]
+  (let [id (domain/vocab-id value)]
+    (and (not= id word-id)
+         (some? ((:learner/word learner) memory id)))))
+
+
+(defn- entered-value
+  [kind value]
+  (if (= :phrase kind)
+    (phrase/collapsed value)
+    (str/trim value)))
+
+
+(defn ^:async rename!
+  "Saves the edit dialog of the word `word-id`: its `value` and its
+   `translation`. A value with the same vocab id is the same word, edited in
+   place, with the text as typed. Any other value is a new word with the same
+   translation, in the same collections, whose kind its text gives; the old
+   word is deleted (`learner/rename-word!`). Resolves with the word as
+   written, true after a rename, or {:error :failure/empty-translations},
+   {:error :failure/empty-value} or {:error :failure/spelling-taken}."
+  [{:keys [learner]} word-id value translation]
+  (cond
+    (str/blank? value)
+    {:error :failure/empty-value}
+
+    (= word-id (domain/vocab-id value))
+    (await ((:learner/update-word! learner)
+            word-id
+            (fn [word]
+              (if (phrase/phrase-doc? word)
+                (assoc (phrase/update-phrase word translation) :value (phrase/collapsed value))
+                (assoc (domain/update-word word translation) :value (str/trim value))))))
+
+    (spelling-taken? learner ((:learner/memory learner)) word-id value)
+    {:error :failure/spelling-taken}
+
+    :else
+    (let [kind    (if (phrase/phrase-value? value []) :phrase :word)
+          value   (entered-value kind value)
+          text    (entered-translation kind translation)
+          entries (translation-entries kind text)]
+      (if (empty? entries)
+        {:error :failure/empty-translations}
+        (await ((:learner/rename-word! learner)
+                word-id
+                (new-entry kind value text entries)
+                text))))))
 
 
 (defn delete!

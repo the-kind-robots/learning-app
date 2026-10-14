@@ -1,6 +1,7 @@
 (ns pages.words.presenter
   (:require
    [clojure.string :as str]
+   [domain.vocabulary :as vocabulary]
    [utils :as utils]))
 
 
@@ -55,6 +56,26 @@
       first-run-state)))
 
 
+(defn edit-dialog-props
+  "What the edit dialog renders: the word as stored and what is typed in it
+   means. A changed spelling is saved as a new word, which the notice says
+   before saving; the spelling of another word is refused, and so is an
+   empty one."
+  [{:keys [draft-value id phrase? spelling-taken? translation value]}]
+  (let [typed    (or draft-value value)
+        blank?   (str/blank? typed)
+        renamed? (and (not blank?) (not= id (vocabulary/vocab-id typed)))]
+    {:duplicate-message (when spelling-taken? "Такое слово уже есть")
+     :id                id
+     :phrase?           phrase?
+     :rename-notice     (when (and renamed? (not spelling-taken?))
+                          (str "Сохранится как новое слово в тех же темах. «" value "» удалится вместе с прогрессом и примерами."))
+     :renamed?          renamed?
+     :save-disabled?    (boolean (or blank? spelling-taken?))
+     :translation       translation
+     :value             value}))
+
+
 (defn page-props
   "What the word list renders: the rows, the placeholder that replaces them,
    and whether the page chrome — header, search box, lesson button — applies.
@@ -62,7 +83,7 @@
    stays editable. Until the learner's data is in memory `total` is nil and
    the list shows nothing — neither placeholder."
   [{:words/keys [editing more? rows search total]}]
-  {:editing     editing
+  {:editing     (some-> editing edit-dialog-props)
    :empty-state (empty-state rows total)
    :items       (word-list-props rows)
    :known?      (some? total)

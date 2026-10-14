@@ -64,9 +64,11 @@
 
 (nxr/register-effect! :effect/update-word
   (fn ^:async update-word
-    [{:keys [capabilities dispatch]} _ {:keys [id translation]}]
+    [{:keys [capabilities dispatch]} _ {:keys [id translation value]}]
     (try
-      (await (vocabulary/update! capabilities id translation))
+      (let [saved (await (vocabulary/rename! capabilities id value translation))]
+        (when (:error saved)
+          (log/error :effect/update-word {:error (:error saved)})))
       (dispatch [[:effect/enter :action/refresh-page]])
       (catch js/Error err
         (log/error :effect/update-word {:error (str err)})))))

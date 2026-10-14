@@ -59,6 +59,9 @@
       :learner/delete-word! (fn delete-word!
                               [word-id]
                               (learner/delete-word! learner word-id))
+      :learner/rename-word! (fn rename-word!
+                              [word-id entry translation]
+                              (learner/rename-word! learner word-id entry translation))
       :learner/add-review! (fn add-review!
                              [word-id retained translation]
                              (learner/add-review! learner word-id retained translation))
