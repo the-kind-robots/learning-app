@@ -12,12 +12,10 @@ Testing is automatic. Deployment is manual.
 - Production deploys are manual via workflow dispatch:
   - `.github/workflows/deploy-infra.yml`
   - `.github/workflows/deploy-app.yml`
-  - `.github/workflows/deploy-dictionary.yml`
 
 Recommended manual order when infra changed:
 1. Run deploy infra.
 2. Run deploy app.
-3. Run deploy dictionary.
 
 1) Install or upgrade the infra package (idempotent).
 ```sh
@@ -31,13 +29,10 @@ mv -f /opt/learning-app/learning-app.jar.tmp /opt/learning-app/learning-app.jar
 ```
 This triggers `learning-app-restart.path`, which restarts `learning-app-run.service`.
 
-3) Upload dictionary artifact/data and run import (idempotent).
+The dictionary travels inside the app jar; there is no separate dictionary deploy. A server that still has a `dictionary-db` from before may drop it by hand:
 ```sh
-systemctl start learning-app-dictionary-import.service
+curl -sf -X DELETE -u "admin:$COUCH_PASS" http://127.0.0.1:5984/dictionary-db
 ```
-The import validates input checksums and writes `/var/lib/learning-app/dictionary/import-metrics.json`.
-It resets the database, so on success it also restarts `learning-app-run.service` — the app recreates
-the CouchDB indexes it queries through as it starts.
 
 ## Infra deploy failed: manual recovery
 
@@ -60,20 +55,18 @@ sudo -u deployer sudo -n systemctl --version >/dev/null
 sudo systemctl status couchdb.service --no-pager
 sudo journalctl -u couchdb.service -n 200 --no-pager
 sudo nginx -t
-sudo systemctl cat learning-app-dictionary-import.service
 ```
 
 2) Fix issues directly on the server (packages, config, credentials, permissions).
 
 3) Re-run deployment.
 ```sh
-# dispatch deploy-infra, then deploy-app, then deploy-dictionary
+# dispatch deploy-infra, then deploy-app
 ```
 
 4) Verify after recovery.
 ```sh
 curl -sf http://127.0.0.1:5984/ >/dev/null
-curl -sf --resolve sprecha.de:443:127.0.0.1 https://sprecha.de/db/dictionary-db/dictionary-meta >/dev/null
 ```
 
 ## Server database home

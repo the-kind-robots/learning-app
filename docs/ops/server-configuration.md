@@ -70,7 +70,7 @@ systemd-ask-password -n "couchdb_admin_password"  | sudo systemd-creds encrypt -
 |---|---|
 | `db_auth_secret` | app (`/auth/check` proxy-auth signing) |
 | `openrouter_api_key` | app (examples generation) |
-| `couchdb_admin_password` | app (server-side CouchDB calls), `learning-app-dictionary-import`, postinst (CouchDB setup, `_global_changes`) |
+| `couchdb_admin_password` | app (server-side CouchDB calls), postinst (CouchDB setup, `_global_changes`) |
 | `borg-passphrase` | `learning-app-backup-db` |
 
 `--name=` must equal the file name — the blob is bound to it. All blobs are
@@ -128,7 +128,3 @@ override anything set here):**
 
 **Admin credential:** `/etc/credstore.encrypted/couchdb_admin_password` — placed per the Secrets section; CouchDB itself learned the same password from its package's debconf prompt at install time, so the two must match.
 
-**dictionary-db**
-- Public read-only database for the German dictionary.
-- Security: empty members list (anyone can read), admin-only writes.
-- Nginx proxy: `/db/dictionary-db/` with rate limiting.

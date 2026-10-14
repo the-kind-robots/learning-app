@@ -17,7 +17,7 @@
 (defonce ^:private channels
   ;; userdb name -> #{channels}. Keyed by database name so a feed answer
   ;; looks its subscribers up directly; events of databases nobody can
-  ;; subscribe to (dictionary-db, _global_changes) simply find no entry.
+  ;; subscribe to (_global_changes) simply find no entry.
   (atom {}))
 
 
