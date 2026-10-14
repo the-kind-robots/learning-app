@@ -113,7 +113,7 @@
     (add-account! db 1 "token-of-one")
     (with-redefs [sut/db-spec db
                   dictionary/lookup-dictionary-entries (constantly nil)
-                  examples/generate-one! (fn [_subject _word-meta]
+                  examples/generate-one! (fn [_subject _word-meta _max-attempts _avoid]
                                            (swap! generations inc)
                                            {:translation "У дома есть сад."
                                             :value       "Das Haus hat einen Garten."})]
@@ -149,7 +149,7 @@
         generations (atom 0)]
     (add-account! db 1 "token-of-one")
     (with-redefs [sut/db-spec db
-                  examples/generate-one! (fn [_subject _word-meta]
+                  examples/generate-one! (fn [_subject _word-meta _max-attempts _avoid]
                                            (swap! generations inc)
                                            nil)]
       (sut/start-server! sut/app-handler 0)
@@ -190,7 +190,7 @@
      (prepare! db)
      (with-redefs [sut/db-spec db
                    dictionary/lookup-dictionary-entries (constantly nil)
-                   examples/generate-one! (fn [subject _word-meta] (generate! subject))]
+                   examples/generate-one! (fn [subject _word-meta _max-attempts _avoid] (generate! subject))]
        (sut/start-server! sut/app-handler 0)
        (try
          (let [port (server/server-port @sut/server)]
@@ -348,13 +348,152 @@
          (is (not (str/includes? (:body response) "Der Hund bellt."))))))))
 
 
+(defn- with-regenerating-server
+  "Serves `/api/examples` against a fresh database holding one account, with
+   `generate!`, a function of the subject and the sentences to avoid, in the
+   provider's place. Calls (body db get-example regenerate), where the last
+   two send a request with the session cookie, or none when it is nil."
+  [generate! body]
+  (let [db (migrated-db)]
+    (add-account! db 1 "token-of-one")
+    (with-redefs [sut/db-spec db
+                  dictionary/lookup-dictionary-entries (constantly nil)
+                  examples/generate-one! (fn [subject _word-meta _max-attempts avoid]
+                                           (generate! subject avoid))]
+      (sut/start-server! sut/app-handler 0)
+      (try
+        (let [port    (server/server-port @sut/server)
+              request (fn [method url payload cookie]
+                        @(client/request
+                          (cond-> {:method method
+                                   :url    (str "http://localhost:" port url)}
+                            payload (assoc :body (if (string? payload) payload (cheshire/generate-string payload)))
+                            cookie  (assoc :headers {"Cookie" (str "auth-token=" cookie)}))))]
+          (body db
+                (fn get-example [query]
+                  (request :get (str "/api/examples" query) nil "token-of-one"))
+                (fn regenerate
+                  ([payload] (regenerate payload "token-of-one"))
+                  ([payload cookie]
+                   (request :post "/api/examples" payload cookie)))))
+        (finally
+         (sut/stop-server!))))))
+
+
+(def ^:private another-example
+  (assoc generated :value "Der Hund schläft." :translation "Собака спит."))
+
+
+(deftest a-regeneration-answers-another-example-and-leaves-the-cache-alone
+  (let [asked (atom [])]
+    (with-regenerating-server
+     (fn [subject avoid]
+       (swap! asked conj {:avoid avoid :word (:word subject)})
+       (if (seq avoid) another-example generated))
+     (fn [db get-example regenerate]
+       (is (= generated (cheshire/parse-string (:body (get-example (query "word" "Hund"))) true))
+           "the shared cache is filled by the ordinary request")
+       (let [before   (jdbc/execute! db ["SELECT * FROM example_cache"])
+             response (regenerate {:word         "Hund"
+                                   :translations ["собака"]
+                                   :context      nil
+                                   :avoid        ["Der Hund bellt."]})]
+         (testing "the answer is a different example, for the same word"
+           (is (= 200 (:status response)))
+           (is (= another-example (cheshire/parse-string (:body response) true)))
+           (is (= {:avoid ["Der Hund bellt."] :word "Hund"} (last @asked))))
+         (testing "the cache holds what it held, and still serves the first example"
+           (is (= before (jdbc/execute! db ["SELECT * FROM example_cache"])))
+           (is (= generated
+                  (cheshire/parse-string (:body (get-example (query "word" "Hund"))) true)))))))))
+
+
+(deftest a-regeneration-avoids-the-example-the-cache-holds
+  (let [asked (atom nil)]
+    (with-regenerating-server
+     (fn [_subject avoid]
+       (reset! asked avoid)
+       (if (seq avoid) another-example generated))
+     (fn [_db get-example regenerate]
+       (get-example (query "word" "Hund" "translation" "собака"))
+       (regenerate {:word "Hund" :translations ["собака"] :avoid []})
+       (is (= ["Der Hund bellt."] @asked))))))
+
+
+(deftest a-regeneration-needs-a-session-and-a-word
+  (let [generations (atom 0)]
+    (with-regenerating-server
+     (fn [_subject _avoid] (swap! generations inc) generated)
+     (fn [_db _get-example regenerate]
+       (testing "no session: 401, the provider is not called"
+         (is (= 401 (:status (regenerate {:word "Hund"} nil))))
+         (is (= 401 (:status (regenerate {:word ""} nil)))
+             "an anonymous caller learns nothing about the parameters"))
+       (testing "a blank word: 400"
+         (is (= 400 (:status (regenerate {:word "  " :avoid []}))))
+         (is (= 400 (:status (regenerate {:translations ["собака"]})))))
+       (is (zero? @generations))))))
+
+
+(deftest a-regeneration-reads-only-strings-from-its-lists
+  (let [asked (atom nil)]
+    (with-regenerating-server
+     (fn [subject avoid]
+       (reset! asked {:avoid avoid :translations (:translations subject)})
+       another-example)
+     (fn [_db _get-example regenerate]
+       (testing "non-string glosses and sentences are ignored, not a 500"
+         (is (= 200 (:status (regenerate {:word         "Hund"
+                                          :translations [1 {:a 2} "собака"]
+                                          :avoid        [7 nil "Der Hund bellt."]}))))
+         (is (= {:avoid ["Der Hund bellt."] :translations ["собака"]} @asked)))
+       (testing "lists that are not lists are ignored too"
+         (is (= 200 (:status (regenerate {:word "Hund" :translations 5 :avoid "x" :context 3}))))
+         (is (= {:avoid [] :translations []} @asked)))))))
+
+
+(deftest a-regeneration-takes-a-bounded-avoid-list
+  (with-regenerating-server
+   (fn [_subject _avoid] another-example)
+   (fn [_db _get-example regenerate]
+     (is (= 200 (:status (regenerate {:word "Hund" :avoid (repeat 5 (apply str (repeat 300 "a")))}))))
+     (testing "six sentences: 400"
+       (let [response (regenerate {:word "Hund" :avoid (repeat 6 "Der Hund bellt.")})]
+         (is (= 400 (:status response)))
+         (is (string? (:error (cheshire/parse-string (:body response) true))))))
+     (testing "a sentence of 301 characters: 400"
+       (is (= 400 (:status (regenerate {:word "Hund" :avoid [(apply str (repeat 301 "a"))]}))))))))
+
+
+(deftest a-regeneration-with-a-malformed-body-is-refused-after-the-session
+  (with-regenerating-server
+   (fn [_subject _avoid] another-example)
+   (fn [_db _get-example regenerate]
+     (testing "an anonymous caller is told nothing about the body"
+       (is (= 401 (:status (regenerate "{not json" nil)))))
+     (testing "an authenticated one is told the body is not JSON"
+       (let [response (regenerate "{not json")]
+         (is (= 400 (:status response)))
+         (is (= "Invalid JSON body" (:error (cheshire/parse-string (:body response) true)))))
+       (is (= 400 (:status (regenerate "[1,2]"))) "JSON that is not an object is refused too")))))
+
+
+(deftest a-failed-regeneration-fails-with-the-status-a-get-fails-with
+  (with-regenerating-server
+   (fn [_subject _avoid] nil)
+   (fn [_db get-example regenerate]
+     (is (= (:status (get-example (query "word" "Hund")))
+            (:status (regenerate {:word "Hund" :avoid []}))
+            422)))))
+
+
 (def ^:private real-generation
   "The generation itself, kept before any test puts a stub in its place. The
    dictionary knows no word in these tests, so it is handed no reading. The attempts
    are named, since the shorter arity calls back through the stubbed var."
   (let [generate-one! examples/generate-one!]
     (fn [subject]
-      (generate-one! subject nil 3))))
+      (generate-one! subject nil 3 []))))
 
 
 (deftest a-failed-generation-says-whose-problem-it-is
