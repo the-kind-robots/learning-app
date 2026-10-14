@@ -1,6 +1,6 @@
 (ns client.utils-test
   (:require
-   [cljs.test :refer-macros [deftest is testing]]
+   [cljs.test :refer-macros [are deftest is testing]]
    [utils :as sut]))
 
 
@@ -19,3 +19,13 @@
   (testing "different words stay different"
     (is (not= (sut/normalize-for-grading "auf jeden Fall")
               (sut/normalize-for-grading "auf keinen Fall")))))
+
+
+(deftest folding-german-reads-umlauts-as-their-base-letters
+  (are [text folded] (= folded (sut/fold-german text))
+    "für"      "fur"
+    "Schön"    "schon"
+    "Mädchen"  "madchen"
+    "Straße"   "strasse"
+    "fuer"     "fuer"
+    "Wie geht's?" "wie geht s"))

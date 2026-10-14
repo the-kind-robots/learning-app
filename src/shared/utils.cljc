@@ -47,15 +47,28 @@
       (str/replace #"\s+" " ")))
 
 
-(defn normalize-german
-  [text]
+(defn- spelled-with
+  "`text` sanitized, lower-cased, with `a`, `o` and `u` umlauts spelled as in
+   `umlauts` and ß as ss."
+  [umlauts text]
   (-> text
       (sanitize-text)
       (str/lower-case)
-      (str/replace #"ä" "ae")
-      (str/replace #"ö" "oe")
-      (str/replace #"ü" "ue")
+      (str/replace #"[äöü]" (fn [umlaut] (get umlauts umlaut)))
       (str/replace #"ß" "ss")))
+
+
+(defn normalize-german
+  [text]
+  (spelled-with {"ä" "ae" "ö" "oe" "ü" "ue"} text))
+
+
+(defn fold-german
+  "The spelling of `text` with umlauts read as their base letters (ü → u), for
+   a reader who types without them. Beside `normalize-german`, never instead
+   of it: that one decides ids and grading."
+  [text]
+  (spelled-with {"ä" "a" "ö" "o" "ü" "u"} text))
 
 
 (defn normalize-for-grading

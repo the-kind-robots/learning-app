@@ -88,4 +88,23 @@
   :pos          "noun"
   :rank         950
   :forms        ["Rückenmarks"]
-  :translations [{:lang "ru" :value "спинной мозг"}]}]
+  :translations [{:lang "ru" :value "спинной мозг"}]}
+ ;; Umlaut and its plain twin: typed without the umlaut, `fur` and `schon`
+ ;; must find them (#578). `schon` and `schön` fold to the same spelling.
+ {:value        "für"
+  :pos          "preposition"
+  :rank         500
+  :forms        []
+  :translations [{:lang "ru" :value "для"}]}
+
+ {:value        "schön"
+  :pos          "adjective"
+  :rank         400
+  :forms        []
+  :translations [{:lang "ru" :value "красивый"}]}
+
+ {:value        "schon"
+  :pos          "adverb"
+  :rank         450
+  :forms        []
+  :translations [{:lang "ru" :value "уже"}]}]

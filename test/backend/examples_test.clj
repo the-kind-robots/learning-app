@@ -370,7 +370,11 @@
    {:value "das Gute" :pos "noun" :rank 10 :forms []
     :translations [{:lang "ru" :value "добро"}]}
    {:value "Bezug auf etwas nehmen" :pos "phrase" :rank 100 :forms []
-    :translations [{:lang "ru" :value "ссылаться"}]}])
+    :translations [{:lang "ru" :value "ссылаться"}]}
+   {:value "schon" :pos "adv" :rank 200 :forms []
+    :translations [{:lang "ru" :value "уже"}]}
+   {:value "schön" :pos "adj" :rank 150 :forms []
+    :translations [{:lang "ru" :value "красивый"}]}])
 
 
 (defn- temp-dir
@@ -433,6 +437,16 @@
   (with-dictionary
     (fn []
       (is (= ["der Ärger"] (mapv :value (dictionary/lookup-dictionary-entries "Ärger")))))))
+
+
+(deftest a-word-typed-without-its-umlaut-also-finds-the-umlaut-twin
+  (with-dictionary
+    (fn []
+      (is (= #{"schon" "schön"}
+             (set (map :value (dictionary/lookup-dictionary-entries "schon")))))
+      (is (= "adv" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["уже"])))
+          "the gloss picks the word typed, not its twin")
+      (is (= "adj" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["красивый"])))))))
 
 
 (deftest a-word-the-dictionary-does-not-know-has-no-entry

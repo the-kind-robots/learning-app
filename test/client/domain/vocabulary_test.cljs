@@ -101,9 +101,22 @@
      ""         {:lemma "der Rücken"}
      "Häus"     haus                  ; the inflected form the reader is typing
      "gingst"   gehen
-     "Rücken"   ruecken)
+     "Rücken"   ruecken
+     "fur"      {:lemma "für" :matched-forms ["fuer" "fur"]})
     (are [typed completion] (not (sut/completes? typed completion))
      "Rückenk" ruecken ; typed past the lemma and every matched form
      "ginge"   {:lemma "gehen" :matched-forms ["ging"]}
      "hu"      {:lemma "das Haus" :matched-forms ["haus"]}
      "rücke"   {:lemma "die Rücksicht"})))
+
+
+(deftest the-words-filter-finds-a-word-typed-with-or-without-its-umlauts
+  (let [word {:value "für" :translation [{:lang "ru" :value "для"}]}
+        text (sut/search-text word)]
+    (are [typed] (sut/matches? text (sut/query typed))
+      "für" "fuer" "fur" "для")
+    (is (not (sut/matches? text (sut/query "fir"))))))
+
+
+(deftest a-word-without-umlauts-has-one-search-line-per-text
+  (is (= "hund\nпёс" (sut/search-text {:value "Hund" :translation [{:lang "ru" :value "пёс"}]}))))

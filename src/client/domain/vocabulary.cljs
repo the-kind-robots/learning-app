@@ -81,10 +81,16 @@
 
 (defn search-text
   "What the words filter matches a query against, normalised once: the value
-   and every translation, one per line. A normalised query holds no line
-   break, so it never matches across two of them."
+   and every translation, one per line, each also without its umlauts when
+   that spells it differently. A normalised query holds no line break, so it
+   never matches across two of them."
   [{:keys [value translation]}]
-  (str/join "\n" (map utils/normalize-german (cons value (map :value translation)))))
+  (->> (cons value (map :value translation))
+       (mapcat (fn [text]
+                 (let [normal (utils/normalize-german text)
+                       folded (utils/fold-german text)]
+                   (if (= normal folded) [normal] [normal folded]))))
+       (str/join "\n")))
 
 
 (defn query
