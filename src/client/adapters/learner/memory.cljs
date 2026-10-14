@@ -396,7 +396,7 @@
         [cached-all cached-slots cached-id cached] @slots-cache]
     (if (and (identical? cached-all all) (identical? cached-slots slots) (= cached-id id))
       cached
-      (let [found (into [] (keep slots) (domain-collections/scope-word-ids (vals all) id))]
+      (let [found (into [] (keep slots) (domain-collections/family-word-ids (vals all) id))]
         (vreset! slots-cache [all slots id found])
         found))))
 
@@ -432,7 +432,7 @@
         [cached-words cached-all cached-id cached] @collection-cache]
     (if (and (identical? cached-words words) (identical? cached-all all) (= cached-id id))
       cached
-      (let [ids   (some->> id (domain-collections/scope-word-ids (vals all)) set)
+      (let [ids   (some->> id (domain-collections/family-word-ids (vals all)) set)
             found (into [] (if ids (filter #(ids (:id %))) identity) (vals words))]
         (vreset! collection-cache [words all id found])
         found))))

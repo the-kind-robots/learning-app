@@ -164,7 +164,7 @@
                        ;; A collection's lesson draws from its words and its children's that exist.
                        (every? (fn [collection]
                                  (= (set (filter (set (map :id (vals (:words incremental))))
-                                                 (collections/scope-word-ids (vals (:collections incremental))
+                                                 (collections/family-word-ids (vals (:collections incremental))
                                                                              (:id collection))))
                                     (set (map (comp :id :word)
                                               (sut/collection-cards incremental collection)))))
