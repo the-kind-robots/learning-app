@@ -78,7 +78,7 @@
 
 (defn- example-max-tokens
   []
-  (-> (or (System/getenv "EXAMPLE_MAX_TOKENS") "300")
+  (-> (or (System/getenv "EXAMPLE_MAX_TOKENS") "600")
       parse-long))
 
 
