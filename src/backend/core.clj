@@ -18,6 +18,7 @@
    [push :as push]
    [reconciliation :as reconciliation]
    [reitit.http :as http]
+   [reitit.http.interceptors.exception :as exception]
    [reitit.http.interceptors.keyword-parameters :as keyword-parameters]
    [reitit.http.interceptors.parameters :as parameters]
    [reitit.interceptor.sieppari :as sieppari]
@@ -351,6 +352,13 @@
 ;;
 
 
+(defn- log-and-hide-exception
+  "The exception goes to the log; the client gets a bare 500."
+  [^Throwable e _request]
+  (t/log! {:level :error :id ::request-failed :error e} "Request failed")
+  {:status 500 :body ""})
+
+
 (def cookie-interceptor
   "Parses the Cookie header into the request's :cookies map. The server only
    reads the bearer token — the client sets it — so there is no response leg."
@@ -607,6 +615,13 @@
                (nil? (authenticated-user-id db (request-token request)))
                {:status 401 :body ""}
 
+               ;; A repeated parameter arrives as a vector; neither the subject
+               ;; nor the prompt can be built from two values.
+               (some vector? [word (get-in request [:params :context])])
+               {:status  400
+                :headers {"Content-Type" "application/json"}
+                :body    (cheshire/generate-string {:error "Parameters take one value each"})}
+
                (str/blank? word)
                {:status  400
                 :headers {"Content-Type" "application/json"}
@@ -699,7 +714,9 @@
                 :body    (cheshire/generate-string {:id user-id})}
                {:status 401 :body ""}))))}]]
 
-    {:data {:interceptors [cookie-interceptor
+    {:data {:interceptors [(exception/exception-interceptor
+                            {::exception/default log-and-hide-exception})
+                           cookie-interceptor
                            (parameters/parameters-interceptor)
                            (keyword-parameters/keyword-parameters-interceptor)]}})
 

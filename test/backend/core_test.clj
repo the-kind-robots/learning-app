@@ -144,6 +144,36 @@
          (sut/stop-server!))))))
 
 
+(deftest a-repeated-parameter-never-answers-with-an-exception-message
+  (let [db (migrated-db)
+        generations (atom 0)]
+    (add-account! db 1 "token-of-one")
+    (with-redefs [sut/db-spec db
+                  examples/generate-one! (fn [_subject _word-meta]
+                                           (swap! generations inc)
+                                           nil)]
+      (sut/start-server! sut/app-handler 0)
+      (try
+        (let [port (server/server-port @sut/server)
+              ask  (fn [cookie query]
+                     @(client/request
+                       (cond-> {:method :get
+                                :url    (str "http://localhost:" port "/api/examples" query)}
+                         cookie (assoc :headers {"Cookie" (str "auth-token=" cookie)}))))]
+          (testing "an anonymous caller is refused before the parameters are read"
+            (is (= 401 (:status (ask nil "?word=Haus&context=A&context=B")))))
+          (testing "a repeated context is a 400 with no exception text"
+            (let [response (ask "token-of-one" "?word=Haus&context=A&context=B")]
+              (is (= 400 (:status response)))
+              (is (not (str/includes? (:body response) "Exception")))))
+          (testing "a repeated word is the same"
+            (is (= 400 (:status (ask "token-of-one" "?word=Haus&word=Hund")))))
+          (testing "nothing was generated"
+            (is (zero? @generations))))
+        (finally
+         (sut/stop-server!))))))
+
+
 (defn- with-example-server
   "Serves `/api/examples` against a fresh database holding one account, with
    `generate!`, a function of the subject alone, in the provider's place. The
