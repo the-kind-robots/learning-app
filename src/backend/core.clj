@@ -841,6 +841,16 @@
     ;; the same rule — CouchDB being down logs a warning, never blocks boot.
     (dictionary/ensure-word-lookup-index!)
     (restart-server! #'ring-handler port)
+    ;; Examples stored under the old key are re-keyed once the server listens:
+    ;; the table's size is unbounded and each row costs a dictionary read. A
+    ;; request meanwhile misses on a waiting row and generates; the re-key
+    ;; keeps the older row. Failures are logged and never reach the server.
+    (Thread/startVirtualThread
+     (fn []
+       (try (examples/rekey-cache! db-spec)
+            (catch Throwable error
+              (t/log! {:level :warn :id ::rekey-failed :data {:error (ex-message error)}}
+                      "Example cache re-key failed")))))
     (println "Serving" url)))
 
 

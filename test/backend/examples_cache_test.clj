@@ -1,7 +1,8 @@
 (ns backend.examples-cache-test
   (:require
-   [clojure.test :refer [deftest is testing]]
    [backend.support.db :as support.db]
+   [cheshire.core :as cheshire]
+   [clojure.test :refer [deftest is testing]]
    [examples :as examples]
    [examples.cache :as sut]
    [examples.provider :as provider]
@@ -126,28 +127,112 @@
         "a row nobody can read is a subject with no example")))
 
 
-(deftest an-edited-prompt-is-a-miss-not-a-stale-row
-  (testing "the sentence depends on the prompt and the model, so the key does too"
-    (let [asked    {:word "Hund" :translation ["собака"]}
-          original (key-of asked)]
-      (testing "the same subject under the same generation is the same key"
-        (is (= original (key-of asked))))
-      (testing "an edited prompt"
-        (with-redefs [examples/system-prompt (str examples/system-prompt "\nOne more rule.")]
-          (is (not= original (key-of asked)))))
-      (testing "another model"
-        (with-redefs [provider/config (constantly {:model "another/model"})]
-          (is (not= original (key-of asked))))))))
+(deftest an-edited-prompt-or-another-model-keeps-the-key
+  (let [asked    {:word "Hund" :translation ["собака"]}
+        original (key-of asked)]
+    (testing "an edited prompt"
+      (with-redefs [examples/system-prompt (str examples/system-prompt "\nOne more rule.")]
+        (is (= original (key-of asked)))))
+    (testing "another model"
+      (with-redefs [provider/config (constantly {:model "another/model"})]
+        (is (= original (key-of asked)))))))
 
 
-(deftest a-stored-example-is-not-served-after-the-prompt-changes
+(deftest a-new-cache-version-is-another-key
+  (let [asked    {:word "Hund" :translation ["собака"]}
+        original (key-of asked)]
+    (with-redefs [examples/cache-version (constantly "2")]
+      (is (not= original (key-of asked))))))
+
+
+(deftest a-stored-example-is-served-after-the-prompt-changes
   (let [db      (migrated-db)
         subject (examples/subject {:word "Hund" :translation ["собака"]})]
     (sut/store! db (subject-key subject) subject example)
-    (is (some? (sut/lookup db (subject-key subject))))
     (with-redefs [examples/system-prompt (str examples/system-prompt "\nOne more rule.")]
-      (is (nil? (sut/lookup db (key-of {:word "Hund" :translation ["собака"]})))
-          "the row is still there, and nothing asks for it any more"))))
+      (is (= example (sut/lookup db (key-of {:word "Hund" :translation ["собака"]})))))))
+
+
+(defn- insert-waiting-row!
+  "A row as an earlier build stored it: under a key of its own, not yet re-keyed."
+  [db old-key subject created-at]
+  (jdbc/execute! db
+    ["INSERT INTO example_cache (question_sha256, word, translations, context, example, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)"
+     old-key
+     (:word subject)
+     (cheshire/generate-string (:translations subject))
+     (:context subject)
+     (cheshire/generate-string {:value old-key})
+     created-at]))
+
+
+(defn- keys-in
+  [db]
+  (into #{}
+        (map :question_sha256)
+        (jdbc/execute! db ["SELECT question_sha256 FROM example_cache"]
+          {:builder-fn result-set/as-unqualified-maps})))
+
+
+(deftest rows-stored-under-old-keys-are-found-after-the-rekey
+  (let [db      (migrated-db)
+        subject (examples/subject {:word "Hund" :translation ["собака"]})]
+    (insert-waiting-row! db "old-key" subject 100)
+    (is (nil? (sut/lookup db (subject-key subject))))
+    (sut/rekey! db subject-key)
+    (is (= {:value "old-key"} (sut/lookup db (subject-key subject))))))
+
+
+(deftest rows-that-land-on-one-key-collapse-to-the-oldest
+  (let [db      (migrated-db)
+        subject (examples/subject {:word "Hund" :translation ["собака"]})]
+    (insert-waiting-row! db "newer" subject 300)
+    (insert-waiting-row! db "oldest" subject 100)
+    (insert-waiting-row! db "middle" subject 200)
+    (is (= {:collapsed 2 :moved 1 :skipped 0} (dissoc (sut/rekey! db subject-key) :elapsed-ms)))
+    (is (= {:value "oldest"} (sut/lookup db (subject-key subject))))
+    (is (= 1 (count (keys-in db))))))
+
+
+(deftest a-row-stored-after-the-change-yields-to-an-older-waiting-one
+  (let [db      (migrated-db)
+        subject (examples/subject {:word "Hund" :translation ["собака"]})]
+    (sut/store! db (subject-key subject) subject example)
+    (insert-waiting-row! db "waiting" subject 1)
+    (sut/rekey! db subject-key)
+    (is (= {:value "waiting"} (sut/lookup db (subject-key subject)))
+        "the waiting row was stored first")))
+
+
+(deftest a-second-rekey-reads-the-dictionary-for-nothing
+  (let [db      (migrated-db)
+        subject (examples/subject {:word "Hund" :translation ["собака"]})
+        reads   (atom 0)
+        counted (fn [s] (swap! reads inc) (subject-key s))]
+    (insert-waiting-row! db "old-key" subject 100)
+    (sut/rekey! db counted)
+    (sut/rekey! db counted)
+    (is (= 1 @reads))))
+
+
+(deftest a-dictionary-that-is-away-leaves-the-rows-for-the-next-start
+  (let [db      (migrated-db)
+        subject (examples/subject {:word "Hund" :translation ["собака"]})]
+    (insert-waiting-row! db "old-key" subject 100)
+    (is (nil? (sut/rekey! db (fn [_] (throw (ex-info "away" {}))))))
+    (is (= #{"old-key"} (keys-in db)))
+    (sut/rekey! db subject-key)
+    (is (= {:value "old-key"} (sut/lookup db (subject-key subject))))))
+
+
+(deftest a-rekey-runs-through-more-rows-than-a-batch
+  (let [db (migrated-db)]
+    (doseq [n (range 1203)]
+      (insert-waiting-row! db (str "old-" n)
+                           (examples/subject {:word (str "Wort" n) :translation ["x"]})
+                           n))
+    (is (= {:collapsed 0 :moved 1203 :skipped 0} (dissoc (sut/rekey! db subject-key) :elapsed-ms)))))
 
 
 (deftest the-digest-material-does-not-depend-on-how-clojure-prints
@@ -177,3 +262,13 @@
     (is (false? (sut/store! db (subject-key subject) subject later))
         "the second says a row was already there")
     (is (= example (sut/lookup db (subject-key subject))))))
+
+
+(deftest a-row-with-unreadable-glosses-is-skipped-and-counted
+  (let [db (migrated-db)]
+    (jdbc/execute! db
+      ["INSERT INTO example_cache (question_sha256, word, translations, context, example)
+        VALUES ('legacy', 'Hund', 'собака, пёс', NULL, '{}')"])
+    (is (= {:collapsed 0 :moved 0 :skipped 1}
+           (dissoc (sut/rekey! db subject-key) :elapsed-ms)))
+    (is (= #{"legacy"} (keys-in db)))))
