@@ -271,7 +271,7 @@ if curl -fsS -m 10 "${couchdb_url}/" > /dev/null 2>&1; then
     fi
 
     if curl_couch -o /dev/null "${couchdb_url}/_all_dbs" 2>/dev/null; then
-        for database in dictionary-db _global_changes; do
+        for database in _global_changes; do
             if curl_couch -o /dev/null "${couchdb_url}/${database}" 2>/dev/null; then
                 ok "database ${database}"
             else
@@ -285,42 +285,6 @@ if curl -fsS -m 10 "${couchdb_url}/" > /dev/null 2>&1; then
                 fi
             fi
         done
-
-        # The dictionary is read by anyone and written by the admin alone —
-        # an empty members list is what makes it public, as in production.
-        if curl_couch "${couchdb_url}/dictionary-db/_security" 2>/dev/null \
-            | grep -q '"members":{"names":\[\]'
-        then
-            ok "dictionary-db is readable without a login"
-        else
-            todo "dictionary-db security is not the public-read shape"
-            if confirm "set it?"; then
-                curl_couch -X PUT -o /dev/null \
-                    -H 'Content-Type: application/json' \
-                    -d '{"admins":{"names":["'"${couchdb_user}"'"],"roles":[]},"members":{"names":[],"roles":[]}}' \
-                    "${couchdb_url}/dictionary-db/_security"
-                done_ "dictionary-db security"
-            else
-                skip "dictionary-db security"
-            fi
-        fi
-
-        if curl_couch "${couchdb_url}/dictionary-db" 2>/dev/null \
-            | grep -q '"doc_count":0[,}]'
-        then
-            todo "dictionary-db is empty — the dictionary is not imported"
-            note "would run: clojure -X:dictionary-import  (minutes, ~1M documents)"
-            if confirm "import it now?"; then
-                (cd "${repo_root}" \
-                    && COUCHDB_URL="${couchdb_url}" COUCHDB_PASS="${couchdb_pass}" \
-                       clojure -X:dictionary-import)
-                done_ "dictionary imported"
-            else
-                skip "dictionary import"
-            fi
-        else
-            ok "dictionary-db holds documents"
-        fi
     else
         manual "CouchDB refused ${couchdb_user}'s credentials — no admin yet, or COUCHDB_PASS is wrong" \
             "docs/dev/development-setup.md, CouchDB Admin Setup"

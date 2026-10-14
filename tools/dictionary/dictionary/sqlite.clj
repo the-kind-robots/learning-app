@@ -26,7 +26,8 @@
         id    INTEGER PRIMARY KEY,
         value TEXT    NOT NULL,
         pos   TEXT,
-        rank  INTEGER NOT NULL)"])
+        rank  INTEGER NOT NULL,
+        cefr_level TEXT)"])
   ;; WITHOUT ROWID: hot path is WHERE lemma_id = ? ORDER BY rank —
   ;; a free clustered B-tree scan on the composite PK.
   (jdbc/execute!
@@ -63,8 +64,8 @@
 
 (defn- insert-lemmas!
   [tx row-seq]
-  (with-open [ps (jdbc/prepare tx ["INSERT INTO lemmas (id, value, pos, rank) VALUES (?, ?, ?, ?)"])]
-    (jdbc/execute-batch! ps (map (juxt :id :value :pos :rank) row-seq) {:batch-size 1000})))
+  (with-open [ps (jdbc/prepare tx ["INSERT INTO lemmas (id, value, pos, rank, cefr_level) VALUES (?, ?, ?, ?, ?)"])]
+    (jdbc/execute-batch! ps (map (juxt :id :value :pos :rank :cefr-level) row-seq) {:batch-size 1000})))
 
 
 (defn- insert-translations!

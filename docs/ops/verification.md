@@ -26,19 +26,6 @@ curl -sf https://sprecha.de/ >/dev/null
 ## CouchDB
 ```sh
 curl -sf http://127.0.0.1:5984/ >/dev/null
-curl -sf http://127.0.0.1:5984/dictionary-db >/dev/null
-curl -sf http://127.0.0.1:5984/dictionary-db/dictionary-meta >/dev/null
-```
-
-## Dictionary import
-```sh
-systemctl start learning-app-dictionary-import.service
-test -f /var/lib/learning-app/dictionary/import-metrics.json
-```
-
-## Public dictionary access through Nginx (no auth)
-```sh
-curl -sf --resolve sprecha.de:443:127.0.0.1 https://sprecha.de/db/dictionary-db/dictionary-meta >/dev/null
 ```
 
 ## Backups (only if configured)

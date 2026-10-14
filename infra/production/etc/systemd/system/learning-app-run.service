@@ -28,7 +28,7 @@ LoadCredentialEncrypted=openrouter_api_key:/etc/credstore.encrypted/openrouter_a
 Environment=OPENROUTER_API_KEY_PATH=%d/openrouter_api_key
 LoadCredentialEncrypted=db_auth_secret:/etc/credstore.encrypted/db_auth_secret
 Environment=LEARNING_APP_DB_AUTH_SECRET_PATH=%d/db_auth_secret
-# The same credential dictionary-import and postinst already use: the app's
+# The same credential postinst already uses: the app's
 # server-side CouchDB calls must authenticate against the real admin
 # password, not the dev fallback (#246).
 LoadCredentialEncrypted=couchdb_admin_password:/etc/credstore.encrypted/couchdb_admin_password

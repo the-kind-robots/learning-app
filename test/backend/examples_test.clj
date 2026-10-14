@@ -1,8 +1,10 @@
 (ns backend.examples-test
   (:require
    [backend.support.generation :as support.generation]
+   [clojure.java.io :as io]
    [clojure.test :refer [are deftest is testing]]
    [db :as db]
+   [dictionary.sqlite]
    [examples :as sut]
    [examples.dictionary :as dictionary]
    [examples.provider :as provider]))
@@ -353,31 +355,99 @@
     (is (= "Tiere" (:context (sut/subject {:word "Hund" :context " Tiere "}))))))
 
 
+(def ^:private dictionary-lemmas
+  [{:value "das Fenster" :pos "noun" :rank 900 :forms ["Fensters" "Fenstern"]
+    :translations [{:lang "ru" :value "окно"}]
+    :enrichment {:cefr-level "a1"}}
+   {:value "der Ärger" :pos "noun" :rank 500 :forms []
+    :translations [{:lang "ru" :value "досада"}]}
+   {:value "die Leiter" :pos "noun" :rank 400 :forms []
+    :translations [{:lang "ru" :value "лестница"}]}
+   {:value "der Leiter" :pos "noun" :rank 300 :forms []
+    :translations [{:lang "ru" :value "руководитель"}]}
+   {:value "gutern" :pos "verb" :rank 990 :forms ["gute"]
+    :translations [{:lang "ru" :value "ничего"}]}
+   {:value "das Gute" :pos "noun" :rank 10 :forms []
+    :translations [{:lang "ru" :value "добро"}]}
+   {:value "Bezug auf etwas nehmen" :pos "phrase" :rank 100 :forms []
+    :translations [{:lang "ru" :value "ссылаться"}]}])
+
+
+(defn- temp-dir
+  []
+  (.toFile (java.nio.file.Files/createTempDirectory
+            "dictionary-test" (make-array java.nio.file.attribute.FileAttribute 0))))
+
+
+(defn- with-dictionary
+  "Runs (f) with lookups reading a dictionary built by the real build code, then
+   closes it, so the next lookup opens the dictionary afresh."
+  [f]
+  (let [lookups @#'dictionary/connection
+        dir     (temp-dir)]
+    (try
+      (dictionary.sqlite/write-dictionary! (str dir) dictionary-lemmas)
+      (dictionary/open! {"LEARNING_APP__DICTIONARY_DIR" (str dir)})
+      (f)
+      (finally
+       (when-let [opened @lookups] (.close ^java.sql.Connection opened))
+       (reset! lookups nil)
+       (run! io/delete-file (reverse (file-seq dir)))))))
+
+
 (deftest a-bare-word-resolves-through-its-surface-form-to-the-lemma-entry
-  (testing "bare words can resolve through surface-form docs to article-bearing lemma docs"
-    (with-redefs [db/request-sync (fn [request]
-                                    (case (:url request)
-                                      "dictionary-db/_find"
-                                      {:status 200
-                                       :body   {:docs []}}
+  (with-dictionary
+    (fn []
+      (let [entry (first (dictionary/lookup-dictionary-entries "Fenster"))]
+        (is (= "das Fenster" (:value entry)))
+        (is (= "noun" (:pos entry)))
+        (is (= "a1" (get-in entry [:meta :cefr_level])))
+        (is (= [{:lang "ru" :value "окно"}] (:translation entry)))))))
 
-                                      "dictionary-db/sf:fenster"
-                                      {:status 200
-                                       :body   {:entries [{:lemma-id "lemma:das fenster:noun"
-                                                           :lemma    "das Fenster"}]}}
 
-                                      "dictionary-db/_all_docs"
-                                      {:status 200
-                                       :body   {:rows [{:id  "lemma:das fenster:noun"
-                                                        :doc {:_id         "lemma:das fenster:noun"
-                                                              :type        "dictionary-entry"
-                                                              :value       "das Fenster"
-                                                              :translation [{:lang  "ru"
-                                                                             :value "окно"}]}}]}}
+(deftest a-phrase-without-an-article-is-found-as-any-word
+  (with-dictionary
+    (fn []
+      (is (= ["Bezug auf etwas nehmen"]
+             (mapv :value (dictionary/lookup-dictionary-entries "Bezug auf etwas nehmen")))))))
 
-                                      (throw (ex-info "unexpected request" request))))]
-      (is (= ["das Fenster"]
-             (mapv :value (#'dictionary/lookup-dictionary-entries "Fenster")))))))
+
+(deftest an-article-keeps-the-lemma-distinct
+  (with-dictionary
+    (fn []
+      (are [word values] (= values (mapv :value (dictionary/lookup-dictionary-entries word)))
+        "die Leiter" ["die Leiter"]
+        "der Leiter" ["der Leiter"]
+        "Leiter"     ["die Leiter" "der Leiter"]))))
+
+
+(deftest a-bare-word-is-found-exact-first-whatever-the-rank
+  (with-dictionary
+    (fn []
+      (is (= ["das Gute" "gutern"]
+             (mapv :value (dictionary/lookup-dictionary-entries "Gute")))
+          "the noun written exactly so outranks a verb that merely has the form"))))
+
+
+(deftest a-word-with-an-umlaut-is-found
+  (with-dictionary
+    (fn []
+      (is (= ["der Ärger"] (mapv :value (dictionary/lookup-dictionary-entries "Ärger")))))))
+
+
+(deftest a-word-the-dictionary-does-not-know-has-no-entry
+  (with-dictionary
+    (fn []
+      (is (= [] (dictionary/lookup-dictionary-entries "Quatsch")))
+      (is (nil? (dictionary/lookup-word-meta "Quatsch" ["чушь"]))))))
+
+
+(deftest a-missing-dictionary-file-stops-the-start-naming-the-file
+  (let [dir (.toString (java.nio.file.Files/createTempDirectory
+                        "dictionary-missing" (make-array java.nio.file.attribute.FileAttribute 0)))
+        error (try (dictionary/open! {"LEARNING_APP__DICTIONARY_DIR" dir})
+                   (catch clojure.lang.ExceptionInfo error error))]
+    (is (re-find #"dictionary\.sqlite" (ex-message error)))))
 
 
 (deftest the-provider-retry-after-reads-seconds-and-dates
@@ -396,23 +466,8 @@
 
 
 (deftest a-dictionary-that-cannot-be-read-is-a-failure-not-an-unknown-word
-  (with-redefs [db/request-sync (fn [_request]
-                                  {:error (org.httpkit.client.TimeoutException. "read timeout")})]
+  (with-redefs [dictionary/lookup-dictionary-entries (fn [_form] (throw (ex-info "Dictionary file unreadable" {})))]
     (is (sut/generation-failure? (sut/word-meta (sut/subject {:word "Fenster" :translation "окно"}))))))
-
-
-(deftest a-phrase-without-an-article-is-looked-up-by-surface-form-under-an-encoded-url
-  (let [urls (atom [])]
-    (with-redefs [db/request-sync (fn [{:keys [url]}]
-                                    (swap! urls conj url)
-                                    (if (re-find #"/_find$" url)
-                                      {:status 200 :body {:docs []}}
-                                      {:status 404 :body {}}))]
-      (is (= [] (vec (dictionary/lookup-dictionary-entries "Bezug auf etwas nehmen")))))
-    (let [surface-url (last @urls)]
-      (is (= "dictionary-db/sf:bezug%20auf%20etwas%20nehmen" surface-url))
-      (is (some? (java.net.URI. (str "http://localhost:5984/" surface-url)))
-          "a URL the HTTP client accepts"))))
 
 
 (defn- candidate

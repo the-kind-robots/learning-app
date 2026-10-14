@@ -37,18 +37,13 @@ Implicit awaits in `^:async`: [docs/dev/cljs-async-pitfalls.md](docs/dev/cljs-as
 
 ## Dictionary
 
-Built files are committed to `resources/dictionary/` and imported from there into CouchDB.
+Built files are committed to `resources/dictionary/`. The client downloads `dictionary.sqlite` from the server, and the example backend reads the same file.
 
 **Rebuild** (when source data changes — see `tools/dictionary/README.md` for stages):
 ```bash
 clojure -X:dictionary build
 # optional: enrich RU translations
 tools/dictionary/enrich-translations/enrich-translations --input resources/dictionary/dictionary-entries.jsonl
-```
-
-**Import** into CouchDB:
-```bash
-COUCHDB_URL=http://localhost:5984 COUCHDB_PASS=<pass> clojure -X:dictionary-import
 ```
 
 © 2025. Egor Shundeev, Petr Maslov.

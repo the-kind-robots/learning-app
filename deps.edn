@@ -22,7 +22,7 @@
 
            ;; Every namespace under test/backend ending in -test; exits
            ;; non-zero when one fails.
-           :test  {:extra-paths ["test"]
+           :test  {:extra-paths ["test" "tools/dictionary"]
                    :extra-deps  {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
                    :main-opts   ["-m" "cognitect.test-runner" "-d" "test/backend"]}
 
@@ -44,9 +44,4 @@
                                             :output-dir "target/test-dictionary"}}
 
            :word-frequencies {:deps       {dictionary/dictionary {:local/root "tools/dictionary"}}
-                              :ns-default word-frequencies}
-
-           :dictionary-import {:extra-paths ["tools/dictionary"]
-                                :extra-deps  {org.clojure/tools.cli {:mvn/version "1.4.256"}}
-                                :exec-fn     dictionary.import/upload
-                                :exec-args   {:input-dir "resources/dictionary"}}}}
+                              :ns-default word-frequencies}}}

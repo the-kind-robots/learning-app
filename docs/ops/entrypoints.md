@@ -7,7 +7,6 @@ Use this file to jump to the authoritative configuration files. Load only what y
 - `.github/workflows/integration.yml` — automatic PR and `master` test workflow.
 - `.github/workflows/deploy-infra.yml` — manual infrastructure deployment workflow.
 - `.github/workflows/deploy-app.yml` — manual application deployment workflow.
-- `.github/workflows/deploy-dictionary.yml` — manual dictionary deployment workflow.
 - `build.clj` — uberjar build and entrypoint.
 
 ## Production runtime

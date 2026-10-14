@@ -16,7 +16,7 @@
           (let [seq-after (#'push/poke-subscribers!
                            {:results  [{:db_name "userdb-3" :type "updated"}
                                        {:db_name "userdb-3" :type "updated"}
-                                       {:db_name "dictionary-db" :type "updated"}
+                                       {:db_name "_dbs" :type "updated"}
                                        {:db_name "_global_changes" :type "updated"}
                                        {:db_name "userdb-5" :type "updated"}
                                        {:db_name "userdb-9" :type "deleted"}]
@@ -24,7 +24,7 @@
             (is (= "42-abc" seq-after))
             (is
              (= #{:channel-a :channel-b} (set @poked))
-             "account 3 twice-updated pokes once per channel; dictionary-db and _global_changes have no possible subscribers; 5 has no channel; 9 was deleted, not updated"))
+             "account 3 twice-updated pokes once per channel; _dbs and _global_changes have no possible subscribers; 5 has no channel; 9 was deleted, not updated"))
           (finally
            (push/unsubscribe! 3 :channel-a)
            (push/unsubscribe! 3 :channel-b)

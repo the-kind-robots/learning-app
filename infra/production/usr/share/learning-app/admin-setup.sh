@@ -296,17 +296,8 @@ if [ -f "${CRED_DIR}/couchdb_admin_password" ] || [ "${couchdb_pending_write}" =
     couchdb_pending_write=false
   fi
 
-  if ! curl -sf -u "admin:${COUCH_PASS}" http://127.0.0.1:5984/dictionary-db >/dev/null 2>&1; then
-    curl -sf -X PUT -u "admin:${COUCH_PASS}" http://127.0.0.1:5984/dictionary-db >/dev/null
-  fi
-
-  curl -sf -X PUT -u "admin:${COUCH_PASS}" \
-    http://127.0.0.1:5984/dictionary-db/_security \
-    -H "Content-Type: application/json" \
-    -d '{"admins":{"names":["admin"],"roles":[]},"members":{"names":[],"roles":[]}}' \
-    >/dev/null
 else
-  warn "Missing couchdb_admin_password; skipping CouchDB admin and dictionary-db setup"
+  warn "Missing couchdb_admin_password; skipping CouchDB admin setup"
 fi
 
 systemctl daemon-reload
