@@ -722,6 +722,15 @@
              :href (if running-from-source?
                      "/dev-manifest.json"
                      "/manifest.json")}]
+           ;; The first screen's fonts are fetched with the document, not after
+           ;; styles.css is parsed; the splash waits for them.
+           (for [file ["nunito-v32-cyrillic-variable" "nunito-v32-latin-variable"]]
+             [:link
+              {:rel         "preload"
+               :as          "font"
+               :type        "font/woff2"
+               :crossorigin true
+               :href        (str "/fonts/Nunito/" file ".woff2")}])
            [:link {:rel "stylesheet" :href "/css/styles.css"}]
            [:script {:src "/js/app/main.js" :defer true}]]
           [:body

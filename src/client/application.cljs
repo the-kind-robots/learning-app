@@ -649,19 +649,38 @@
   (sync-virtual-keyboard!))
 
 
-(defn install-render!
-  "Renders on every state change and only on change. `identical?` is enough:
-   CLJS `assoc`/`merge` hand back the same map when nothing differs, so a
-   dispatch that saves nothing costs no render. A dispatch that saves several
-   times renders several times — measured earlier: extra renders inside one
-   synchronous dispatch cost diffing, never extra paints, and the owner chose
+(defn start-render!
+  "Renders the state now and again on every change to it, and only on change.
+   `identical?` is enough: CLJS `assoc`/`merge` hand back the same map when
+   nothing differs, so a dispatch that saves nothing costs no render. A
+   dispatch that saves several times renders several times; the owner chose
    this simplicity over a coalescing counter (#213)."
   [store render-fn]
   (add-watch store
              ::render
              (fn [_ _ old state]
                (when-not (identical? old state)
-                 (render-fn state)))))
+                 (render-fn state))))
+  (render-fn @store))
+
+
+(def ^:private fonts-cap-ms
+  "How long after navigation the splash waits for fonts at most, so a failed
+   fetch cannot hold the start."
+  1000)
+
+
+(defn fonts-settled
+  "A promise that resolves once the regular and the bold Nunito are loaded
+   for both scripts, or after `fonts-cap-ms`, whichever is first. Never
+   rejects."
+  []
+  (let [loads (for [weight ["400" "700"]]
+                (js/document.fonts.load (str weight " 1rem Nunito") "Аa"))
+        cap   (js/Promise. (fn [resolve _]
+                             (js/setTimeout resolve (max 0 (- fonts-cap-ms (js/performance.now))))))]
+    (js/Promise.race #js [(.catch (js/Promise.all (clj->js loads)) (fn [_] nil))
+                          cap])))
 
 
 (defn guard-double-clicks!

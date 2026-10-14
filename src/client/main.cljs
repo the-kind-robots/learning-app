@@ -163,14 +163,19 @@
                                           ;; server's splash stays until the first screen
                                           ;; replaces it. When the start read fails, the shell
                                           ;; is rendered in its place to ask for a reload.
-                                          (application/install-render!
-                                           store
-                                           (fn [state]
-                                             (when (or (:learner/loaded? state)
-                                                       (:learner/unreadable? state))
-                                               (if ^boolean goog/DEBUG
-                                                 (instrumentation/render! application/render! state)
-                                                 (application/render! state)))))
+                                          ;; The first screen replaces the splash, so it
+                                          ;; waits for the fonts: they are on the screen
+                                          ;; from its first paint, not swapped in after it.
+                                          (.then (application/fonts-settled)
+                                                 (fn [_]
+                                                   (application/start-render!
+                                                    store
+                                                    (fn [state]
+                                                      (when (or (:learner/loaded? state)
+                                                                (:learner/unreadable? state))
+                                                        (if ^boolean goog/DEBUG
+                                                          (instrumentation/render! application/render! state)
+                                                          (application/render! state)))))))
                                           (when ^boolean goog/DEBUG
                                             (instrumentation/install!))
                                           {:dispatch #(dispatch {} %)}))}
