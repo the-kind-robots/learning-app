@@ -258,22 +258,23 @@
 
 (defn- ^:async word-deletion
   "The documents that delete the word `word-id` in one bulk write, as
-   PouchDB holds them now: the word's deletion, and every collection that
-   lists the word, without it. Which collections list it is asked of
-   memory once it has caught up."
+   PouchDB holds them now: a deletion of every live version of the word (a
+   replication may leave it more than one, and the one left alive would
+   bring the word back), and every collection that lists the word, without
+   it. Which collections list it is asked of memory once it has caught up."
   [{:keys [dbs] :as learner} word-id]
   (await (catch-up! learner))
-  (let [listing (into []
-                      (comp (filter #(some #{word-id} (:word-ids %))) (map :id))
-                      (memory/collections (current-memory learner)))
-        stored  (await (dbs/read-ids dbs :user/db (cons word-id listing)))
-        word    (first (filter #(and (= word-id (:_id %)) (not (:_deleted %))) stored))]
-    (cond-> (into []
-                  (keep (fn [{:keys [_deleted word-ids] :as doc}]
-                          (when (and (not _deleted) (some #{word-id} word-ids))
-                            (assoc doc :word-ids (filterv #(not= word-id %) word-ids)))))
-                  stored)
-      word (conj (documents/tombstone word)))))
+  (let [listing  (into []
+                       (comp (filter #(some #{word-id} (:word-ids %))) (map :id))
+                       (memory/collections (current-memory learner)))
+        stored   (await (dbs/read-ids dbs :user/db listing))
+        versions (await (dbs/doc-versions dbs documents/vocab-schema word-id))]
+    (-> (into []
+              (keep (fn [{:keys [_deleted word-ids] :as doc}]
+                      (when (and (not _deleted) (some #{word-id} word-ids))
+                        (assoc doc :word-ids (filterv #(not= word-id %) word-ids)))))
+              stored)
+        (into (comp (remove :_deleted) (map documents/tombstone)) versions))))
 
 
 (defn- ^:async attempt-word-deletion!
