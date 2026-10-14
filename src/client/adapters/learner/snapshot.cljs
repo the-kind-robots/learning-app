@@ -64,9 +64,9 @@
   "The transit reader of the body."
   (transit/reader :json {:handlers {"reviews" (fn [text]
                                                 (let [columns (js/JSON.parse text)]
-                                                  (retention/->Reviews (js/Float64Array.from (aget columns 0))
-                                                                       (js/Uint8Array.from (.split ^string (aget columns 1) ""))
-                                                                       (aget columns 2))))}}))
+                                                  (retention/reviews (js/Float64Array.from (aget columns 0))
+                                                                      (js/Uint8Array.from (.split ^string (aget columns 1) ""))
+                                                                      (aget columns 2))))}}))
 
 
 (defn- checksum

@@ -6,18 +6,51 @@
    within one second, by id, so the result does not depend on the order the
    reviews arrived in. A history is never changed: a review in or out gives
    a new one. `urgency` walks the columns: a lesson ranks every word in
-   scope on the tap."
+   scope on the tap, so a history keeps the forgetting rate its reviews lead
+   to, and `urgency` reads it."
   (:require
    [clojure.math :as math]
    [goog.array :as garray]
    [utils :as utils]))
 
 
-(defrecord Reviews [seconds retained ids])
+(def ^:private initial-rate
+  "The forgetting rate per second of a word with no lapse and no retained
+   review behind it."
+  0.00231)
+
+
+(defrecord Reviews [seconds retained ids rate])
+
+
+(defn- next-rate
+  "The forgetting rate after a review, `elapsed` seconds after the one before:
+   a retained review divides it by one plus the rate times the interval; a
+   lapse doubles it."
+  [rate retained elapsed]
+  (if (== 1 retained)
+    (/ rate (inc (* rate elapsed)))
+    (* 2 rate)))
+
+
+(defn reviews
+  "A review history out of its three columns, its rate folded from the first
+   review to the last. `with-review` at the end takes one step of that fold
+   instead."
+  [^js seconds ^js retained ids]
+  (->Reviews seconds
+             retained
+             ids
+             (loop [index 1
+                    rate  initial-rate]
+               (if (< index (.-length ids))
+                 (recur (inc index)
+                        (next-rate rate (aget retained index) (- (aget seconds index) (aget seconds (dec index)))))
+                 rate))))
 
 
 (def empty-reviews
-  (->Reviews (js/Float64Array. 0) (js/Uint8Array. 0) #js []))
+  (reviews (js/Float64Array. 0) (js/Uint8Array. 0) #js []))
 
 
 (defn- after?
@@ -47,7 +80,13 @@
     (.set flags (.subarray (.-retained history) 0 index))
     (.set flags (.subarray (.-retained history) index) (inc index))
     (aset flags index (if retained 1 0))
-    (->Reviews times flags (doto (.slice (.-ids history)) (.splice index 0 id)))))
+    (let [ids (doto (.slice (.-ids history)) (.splice index 0 id))]
+      (if (and (== index size) (pos? size))
+        ;; At the end: one more step of the fold, not the fold again.
+        (->Reviews times flags ids (next-rate (.-rate history)
+                                              (aget flags index)
+                                              (- seconds (aget times (dec index)))))
+        (reviews times flags ids)))))
 
 
 (defn without-review
@@ -63,7 +102,7 @@
         (.set times (.subarray (.-seconds history) (inc index)) index)
         (.set flags (.subarray (.-retained history) 0 index))
         (.set flags (.subarray (.-retained history) (inc index)) index)
-        (->Reviews times flags (doto (.slice (.-ids history)) (.splice index 1)))))))
+        (reviews times flags (doto (.slice (.-ids history)) (.splice index 1)))))))
 
 
 (defn urgency
@@ -75,22 +114,13 @@
 
    The forgetting rate starts at 0.00231 per second. Each retained review
    divides it by one plus the rate times the interval; each lapse doubles
-   it."
+   it (`next-rate`)."
   [^Reviews history now-ms]
   (let [size (if history (.-length (.-ids history)) 0)]
     (if (zero? size)
       ##Inf
-      (let [seconds  (.-seconds history)
-            retained (.-retained history)
-            rate     (loop [index 1
-                            rate  0.00231]
-                       (if (< index size)
-                         (recur (inc index)
-                                (if (== 1 (aget retained index))
-                                  (/ rate (inc (* rate (- (aget seconds index) (aget seconds (dec index))))))
-                                  (* 2 rate)))
-                         rate))]
-        (* rate (utils/ms->secs (- now-ms (* 1000 (aget seconds (dec size))))))))))
+      (* (.-rate history)
+         (utils/ms->secs (- now-ms (* 1000 (aget (.-seconds history) (dec size)))))))))
 
 
 (defn level

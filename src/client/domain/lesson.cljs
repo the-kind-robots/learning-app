@@ -18,19 +18,20 @@
         before? (fn [u t ^js kept]
                   (or (> u (aget kept 1))
                       (and (== u (aget kept 1)) (< t (aget kept 2)))))]
-    (doseq [row   rows
-            :let  [u (let [u (urgency-of row)] (if (js/Number.isNaN u) ##-Inf u))
-                   t (random)]
-            :when (and (pos? n)
-                       (or (< (.-length top) n)
-                           (before? u t (aget top (dec (.-length top))))))]
-      (let [at (loop [i 0]
-                 (if (and (< i (.-length top)) (not (before? u t (aget top i))))
-                   (recur (inc i))
-                   i))]
-        (.splice top at 0 #js [row u t])
-        (when (> (.-length top) n)
-          (.pop top))))
+    (run! (fn [row]
+            (let [u (let [u (urgency-of row)] (if (js/Number.isNaN u) ##-Inf u))
+                  t (random)]
+              (when (and (pos? n)
+                         (or (< (.-length top) n)
+                             (before? u t (aget top (dec (.-length top))))))
+                (let [at (loop [i 0]
+                           (if (and (< i (.-length top)) (not (before? u t (aget top i))))
+                             (recur (inc i))
+                             i))]
+                  (.splice top at 0 #js [row u t])
+                  (when (> (.-length top) n)
+                    (.pop top))))))
+          rows)
     (mapv #(aget % 0) top)))
 
 
