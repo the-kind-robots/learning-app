@@ -112,6 +112,7 @@ override anything set here):**
   - `OPENROUTER_MODEL` — primary model id (default: `mistralai/mistral-small-3.2-24b-instruct`)
   - `OPENROUTER_MODELS` — CSV model list in fallback order (default: the primary model, then `google/gemini-3.5-flash-lite`)
   - To compare candidate models on the production request and validator, run `clojure -M:dev -m example-models` with `OPENROUTER_API_KEY` set (paid; see `dev/example_models.clj`).
+- `EXAMPLE_CACHE_VERSION` — unset in the normal state. Setting or changing it makes every cached example a miss, so all are regenerated on demand; the prompt and the models are not part of the cache key.
 - `BORG_REPO` for backups
 
 ## CouchDB

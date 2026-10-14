@@ -60,7 +60,7 @@ for anyone still sending the older subject.
 
 The server SHALL keep every valid generated example in its own database, under a key derived from
 its subject — the German word, the confirmed Russian glosses, and the collection context — together
-with the generation that would produce the example. The key SHALL
+with what the dictionary says about the word and the operator's cache version. The key SHALL
 be built from a normalized form of the subject:
 
 - the word is trimmed and its case kept — German case carries meaning, and `Essen` is not `essen`;
@@ -68,11 +68,13 @@ be built from a normalized form of the subject:
   in a different order is the same subject;
 - the context is trimmed, and absent when blank.
 
-The generation SHALL be everything else the sentence depends on: the system prompt it would be asked
-with, the models configured to produce it, and what the dictionary says about the word — its part of
-speech and level, or that it has no entry for the word. All three go into the prompt, so all three belong in the key: an
-edited prompt, another model, or the word arriving in the dictionary is a miss, and the rows stored
-under the old generation are simply no longer found. There is no other invalidation.
+What the dictionary says SHALL be the word's part of speech and level, or that it has no entry for
+the word. It goes into the prompt, so it belongs in the key: the word arriving in the dictionary is
+a miss. The system prompt and the configured models SHALL NOT be part of the key: an example fixes
+the meaning it was made for, and an edited prompt or another model keeps every stored example
+reachable. The cache version is the environment variable `EXAMPLE_CACHE_VERSION`; it SHALL be
+absent in the normal state, and setting or changing it SHALL make every earlier row a miss, which is
+the deliberate full regeneration. There is no other invalidation.
 
 The same normalized glosses SHALL be what the generation is asked with, so a subject cannot be
 keyed on one gloss list and generated from another. Likewise the dictionary SHALL be read once per
@@ -91,7 +93,7 @@ keep their glosses joined by `", "`: the column is for reading and is no part of
 #### Scenario: A valid example is stored
 
 - **WHEN** a request generates a valid example
-- **THEN** the example is stored under the digest of its normalized subject and generation
+- **THEN** the example is stored under the digest of its normalized subject and dictionary reading
 - **AND** the row also carries the normalized word, glosses and context, the glosses as a JSON array
 
 #### Scenario: The same glosses in another order are the same subject
@@ -119,11 +121,17 @@ keep their glosses joined by `", "`: the column is for reading and is no part of
 
 - **WHEN** the system prompt changes
 - **AND** a request repeats a subject whose example was generated before
-- **THEN** it is a miss, and a new example is generated and stored
+- **THEN** the stored example is served and the provider is not called
 
 #### Scenario: Another model is configured
 
 - **WHEN** the configured model changes
+- **AND** a request repeats a subject whose example was generated before
+- **THEN** the stored example is served and the provider is not called
+
+#### Scenario: The cache version changes
+
+- **WHEN** `EXAMPLE_CACHE_VERSION` is set or changed
 - **AND** a request repeats a subject whose example was generated before
 - **THEN** it is a miss, and a new example is generated and stored
 
@@ -216,3 +224,38 @@ processes, or one finishing while the other was storing — serve the same examp
   this one was running
 - **THEN** the response carries the example that was stored first, not the one this request
   generated
+
+### Requirement: Earlier rows are re-keyed at startup
+
+Once it is listening, the server SHALL, in the background, give every row stored under an earlier key the key the current rule
+computes from the row's own word, glosses and context and the dictionary's present reading of the
+word. When two rows land on one key, the one stored first SHALL be kept and the other removed. A row
+whose key was already computed this way SHALL NOT be computed again. When the dictionary cannot be
+read, the step SHALL stop, leave the remaining rows as they are, and not affect the server; the next
+start continues it.
+
+#### Scenario: Rows stored before the key changed
+
+- **WHEN** the server has started with rows stored under the earlier key and the re-key has finished
+- **THEN** a request for the subject of such a row is served from it, and the provider is not called
+
+#### Scenario: A request arrives before its row is re-keyed
+
+- **WHEN** a request repeats the subject of a row the re-key has not reached yet
+- **THEN** it generates and stores as on a miss
+- **AND** the re-key later keeps the row stored first
+
+#### Scenario: Two rows land on one key
+
+- **WHEN** two earlier rows, stored under different prompts, have the same subject and dictionary reading
+- **THEN** one row remains, the one stored first
+
+#### Scenario: A second start
+
+- **WHEN** the server starts again after the rows were re-keyed
+- **THEN** the dictionary is not read for them again
+
+#### Scenario: The dictionary is away at startup
+
+- **WHEN** the server starts and the dictionary cannot be read
+- **THEN** the server serves, and the rows still waiting are re-keyed at a later start

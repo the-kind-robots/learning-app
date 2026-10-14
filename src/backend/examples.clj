@@ -561,36 +561,30 @@
         failure))))
 
 
-(defn- generation-version
-  "What a generated sentence depends on besides its subject: the prompt, the
-   models and the dictionary's reading of the word."
-  [word-meta]
-  (let [{:keys [model models]} (provider/config)]
-    {:models    (or models [model])
-     :prompt    system-prompt
-     :word-meta word-meta}))
-
-
-(def ^:private digested
-  "Hashed once per generation. The prompt runs to several kilobytes and every
-   request would otherwise serialize and hash all of it — twice on a miss —
-   for a value that changes when the build does, or when a word's dictionary
-   entry does."
-  (memoize (fn [version] (utils/sha256-hex (cheshire/generate-string version)))))
-
-
-(defn generation-digest
-  "The digest of the generation that would produce an example under the
-   dictionary's `word-meta`. A new prompt, model or dictionary entry changes
-   it, so old rows simply stop being found."
-  [word-meta]
-  (digested (generation-version word-meta)))
+(defn- cache-version
+  "The operator's EXAMPLE_CACHE_VERSION, or nil when it is unset or blank.
+   Setting or changing it is the deliberate full regeneration."
+  []
+  (utils/non-blank (System/getenv "EXAMPLE_CACHE_VERSION")))
 
 
 (defn subject-key
-  "The cache key of `subject` under the dictionary's `word-meta`."
+  "The cache key of `subject` under the dictionary's `word-meta`. The prompt
+   and the models are not in it: an example keeps the meaning it was made for."
   [subject word-meta]
-  (cache/digest subject (generation-digest word-meta)))
+  (cache/digest subject word-meta (cache-version)))
+
+
+(defn rekey-cache!
+  "Gives every example stored under an earlier key the current one. Stops
+   quietly when the dictionary cannot be read; the next start continues."
+  [db]
+  (cache/rekey! db
+                (fn [subject]
+                  (let [reading (word-meta subject)]
+                    (if (generation-failure? reading)
+                      (throw (ex-info "Dictionary cannot be read" reading))
+                      (subject-key subject reading))))))
 
 
 (defn- previous-issue-payload
