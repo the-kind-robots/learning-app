@@ -1,6 +1,6 @@
 # 0010. Staging ladder: headless, container, metal
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-08-06
 
 ## Context
@@ -11,11 +11,13 @@ Rejected earlier and recorded in #169: driving the visible Windows browser via m
 
 ## Decision
 
+State as built: rung 1 done, rung 2 partial, rung 3 not built and tracked as #215.
+
 Three rungs, each with a distinct question it answers:
 
-1. **Headless in WSL** (exists — #169): does the application behave? Playwright against the suite's own backend; no nginx, no CouchDB, no stand.
-2. **Container from the deb** (#214): does the production *shape* hold? The actual `.deb` installed in a systemd container; units boot under their sandboxes, migrations and adoption run, `backup.sh` produces a coherent archive, smoke over nginx. Turns in-PR checklists into a script.
-3. **Mini PC staging** (#215): does the production *reality* hold? Home metal, deployed over SSH from the local network, exposed through a Cloudflare Tunnel — no port forwarding, no public IP, TLS at the edge, so certbot is not needed below production; access can be gated by Cloudflare Access. Real systemd, multi-day observations, restore drills. Re-imaged only via `admin-setup.sh`, which thereby stays honest.
+1. **Headless in WSL** (done — #169): does the application behave? Playwright against the suite's own backend; no nginx, no CouchDB, no stand.
+2. **Container from the deb** (partial — #214 closed): does the production *shape* hold? The actual `.deb` installed in a systemd container; units boot under their sandboxes, migrations and adoption run, `backup.sh` produces a coherent archive, smoke over nginx. Turns in-PR checklists into a script. Built: `infra/staging/run.sh` and `smoke.sh`, run in CI on pull requests that touch infra (`.github/workflows/staging-smoke.yml`), with the systemd-in-docker incantation recorded in `infra/staging/README.md`. Partial because what needs a long-lived real machine (multi-day observation, a real journal) cannot run in a container and waits for rung 3.
+3. **Mini PC staging** (not built — tracked as #215, open): does the production *reality* hold? Home metal, deployed over SSH from the local network, exposed through a Cloudflare Tunnel — no port forwarding, no public IP, TLS at the edge, so certbot is not needed below production; access can be gated by Cloudflare Access. Real systemd, multi-day observations, restore drills. Re-imaged only via `admin-setup.sh`, which thereby stays honest.
 
 Rungs 2 and 3 complement each other and carry no ordering between them (owner's decision, 2026-08-06): the container is the fast automatic check for infra PRs, the metal is the truth. Either may land first.
 
@@ -25,4 +27,4 @@ Rungs 2 and 3 complement each other and carry no ordering between them (owner's 
 - Staging deploys go over SSH for now. If a self-hosted runner is ever added, the public repository makes it the sharpest edge: only `workflow_dispatch` deploys behind a reviewed GitHub Environment — never `pull_request` jobs. The rule precedes any runner.
 - Certbot stays dry-run below production unless a staging DNS name is ever wanted.
 - The container rung is fragile by nature (systemd-in-docker cgroup care); the incantation gets recorded, not rediscovered.
-- Production deploys gain a precondition worth writing into the delivery flow once rung 2 exists: infra changes visit staging first.
+- Production deploys gain a precondition worth writing into the delivery flow once rung 2 exists: infra changes visit staging first. Deferred: it is not yet in the delivery flow. The container check runs on infra PRs automatically, but a "visit staging" step that deploys somewhere before production has no target until rung 3 exists; revisit when #215 lands.

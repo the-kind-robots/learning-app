@@ -1,6 +1,6 @@
 # 0009. Push-notified sync via _db_updates + WebSocket
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-06-09
 
 ## Context
@@ -32,5 +32,5 @@ Cost shape: one held CouchDB feed total (not per device) + idle ws sockets ∝ f
 - The own-poke echo is tolerated: A's push triggers a poke back to A, whose pull finds nothing (checkpoints converge) — same settled-echo class as 0007's local-feed echo. Server-side coalescing (throttle pokes per account) is an optional refinement.
 - Scale ceiling moves from "held CouchDB feeds per device" to "ws connections per foregrounded client" — far cheaper, single-node fine for the invite-phase population (ADR-0006).
 - Rejected: per-db `_changes`/EventSource feeds to clients (rebuilds the 0007 wall); Web Push (wrong tool, above); polling-while-foreground (wakes the radio on a timer for nothing — the poke wakes it only when there is data).
-- Whether the `online`-event pull stays or folds into reconnect-pull is decided at implementation (left open in the 0007 change).
-- Implementation — fan-in loop, ws endpoint + registry, client socket component, nginx — deferred to an OpenSpec change referencing this ADR.
+- The `online`-event pull stayed, and the socket reconnect pull sits beside it rather than replacing it. As built, `:app/sync` in `src/client/main.cljs` registers `:page/on-online` to dispatch `[:effect/sync-pull :poke]`, and `sync/connect-push!` separately recycles the socket on `online` (`disconnect!` then `connect!`) and pulls from `onopen`. One `online` event therefore causes two pulls: the direct one and the one from the reconnected socket. The code does not merge them and no decision to do so is recorded, so merging them is deferred; the doubled pull is tolerated as a settled echo (a second pass finds nothing).
+- Built: fan-in loop in `src/backend/push.clj` (`db/db-updates`, longpoll), the `GET /api/sync/updates` socket gated by the account cookie, and the foreground-gated client socket `sync/connect-push!` with a flat 5 s reconnect. The behaviour is specified in `openspec/specs/push-sync/spec.md` (change archived as `2026-08-06-push-notified-sync`); this ADR records only the decision.
