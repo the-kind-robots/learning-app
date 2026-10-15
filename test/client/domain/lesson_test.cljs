@@ -248,3 +248,9 @@
       (is (true? (-> showing (sut/check-answer "falsch") (assoc :last-result nil) sut/failed-before?))))
     (testing "a failed word is not remembered"
       (is (nil? (:failed-trials (sut/check-answer state "falsch")))))))
+
+
+(deftest an-answer-longer-than-the-limit-is-cut-to-it
+  (let [state (sut/initial-state fixtures/lesson-words fixtures/lesson-examples :first)
+        after (sut/check-answer state (apply str (repeat 1500 "a")))]
+    (is (= sut/max-answer-length (count (:answer (sut/last-result after)))))))

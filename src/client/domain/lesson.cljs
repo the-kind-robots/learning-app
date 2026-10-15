@@ -204,12 +204,18 @@
   (vec (remove #(= % trial) remaining-trials)))
 
 
+(def max-answer-length
+  1000)
+
+
 (defn check-answer
   "The lesson after `answer` to its current trial. A blank answer is graded
    like any wrong one. A wrong example is remembered, beside the trials, since
    `remove-trial` compares them whole."
-  [state answer]
-  (let [current-trial  (:current-trial state)
+  [state answer-given]
+  (let [given          (or answer-given "")
+        answer         (subs given 0 (min max-answer-length (count given)))
+        current-trial  (:current-trial state)
         correct-answer (expected-answer state)
         correct?       (= (trial-normalized current-trial answer)
                           (trial-normalized current-trial correct-answer))

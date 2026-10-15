@@ -24,7 +24,7 @@
 
 
 (defn- input-footer
-  [{:keys [correct-answer]}]
+  [{:keys [correct-answer max-length]}]
   [:footer#lesson-footer
    {:replicant/key      :input
     :replicant/on-mount [[:action/focus-lesson-input]]}
@@ -44,7 +44,7 @@
       :bank-label     "Плитки"
       :correct-answer correct-answer
       :hint-label     "Подсказка: собрать из плиток"
-      :maxlength      1000
+      :maxlength      max-length
       :placeholder    "Введите перевод..."
       :spellcheck     "false"
       :tray-label     "Ваш ответ"

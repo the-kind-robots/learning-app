@@ -100,44 +100,26 @@
          (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
          (let [lesson  (await (started (test-capabilities dbs) {:trial-selector :first}))
                before  (set (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review"))))
-               _       (await (sut/check-answer! (test-capabilities dbs) lesson answer))
+               _       (await (sut/record-review! (test-capabilities dbs) (domain/check-answer lesson answer)))
                written (remove (comp before :_id) (await (db-queries/fetch-by-type (:user/db dbs) "review")))]
            (is (= [["word-1" retained?]] (map (juxt :word-id :retained) written)) answer))))))))
 
 
-(deftest an-answer-to-an-example-writes-no-review
-  (async-testing "`check-answer!` skips review for example trials"
+(deftest a-review-that-cannot-be-saved-is-raised-for-the-effect-to-report
+  (async-testing "`record-review!` rejects on db failure"
     (with-test-dbs
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (await (db-seed/seed-examples! (:user/db dbs)
-                                     [{:_id         "example-1"
-                                       :word-id     "word-1"
-                                       :word        "der Hund"
-                                       :value       "Der Hund schlaeft."
-                                       :translation "Пёс спит."}]))
       (let [lesson  (await (started (test-capabilities dbs) {:trial-selector :first}))
-            checked (:lesson-state (await (sut/check-answer! (test-capabilities dbs) lesson "der Hund")))
-            initial-reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
-        (await (sut/check-answer! (test-capabilities dbs) (domain/advance checked) "Der Hund schlaeft."))
-        (let [final-reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
-          (is (= (count initial-reviews) (count final-reviews)))))))))
-
-
-(deftest a-review-that-cannot-be-saved-is-reported-and-the-answer-stands
-  (async-testing "`check-answer!` errors on db failure"
-    (with-test-dbs
-     (^:async fn
-      [dbs]
-      (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (let [lesson (await (started (test-capabilities dbs) {:trial-selector :first}))]
+            checked (domain/check-answer lesson "der Hund")]
         (with-redefs [db/insert (fn [_ _] (js/Promise.reject (ex-info "DB error" {})))]
-          (let [result      (await (sut/check-answer! (test-capabilities dbs) lesson "der Hund"))
-                last-result (domain/last-result (:lesson-state result))]
-            (is (= :review-save-failed (:error result)))
-            (is (some? (:lesson-state result)))
-            (is (true? (:correct? last-result))))))))))
+          (let [error (try
+                        (await (sut/record-review! (test-capabilities dbs) checked))
+                        nil
+                        (catch js/Error err err))]
+            (is (some? error))
+            (is (true? (-> checked domain/last-result :correct?))))))))))
 
 
 (defn- ^:async seed-stale-vocabulary!
