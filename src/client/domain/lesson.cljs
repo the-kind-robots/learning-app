@@ -7,64 +7,37 @@
 (def default-vocab-per-lesson 3)
 
 
-(def default-vocab-pool-size
-  "How many of the most due words a lesson draws from. Taking the top of that
-   pool would serve the same words until they are answered; drawing from it
-   keeps the due end of the vocabulary in rotation."
-  20)
-
-
 (def default-trial-selector rand-nth)
 
 
 (defn pick-vocab
-  "Picks `n` items for a lesson out of `rows`, ranked by `urgency-of` —
-   `:urgency` unless given. Strict urgency still wins: every row is ranked,
-   so a more due item outranks a less due one every time, not merely
-   usually.
+  "The `n` most due of `rows`, most due first, ranked by `urgency-of`. Rows
+   that tie are taken in random order, so a tied vocabulary is never cut
+   alphabetically (#431).
 
-   Randomised twice, for two unrelated reasons — deleting either brings a bug
-   back.
-
-   Ties are broken at random. Urgency ties in bulk: every item never reviewed
-   sits at `##Inf`, and elapsed time is truncated to seconds, so a batch
-   added together ties too. Broken by the order the rows arrive in, the pool
-   is cut alphabetically and the lesson walks `ab-` again (#431).
-
-   The draw is the second: it takes `n` of the pool uniformly, so consecutive
-   lessons over an unchanged vocabulary differ.
-
-   One pass keeps the most due `pool-size`, each with a random tie key, in a
-   small array: a vocabulary is not sorted to keep twenty, since the lesson is
-   drawn in the task of the tap. `##Inf` compares; it is never subtracted.
-
-   A pool shorter than `n` is taken whole; no pool, nothing. An urgency that
-   is not a number ranks last, so it can never hold a place in the pool
-   against a real one."
-  ([rows urgency-of pool-size n]
-   (let [pool-size (or pool-size 0)
-         pool      #js []
-         before?   (fn [u t ^js kept]
-                     (or (> u (aget kept 1))
-                         (and (== u (aget kept 1)) (< t (aget kept 2)))))]
-     (doseq [row   rows
-             :let  [u (let [u (urgency-of row)] (if (js/Number.isNaN u) ##-Inf u))
-                    t (js/Math.random)]
-             :when (and (pos? pool-size)
-                        (or (< (.-length pool) pool-size)
-                            (before? u t (aget pool (dec (.-length pool))))))]
-       (let [at (loop [i 0]
-                  (if (and (< i (.-length pool)) (not (before? u t (aget pool i))))
-                    (recur (inc i))
-                    i))]
-         (.splice pool at 0 #js [row u t])
-         (when (> (.-length pool) pool-size)
-           (.pop pool))))
-     (->> pool
-          (map #(aget % 0))
-          shuffle
-          (take n)
-          vec))))
+   One pass keeps the top `n` in a small array, each with a random tie key;
+   the vocabulary is not sorted. `##Inf` compares, it is never subtracted. An
+   urgency that is not a number ranks last."
+  [rows urgency-of n]
+  (let [n       (or n 0)
+        top     #js []
+        before? (fn [u t ^js kept]
+                  (or (> u (aget kept 1))
+                      (and (== u (aget kept 1)) (< t (aget kept 2)))))]
+    (doseq [row   rows
+            :let  [u (let [u (urgency-of row)] (if (js/Number.isNaN u) ##-Inf u))
+                   t (js/Math.random)]
+            :when (and (pos? n)
+                       (or (< (.-length top) n)
+                           (before? u t (aget top (dec (.-length top))))))]
+      (let [at (loop [i 0]
+                 (if (and (< i (.-length top)) (not (before? u t (aget top i))))
+                   (recur (inc i))
+                   i))]
+        (.splice top at 0 #js [row u t])
+        (when (> (.-length top) n)
+          (.pop top))))
+    (mapv #(aget % 0) top)))
 
 
 (def trial-type-word "word")

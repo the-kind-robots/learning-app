@@ -15,17 +15,15 @@
 
 (defn start
   "A new lesson out of the learner's data in memory. Returns {:lesson-state
-   ...} or {:error :no-words-available}. Pure but for the draw: the words are
-   drawn at random from the most due (`domain/pick-vocab`).
+   ...} or {:error :no-words-available}. Pure but for ties: the words are
+   the most due ones (`domain/pick-vocab`), equally due ones in random order.
 
    opts:
      :vocab-per-lesson  — how many words and phrases to include (default 3)
-     :vocab-pool-size   — how many of the most due to draw them from (default 20)
      :trial-selector    — strategy for picking the next trial (:first or :random, default nil → random)"
   [learner memory collection
-   {:keys [vocab-per-lesson vocab-pool-size trial-selector]
-    :or   {vocab-per-lesson domain/default-vocab-per-lesson
-           vocab-pool-size  domain/default-vocab-pool-size}}
+   {:keys [vocab-per-lesson trial-selector]
+    :or   {vocab-per-lesson domain/default-vocab-per-lesson}}
    now-ms]
   ;; Every word in scope, unranked: `pick-vocab` owns the whole selection
   ;; policy, ties included.
@@ -33,7 +31,6 @@
         selected (map :word
                       (domain/pick-vocab cards
                                          #(vocabulary/urgency-of % now-ms)
-                                         vocab-pool-size
                                          vocab-per-lesson))]
     (if-not (seq selected)
       {:error :no-words-available}
