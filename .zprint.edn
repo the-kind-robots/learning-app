@@ -72,4 +72,6 @@
            "nxr/register-action!"      :arg1-body
            "nxr/register-effect!"      :arg1-body
            "nxr/register-placeholder!" :arg1-body
-           "nxr/register-interceptor!" :arg1-body}}
+           "nxr/register-interceptor!" :arg1-body
+           ;; shadow.cljs.modern — the class name stays on the first line
+           "modern/defclass"           :arg1-body}}

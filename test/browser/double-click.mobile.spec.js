@@ -38,7 +38,7 @@ test.describe('Двойное нажатие на телефоне', () => {
         await page.goto('/home');
         await seedWords(page, ['der Hund', 'die Katze', 'das Haus']);
         await page.goto('/lesson');
-        await page.locator('#lesson-answer').fill('falsch');
+        await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('falsch');
         await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
         await expect(page.getByRole('button', { name: 'ДАЛЕЕ' })).toBeFocused();
         before = await reviewCount(page);

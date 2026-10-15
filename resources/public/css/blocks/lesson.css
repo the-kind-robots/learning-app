@@ -13,6 +13,10 @@
  *     the footer changes height (input <-> success/error), the body shrinks
  *     from its bottom edge, leaving the challenge top position unchanged.
  *
+ * Room for a taller footer (tiles, keyboard) comes out of two blanks first:
+ * the header's row under the progress bar and the offset above the prompt both
+ * shrink before the prompt is touched.
+ *
  * `overflow:hidden` is the only enforced overflow rule and is required by the
  * "nothing scrolls on the lesson page" constraint.
  */
@@ -31,9 +35,9 @@
   gap: 12px;
   margin: 0 auto;
   max-width: 600px;
-  /* The 44px row the lesson's own ✕ once set, above the top padding: the
-     corner ✕ took its place, and the challenge below keeps where it stood. */
-  min-height: calc(56px + 44px);
+  /* The row under the progress bar is a blank that gives way to a taller
+     footer, down to the bar itself. */
+  flex: 0 1 calc(56px + 44px);
   /* top: clears the fixed app-shell logo (top:16px + height:28px = 44px). */
   padding: 56px 16px 0;
   width: 100%;
@@ -93,19 +97,27 @@
   align-items: center;
   display: flex;
   flex-direction: column;
+  /* As tall as the body, so that its blank shrinks when the body does. */
+  height: 100%;
   margin-inline: auto;
   max-width: 600px;
-  /*
-   * padding-top is a pure function of dvh: it anchors the prompt near 30% of
-   * the viewport height (minus the header's ~100px so the 30% is measured
-   * from the viewport top), and collapses to a minimum 16px on short
-   * viewports (keyboard open with `interactive-widget=resizes-content`).
-   * No CSS transition here — the value tracks whatever timing the browser
-   * uses to animate dvh during the keyboard show/hide, so the prompt follows
-   * the viewport shrink naturally, in sync with the footer.
-   */
-  padding: max(16px, calc(30dvh - 100px)) 24px 0;
+  padding: 0 24px;
   width: 100%;
+}
+
+/*
+ * The blank above the prompt is a function of dvh: it anchors the prompt near
+ * 30% of the viewport height (minus the header's ~100px so the 30% is measured
+ * from the viewport top), and shrinks, down to nothing, when the body has less
+ * room than the prompt needs (a taller footer, or the keyboard open with
+ * `interactive-widget=resizes-content`).
+ * No CSS transition here — the value tracks whatever timing the browser
+ * uses to animate dvh during the keyboard show/hide, so the prompt follows
+ * the viewport shrink naturally, in sync with the footer.
+ */
+.lesson__challenge::before {
+  content: "";
+  flex: 0 1 calc(30dvh - 100px);
 }
 
 .lesson__prompt {
@@ -140,26 +152,42 @@
   align-items: center;
 }
 
+/* The answer field. Font and colour reach its text by inheritance; the box of
+   its field, the tiles' gaps and the bulb come in as custom properties; only
+   the tile, which has no neat set of them, is styled through its part. */
 .lesson__input {
-  background-color: rgb(var(--color-polar));
-  border: 2px solid rgb(var(--color-swan));
-  border-radius: 0.625rem;
-  box-sizing: border-box;
+  --answer-field-background: rgb(var(--color-polar));
+  --answer-field-border: 2px solid rgb(var(--color-swan));
+  --answer-field-caret-color: rgb(var(--color-owl));
+  --answer-field-gap: 10px 8px;
+  --answer-field-hint-color: rgb(var(--color-owl));
+  --answer-field-min-height: 87px;
+  /* The right padding keeps text out from under the light bulb. */
+  --answer-field-padding: 0.625rem 3rem 0.625rem 0.875rem;
+  --answer-field-radius: 0.625rem;
+
   color: rgb(var(--color-black-text));
   font-family: Nunito, sans-serif;
   font-size: 1.25rem;
+  gap: 12px;
   line-height: 1.5rem;
   margin-inline: auto;
   max-width: 600px;
-  min-height: 87px;
-  field-sizing: content;
-  padding: 0.625rem 0.875rem;
-  resize: none;
   width: 100%;
 }
 
-.lesson__input:focus-visible {
-  outline: none;
+.lesson__input::part(tile) {
+  background: rgb(var(--color-snow));
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 14%), 0 0 0 1px rgb(0 0 0 / 4%);
+  box-sizing: border-box;
+  color: rgb(var(--color-eel));
+  font-family: Nunito, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  height: 40px;
+  padding: 0 12px;
 }
 
 .lesson__answer {
@@ -293,7 +321,7 @@
 
 @media (min-width: 700px) {
   .lesson__header {
-    min-height: calc(64px + 44px);
+    flex-basis: calc(64px + 44px);
     padding-top: 64px;
   }
 
@@ -301,8 +329,13 @@
     gap: 12px;
   }
 
+  /* The challenge's gap counts as part of the blank above the prompt. */
+  .lesson__challenge::before {
+    flex-basis: calc(30dvh - 112px);
+  }
+
   .lesson__input {
-    min-height: 170px;
+    --answer-field-min-height: 170px;
   }
 
   .lesson__footer {

@@ -11,7 +11,7 @@ const { seedWords } = require('./seed.shared');
 const reviewCount = async (page) => (await docsOfType(page, 'user-db', 'review')).length;
 
 const answerWrong = async (page) => {
-  await page.locator('#lesson-answer').fill('falsch');
+  await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('falsch');
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
   await expect(page.getByRole('button', { name: 'ДАЛЕЕ' })).toBeFocused();
 };

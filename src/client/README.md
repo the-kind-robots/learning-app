@@ -63,7 +63,7 @@ src/client/
 │
 ├── pages/                    # Screens: actions, effects, presenter, view
 │   ├── home/                 # Search, autocomplete, add word
-│   ├── lesson/               # Lesson card, scoring, token popover
+│   ├── lesson/               # Lesson card, scoring, token popover, tiles element
 │   ├── words/                # Vocabulary list
 │   └── collections/          # Collections screen
 │
@@ -75,6 +75,8 @@ Shared code the client also compiles: `lib/db/src/db.cljc` (the PouchDB/CouchDB 
 ## Architecture
 
 **Replicant + Nexus** — Replicant renders hiccup → DOM from immutable state. Nexus manages async effects and state transitions. Actions (pure) → effects (async/IO) → state updates.
+
+**Web components for UI-only state** — the answer field of a lesson (`pages/lesson/answer_field.cljs`) is a custom element, `<answer-field>`, because how the tiles are arranged is state of the screen, not of the business, and Replicant has no state local to a component. From outside it is a textarea with a twist: the view gives it the attributes of a textarea (`name`, `placeholder`, `maxlength`, `aria-label`, ...), it has a `value`, takes part in its form (`formAssociated`, so `form.elements.answer.value` works) and fires `input`. The twist is a light bulb, shown when the view passes a `correct-answer`: a one-way checkbox in the shadow root that, once on, swaps the textarea for tiles of the answer's words (a bank above the field, the placed tiles in it); the value is then the placed words, otherwise the typed text. Which of textarea, bank and tray shows is the checkbox's state read by CSS sibling selectors; the script only builds and moves the tiles and keeps the value. The element knows no UI text (`bank-label`, `tray-label`, `hint-label` name its parts) and nothing of the store, Nexus or the page's CSS classes; it uses Replicant's string renderer only to write its own skeleton as HTML once (the tiles are made and moved by hand). It is written in ClojureScript with `shadow.cljs.modern/defclass`, its shadow styles in `answer_field.css` next to it (inlined at compile time with `shadow.resource/inline`). How it looks is set from outside: font and colour by inheritance, the field's box, the tiles' gap, the bulb and caret by custom properties (`--answer-field-*`), and the tile through the one part it exposes, `tile` — a set of properties for it would be longer than its rule. All of it is styled in `lesson.css` on `.lesson__input`. Reach for the same technique only when state is UI-only and the app has no use for it.
 
 **System** — `main.cljs` declares components (`:db/pouch`, `:db/sqlite`, `:sync/identity`, `:port/*`, …) and `runtime/system.cljs` starts them in dependency order. Ports are the capabilities; use-cases and pages reach storage only through them.
 

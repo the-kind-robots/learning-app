@@ -33,11 +33,11 @@ async function seedExample(page) {
 async function playToExampleReveal(page, exampleAnswer) {
   await page.goto('/lesson');
   await expect(page.locator('.lesson__prompt')).toBeVisible();
-  await page.locator('#lesson-answer').fill('der Hund');
+  await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('der Hund');
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
   await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
   await expect(page.locator('.lesson__instruction')).toContainText('предложение');
-  await page.locator('#lesson-answer').fill(exampleAnswer);
+  await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(exampleAnswer);
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
 }
 
@@ -70,4 +70,4 @@ async function answerWidths(page) {
   });
 }
 
-module.exports = { setUpLesson, token, answerWidths };
+module.exports = { seedExample, setUpLesson, token, answerWidths };

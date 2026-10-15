@@ -14,6 +14,15 @@
                     :else                         "Переведите слово на немецкий")}))
 
 
+(defn input-props
+  "Props for the answer field: the answer to build from tiles when the example
+   was failed before."
+  [state]
+  (let [lesson-state (:lesson/state state)]
+    {:correct-answer (when (domain/failed-before? lesson-state)
+                       (domain/expected-answer lesson-state))}))
+
+
 (defn progress-props
   [state]
   (domain/progress state))
