@@ -32,9 +32,10 @@
    `client.memory-snapshot-test/a-snapshot-of-this-format-version-holds-exactly-what-memory-takes`
    fails when the format changes.
 
-   Version 3: the body is memory itself (ADR-0023). Version 2 held the
-   entries memory took from each document."
-  3)
+   Version 4: a word's `:search` also holds its spelling without umlauts
+   (#578). Version 3: the body is memory itself (ADR-0023). Version 2 held
+   the entries memory took from each document."
+  4)
 
 
 (def ^:private cache-name

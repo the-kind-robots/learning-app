@@ -15,11 +15,11 @@ Domain-specific terms used across the dictionary pipeline (`tools/dictionary/`).
 | **Lemma**              | The base/headword form of a word (e.g., "gehen" not "ging"). Distinguished from form-of redirects.                                                                 |
 | **Manifest**           | `manifest.edn` — metadata file with entry counts, byte sizes, and SHA-256 checksums for output files.                                                             |
 | **Merge**              | Combining duplicate Kaikki entries (same word+POS) by unioning translations and forms.                                                                             |
-| **Normalized form**    | Lowercase with German special chars mapped to ASCII (ä→ae, ö→oe, ü→ue, ß→ss). Used as lookup keys.                                                                 |
+| **Normalized form**    | Lowercase with German special chars mapped to ASCII (ä→ae, ö→oe, ü→ue, ß→ss). Used as lookup keys. The surface-form index also holds the umlaut-free spelling (ä→a, ö→o, ü→u).                                                                 |
 | **POS**                | Part of speech — grammatical category (noun, verb, adj, adv, name, etc.). Stored lowercase.                                                                        |
 | **Rank**               | Importance score. CEFR words get a base (A1=30k, A2=20k, B1=10k) plus bonuses for word frequency and senses/translations. Non-CEFR words max out at 5000.                             |
 | **Sense**              | A distinct meaning of a Kaikki word entry. Each entry has a `:senses` vector; senses with `:form_of` are inflection redirects. Sense count feeds the rank formula. |
 | **Slim entry**         | Stripped-down Kaikki entry with only needed fields, reducing memory during processing.                                                                             |
 | **Stem**               | Root form used for CEFR matching. The Goethe index uses longest-prefix matching against stems.                                                                     |
 | **Surface form**       | Any written variant of a word that a user might type — the lemma, article-prefixed form ("der Hund"), and all inflected forms. Used for autocomplete matching.     |
-| **Surface-form index** | Map from normalized form → list of `{lemma-id, lemma, rank}`. Powers autocomplete prefix search.                                                                   |
+| **Surface-form index** | Map from normalized form → list of `{lemma-id, lemma, rank}`. Also holds the umlaut-free spelling (ü→u), so `fur` finds `für`. Powers autocomplete prefix search.                                                                   |

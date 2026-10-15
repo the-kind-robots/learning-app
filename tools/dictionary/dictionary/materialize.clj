@@ -1,6 +1,6 @@
 (ns dictionary.materialize
   (:require [clojure.string :as str]
-            [utils :refer [normalize-german]]))
+            [utils :refer [fold-german normalize-german]]))
 
 
 (def ^:private label-aliases
@@ -113,7 +113,9 @@
   [lemma-id value forms]
   (let [[_ word] (re-matches #"(?:der|die|das)\s+(.*)" value)
         bare     (or word value)
-        norms    (distinct (map normalize-german (concat [value bare] forms)))]
+        spelled  (concat [value bare] forms)
+        norms    (distinct (concat (map normalize-german spelled)
+                                   (map fold-german spelled)))]
     (for [norm  norms
           :when (seq norm)]
       {:normalized-form norm
