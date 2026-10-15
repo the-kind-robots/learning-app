@@ -1,4 +1,5 @@
-{:lint-as {jdbc.core/on-connection clojure.core/with-open}
+{:lint-as {jdbc.core/on-connection clojure.core/with-open
+            shadow.cljs.modern/defclass clj-kondo.lint-as/def-catch-all}
 
  ;; Client layering rules live in layering/config.edn (CI gate).
  :config-paths ["layering"]

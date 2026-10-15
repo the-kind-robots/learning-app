@@ -94,7 +94,7 @@ test.describe('Пример к фразе', () => {
     });
 
     await test.step('Когда он верно переводит фразу', async () => {
-      await page.locator('#lesson-answer').fill(PHRASE);
+      await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(PHRASE);
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
     });
 
@@ -114,7 +114,7 @@ test.describe('Пример к фразе', () => {
     });
 
     await test.step('Когда он верно переводит предложение', async () => {
-      await page.locator('#lesson-answer').fill(SENTENCE);
+      await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(SENTENCE);
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
     });
 
@@ -128,11 +128,11 @@ test.describe('Пример к фразе', () => {
     await test.step('Дано разбор ответа на предложение-пример', async () => {
       await addPhraseAndAwaitItsExample(page);
       await page.goto('/lesson');
-      await page.locator('#lesson-answer').fill(PHRASE);
+      await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(PHRASE);
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
       await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
       await expect(page.locator('.lesson__instruction')).toHaveText('Переведите предложение на немецкий');
-      await page.locator('#lesson-answer').fill(SENTENCE);
+      await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(SENTENCE);
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
     });
 

@@ -2,20 +2,7 @@
   (:require
    [domain.examples :as examples]
    [domain.lesson :as domain]
-   [lambdaisland.glogi :as log]
    [use-cases.vocabulary :as vocabulary]))
-
-
-(def max-answer-length
-  1000)
-
-
-(defn- clamp-answer
-  [answer]
-  (let [answer (or answer "")]
-    (if (> (count answer) max-answer-length)
-      (subs answer 0 max-answer-length)
-      answer)))
 
 
 (defn- lesson-vocab
@@ -61,31 +48,15 @@
                         trial-selector)}))))
 
 
-(defn ^:async check-answer!
-  "Check the user's answer against `current-state`, the lesson on screen.
-   Returns {:lesson-state ...}."
-  [capabilities current-state answer]
-  (let [answer (clamp-answer answer)]
-    (if-not current-state
-      (do
-        (log/warn :lesson/check-answer-missing {:answer answer})
-        {:error :lesson-not-found :lesson-state nil})
-      (let [current-trial (domain/current-trial current-state)
-            lesson-state  (domain/check-answer current-state answer)]
-        (try
-          ;; Every graded attempt is written, however many a lesson holds: a
-          ;; run of lapses is the log being honest, not noise. Example trials
-          ;; keep writing nothing — they grade a word already reviewed here.
-          (when-not (domain/example-trial? current-trial)
-            (await (vocabulary/add-review
-                    capabilities
-                    (:word-id current-trial)
-                    (-> lesson-state domain/last-result :correct?)
-                    (:prompt current-trial))))
-          {:lesson-state lesson-state}
-          (catch js/Error err
-            (log/error :lesson/check-answer-save-failed {:error (ex-message err)})
-            {:error :review-save-failed :lesson-state lesson-state}))))))
+(defn ^:async record-review!
+  "Writes the review of the answer just checked in `lesson-state`."
+  [capabilities lesson-state]
+  (let [trial (domain/current-trial lesson-state)]
+    (await (vocabulary/add-review
+            capabilities
+            (:word-id trial)
+            (-> lesson-state domain/last-result :correct?)
+            (:prompt trial)))))
 
 
 (defn- token-state

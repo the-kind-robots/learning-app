@@ -24,7 +24,7 @@
 
 
 (defn- input-footer
-  []
+  [{:keys [correct-answer max-length]}]
   [:footer#lesson-footer
    {:replicant/key      :input
     :replicant/on-mount [[:action/focus-lesson-input]]}
@@ -33,23 +33,25 @@
      :autocorrect "off"
      :on {:submit [[:effect/prevent-default]
                    [:action/check-answer [:event.form.field/value "answer"]]]}}
-    [:label.lesson__input-label.visually-hidden {:for "lesson-answer"} "Ответ на немецком"]
-    [:textarea.lesson__input
-     {:id          "lesson-answer"
-      :name        "answer"
-      :rows        4
+    [:answer-field.lesson__input
+     {:id             "lesson-answer"
+      :name           "answer"
       :autocapitalize "none"
-      :autocomplete "off"
-      :autocorrect "off"
-      :enterkeyhint "done"
-      :placeholder "Введите перевод..."
-      :maxlength   1000
-      :lang        "de"
-      :spellcheck  "false"
-      :on          {:input   [[:effect/autogrow-target]]
-                    :keydown [[:action/submit-if-ctrl-enter
-                               {:key   [:event.keyboard/key]
-                                :ctrl? [:event.keyboard/ctrl?]}]]}}]
+      :autocomplete   "off"
+      :autocorrect    "off"
+      :enterkeyhint   "done"
+      :aria-label     "Ответ на немецком"
+      :bank-label     "Плитки"
+      :correct-answer correct-answer
+      :hint-label     "Подсказка: собрать из плиток"
+      :maxlength      max-length
+      :placeholder    "Введите перевод..."
+      :spellcheck     "false"
+      :tray-label     "Ваш ответ"
+      :lang           "de"
+      :on             {:keydown [[:action/submit-if-ctrl-enter
+                                  {:key   [:event.keyboard/key]
+                                   :ctrl? [:event.keyboard/ctrl?]}]]}}]
     [:div.lesson__action.page-footer__action
      [:button.big-button {:type "submit"} "ПРОВЕРИТЬ"]]]])
 
@@ -198,4 +200,4 @@
            (case (:variant footer-props)
              :success (success-footer footer-props)
              :error   (error-footer footer-props))
-           (input-footer)))])))
+           (input-footer (presenter/input-props state))))])))

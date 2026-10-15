@@ -25,7 +25,7 @@ test.describe('Горячие клавиши главной', () => {
 
     await test.step('Тогда открыт урок с полем ответа', async () => {
       await expect(page).toHaveURL(/\/lesson$/);
-      await expect(page.getByLabel('Ответ на немецком')).toBeVisible();
+      await expect(page.getByRole('textbox', { name: 'Ответ на немецком' })).toBeVisible();
     });
 
     await test.step('Когда он возвращается и жмёт Alt+Enter в поле перевода с черновиком', async () => {

@@ -14,6 +14,16 @@
                     :else                         "Переведите слово на немецкий")}))
 
 
+(defn input-props
+  "Props for the answer field: the answer to build from tiles when the example
+   was failed before, and the longest answer taken."
+  [state]
+  (let [lesson-state (:lesson/state state)]
+    {:correct-answer (when (domain/failed-before? lesson-state)
+                       (domain/expected-answer lesson-state))
+     :max-length     domain/max-answer-length}))
+
+
 (defn progress-props
   [state]
   (domain/progress state))

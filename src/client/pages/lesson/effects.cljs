@@ -13,43 +13,25 @@
     [[:effect/navigate :page/lesson]]))
 
 
-(defn- shown
-  "The lesson screen with `lesson-state` on it, fresh: no answer revealed, no
-   hint open."
-  [{:keys [lesson-state error]}]
-  {:lesson/answer-hints nil
-   :lesson/empty?       (boolean error)
-   :lesson/open-hint-index nil
-   :lesson/state        lesson-state
-   :page/current        :page/lesson})
-
-
-(nxr/register-action! :action/open-lesson
-  ;; The lesson is drawn from memory and on screen in the task of the tap. It
-  ;; lives in app state only: leaving the screen drops it. Entered while
-  ;; memory loads, behind the splash, it is drawn once memory is in place
-  ;; (`:action/refresh-page`).
-  (fn open-lesson [state {:keys [active-collection learner now-ms]}]
-    [[:effect/save
-      (shown (when (:learner/loaded? state)
-               (lesson/start learner (:learner/memory state) active-collection {} now-ms)))]]))
-
-
-(nxr/register-effect! :effect/check-answer
-  (fn ^:async check-answer
-    [{:keys [capabilities dispatch]} _ current-state answer]
+(nxr/register-effect! :effect/record-review
+  (fn ^:async record-review
+    [{:keys [capabilities]} _ lesson-state]
     (try
-      (let [{:keys [lesson-state]} (await (lesson/check-answer! capabilities current-state answer))]
-        (when lesson-state
-          (dispatch [[:action/update-lesson current-state lesson-state]])
-          ;; The revealed answer carries hints for its annotated words; their
-          ;; vocabulary states are looked up once here, not on every click.
-          (let [trial (domain/current-trial lesson-state)]
-            (when (domain/example-trial? trial)
-              (let [hints (lesson/answer-annotations capabilities trial)]
-                (dispatch [[:action/annotate-answer lesson-state hints]]))))))
+      (await (lesson/record-review! capabilities lesson-state))
       (catch js/Error err
-        (log/error :effect/check-answer {:error (str err)})))))
+        (log/error :effect/record-review {:error (str err)})))))
+
+
+(nxr/register-effect! :effect/look-up-answer-annotations
+  ;; The revealed answer carries hints for its annotated words; their
+  ;; vocabulary states are looked up once here, not on every click.
+  (fn look-up-answer-annotations
+    [{:keys [capabilities dispatch]} _ lesson-state]
+    (try
+      (let [hints (lesson/answer-annotations capabilities (domain/current-trial lesson-state))]
+        (dispatch [[:action/annotate-answer lesson-state hints]]))
+      (catch js/Error err
+        (log/error :effect/look-up-answer-annotations {:error (str err)})))))
 
 
 (nxr/register-effect! :effect/show-token-popover

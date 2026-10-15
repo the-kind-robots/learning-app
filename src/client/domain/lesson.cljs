@@ -204,11 +204,18 @@
   (vec (remove #(= % trial) remaining-trials)))
 
 
+(def max-answer-length
+  1000)
+
+
 (defn check-answer
   "The lesson after `answer` to its current trial. A blank answer is graded
-   like any wrong one."
-  [state answer]
-  (let [current-trial  (:current-trial state)
+   like any wrong one. A wrong example is remembered, beside the trials, since
+   `remove-trial` compares them whole."
+  [state answer-given]
+  (let [given          (or answer-given "")
+        answer         (subs given 0 (min max-answer-length (count given)))
+        current-trial  (:current-trial state)
         correct-answer (expected-answer state)
         correct?       (= (trial-normalized current-trial answer)
                           (trial-normalized current-trial correct-answer))
@@ -216,11 +223,13 @@
         remaining      (cond-> (:remaining-trials state)
                          correct? (remove-trial current-trial)
                          unlock?  (unlock-example-trials (:word-id current-trial)))]
-    (assoc state
-           :last-result      {:answer answer :correct? correct?}
-           :remaining-trials remaining
-           :trials           (cond-> (:trials state)
-                               unlock? (unlock-example-trials (:word-id current-trial))))))
+    (cond-> (assoc state
+                   :last-result      {:answer answer :correct? correct?}
+                   :remaining-trials remaining
+                   :trials           (cond-> (:trials state)
+                                       unlock? (unlock-example-trials (:word-id current-trial))))
+      (and (not correct?) (example-trial? current-trial))
+      (update :failed-trials (fnil conj #{}) (trial-id current-trial)))))
 
 
 (defn- available-trials
@@ -291,3 +300,9 @@
                :text       word
                :word-index word-index})))
          vec)))
+
+
+(defn failed-before?
+  "Whether the current trial is an example that was answered wrongly before."
+  [state]
+  (contains? (:failed-trials state) (trial-id (current-trial state))))

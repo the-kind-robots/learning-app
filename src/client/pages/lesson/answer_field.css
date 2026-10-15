@@ -1,0 +1,122 @@
+/* The shadow styles of <answer-field>: mechanics only. Font and colour come in
+   by inheritance, the rest as --answer-field-* custom properties and the one
+   part, `tile`. */
+
+:host {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+#bank,
+#tray {
+  display: none;
+  flex-wrap: wrap;
+  gap: var(--answer-field-gap, 0);
+}
+
+#bank {
+  justify-content: center;
+}
+
+#tray {
+  -webkit-touch-callout: none;
+  align-content: flex-start;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  user-select: none;
+}
+
+#field {
+  background: var(--answer-field-background);
+  border: var(--answer-field-border, 0);
+  border-radius: var(--answer-field-radius, 0);
+  box-sizing: border-box;
+  display: flex;
+  min-height: var(--answer-field-min-height, 0);
+  padding: var(--answer-field-padding, 0);
+}
+
+textarea {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  field-sizing: content;
+  flex: 1;
+  font: inherit;
+  margin: 0;
+  min-width: 0;
+  outline: none;
+  padding: 0;
+  resize: none;
+}
+
+/* The light bulb: a checkbox drawn as a mask, in a 44px hit zone in the
+   field's top-right corner. */
+#hint {
+  appearance: none;
+  background: var(--answer-field-hint-color, currentcolor);
+  border: 0;
+  cursor: pointer;
+  height: 44px;
+  margin: 0;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 15.5a5.5 5.5 0 1 1 6 0V18H9z'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E") center / 24px no-repeat;
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 44px;
+}
+
+/* Without an answer there is no bulb; once on, it is gone and the tiles show. */
+:host(:not([correct-answer])) #hint,
+#hint:checked {
+  display: none;
+}
+
+#hint:checked ~ #bank,
+#hint:checked ~ #field #tray {
+  display: flex;
+}
+
+#hint:checked ~ #field textarea {
+  display: none;
+}
+
+button {
+  cursor: pointer;
+  position: relative;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+#tray button {
+  cursor: grab;
+  touch-action: none;
+}
+
+button[data-lifted] {
+  cursor: grabbing;
+  filter: drop-shadow(0 6px 7px rgb(0 0 0 / 22%));
+  z-index: 1;
+}
+
+/* The caret of a drag: a bar before or after the tile it points at. */
+[data-caret='before']::before,
+[data-caret='after']::after {
+  background: var(--answer-field-caret-color, currentcolor);
+  border-radius: 2px;
+  bottom: 0;
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 3px;
+}
+
+[data-caret='before']::before {
+  left: -6px;
+}
+
+[data-caret='after']::after {
+  right: -6px;
+}

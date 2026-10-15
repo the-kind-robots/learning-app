@@ -36,6 +36,11 @@
     (swap! (:store system) merge m)))
 
 
+(nxr/register-effect! :effect/log-warning
+  (fn log-warning [_ _ id data]
+    (log/warn id data)))
+
+
 (nxr/register-effect! :effect/navigate
   (fn navigate-effect [{:keys [capabilities dispatch]} _ page]
     (when-let [navigate! (get-in capabilities [:navigation :navigation/navigate])]

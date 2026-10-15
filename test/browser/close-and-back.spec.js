@@ -173,7 +173,7 @@ async function startLesson(page) {
 async function answerCorrectly(page) {
   await expect(page.locator('#lesson-answer')).toBeVisible();
   const prompt = (await page.locator('.lesson__prompt').textContent()).trim();
-  await page.locator('#lesson-answer').fill(ANSWERS[prompt]);
+  await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(ANSWERS[prompt]);
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
   await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
 }

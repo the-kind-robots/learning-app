@@ -231,3 +231,26 @@
   (testing "NaN ranks last, so it never blocks a real urgency out of a full pool"
     (let [nan-first (cons {:id "vocab:nan" :urgency ##NaN} (rows [1 2 3 4]))]
       (is (every? #(not (contains? % "vocab:nan")) (draws nan-first 2 2 30))))))
+
+
+;; =============================================================================
+;; a failed example
+;; =============================================================================
+
+
+(deftest a-failed-example-is-remembered
+  (let [state   (sut/initial-state fixtures/lesson-words fixtures/lesson-examples :first)
+        example (first (filter sut/example-trial? (:trials state)))
+        showing (assoc state :current-trial example)]
+    (testing "before a miss, the example has not been failed"
+      (is (false? (sut/failed-before? showing))))
+    (testing "after a miss, a later showing knows it was failed"
+      (is (true? (-> showing (sut/check-answer "falsch") (assoc :last-result nil) sut/failed-before?))))
+    (testing "a failed word is not remembered"
+      (is (nil? (:failed-trials (sut/check-answer state "falsch")))))))
+
+
+(deftest an-answer-longer-than-the-limit-is-cut-to-it
+  (let [state (sut/initial-state fixtures/lesson-words fixtures/lesson-examples :first)
+        after (sut/check-answer state (apply str (repeat 1500 "a")))]
+    (is (= sut/max-answer-length (count (:answer (sut/last-result after)))))))

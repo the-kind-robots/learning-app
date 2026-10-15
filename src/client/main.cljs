@@ -19,6 +19,7 @@
    [pages.home.effects]
    [pages.lesson.actions]
    [pages.lesson.effects]
+   [pages.lesson.answer-field]
    [pages.words.actions]
    [pages.words.effects]
    [ports.backup :as backup]
