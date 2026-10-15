@@ -358,3 +358,28 @@
     justify-content: space-between;
   }
 }
+
+/*
+ * On-screen keyboard open. The page sets `interactive-widget=resizes-content`,
+ * so an open keyboard is simply a shorter viewport, and a height query is the
+ * whole detection: no script, no visualViewport listener. 560px is under any
+ * phone's height with the keyboard shown and over none without it; a landscape
+ * phone, short for the same reason, gets the same compact layout. The prompt
+ * is the one thing that must not be clipped, so the instruction line goes, the
+ * prompt shrinks and the field starts at two rows (autogrow continues); the
+ * blanks above the prompt have already given way.
+ */
+@media (max-height: 560px) {
+  .lesson__instruction {
+    display: none;
+  }
+
+  .lesson__prompt {
+    font-size: 18px;
+  }
+
+  .lesson__input {
+    /* Two rows of text, the padding and the border. */
+    --answer-field-min-height: calc(2 * 1.5rem + 1.25rem + 4px);
+  }
+}
