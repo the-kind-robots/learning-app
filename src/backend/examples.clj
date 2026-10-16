@@ -609,8 +609,8 @@
     "Separable verb in Perfekt. word=aufpassen gloss=следить:"
     "{\"value\":\"Er hat auf die Kinder gut aufgepasst.\",\"translation\":\"Он хорошо присмотрел за детьми.\",\"structure\":[{\"usedForm\":\"hat\",\"dictionaryForm\":\"haben\",\"translation\":\"иметь\"},{\"usedForm\":\"Kinder\",\"dictionaryForm\":\"das Kind\",\"translation\":\"дети\"},{\"usedForm\":\"gut\",\"dictionaryForm\":\"gut\",\"translation\":\"хорошо\"},{\"usedForm\":\"aufgepasst\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"}]}"
     "The `auf` before `die Kinder` is a preposition and is excluded; the participle `aufgepasst` is one word and one item, its `dictionaryForm` the infinitive."
-    "Reflexive, leading connector. word=sich vorstellen gloss=представляться:"
-    "{\"value\":\"Außerdem stellt er sich bei den neuen Kollegen vor.\",\"translation\":\"Кроме того, он представляется новым коллегам.\",\"structure\":[{\"usedForm\":\"Außerdem\",\"dictionaryForm\":\"außerdem\",\"translation\":\"кроме того\"},{\"usedForm\":\"stellt\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"neuen\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"
+    "Reflexive, connector adverb. word=sich vorstellen gloss=представляться:"
+    "{\"value\":\"Er war neu im Team, deshalb stellte er sich den Kollegen vor.\",\"translation\":\"Он был новым в команде, поэтому представился коллегам.\",\"structure\":[{\"usedForm\":\"war\",\"dictionaryForm\":\"sein\",\"translation\":\"быть\"},{\"usedForm\":\"neu\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Team\",\"dictionaryForm\":\"das Team\",\"translation\":\"команда\"},{\"usedForm\":\"deshalb\",\"dictionaryForm\":\"deshalb\",\"translation\":\"поэтому\"},{\"usedForm\":\"stellte\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"
     "Homograph, Präteritum of `sein`. word=Leiter gloss=лестница:"
     "{\"value\":\"Die Leiter war gestern noch in der Garage.\",\"translation\":\"Лестница ещё вчера была в гараже.\",\"structure\":[{\"usedForm\":\"Leiter\",\"dictionaryForm\":\"die Leiter\",\"translation\":\"лестница\"},{\"usedForm\":\"war\",\"dictionaryForm\":\"sein\",\"translation\":\"быть\"},{\"usedForm\":\"gestern\",\"dictionaryForm\":\"gestern\",\"translation\":\"вчера\"},{\"usedForm\":\"noch\",\"dictionaryForm\":\"noch\",\"translation\":\"ещё\"},{\"usedForm\":\"Garage\",\"dictionaryForm\":\"die Garage\",\"translation\":\"гараж\"}]}"
     "Do not use `der Leiter` for this meaning."
@@ -703,7 +703,7 @@
   ["Perfekt in the main clause"
    "a subordinate clause with sobald, nachdem, obwohl, weil, dass, wenn or als"
    "an infinitive clause with ohne ... zu, um ... zu or anstatt ... zu"
-   "a leading connector adverb: jedoch, dadurch, deshalb, trotzdem, außerdem or stattdessen"
+   "two main clauses in one sentence joined by a connector adverb: ..., deshalb ... / ..., trotzdem ... / ..., dadurch ... / ..., jedoch ... / ..., außerdem ... / ..., stattdessen ... The first clause gives what the connector refers to; the sentence never opens with the connector"
    "passive voice (wird or wurde with a participle)"
    "plain Präsens without a modal verb"])
 
