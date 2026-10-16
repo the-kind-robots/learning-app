@@ -79,6 +79,12 @@
                    (into [lemma (str/replace lemma article "")] matched-forms)))))
 
 
+(defn completing-indexes
+  "Positions in `completions` of the rows that still `completes?` `typed`, in order."
+  [typed completions]
+  (into [] (keep-indexed (fn [idx item] (when (completes? typed item) idx))) completions))
+
+
 (defn search-text
   "What the words filter matches a query against, normalised once: the value
    and every translation, one per line, each also without its umlauts when

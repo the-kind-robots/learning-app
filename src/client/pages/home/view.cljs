@@ -4,19 +4,24 @@
 
 
 (defn- suggestion-item
-  [{:keys [active? lemma phrase? translations exact?]}]
+  [{:keys [active? completes? lemma phrase? translations exact?]}]
   [:li.suggestions__item
    {:role        "option"
     :data-active (when active? "")
     :data-exact  (when exact? "")
-    :on          {:click       [[:action/select-suggestion
-                                 {:lemma        lemma
-                                  :phrase?      phrase?
-                                  :translations translations
-                                  :focus-id     "new-word-translation"}]]
-                  ;; Keep input focus during the click so :blur on the input
-                  ;; doesn't fire and clear the suggestions before :click runs.
-                  :pointerdown [[:effect/prevent-default]]}}
+    :aria-disabled (when-not completes? "true")
+    :on          (if completes?
+                   {:click       [[:action/select-suggestion
+                                   {:lemma        lemma
+                                    :phrase?      phrase?
+                                    :translations translations
+                                    :focus-id     "new-word-translation"}]]
+                    ;; Keep input focus during the click so :blur on the input
+                    ;; doesn't fire and clear the suggestions before :click runs.
+                    :pointerdown [[:effect/prevent-default]]}
+                   ;; An inert row still swallows the press, or focus would
+                   ;; leave the field and :blur would clear the list.
+                   {:pointerdown [[:effect/prevent-default]]})}
    [:span {:lang "de"} lemma]
    (when phrase?
      [:span.suggestions__badge "фраза"])])

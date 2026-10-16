@@ -122,6 +122,13 @@
     :suggestions/active-idx active-idx}))
 
 
+(defn- completing-items
+  "The shown suggestions that still complete the word field: the only ones that count."
+  [{:home/keys [word suggestions]}]
+  (let [items (:suggestions/items suggestions)]
+    (mapv items (vocabulary/completing-indexes word items))))
+
+
 (nxr/register-action! :action/update-suggestions
   (fn update-suggestions [state {:keys [completions value]}]
     ;; Guarded by the value the query was made for: a debounced answer landing
@@ -152,17 +159,17 @@
 
 
 (defn- narrowed
-  "The shown suggestions that still complete `value`, in order, with the marked entry kept when it survives.
-   Returns nil when none are left."
+  "All shown suggestions, rows the typed text has left behind included: the list
+   neither shrinks nor empties between answers (#584). The marked entry stays
+   when it still completes `value`, else it moves to the first row that does,
+   else to none."
   [{:suggestions/keys [items active-idx]} value]
-  (let [active (get items (or active-idx 0))
-        kept   (filterv #(vocabulary/completes? value %) items)]
-    (when (seq kept)
-      (suggestions kept (max 0 (.indexOf kept active))))))
+  (let [idxs (vocabulary/completing-indexes value items)]
+    (suggestions items (if (some #{active-idx} idxs) active-idx (first idxs)))))
 
 
-;; Keeps the shown suggestions that still complete the new value; the next
-;; answer replaces them, and an emptied input clears them.
+;; Keeps the shown suggestions, inert where they no longer complete the new
+;; value; the next answer replaces them.
 (nxr/register-action! :action/update-word
   (fn update-word [state value]
     ;; Emptying the German field drops a prefilled translation.
@@ -187,7 +194,7 @@
 (nxr/register-action! :action/add-word
   (fn add-word [state {:keys [value translation focus-id]}]
     (let [mode (phrase/add-mode (:home/word state)
-                                (:suggestions/items (:home/suggestions state))
+                                (completing-items state)
                                 (:home/mode-override state))]
       [[:effect/add-word
         {:focus-id    focus-id
@@ -226,34 +233,35 @@
 (nxr/register-action! :action/handler-word-keydown
   (fn handle-word-keydown [state {:keys [key shift? focus-id scroll-selector]}]
     (let [{:suggestions/keys [items active-idx]} (:home/suggestions state)
-          n (count items)]
+          n      (count items)
+          idxs   (vocabulary/completing-indexes (:home/word state) items)
+          ;; Arrows walk the rows that still complete the field; the rest are inert.
+          move   (fn [new-idx]
+                   (when new-idx
+                     [[:effect/prevent-default]
+                      [:effect/save {:home/suggestions (suggestions items new-idx)}]
+                      [:effect/scroll-nearest scroll-selector]]))
+          active (when (some #{active-idx} idxs) (get items active-idx))]
       (cond
         (and (pos? n) (= key "ArrowDown"))
-        (let [new-idx (min (dec n) (inc (or active-idx -1)))]
-          [[:effect/prevent-default]
-           [:effect/save {:home/suggestions (suggestions items new-idx)}]
-           [:effect/scroll-nearest scroll-selector]])
+        (move (or (first (filter #(> % (or active-idx -1)) idxs)) active-idx))
 
         (and (pos? n) (= key "ArrowUp"))
-        (let [new-idx (max 0 (dec (or active-idx 0)))]
-          [[:effect/prevent-default]
-           [:effect/save {:home/suggestions (suggestions items new-idx)}]
-           [:effect/scroll-nearest scroll-selector]])
+        (move (or (last (filter #(< % (or active-idx 0)) idxs)) active-idx))
 
-        (and (pos? n) (or (= key "Enter") (and (= key "Tab") (not shift?))))
-        (let [item (get (vec items) (or active-idx 0))]
-          (when item
-            (into [[:effect/prevent-default]] (select-item item focus-id))))
+        (and active (or (= key "Enter") (and (= key "Tab") (not shift?))))
+        (into [[:effect/prevent-default]] (select-item active focus-id))
 
         (and (pos? n) (= key "Escape"))
         [[:effect/prevent-default]
          [:effect/save {:home/suggestions empty-suggestions}]]
 
-        ;; No suggestions on screen: Enter moves on to the translation field —
-        ;; the phrase flow's typing rhythm (phrase, Enter, translation, and
-        ;; then Ctrl/Cmd+Enter or the button, since Enter belongs to the text
-        ;; in a field that takes several lines).
-        (and (zero? n) (= key "Enter"))
+        ;; No active suggestion: none shown, or none left that completes the
+        ;; field. Enter moves on to the translation field, the phrase flow's
+        ;; typing rhythm (phrase, Enter, translation, and then Ctrl/Cmd+Enter
+        ;; or the button, since Enter belongs to the text in a field that takes
+        ;; several lines).
+        (= key "Enter")
         [[:effect/prevent-default]
          [:effect/focus focus-id]]))))
 

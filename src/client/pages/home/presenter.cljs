@@ -1,6 +1,7 @@
 (ns pages.home.presenter
   (:require
-   [domain.phrase :as phrase]))
+   [domain.phrase :as phrase]
+   [domain.vocabulary :as vocabulary]))
 
 
 (defn- active-collection-props
@@ -17,16 +18,17 @@
    against an item it had already decorated — the two shapes never matched and
    nothing was ever marked (#412). Position against the active index is the one
    thing that decides it, and it is decided here."
-  [active-idx idx item]
+  [word active-idx idx item]
   (assoc item
          :active? (= idx active-idx)
+         :completes? (vocabulary/completes? word item)
          :phrase? (phrase/phrase-suggestion? item)))
 
 
 (defn- suggestions-props
   [state]
   (when-let [{:suggestions/keys [items active-idx]} (:home/suggestions state)]
-    {:items (vec (map-indexed (partial suggestion-props active-idx) items))}))
+    {:items (vec (map-indexed (partial suggestion-props (:home/word state) active-idx) items))}))
 
 
 (def ^:private mode-wording
@@ -56,7 +58,8 @@
 (defn- form-props
   [state]
   (let [mode    (phrase/add-mode (:home/word state)
-                                 (:suggestions/items (:home/suggestions state))
+                                 (let [items (:suggestions/items (:home/suggestions state))]
+                                   (mapv items (vocabulary/completing-indexes (:home/word state) items)))
                                  (:home/mode-override state))
         wording (mode-wording mode)
         error   (:home/add-error state)]
