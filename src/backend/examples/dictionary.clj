@@ -256,6 +256,22 @@
         (mapv #(entry by-lemma %) chosen)))))
 
 
+(defn lemma-ids
+  "The ids of the lemmas `form` belongs to, by the form index: all its lemmas
+   for a bare form, only the one written exactly so for a form with an article.
+   `sich` is dropped. Empty for a form the dictionary does not know. Throws
+   when the dictionary cannot be read."
+  [form]
+  (let [form-key (some-> form strip-reflexive utils/normalize-german utils/non-blank)]
+    (if form-key
+      (->> (lemmas-of-form form-key)
+           (filter #(or (not (has-article? form))
+                        (exact-form? form-key true %)))
+           (map :id)
+           (into #{}))
+      #{})))
+
+
 (defn- dictionary-entry-matches-gloss?
   [entry translation]
   (some #(and (= "ru" (:lang %))
@@ -269,7 +285,7 @@
 
 
 (defn lookup-word-meta
-  "Part of speech and CEFR level of `word`, preferring an entry whose gloss
+  "Lemma, part of speech and CEFR level of `word`, preferring an entry whose gloss
    is one of `translations`. Nil when the dictionary has no entry; throws when
    it cannot be read."
   [word translations]
@@ -280,8 +296,9 @@
     (when (seq entries)
       (let [best (or (first (filter matches-any-gloss? entries))
                      (first entries))]
-        {:partOfSpeech (:pos best)
-         :cefrLevel    (get-in best [:meta :cefr_level])}))))
+        {:cefrLevel    (get-in best [:meta :cefr_level])
+         :lemma        (:value best)
+         :partOfSpeech (:pos best)}))))
 
 
 (defn lemma-in-structure?

@@ -113,6 +113,7 @@
     (add-account! db 1 "token-of-one")
     (with-redefs [sut/db-spec db
                   dictionary/lookup-dictionary-entries (constantly nil)
+                  dictionary/lemma-ids (constantly #{})
                   examples/generate-one! (fn [_subject _word-meta]
                                            (swap! generations inc)
                                            {:translation "У дома есть сад."
@@ -280,7 +281,8 @@
       (with-example-server
        (fn [_] (swap! generations inc) generated)
        (fn [ask]
-         (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+         (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                       dictionary/lemma-ids (constantly #{})]
            (is (= 200 (:status (ask (query "word" "Hund" "translation" "собака")))))
            (testing "and the example of a word the dictionary does not know is kept"
              (is (= 200 (:status (ask (query "word" "Hund" "translation" "собака")))))
@@ -382,7 +384,8 @@
       (let [calls (atom 0)]
         (with-redefs [examples/example-api-request (support.generation/provider-answering-in-turn calls
                                                                                                   [provider-answer])
-                      dictionary/lookup-dictionary-entries (constantly nil)]
+                      dictionary/lookup-dictionary-entries (constantly nil)
+                      dictionary/lemma-ids (constantly #{})]
           (with-example-server
            real-generation
            (fn [ask]
@@ -408,7 +411,8 @@
                                               (str "http://localhost:"
                                                    (server/server-port provider-server)
                                                    "/")))
-                      dictionary/lookup-dictionary-entries (constantly nil)]
+                      dictionary/lookup-dictionary-entries (constantly nil)
+                      dictionary/lemma-ids (constantly #{})]
           (with-example-server
            real-generation
            (fn [ask]
@@ -615,3 +619,26 @@
       (#'sut/adopt-database! legacy {:dbname (.getPath target)})
       (is (= "real-bytes" (slurp target)) "adopted over the empty placeholder")
       (is (not (.exists legacy))))))
+
+
+(deftest a-word-saved-in-an-inflected-form-gets-an-example-in-another-form
+  (let [calls (atom 0)
+        lemmas {"explodiert" #{1 2} "explodierte" #{1 2} "explodieren" #{1}}]
+    (with-redefs [examples/example-api-request
+                  (support.generation/provider-answering-in-turn
+                   calls
+                   [(support.generation/example-completion
+                     {:value       "Die Bombe explodierte laut im Hof."
+                      :translation "Бомба громко взорвалась во дворе."
+                      :structure   [{:usedForm "Bombe" :dictionaryForm "die Bombe" :translation "бомба"}
+                                    {:usedForm "explodierte" :dictionaryForm "explodieren" :translation "взрываться"}
+                                    {:usedForm "Hof" :dictionaryForm "der Hof" :translation "двор"}]})])
+                  dictionary/lookup-dictionary-entries (constantly nil)
+                  dictionary/lemma-ids (fn [form] (get lemmas (str/lower-case form) #{}))]
+      (with-example-server
+       real-generation
+       (fn [ask]
+         (let [response (ask (query "word" "explodiert" "translation" "взорванный"))]
+           (is (= 200 (:status response)))
+           (is (str/includes? (:body response) "Die Bombe explodierte laut im Hof."))
+           (is (= 1 @calls))))))))
