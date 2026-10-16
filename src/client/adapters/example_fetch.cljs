@@ -9,13 +9,17 @@
 (defn- url
   "The address that asks the backend for an example of `subject`: the
    entry's text `word`, glossed by `translations`, in the collection called
-   `collection-name`. Throws a URIError when a part cannot be encoded, as
+   `collection-name`, with the part of speech `pos` when the learner picked
+   one. Throws a URIError when a part cannot be encoded, as
    half of a character written as two UTF-16 units cannot."
-  [{:keys [collection-name translations word]}]
+  [{:keys [collection-name pos translations word]}]
   (cond-> (reduce (fn [url translation]
                     (str url "&translation=" (js/encodeURIComponent translation)))
                   (str "/api/examples?word=" (js/encodeURIComponent word))
                   translations)
+    (utils/non-blank pos)
+    (str "&pos=" (js/encodeURIComponent pos))
+
     (utils/non-blank collection-name)
     (str "&context=" (js/encodeURIComponent collection-name))))
 
@@ -57,7 +61,7 @@
 
 (defn ^:async fetch-one
   "Asks the backend for an example of `subject`, `{:word :translations
-   :collection-name}`. `signal` is an AbortSignal that aborts the request.
+   :collection-name :pos}`. `signal` is an AbortSignal that aborts the request.
 
    It never rejects. It resolves with `{:example example}` for a valid
    example, and otherwise with `{:failure kind}`, where kind is one of

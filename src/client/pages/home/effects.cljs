@@ -63,9 +63,9 @@
 
 (nxr/register-effect! :effect/add-word
   (fn ^:async add-word
-    [{:keys [dispatch capabilities]} _ {:keys [value translation focus-id mode]}]
+    [{:keys [dispatch capabilities]} _ {:keys [value translation focus-id mode pos]}]
     (try
-      (let [result (await (vocabulary/add! capabilities value translation (or mode :word)))]
+      (let [result (await (vocabulary/add! capabilities value translation (or mode :word) pos))]
         (if (:error result)
           (dispatch [[:action/show-word-error (:error result)]])
           (dispatch (cond-> [[:action/word-added]]

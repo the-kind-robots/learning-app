@@ -84,7 +84,8 @@
             {:keys [word-id created?]} (await (sut/add! capabilities
                                                         "Entschuldigung, dass ich zu spät komme"
                                                         "Извини, что я опоздал."
-                                                        :phrase))
+                                                        :phrase
+                                                        nil))
             [entry & more] (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
             reviews        (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (is (true? created?))
@@ -103,8 +104,8 @@
       (let [capabilities (await (test-capabilities dbs
                                                    {:active-id        "collection-1"
                                                     :existing-example {:id "example-1"}}))]
-        (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase))
-        (await (sut/add! capabilities "auf jeden Fall" "обязательно" :phrase))
+        (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase nil))
+        (await (sut/add! capabilities "auf jeden Fall" "обязательно" :phrase nil))
         (is (empty? (missing capabilities)) "the collection has its example already"))))))
 
 
@@ -114,8 +115,8 @@
      (^:async fn
       [dbs]
       (let [capabilities (await (test-capabilities dbs {}))]
-        (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase))
-        (let [{:keys [created?]} (await (sut/add! capabilities "Auf jeden Fall" "обязательно, точно" :phrase))
+        (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase nil))
+        (let [{:keys [created?]} (await (sut/add! capabilities "Auf jeden Fall" "обязательно, точно" :phrase nil))
               entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
           (is (false? created?))
           (is (= 1 (count entries)))
@@ -131,8 +132,8 @@
      (^:async fn
       [dbs]
       (let [capabilities (await (test-capabilities dbs {}))]
-        (await (sut/add! capabilities "Guten Morgen" "доброе утро" :word))
-        (let [{:keys [created?]} (await (sut/add! capabilities "guten Morgen" "доброго утра" :phrase))
+        (await (sut/add! capabilities "Guten Morgen" "доброе утро" :word nil))
+        (let [{:keys [created?]} (await (sut/add! capabilities "guten Morgen" "доброго утра" :phrase nil))
               entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
           (is (false? created?))
           (is (= 1 (count entries)))
@@ -148,7 +149,7 @@
      (^:async fn
       [dbs]
       (let [capabilities (await (test-capabilities dbs {}))
-            result       (await (sut/add! capabilities "auf jeden Fall" "   " :phrase))]
+            result       (await (sut/add! capabilities "auf jeden Fall" "   " :phrase nil))]
         (is (= {:error :empty-translations} result))
         (is (empty? (missing capabilities))))))))
 
@@ -161,7 +162,8 @@
       (await (sut/add! (await (test-capabilities dbs {}))
                        "auf jeden Fall"
                        "во всяком\n   случае"
-                       :phrase))
+                       :phrase
+                       nil))
       (let [entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
         (is (= [{:lang "ru" :value "во всяком случае"}]
                (:translation (first entries)))))))))

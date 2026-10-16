@@ -607,7 +607,7 @@
 
                ;; A repeated parameter arrives as a vector; neither the subject
                ;; nor the prompt can be built from two values.
-               (some vector? [word (get-in request [:params :context])])
+               (some vector? [word (get-in request [:params :context]) (get-in request [:params :pos])])
                {:status  400
                 :headers {"Content-Type" "application/json"}
                 :body    (cheshire/generate-string {:error "Parameters take one value each"})}

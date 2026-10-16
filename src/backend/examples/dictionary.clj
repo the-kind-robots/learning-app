@@ -286,16 +286,19 @@
 
 (defn lookup-word-meta
   "Lemma, part of speech and CEFR level of `word`, preferring an entry whose gloss
-   is one of `translations`. Nil when the dictionary has no entry; throws when
-   it cannot be read."
-  [word translations]
+   is one of `translations`. With `pos`, only entries of that part of speech
+   compete; none of them means the choice is made as without it. Nil when the
+   dictionary has no entry; throws when it cannot be read."
+  [word translations pos]
   (let [entries (lookup-dictionary-entries word)
         matches-any-gloss? (fn [entry]
                              (some #(dictionary-entry-matches-gloss? entry %)
                                    translations))]
     (when (seq entries)
-      (let [best (or (first (filter matches-any-gloss? entries))
-                     (first entries))]
+      (let [of-pos  (filterv #(= pos (:pos %)) entries)
+            choices (if (and pos (seq of-pos)) of-pos entries)
+            best    (or (first (filter matches-any-gloss? choices))
+                        (first choices))]
         {:cefrLevel    (get-in best [:meta :cefr_level])
          :lemma        (:value best)
          :partOfSpeech (:pos best)}))))

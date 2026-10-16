@@ -6,7 +6,7 @@
 
    Outward, the entities are:
 
-     word        {:id :kind :value :translation :created-at :modified-at}
+     word        {:id :kind :value :translation :pos :created-at :modified-at}
      review      {:id :word-id :retained :created-at}
      collection  {:id :name :word-ids :created-at}
      example     {:id :word-id :collection-id :word :value :translation

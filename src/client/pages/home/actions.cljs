@@ -188,10 +188,12 @@
   (fn add-word [state {:keys [value translation focus-id]}]
     (let [mode (phrase/add-mode (:home/word state)
                                 (:suggestions/items (:home/suggestions state))
-                                (:home/mode-override state))]
+                                (:home/mode-override state))
+          pos  (:pos (phrase/current-pick (:home/word state) (:home/mode-override state)))]
       [[:effect/add-word
         {:focus-id    focus-id
          :mode        mode
+         :pos         pos
          :translation translation
          :value       value}]])))
 
@@ -202,17 +204,19 @@
 
 
 (defn- select-item
-  [{:keys [lemma translations] :as item} element-id]
+  [{:keys [lemma pos translations] :as item} element-id]
   ;; Picking a suggestion decides the mode by its pos, overriding the space
   ;; heuristic: a multi-word pos=phrase lemma is a phrase, anything else a
   ;; word. Click payloads carry a precomputed :phrase?, keyboard selection
   ;; hands the raw completion with :pos — accept either. The lemma is stored
   ;; with it: the decision was about that lemma and expires when the value
-  ;; stops being it (GH-358).
+  ;; stops being it (GH-358). So does its part of speech, which the example
+  ;; request carries to tell `rauch` the adjective from `der Rauch` (GH-585).
   [[:effect/save
     {:home/mode-override {:mode  (if (or (:phrase? item) (phrase/phrase-suggestion? item))
                                    :phrase
                                    :word)
+                          :pos   pos
                           :value lemma}
      :home/suggestions   empty-suggestions
      :home/translation   (prefill-text translations)

@@ -82,18 +82,25 @@
        (str/includes? (str lemma) " ")))
 
 
+(defn current-pick
+  "The picked suggestion `{:mode :pos :value}` while `value` still is the lemma
+   it was picked for, else nil. Typing on makes it something nobody picked.
+   Same lemma means the same normalized value: that is what makes one
+   vocabulary document."
+  [value pick]
+  (when (and pick
+             (= (vocabulary/normalize-value value)
+                (vocabulary/normalize-value (:value pick))))
+    pick))
+
+
 (defn add-mode
   "The add form's mode. A picked suggestion settles it for the lemma picked —
    `das heißt` is a phrase the article exception would call a word, and the
-   suggestions it came from are gone by then — but only while the value still
-   is that lemma. Typing on turns it into something nobody picked, so the value
-   decides again against the completions on screen (GH-358). Same lemma means
-   the same normalized value: that is what makes one vocabulary document."
-  [value completions {picked-mode :mode picked-value :value}]
-  (or (when (and picked-mode
-                 (= (vocabulary/normalize-value value)
-                    (vocabulary/normalize-value picked-value)))
-        picked-mode)
+   suggestions it came from are gone by then (`current-pick`). Otherwise the
+   value decides against the completions on screen (GH-358)."
+  [value completions mode-override]
+  (or (:mode (current-pick value mode-override))
       (if (phrase-value? value completions) :phrase :word)))
 
 
