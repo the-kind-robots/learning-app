@@ -356,7 +356,7 @@
    :wrong-part-of-speech
    "The target is used as a different part of speech. `partOfSpeech` names the one required. A word spelled the same way of another part of speech (here e.g. `der Rauch` for the adjective `rauch`) is a different word and does not count."
    :target-lemma-missing
-   "The sentence must contain the whole target: a single lemma as the word itself or any form of its lemma as a separate word of the sentence, and a multi-word target with every one of its words present, inflected as the sentence needs. A placeholder (`etwas`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot the sentence fills with anything that fits, and an article may be any article."})
+   "The sentence must contain the whole target: a single lemma as the word itself or any form of its lemma as a separate word of the sentence, and a multi-word target with every one of its words present, inflected as the sentence needs, in any tense, voice or word order. A placeholder (`etwas`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot the sentence fills with anything that fits, and an article may be any article."})
 
 
 (def ^:private single-lemma-prefixes
@@ -554,6 +554,10 @@
     "- A placeholder in a phrase (`etwas`, `jemand`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot, not a word to repeat: fill it with a fitting noun phrase or pronoun, and put `sich` as the reflexive pronoun the subject needs (`mich`, `dich`, `sich`, `uns`, `euch`). Every other word of the phrase is required, inflected as the sentence needs; its article may be any article."
     "- A phrase that is already a complete sentence is extended or embedded into a turn, never returned unchanged. A phrase that ends in `!` or `?` is used without that mark inside a longer sentence."
     "- Leave room around the target: roughly the target's own length plus a handful of words, and at least three words in all."
+    "- Use the target in whatever form the sentence needs — participle, finite verb, passive, plural. Do not keep a verb in the infinitive just to match `word`."
+    "- A phrase may change voice and word order: `einen Skonto gewähren` becomes `Ein Skonto wird gewährt.`"
+    "- For past events in everyday speech use Perfekt; Präteritum only for `sein`, `haben`, modal verbs and narrative."
+    "- `construction` is the grammar to build the sentence around. Follow it when it fits the word naturally; otherwise pick another natural construction. One main clause plus at most one subordinate clause or connector — never stack more."
     "- German sentence only: no labels, notes, markdown, or meta commentary."
     "- `translation` must be one natural Russian sentence, not a calque."
     ""
@@ -584,16 +588,19 @@
     ""
     ;; One case per shape
     "EXAMPLES — one per shape"
-    "Noun with article. word=das Verstehen gloss=понимание:"
-    "{\"value\":\"Das Verstehen dieser Regel dauert lange.\",\"translation\":\"Понимание этого правила требует времени.\",\"structure\":[{\"usedForm\":\"Verstehen\",\"dictionaryForm\":\"das Verstehen\",\"translation\":\"понимание\"},{\"usedForm\":\"Regel\",\"dictionaryForm\":\"die Regel\",\"translation\":\"правило\"},{\"usedForm\":\"dauert\",\"dictionaryForm\":\"dauern\",\"translation\":\"длиться\"},{\"usedForm\":\"lange\",\"dictionaryForm\":\"lang\",\"translation\":\"долго\"}]}"
-    "Separable verb. word=aufpassen gloss=следить:"
-    "{\"value\":\"Er passt auf die Kinder auf.\",\"translation\":\"Он следит за детьми.\",\"structure\":[{\"usedForm\":\"passt\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"},{\"usedForm\":\"Kinder\",\"dictionaryForm\":\"das Kind\",\"translation\":\"дети\"},{\"usedForm\":\"auf\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"}]}"
-    "The first `auf` is a preposition and is excluded; only the sentence-final `auf` is the detached separable prefix."
-    "Reflexive. word=sich vorstellen gloss=представляться:"
-    "{\"value\":\"Er stellt sich bei den neuen Kollegen vor.\",\"translation\":\"Он представляется новым коллегам.\",\"structure\":[{\"usedForm\":\"stellt\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"neu\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"
-    "Homograph. word=Leiter gloss=лестница:"
-    "{\"value\":\"Die Leiter steht neben der Wand.\",\"translation\":\"Лестница стоит у стены.\",\"structure\":[{\"usedForm\":\"Leiter\",\"dictionaryForm\":\"die Leiter\",\"translation\":\"лестница\"},{\"usedForm\":\"steht\",\"dictionaryForm\":\"stehen\",\"translation\":\"стоять\"},{\"usedForm\":\"Wand\",\"dictionaryForm\":\"die Wand\",\"translation\":\"стена\"}]}"
+    "Noun with article, subordinate clause. word=das Verstehen gloss=понимание:"
+    "{\"value\":\"Obwohl das Verstehen dieser Regel lange dauert, bleibt er geduldig.\",\"translation\":\"Хотя понимание этого правила занимает много времени, он остаётся терпеливым.\",\"structure\":[{\"usedForm\":\"Verstehen\",\"dictionaryForm\":\"das Verstehen\",\"translation\":\"понимание\"},{\"usedForm\":\"Regel\",\"dictionaryForm\":\"die Regel\",\"translation\":\"правило\"},{\"usedForm\":\"dauert\",\"dictionaryForm\":\"dauern\",\"translation\":\"длиться\"},{\"usedForm\":\"lange\",\"dictionaryForm\":\"lang\",\"translation\":\"долго\"},{\"usedForm\":\"bleibt\",\"dictionaryForm\":\"bleiben\",\"translation\":\"оставаться\"},{\"usedForm\":\"geduldig\",\"dictionaryForm\":\"geduldig\",\"translation\":\"терпеливый\"}]}"
+    "Separable verb in Perfekt. word=aufpassen gloss=следить:"
+    "{\"value\":\"Er hat auf die Kinder gut aufgepasst.\",\"translation\":\"Он хорошо присмотрел за детьми.\",\"structure\":[{\"usedForm\":\"hat\",\"dictionaryForm\":\"haben\",\"translation\":\"иметь\"},{\"usedForm\":\"Kinder\",\"dictionaryForm\":\"das Kind\",\"translation\":\"дети\"},{\"usedForm\":\"gut\",\"dictionaryForm\":\"gut\",\"translation\":\"хорошо\"},{\"usedForm\":\"aufgepasst\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"}]}"
+    "The `auf` before `die Kinder` is a preposition and is excluded; the participle `aufgepasst` is one word and one item, its `dictionaryForm` the infinitive."
+    "Reflexive, leading connector. word=sich vorstellen gloss=представляться:"
+    "{\"value\":\"Außerdem stellt er sich bei den neuen Kollegen vor.\",\"translation\":\"Кроме того, он представляется новым коллегам.\",\"structure\":[{\"usedForm\":\"Außerdem\",\"dictionaryForm\":\"außerdem\",\"translation\":\"кроме того\"},{\"usedForm\":\"stellt\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"neuen\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"
+    "Homograph, Präteritum of `sein`. word=Leiter gloss=лестница:"
+    "{\"value\":\"Die Leiter war gestern noch in der Garage.\",\"translation\":\"Лестница ещё вчера была в гараже.\",\"structure\":[{\"usedForm\":\"Leiter\",\"dictionaryForm\":\"die Leiter\",\"translation\":\"лестница\"},{\"usedForm\":\"war\",\"dictionaryForm\":\"sein\",\"translation\":\"быть\"},{\"usedForm\":\"gestern\",\"dictionaryForm\":\"gestern\",\"translation\":\"вчера\"},{\"usedForm\":\"noch\",\"dictionaryForm\":\"noch\",\"translation\":\"ещё\"},{\"usedForm\":\"Garage\",\"dictionaryForm\":\"die Garage\",\"translation\":\"гараж\"}]}"
     "Do not use `der Leiter` for this meaning."
+    "Phrase, passive. word=einen Skonto gewähren gloss=предоставлять скидку:"
+    "{\"value\":\"Bei Zahlung innerhalb von zehn Tagen wird ein Skonto von 2 % gewährt.\",\"translation\":\"При оплате в течение десяти дней предоставляется скидка 2 %.\",\"structure\":[{\"usedForm\":\"Zahlung\",\"dictionaryForm\":\"die Zahlung\",\"translation\":\"оплата\"},{\"usedForm\":\"Tagen\",\"dictionaryForm\":\"der Tag\",\"translation\":\"день\"},{\"usedForm\":\"wird\",\"dictionaryForm\":\"werden\",\"translation\":\"становиться\"},{\"usedForm\":\"Skonto\",\"dictionaryForm\":\"der Skonto\",\"translation\":\"скидка\"},{\"usedForm\":\"gewährt\",\"dictionaryForm\":\"gewähren\",\"translation\":\"предоставлять\"}]}"
+    "The phrase changed voice and word order, and it is in the sentence, not in `structure`: `Bei`, `innerhalb`, `von` and `ein` are excluded as prepositions and articles, and `zehn` and `2 %` are figures, not words to annotate."
     "Phrase. word=von Zeit zu Zeit gloss=время от времени:"
     "{\"value\":\"Von Zeit zu Zeit besuche ich meine Eltern.\",\"translation\":\"Время от времени я навещаю своих родителей.\",\"structure\":[{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"die Zeit\",\"translation\":\"время\"},{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"die Zeit\",\"translation\":\"время\"},{\"usedForm\":\"besuche\",\"dictionaryForm\":\"besuchen\",\"translation\":\"навещать\"},{\"usedForm\":\"Eltern\",\"dictionaryForm\":\"die Eltern\",\"translation\":\"родители\"}]}"
     "The phrase is in the sentence, not in `structure`: `von` and `zu` are excluded as prepositions, and each `Zeit` is annotated as the noun it is."]))
@@ -653,7 +660,7 @@
 
 
 (defn- user-prompt
-  [word translations context word-meta retry-context]
+  [word translations context word-meta construction retry-context]
   (str/join
    "\n"
    ["Generate one example."
@@ -663,11 +670,25 @@
      (cond-> {:word         word
               :partOfSpeech (:partOfSpeech word-meta)
               :cefrLevel    (:cefrLevel word-meta "B2")
+              :construction construction
               :translation  translations}
-       (:lemma word-meta)        (assoc :lemma (:lemma word-meta))
+       (:lemma word-meta) (assoc :lemma (:lemma word-meta))
        (utils/non-blank context) (assoc :context context)
-       retry-context (assoc :previousAttempt (:example retry-context)
-                            :previousIssue   (previous-issue-payload retry-context))))]))
+       retry-context      (assoc :previousAttempt (:example retry-context)
+                                 :previousIssue   (previous-issue-payload retry-context))))]))
+
+
+(def ^:private constructions
+  "The grammar a sentence may be built around, one asked per generation. Left
+   out on purpose: a modal verb with an infinitive, which the model reaches for
+   unprompted. Not part of the cache key, and whether the model followed it is
+   not checked."
+  ["Perfekt in the main clause"
+   "a subordinate clause with sobald, nachdem, obwohl, weil, dass, wenn or als"
+   "an infinitive clause with ohne ... zu, um ... zu or anstatt ... zu"
+   "a leading connector adverb: jedoch, dadurch, deshalb, trotzdem, außerdem or stattdessen"
+   "passive voice (wird or wurde with a participle)"
+   "plain Präsens without a modal verb"])
 
 
 (def ^:private first-attempt-temperature 0.5)
@@ -683,8 +704,9 @@
   [word translations context word-meta retry-context]
   {:messages        [{:role    "system"
                       :content system-prompt}
-                     {:role    "user"
-                      :content (user-prompt word translations context word-meta retry-context)}]
+                     {:role "user"
+                      :content
+                      (user-prompt word translations context word-meta (rand-nth constructions) retry-context)}]
    :temperature     (if retry-context retry-temperature first-attempt-temperature)
    :max_tokens      (example-max-tokens)
    :response_format {:type        "json_schema"
@@ -769,9 +791,9 @@
         hard?   (and (int? status) (<= 400 status 499) (not= 408 status))
         failure (merge
                  (select-keys response [:status :error :body])
-                 {::type          ::generation-failure
-                  :retryable?     (not hard?)
-                  :word           word
+                 {::type      ::generation-failure
+                  :retryable? (not hard?)
+                  :word       word
                   :retry-after-ms (provider/retry-after-ms response)})]
     (log-generation-failure! failure)
     failure))
@@ -906,10 +928,10 @@
    `:outcome/unavailable`."
   [result]
   (cond
-    (valid-example? result)            :outcome/success
+    (valid-example? result)  :outcome/success
     (not (generation-failure? result)) :outcome/rejected
-    (= 429 (:status result))           :outcome/throttled
-    :else                              :outcome/unavailable))
+    (= 429 (:status result)) :outcome/throttled
+    :else                    :outcome/unavailable))
 
 
 (defn get!
