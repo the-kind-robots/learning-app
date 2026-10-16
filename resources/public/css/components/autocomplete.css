@@ -30,12 +30,17 @@
   padding: 10px 14px;
 }
 
-.suggestions__item:hover,
+.suggestions__item[aria-disabled] {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.suggestions__item:not([aria-disabled]):hover,
 .suggestions__item[data-active] {
   background: rgb(var(--color-polar));
 }
 
-.suggestions__item:active {
+.suggestions__item:not([aria-disabled]):active {
   background: rgb(var(--color-swan));
 }
 

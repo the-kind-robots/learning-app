@@ -1,7 +1,7 @@
 const { test, expect } = require('./fixtures');
 const { openHome } = require('./service-worker.shared');
 
-// Suggestions kept across keystrokes drop the rows the typed text has left behind.
+// Suggestions kept across keystrokes stay on screen, inert where the typed text has left them behind.
 // `der Rücken` and `das Rückenmark` are the only fixture lemmas under `rück`.
 
 const options = (page) => page.getByRole('option');
@@ -18,11 +18,23 @@ const rowsRightAfterTyping = (field, text) => field.evaluate((node, typed) => {
   return Array.from(document.querySelectorAll('[role="option"]'), (row) => row.innerText.trim());
 }, text);
 
+// Types the letters one by one inside a single task, so no dictionary answer can land between them,
+// and returns after each the rows on screen and how many of them are inert.
+const rowsAfterEachLetter = (field, letters) => field.evaluate((node, typed) => Array.from(typed, (letter) => {
+  node.value += letter;
+  node.dispatchEvent(new Event('input', { bubbles: true }));
+  const rows = Array.from(document.querySelectorAll('[role="option"]'));
+  return {
+    inert: rows.filter((row) => row.getAttribute('aria-disabled') === 'true').length,
+    rows: rows.map((row) => row.innerText.trim()),
+  };
+}), letters);
+
 test.describe('Подсказки слов при вводе', () => {
-  test('пользователь печатает дальше слова из подсказки → устаревшая подсказка исчезает сразу, и нажать её нельзя', async ({ page }) => {
+  test('пользователь печатает дальше слова из подсказки → устаревшая подсказка остаётся, но недоступна, и нажать её нельзя', async ({ page }) => {
     const field = valueField(page);
     let lastRow;
-    let rowsAfterKeystroke;
+    let afterKeystroke;
 
     await test.step('Дано подсказки «der Rücken» и «das Rückenmark» на «Rücken» и перевод «спина» в поле', async () => {
       await openHome(page);
@@ -33,11 +45,11 @@ test.describe('Подсказки слов при вводе', () => {
     });
 
     await test.step('Когда он печатает «k»', async () => {
-      rowsAfterKeystroke = await rowsRightAfterTyping(field, 'k');
+      [afterKeystroke] = await rowsAfterEachLetter(field, 'k');
     });
 
-    await test.step('Тогда подсказок нет уже в задаче самого нажатия, до ответа словаря', async () => {
-      expect(rowsAfterKeystroke).toEqual([]);
+    await test.step('Тогда обе подсказки на месте в задаче нажатия и недоступны, пока словарь не ответил', async () => {
+      expect(afterKeystroke).toEqual({ inert: 2, rows: ['der Rücken', 'das Rückenmark'] });
     });
 
     await test.step('Когда он допечатывает «urse» по 60 мс и нажимает туда, где была подсказка', async () => {
@@ -71,7 +83,7 @@ test.describe('Подсказки слов при вводе', () => {
     });
   });
 
-  test('пользователь печатает букву, с которой часть подсказок продолжается → они остаются, без мигания', async ({ page }) => {
+  test('пользователь печатает букву, с которой часть подсказок продолжается → все остаются, лишние недоступны, без мигания', async ({ page }) => {
     const field = valueField(page);
     let rowsAfterKeystroke;
 
@@ -85,9 +97,32 @@ test.describe('Подсказки слов при вводе', () => {
       rowsAfterKeystroke = await rowsRightAfterTyping(field, 'n');
     });
 
-    await test.step('Тогда в задаче нажатия остались две подсказки на «Fen», и ответ словаря их не меняет', async () => {
-      expect(rowsAfterKeystroke).toEqual(['das Fenster', 'die Fensterbank']);
+    await test.step('Тогда в задаче нажатия все четыре на месте, а ответ словаря оставляет две на «Fen»', async () => {
+      expect(rowsAfterKeystroke).toHaveLength(4);
       await expect(options(page)).toHaveText(['das Fenster', 'die Fensterbank']);
+    });
+  });
+
+  test('пользователь печатает дальше, когда подсказок десять → список не сжимается и не пустеет ни на одной букве', async ({ page }) => {
+    const field = valueField(page);
+    let afterEachLetter;
+
+    await test.step('Дано десять подсказок на «Zimmer»', async () => {
+      await openHome(page);
+      await field.pressSequentially('Zimmer');
+      await expect(options(page)).toHaveCount(10);
+    });
+
+    await test.step('Когда он печатает «tempe» по букве, не ожидая ответов', async () => {
+      afterEachLetter = await rowsAfterEachLetter(field, 'tempe');
+    });
+
+    await test.step('Тогда после каждой буквы на экране по-прежнему десять подсказок', async () => {
+      expect(afterEachLetter.map(({ rows }) => rows.length)).toEqual([10, 10, 10, 10, 10]);
+    });
+
+    await test.step('Когда словарь отвечает, Тогда остаётся одна «die Zimmertemperatur»', async () => {
+      await expect(options(page)).toHaveText(['die Zimmertemperatur']);
     });
   });
 });
