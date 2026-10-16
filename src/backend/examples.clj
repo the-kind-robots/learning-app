@@ -347,6 +347,8 @@
    "The generated example did not match the required JSON shape or text constraints. See `details` for the specific field errors."
    :structure-mismatch
    "Items in `structure` must appear left to right as they occur in the German sentence, and none of them matched a word of it. A `usedForm` is exactly one word of the sentence, spelled as the sentence spells it — the inflected form, never the lemma. An expression of several words is annotated one item per word, each with its own `dictionaryForm`, or left out of `structure` altogether — the sentence is where such an expression lives, not `structure`."
+   :avoided-sentence
+   "This sentence is one of `avoid`. Write a different sentence, not a rewording of one in `avoid`."
    :sentence-length-out-of-range
    "The German sentence is outside the accepted length. See `details` for the number of words it must contain."
    :target-lemma-missing
@@ -440,8 +442,20 @@
          (every? #(word-present? sentence-words structure %) words)))))
 
 
+(defn avoid-forms
+  "The set of `sentences` as compared: lower case, without punctuation, spaces
+   collapsed."
+  [sentences]
+  (into #{}
+        (map #(some-> % normalize-text
+                      (str/replace #"[^\p{L}\p{N}\s]" "")
+                      (str/replace #"\s+" " ")
+                      str/trim))
+        sentences))
+
+
 (defn- example-issue
-  [target example]
+  [target example avoided]
   (let [raw     (strip-word-indexes example)
         valid?  (m/validate valid-generated-example-schema raw)
         indexed (when valid? (add-word-indexes raw))]
@@ -453,6 +467,9 @@
           :error   "Invalid generated example shape"
           :explain explain})
         {:issue :malformed-example :details explain})
+
+      (contains? avoided (first (avoid-forms [(:value raw)])))
+      {:issue :avoided-sentence}
 
       (nil? indexed)
       {:issue :structure-mismatch}
@@ -482,7 +499,8 @@
    [;; What this is
     "You generate learner-facing German example sentences for a vocabulary app."
     "Return only JSON that matches the supplied schema."
-    "Input fields: word, translation, part of speech, cefrLevel, context, previousAttempt, previousIssue."
+    "Input fields: word, translation, part of speech, cefrLevel, context, avoid, previousAttempt, previousIssue."
+    "`avoid`, when present, lists German sentences the learner already has. Write a different sentence: not one of them, and not a light rewording of one."
     "The target is `word`: either a single lemma (`die Leiter`, `aufpassen`, `sich vorstellen`) or a whole phrase (`auf jeden Fall`, `von Zeit zu Zeit`, `das heißt`). Every rule below applies to both, and `structure` is built the same way for both."
     "Missing cefrLevel => B2."
     ""
@@ -598,7 +616,7 @@
 
 
 (defn- user-prompt
-  [word translations context word-meta retry-context]
+  [word translations context word-meta retry-context avoid]
   (str/join
    "\n"
    ["Generate one example."
@@ -610,6 +628,7 @@
               :cefrLevel    (:cefrLevel word-meta "C2")
               :translation  translations}
        (utils/non-blank context) (assoc :context context)
+       (seq avoid)   (assoc :avoid (vec avoid))
        retry-context (assoc :previousAttempt (:example retry-context)
                             :previousIssue   (previous-issue-payload retry-context))))]))
 
@@ -624,11 +643,11 @@
 
 
 (defn- request-body
-  [word translations context word-meta retry-context]
+  [word translations context word-meta retry-context avoid]
   {:messages        [{:role    "system"
                       :content system-prompt}
                      {:role    "user"
-                      :content (user-prompt word translations context word-meta retry-context)}]
+                      :content (user-prompt word translations context word-meta retry-context avoid)}]
    :temperature     (if retry-context retry-temperature first-attempt-temperature)
    :max_tokens      (example-max-tokens)
    :response_format {:type        "json_schema"
@@ -638,9 +657,9 @@
 
 
 (defn example-api-request
-  [word translations context word-meta retry-context]
+  [word translations context word-meta retry-context avoid]
   (provider/request
-   (request-body word translations context word-meta retry-context)
+   (request-body word translations context word-meta retry-context avoid)
    @generation-timeout-ms))
 
 
@@ -760,10 +779,10 @@
 (defn- generate-attempt!
   "One request to the provider, waited for at most the per-attempt timeout.
    An interrupted wait gives a failure that is not retried."
-  [word translations context word-meta retry-context]
+  [word translations context word-meta retry-context avoid]
   (let [timeout-ms @generation-timeout-ms]
     (try
-      (-> (example-api-request word translations context word-meta retry-context)
+      (-> (example-api-request word translations context word-meta retry-context avoid)
           (deref timeout-ms {:error (str "No answer within " timeout-ms " ms")})
           (parse-generated-example word))
       (catch InterruptedException error
@@ -788,57 +807,57 @@
 
 (defn generate-one!
   "An example sentence generated for `subject` under the dictionary's
-   `word-meta`, in up to `max-generation-attempts` attempts. A provider
+   `word-meta`, in up to `max-attempts` attempts. A provider
    failure gives a generation failure; a rejected last candidate or a refused
-   input gives nil."
-  ([subject word-meta]
-   (generate-one! subject word-meta max-generation-attempts))
-  ([{:keys [context translations word]} word-meta max-attempts]
-   (loop [attempt       1
-          retry-context nil]
-     (let [example  (generate-attempt! word translations context word-meta retry-context)
-           failure? (generation-failure? example)
-           refused? (= ::moderated (::type example))
-           result   (when-not (or failure? refused?) (example-issue word example))
-           issue    (:issue result)]
-       (cond
-         ;; The same input would be refused again.
-         refused?
-         nil
+   input gives nil. With `avoid`, sentences the answer must not be, a candidate
+   equal to one of them counts as rejected."
+  [{:keys [context translations word]} word-meta max-attempts avoid]
+  (let [avoided (avoid-forms avoid)]
+    (loop [attempt       1
+           retry-context nil]
+      (let [example  (generate-attempt! word translations context word-meta retry-context avoid)
+            failure? (generation-failure? example)
+            refused? (= ::moderated (::type example))
+            result   (when-not (or failure? refused?) (example-issue word example avoided))
+            issue    (:issue result)]
+        (cond
+          ;; The same input would be refused again.
+          refused?
+          nil
 
-         (and failure? (not (:retryable? example)))
-         example
+          (and failure? (not (:retryable? example)))
+          example
 
-         (and (not failure?) (nil? issue))
-         (add-word-indexes example)
+          (and (not failure?) (nil? issue))
+          (add-word-indexes example)
 
-         (< attempt max-attempts)
-         (let [retry-ctx (when (and (not failure?) issue)
-                           (cond-> {:example (strip-word-indexes example)
-                                    :issue   issue}
-                             (seq (:details result)) (assoc :details (:details result))))]
-           (when retry-ctx
-             (log-generation-failure!
-              {:words   [word]
-               :attempt attempt
-               :error   "Rejected generated example candidate"
-               :issue   issue
-               :example example}))
-           (recur (inc attempt) retry-ctx))
+          (< attempt max-attempts)
+          (let [retry-ctx (when (and (not failure?) issue)
+                            (cond-> {:example (strip-word-indexes example)
+                                     :issue   issue}
+                              (seq (:details result)) (assoc :details (:details result))))]
+            (when retry-ctx
+              (log-generation-failure!
+               {:words   [word]
+                :attempt attempt
+                :error   "Rejected generated example candidate"
+                :issue   issue
+                :example example}))
+            (recur (inc attempt) retry-ctx))
 
-         ;; The last attempt decides whose failure it is.
-         failure?
-         example
+          ;; The last attempt decides whose failure it is.
+          failure?
+          example
 
-         :else
-         (do
-           (log-generation-failure!
-            {:words   [word]
-             :attempt attempt
-             :error   "Exhausted example generation attempts"
-             :issue   issue
-             :example example})
-           nil))))))
+          :else
+          (do
+            (log-generation-failure!
+             {:words   [word]
+              :attempt attempt
+              :error   "Exhausted example generation attempts"
+              :issue   issue
+              :example example})
+            nil))))))
 
 
 (defn outcome
@@ -867,7 +886,7 @@
            cache-key
            (fn []
              (or (cache/lookup db cache-key)
-                 (let [result (generate-one! subject word-meta)]
+                 (let [result (generate-one! subject word-meta max-generation-attempts [])]
                    (if (and (valid-example? result)
                             (false? (cache/store! db cache-key subject result)))
                      (or (cache/lookup db cache-key) result)
@@ -880,6 +899,25 @@
                            :context    :failure/joined-run}]
               (log-generation-failure! failure)
               failure)))))))
+
+
+(defn regenerate!
+  "A new example for `subject`, none of the sentences in `avoid` and not the
+   one the cache holds for it. The answer is for the caller alone: nothing is
+   stored, and no other run of the subject is joined. Failures as in `get!`."
+  [db subject avoid]
+  (let [word-meta (word-meta subject)]
+    (if (generation-failure? word-meta)
+      word-meta
+      (let [cached (cache/lookup db (subject-key subject word-meta))]
+        (generate-one! subject
+                       word-meta
+                       max-generation-attempts
+                       (cond-> (vec avoid)
+                         (and (:value cached)
+                              (not (contains? (avoid-forms avoid)
+                                              (first (avoid-forms [(:value cached)])))))
+                         (conj (:value cached))))))))
 
 
 (comment
