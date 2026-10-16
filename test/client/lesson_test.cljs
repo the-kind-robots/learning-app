@@ -169,8 +169,7 @@
             {:keys [words]} (await (cached-words capabilities))
             {:keys [lesson-state]}
             (await (start! capabilities
-                           {:vocab-pool-size  3
-                            :vocab-per-lesson 3
+                           {:vocab-per-lesson 3
                             :trial-selector   :first}))]
         (is (every? zero? (map :retention-level words))
             "the premise: retention has underflowed to zero for all six")

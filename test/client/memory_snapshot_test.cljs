@@ -250,7 +250,6 @@
                          (map (comp :id :word))
                          (lesson/pick-vocab (memory/collection-cards m nil)
                                             #(vocabulary/urgency-of % now)
-                                            2
                                             2)))]
     (is (= (levels rebuilt) (levels restored)) "retention levels")
     (is (= (picked rebuilt) (picked restored)) "the words a lesson picks")
