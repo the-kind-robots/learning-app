@@ -1,6 +1,7 @@
 (ns examples
   (:require
    [cheshire.core :as cheshire]
+   [clojure.set :as set]
    [clojure.string :as str]
    [examples.cache :as cache]
    [examples.dictionary :as dictionary]
@@ -186,14 +187,14 @@
 (def ^:private min-sentence-words 3)
 
 
-(def ^:private min-max-sentence-words 16)
+(def ^:private min-max-sentence-words 20)
 
 
 (def ^:private words-around-target
   "How much room a sentence gets beyond the target itself. A six-word phrase
    cannot fit a flat ceiling with anything around it, and a placeholder
    becomes a noun phrase of several words."
-  10)
+  12)
 
 
 (defn- sentence-length-bounds
@@ -350,7 +351,7 @@
    :sentence-length-out-of-range
    "The German sentence is outside the accepted length. See `details` for the number of words it must contain."
    :target-lemma-missing
-   "The sentence must contain the whole target: a single lemma as a `dictionaryForm` entry in `structure`, and a multi-word target with every one of its words present, inflected as the sentence needs. A placeholder (`etwas`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot the sentence fills with anything that fits, and an article may be any article."})
+   "The sentence must contain the whole target: a single lemma as the word itself or any form of its lemma as a separate word of the sentence, and a multi-word target with every one of its words present, inflected as the sentence needs. A placeholder (`etwas`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot the sentence fills with anything that fits, and an article may be any article."})
 
 
 (def ^:private single-lemma-prefixes
@@ -420,28 +421,53 @@
             structure)))
 
 
+(defn- lemma-present?
+  "Whether a word of the sentence or the `dictionaryForm` of some item belongs
+   to a lemma in `lemma-ids`: `explodierte` for a learner's `explodiert`. Never
+   so for a word the dictionary does not know."
+  [lemma-ids sentence-words structure]
+  (boolean
+   (and (seq lemma-ids)
+        (or (some #(seq (set/intersection lemma-ids (dictionary/lemma-ids %)))
+                  (keep strip-word-edges sentence-words))
+            (some #(seq (set/intersection lemma-ids (dictionary/lemma-ids (:dictionaryForm %))))
+                  structure)))))
+
+
+(defn target-lemma-ids
+  "The lemma ids of each word of `target` that the sentence must carry, by
+   word: the whole target when it is one lemma, else each required word."
+  [target]
+  (into {}
+        (map (juxt identity dictionary/lemma-ids))
+        (if (several-words? target) (required-words target) [target])))
+
+
 (defn- target-present?
   "Several words: every one that is not a placeholder or a determiner must be
-   in the sentence or named by some item, because with plain word-by-word
-   annotation nothing in `structure` says the construction was the target.
-   One lemma: named in `structure` by its `dictionaryForm`, or said by the
-   sentence in the form the target is written in — a participle the model
-   lemmatised as a verb, a plural the model listed in the singular. An
-   article pair takes whichever of the two answers yes: `die Leiter` is named
-   by its own item, `das heißt` only by the sentence."
-  [target sentence structure]
-  (let [sentence-words (split-sentence-words sentence)
-        words          (if (several-words? target)
-                         (required-words target)
-                         (split-sentence-words target))]
+   in the sentence, named by some item, or said in some form of its lemma,
+   because with plain word-by-word annotation nothing in `structure` says the
+   construction was the target. One lemma: named in `structure` by its
+   `dictionaryForm`, said by the sentence in any form of its lemma, or said in
+   the form the target is written in — a participle the model lemmatised as a
+   verb, a plural the model listed in the singular. An article pair takes
+   whichever of the two answers yes: `die Leiter` is named by its own item,
+   `das heißt` only by the sentence. `lemma-ids` is `target-lemma-ids`."
+  [lemma-ids target sentence structure]
+  (let [sentence-words (split-sentence-words sentence)]
     (boolean
-     (or (and (not (several-words? target))
-              (dictionary/lemma-in-structure? target structure))
-         (every? #(word-present? sentence-words structure %) words)))))
+     (if (several-words? target)
+       (every? #(or (word-present? sentence-words structure %)
+                    (lemma-present? (get lemma-ids %) sentence-words structure))
+               (required-words target))
+       (or (dictionary/lemma-in-structure? target structure)
+           (lemma-present? (get lemma-ids target) sentence-words structure)
+           (every? #(word-present? sentence-words structure %)
+                   (split-sentence-words target)))))))
 
 
 (defn- example-issue
-  [target example]
+  [target lemma-ids example]
   (let [raw     (strip-word-indexes example)
         valid?  (m/validate valid-generated-example-schema raw)
         indexed (when valid? (add-word-indexes raw))]
@@ -461,7 +487,7 @@
       {:issue   :sentence-length-out-of-range
        :details (sentence-length-bounds target)}
 
-      (not (target-present? target (:value indexed) (:structure indexed)))
+      (not (target-present? lemma-ids target (:value indexed) (:structure indexed)))
       {:issue :target-lemma-missing})))
 
 
@@ -485,6 +511,7 @@
     "Input fields: word, translation, part of speech, cefrLevel, context, previousAttempt, previousIssue."
     "The target is `word`: either a single lemma (`die Leiter`, `aufpassen`, `sich vorstellen`) or a whole phrase (`auf jeden Fall`, `von Zeit zu Zeit`, `das heißt`). Every rule below applies to both, and `structure` is built the same way for both."
     "Missing cefrLevel => B2."
+    "`word` is the form the learner saved, and `lemma`, when present, is its dictionary lemma. The sentence may use any form of that lemma, not only `word` itself."
     ""
     ;; Sense
     "SENSE"
@@ -607,14 +634,15 @@
     (cheshire/generate-string
      (cond-> {:word         word
               :partOfSpeech (:partOfSpeech word-meta)
-              :cefrLevel    (:cefrLevel word-meta "C2")
+              :cefrLevel    (:cefrLevel word-meta "B2")
               :translation  translations}
+       (:lemma word-meta)        (assoc :lemma (:lemma word-meta))
        (utils/non-blank context) (assoc :context context)
        retry-context (assoc :previousAttempt (:example retry-context)
                             :previousIssue   (previous-issue-payload retry-context))))]))
 
 
-(def ^:private first-attempt-temperature 0.1)
+(def ^:private first-attempt-temperature 0.5)
 
 
 (def ^:private retry-temperature
@@ -794,51 +822,52 @@
   ([subject word-meta]
    (generate-one! subject word-meta max-generation-attempts))
   ([{:keys [context translations word]} word-meta max-attempts]
-   (loop [attempt       1
-          retry-context nil]
-     (let [example  (generate-attempt! word translations context word-meta retry-context)
-           failure? (generation-failure? example)
-           refused? (= ::moderated (::type example))
-           result   (when-not (or failure? refused?) (example-issue word example))
-           issue    (:issue result)]
-       (cond
-         ;; The same input would be refused again.
-         refused?
-         nil
+   (let [target-ids (target-lemma-ids word)]
+     (loop [attempt       1
+            retry-context nil]
+       (let [example  (generate-attempt! word translations context word-meta retry-context)
+             failure? (generation-failure? example)
+             refused? (= ::moderated (::type example))
+             result   (when-not (or failure? refused?) (example-issue word target-ids example))
+             issue    (:issue result)]
+         (cond
+           ;; The same input would be refused again.
+           refused?
+           nil
 
-         (and failure? (not (:retryable? example)))
-         example
+           (and failure? (not (:retryable? example)))
+           example
 
-         (and (not failure?) (nil? issue))
-         (add-word-indexes example)
+           (and (not failure?) (nil? issue))
+           (add-word-indexes example)
 
-         (< attempt max-attempts)
-         (let [retry-ctx (when (and (not failure?) issue)
-                           (cond-> {:example (strip-word-indexes example)
-                                    :issue   issue}
-                             (seq (:details result)) (assoc :details (:details result))))]
-           (when retry-ctx
+           (< attempt max-attempts)
+           (let [retry-ctx (when (and (not failure?) issue)
+                             (cond-> {:example (strip-word-indexes example)
+                                      :issue   issue}
+                               (seq (:details result)) (assoc :details (:details result))))]
+             (when retry-ctx
+               (log-generation-failure!
+                {:words   [word]
+                 :attempt attempt
+                 :error   "Rejected generated example candidate"
+                 :issue   issue
+                 :example example}))
+             (recur (inc attempt) retry-ctx))
+
+           ;; The last attempt decides whose failure it is.
+           failure?
+           example
+
+           :else
+           (do
              (log-generation-failure!
               {:words   [word]
                :attempt attempt
-               :error   "Rejected generated example candidate"
+               :error   "Exhausted example generation attempts"
                :issue   issue
-               :example example}))
-           (recur (inc attempt) retry-ctx))
-
-         ;; The last attempt decides whose failure it is.
-         failure?
-         example
-
-         :else
-         (do
-           (log-generation-failure!
-            {:words   [word]
-             :attempt attempt
-             :error   "Exhausted example generation attempts"
-             :issue   issue
-             :example example})
-           nil))))))
+               :example example})
+             nil)))))))
 
 
 (defn outcome

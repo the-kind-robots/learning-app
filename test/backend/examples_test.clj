@@ -29,7 +29,8 @@
    Returns what (f) returns."
   [responses f]
   (with-redefs [sut/example-api-request (support.generation/provider-answering-in-turn (atom 0) responses)
-                dictionary/lookup-dictionary-entries (constantly nil)]
+                dictionary/lookup-dictionary-entries (constantly nil)
+                dictionary/lemma-ids (constantly #{})]
     (f)))
 
 
@@ -87,7 +88,7 @@
 
 
 (deftest a-malformed-example-is-rejected-whatever-the-flaw
-  (are [flaw example] (= :malformed-example (:issue (#'sut/example-issue "Hund" example)))
+  (are [flaw example] (= :malformed-example (:issue (#'sut/example-issue "Hund" {} example)))
    "English mixed into the translation"
     (assoc dog :translation "The dog runs quickly in the park, собака.")
 
@@ -129,9 +130,10 @@
                     {:usedForm       "Park"
                      :dictionaryForm "der Park"
                      :translation    "парк"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                    dictionary/lemma-ids (constantly #{})]
         (is (= :target-lemma-missing
-               (:issue (#'sut/example-issue "Leiter" example))))))))
+               (:issue (#'sut/example-issue "Leiter" {} example))))))))
 
 
 (deftest structure-items-out-of-sentence-order-are-placed-in-sentence-order
@@ -148,8 +150,9 @@
                     {:usedForm       "Seele"
                      :dictionaryForm "die Seele"
                      :translation    "душа"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (:issue (#'sut/example-issue "aufpassen" example))))
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                    dictionary/lemma-ids (constantly #{})]
+        (is (nil? (:issue (#'sut/example-issue "aufpassen" {} example))))
         (is (= [0 1 3]
                (mapv :wordIndex (:structure (#'sut/add-word-indexes example)))))))))
 
@@ -172,9 +175,10 @@
                     {:usedForm       "auf"
                      :dictionaryForm "aufpassen"
                      :translation    "беречь"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                    dictionary/lemma-ids (constantly #{})]
         (is
-         (nil? (:issue (#'sut/example-issue "aufpassen" example)))
+         (nil? (:issue (#'sut/example-issue "aufpassen" {} example)))
          "the preposition wrongly annotated with the verb's gloss is the cost; rejecting this also rejected every `von Zeit zu Zeit`")
         (is (= [0 1 3 4]
                (mapv :wordIndex (:structure (#'sut/add-word-indexes example)))))))))
@@ -214,8 +218,9 @@
                                  {:usedForm       "mit"
                                   :dictionaryForm "mitkommen"
                                   :translation    "идти вместе"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (#'sut/example-issue "auf jeden Fall" example))
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                    dictionary/lemma-ids (constantly #{})]
+        (is (nil? (#'sut/example-issue "auf jeden Fall" {} example))
             "auf, jeden and Fall are all words of the sentence")
         (is (= [1 4 5]
                (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))
@@ -232,8 +237,9 @@
                                  {:usedForm       "Kopf"
                                   :dictionaryForm "der Kopf"
                                   :translation    "голова"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (#'sut/example-issue "den Kopf verlieren" example)))))))
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                    dictionary/lemma-ids (constantly #{})]
+        (is (nil? (#'sut/example-issue "den Kopf verlieren" {} example)))))))
 
 
 (deftest a-word-the-sentence-says-twice-no-longer-costs-the-example
@@ -252,8 +258,9 @@
                                  {:usedForm       "Eltern"
                                   :dictionaryForm "die Eltern"
                                   :translation    "родители"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (#'sut/example-issue "von Zeit zu Zeit" example)))
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                    dictionary/lemma-ids (constantly #{})]
+        (is (nil? (#'sut/example-issue "von Zeit zu Zeit" {} example)))
         (is (= [1 3 4 7]
                (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))
             "each occurrence indexes its own position")))))
@@ -269,9 +276,10 @@
                                  {:usedForm       "Eltern"
                                   :dictionaryForm "die Eltern"
                                   :translation    "родители"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                    dictionary/lemma-ids (constantly #{})]
         (is (= :target-lemma-missing
-               (:issue (#'sut/example-issue "von Zeit zu Zeit" example))))))))
+               (:issue (#'sut/example-issue "von Zeit zu Zeit" {} example))))))))
 
 
 (deftest a-partly-present-construction-is-rejected
@@ -287,9 +295,10 @@
                                  {:usedForm       "Buch"
                                   :dictionaryForm "das Buch"
                                   :translation    "книга"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                    dictionary/lemma-ids (constantly #{})]
         (is (= :target-lemma-missing
-               (:issue (#'sut/example-issue "auf jeden Fall" example)))
+               (:issue (#'sut/example-issue "auf jeden Fall" {} example)))
             "`auf` is there, `jeden` and `Fall` are not")))))
 
 
@@ -309,8 +318,9 @@
                                  {:usedForm       "Hause"
                                   :dictionaryForm "das Haus"
                                   :translation    "дом"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
-        (is (nil? (#'sut/example-issue "das heißt" example)))))))
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                    dictionary/lemma-ids (constantly #{})]
+        (is (nil? (#'sut/example-issue "das heißt" {} example)))))))
 
 
 (deftest a-reflexive-dictionary-form-matches-its-bare-verb-target
@@ -330,10 +340,11 @@
                     {:usedForm       "vor"
                      :dictionaryForm "sich vorstellen"
                      :translation    "представляться"}]}]
-      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+      (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                    dictionary/lemma-ids (constantly #{})]
         (is (= nil
                (#'sut/example-issue
-                "vorstellen"
+                "vorstellen" {}
                 example)))))))
 
 
@@ -374,7 +385,21 @@
    {:value "schon" :pos "adv" :rank 200 :forms []
     :translations [{:lang "ru" :value "уже"}]}
    {:value "schön" :pos "adj" :rank 150 :forms []
-    :translations [{:lang "ru" :value "красивый"}]}])
+    :translations [{:lang "ru" :value "красивый"}]}
+   {:value "explodieren" :pos "verb" :rank 710 :forms ["explodiert" "explodierte"]
+    :translations [{:lang "ru" :value "взрываться"}]}
+   {:value "explodiert" :pos "adj" :rank 309 :forms []
+    :translations [{:lang "ru" :value "взорванный"}]}
+   {:value "federn" :pos "verb" :rank 120 :forms ["federt"]
+    :translations [{:lang "ru" :value "пружинить"}]}
+   {:value "die Feder" :pos "noun" :rank 650 :forms ["Federn"]
+    :translations [{:lang "ru" :value "перо"}]}
+   {:value "erhöhen" :pos "verb" :rank 800 :forms ["erhöht" "erhöhte"]
+    :translations [{:lang "ru" :value "повышать"}]}
+   {:value "erhöht" :pos "adj" :rank 250 :forms []
+    :translations [{:lang "ru" :value "повышенный"}]}
+   {:value "nehmen" :pos "verb" :rank 950 :forms ["nahm" "nimmt"]
+    :translations [{:lang "ru" :value "брать"}]}])
 
 
 (defn- temp-dir
@@ -640,14 +665,16 @@
 
 
 (deftest a-correct-sentence-the-validator-once-rejected-is-accepted
-  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                dictionary/lemma-ids (constantly #{})]
     (doseq [[reason [target example]] rejected-before]
       (testing (name reason)
-        (is (nil? (#'sut/example-issue target example)))))))
+        (is (nil? (#'sut/example-issue target {} example)))))))
 
 
 (deftest a-placeholder-is-a-slot-the-sentence-fills-however-it-likes
-  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                dictionary/lemma-ids (constantly #{})]
     (let [fixed     (candidate "Wir legen den Termin bald fest."
                                "Мы скоро назначим срок."
                                ["legen" "festlegen" "назначать"]
@@ -660,7 +687,7 @@
                                  ["stelle" "sich vorstellen" "представляться"]
                                  ["Kollegen" "der Kollege" "коллега"]
                                  ["vor" "sich vorstellen" "представляться"]))]
-      (are [target example] (nil? (#'sut/example-issue target example))
+      (are [target example] (nil? (#'sut/example-issue target {} example))
        "etwas festlegen"         fixed
        "etw. festlegen"          fixed
        "sich vorstellen"         (reflexive "mich")
@@ -669,14 +696,15 @@
 
 
 (deftest a-word-of-the-phrase-that-is-no-placeholder-is-still-required
-  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                dictionary/lemma-ids (constantly #{})]
     (let [example (candidate "Jeder Arbeitnehmer hat einen Anspruch auf Urlaub."
                              "Каждый работник имеет право на отпуск."
                              ["Arbeitnehmer" "der Arbeitnehmer" "работник"]
                              ["hat" "haben" "иметь"]
                              ["Anspruch" "der Anspruch" "право"]
                              ["Urlaub" "der Urlaub" "отпуск"])]
-      (are [target] (= :target-lemma-missing (:issue (#'sut/example-issue target example)))
+      (are [target] (= :target-lemma-missing (:issue (#'sut/example-issue target {} example)))
        "Anspruch auf etwas verlieren"
        "Bezug auf etwas nehmen"
        "etwas zur Folge haben"))))
@@ -705,10 +733,68 @@
 
 
 (deftest a-structure-with-no-word-of-the-sentence-is-a-structure-mismatch
-  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)]
+  (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                dictionary/lemma-ids (constantly #{})]
     (is (= :structure-mismatch
            (:issue (#'sut/example-issue
-                    "Leiter"
+                    "Leiter" {}
                     (candidate "Der Hund läuft schnell im Park."
                                "Собака быстро бежит по парку."
                                ["Leiter" "die Leiter" "лестница"])))))))
+
+
+(deftest a-form-belongs-to-every-lemma-it-is-a-form-of
+  (with-dictionary
+    (fn []
+      (are [form n] (= n (count (dictionary/lemma-ids form)))
+        "explodiert"  2
+        "Federn"      2
+        "erhöht"      2
+        "sich erhöhen" 1
+        "die Feder"   1
+        "die Federn"  0
+        "Quatsch"     0)
+      (is (= (dictionary/lemma-ids "erhöhen") (dictionary/lemma-ids "sich erhöhen"))
+          "`sich` is not part of the lemma")
+      (is (not= (dictionary/lemma-ids "die Feder") (dictionary/lemma-ids "Federn"))
+          "an article names its own lemma only"))))
+
+
+(defn- issue-of
+  "The issue the validator finds in the sentence `value` for `target`, with
+   the dictionary read as it is for a generation. `items` are the structure
+   triples."
+  [target value & items]
+  (:issue (#'sut/example-issue
+           target
+           (sut/target-lemma-ids target)
+           (apply candidate value "Перевод предложения." items))))
+
+
+(deftest a-word-saved-in-one-form-is-present-in-another-form-of-its-lemma
+  (with-dictionary
+    (fn []
+      (are [target value items] (nil? (apply issue-of target value items))
+        "explodiert" "Die Bombe explodierte laut im Hof." [["Bombe" "die Bombe" "бомба"]
+                                                           ["Hof" "der Hof" "двор"]]
+        "federn"     "Die Feder liegt auf dem Tisch."     [["Feder" "die Feder" "перо"]
+                                                           ["liegt" "liegen" "лежать"]]
+        "federn"     "Die Federn des Vogels sind weich."  [["Vogels" "der Vogel" "птица"]
+                                                           ["weich" "weich" "мягкий"]]
+        "erhöht"     "Der Chef erhöhte den Preis stark."  [["Chef" "der Chef" "начальник"]
+                                                           ["Preis" "der Preis" "цена"]]
+        "Bezug auf etwas nehmen" "Er nahm auf die Regel Bezug." [["Regel" "die Regel" "правило"]]
+        "Quatsch"    "Das ist doch alles Quatsch hier."   [["alles" "alles" "всё"]]))))
+
+
+(deftest a-word-is-missing-when-the-sentence-has-no-form-of-its-lemma
+  (with-dictionary
+    (fn []
+      (are [target value items] (= :target-lemma-missing (apply issue-of target value items))
+        "explodiert" "Der Hund läuft schnell im Park."    [["Hund" "der Hund" "собака"]
+                                                           ["Park" "der Park" "парк"]]
+        "erhöht"     "Der Hund läuft schnell im Park."    [["Hund" "der Hund" "собака"]]
+        "Quatsch"    "Das ist doch alles Unsinn hier."    [["alles" "alles" "всё"]]
+        "explodiert" "Der Hund läuft schnell im Park."    [["Hund" "der Hund" "собака"]
+                                                           ["explodierte" "explodieren" "взрываться"]]
+        "Bezug auf etwas nehmen" "Er nahm auf die Regel Rücksicht." [["Regel" "die Regel" "правило"]]))))
