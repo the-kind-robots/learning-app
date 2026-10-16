@@ -31,10 +31,11 @@
 
 
 (defn- new-entry
-  [kind value translation entries]
+  [kind value translation entries pos]
   (if (= :phrase kind)
     (phrase/new-phrase value translation)
-    (domain/new-word value entries)))
+    (cond-> (domain/new-word value entries)
+      pos (assoc :pos pos))))
 
 
 (defn ^:async add!
@@ -47,7 +48,9 @@
    already: a word deleted and added again comes back with its history,
    and its retention is computed from that history alone. A duplicate value
    is one entry whatever its kind: translations merge, and the kind is left
-   alone. Returns a promise of {:word-id id :created? bool} or {:error
+   alone. `pos` is the part of speech of the suggestion the word was picked
+   from, or nil; a word keeps it for the example request, and a phrase does
+   not. Returns a promise of {:word-id id :created? bool} or {:error
    :empty-translations}.
 
    `kind` has no default on purpose. Made optional, this becomes a two-arity
@@ -55,14 +58,14 @@
    `add_BANG_.cljs$core$IFn$_invoke$arity$4` — a property a plain test stub
    does not carry, so `with-redefs` stops intercepting and the effect throws
    where it used to run."
-  [{:keys [learner]} value translation kind]
+  [{:keys [learner]} value translation kind pos]
   (let [translation (entered-translation kind translation)
         entries     (translation-entries kind translation)]
     (if (empty? entries)
       {:error :empty-translations}
       (let [collection ((:learner/active-collection learner))
             {:keys [created? word]} (await ((:learner/add-word! learner)
-                                            (new-entry kind value translation entries)))
+                                            (new-entry kind value translation entries pos)))
             history    ((:learner/review-history learner) ((:learner/memory learner)) (:id word))]
         (when (and created? (zero? (count (:ids history))))
           (await ((:learner/add-review! learner) (:id word) true translation)))

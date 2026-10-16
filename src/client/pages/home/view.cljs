@@ -4,7 +4,7 @@
 
 
 (defn- suggestion-item
-  [{:keys [active? lemma phrase? translations exact?]}]
+  [{:keys [active? lemma phrase? pos translations exact?]}]
   [:li.suggestions__item
    {:role        "option"
     :data-active (when active? "")
@@ -12,6 +12,7 @@
     :on          {:click       [[:action/select-suggestion
                                  {:lemma        lemma
                                   :phrase?      phrase?
+                                  :pos          pos
                                   :translations translations
                                   :focus-id     "new-word-translation"}]]
                   ;; Keep input focus during the click so :blur on the input

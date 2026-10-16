@@ -324,10 +324,12 @@
 
 (defn subject
   "What an example is generated for: the trimmed German word, its sorted
-   Russian glosses and the collection context. The cache key and the prompt
-   are both built from this one value."
-  [{:keys [context translation word]}]
+   Russian glosses, the collection context and the part of speech the learner
+   picked, if any. The cache key and the prompt are both built from this one
+   value."
+  [{:keys [context pos translation word]}]
   {:context      (utils/non-blank (some-> context str/trim))
+   :pos          (utils/non-blank (some-> pos str/trim))
    :translations (vec (sort (glosses translation)))
    :word         (utils/non-blank (some-> word str/trim))})
 
@@ -337,6 +339,7 @@
    a raw request map with `:translation` does not pass for a subject."
   [:map {:closed true}
    [:context [:maybe [:string {:min 1}]]]
+   [:pos [:maybe [:string {:min 1}]]]
    [:translations [:vector [:string {:min 1}]]]
    [:word [:string {:min 1}]]])
 
@@ -350,6 +353,8 @@
    "Items in `structure` must appear left to right as they occur in the German sentence, and none of them matched a word of it. A `usedForm` is exactly one word of the sentence, spelled as the sentence spells it — the inflected form, never the lemma. An expression of several words is annotated one item per word, each with its own `dictionaryForm`, or left out of `structure` altogether — the sentence is where such an expression lives, not `structure`."
    :sentence-length-out-of-range
    "The German sentence is outside the accepted length. See `details` for the number of words it must contain."
+   :wrong-part-of-speech
+   "The target is used as a different part of speech. `partOfSpeech` names the one required. A word spelled the same way of another part of speech (here e.g. `der Rauch` for the adjective `rauch`) is a different word and does not count."
    :target-lemma-missing
    "The sentence must contain the whole target: a single lemma as the word itself or any form of its lemma as a separate word of the sentence, and a multi-word target with every one of its words present, inflected as the sentence needs. A placeholder (`etwas`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot the sentence fills with anything that fits, and an article may be any article."})
 
@@ -466,29 +471,52 @@
                    (split-sentence-words target)))))))
 
 
+(def ^:private compatible-pos
+  "The parts of speech a picked one lets through: a participle is an adjective
+   and a verb at once, so `explodierte Bombe` named as `explodieren` is right
+   for the adjective `explodiert`."
+  {"adj" #{"adj" "verb"} "verb" #{"adj" "verb"}})
+
+
 (defn- example-issue
-  [target lemma-ids example]
-  (let [raw     (strip-word-indexes example)
-        valid?  (m/validate valid-generated-example-schema raw)
-        indexed (when valid? (add-word-indexes raw))]
-    (cond
-      (not valid?)
-      (let [explain (me/humanize (m/explain valid-generated-example-schema raw))]
-        (log-generation-failure!
-         {:word    target
-          :error   "Invalid generated example shape"
-          :explain explain})
-        {:issue :malformed-example :details explain})
+  "The first rule the generated `example` breaks, or nil. With `pos`, the part
+   of speech the learner picked, an item that names the target only as a lemma
+   of another part of speech (`compatible-pos` aside) breaks one too."
+  ([target lemma-ids example]
+   (example-issue target lemma-ids nil example))
+  ([target lemma-ids pos example]
+   (let [raw     (strip-word-indexes example)
+         valid?  (m/validate valid-generated-example-schema raw)
+         indexed (when valid? (add-word-indexes raw))]
+     (cond
+       (not valid?)
+       (let [explain (me/humanize (m/explain valid-generated-example-schema raw))]
+         (log-generation-failure!
+          {:word    target
+           :error   "Invalid generated example shape"
+           :explain explain})
+         {:issue :malformed-example :details explain})
 
-      (nil? indexed)
-      {:issue :structure-mismatch}
+       (nil? indexed)
+       {:issue :structure-mismatch}
 
-      (not (sentence-length-ok? target (:value indexed)))
-      {:issue   :sentence-length-out-of-range
-       :details (sentence-length-bounds target)}
+       (not (sentence-length-ok? target (:value indexed)))
+       {:issue   :sentence-length-out-of-range
+        :details (sentence-length-bounds target)}
 
-      (not (target-present? lemma-ids target (:value indexed) (:structure indexed)))
-      {:issue :target-lemma-missing})))
+       (not (target-present? lemma-ids target (:value indexed) (:structure indexed)))
+       {:issue :target-lemma-missing}
+
+       (and pos
+            (not (several-words? target))
+            (some (fn [{:keys [dictionaryForm]}]
+                    (and (seq (set/intersection (get lemma-ids target #{})
+                                                (dictionary/lemma-ids dictionaryForm)))
+                         (let [entries (dictionary/lookup-dictionary-entries dictionaryForm)]
+                           (and (seq entries)
+                                (not-any? (comp (get compatible-pos pos #{pos}) :pos) entries)))))
+                  (:structure indexed)))
+       {:issue :wrong-part-of-speech}))))
 
 
 (defn generation-failure?
@@ -575,9 +603,9 @@
   "What the dictionary says about the subject's word: part of speech and
    level, or nil when it has no entry. A dictionary that cannot be read gives
    a generation failure that is not retried."
-  [{:keys [translations word]}]
+  [{:keys [pos translations word]}]
   (try
-    (dictionary/lookup-word-meta word translations)
+    (dictionary/lookup-word-meta word translations pos)
     (catch Exception error
       (let [failure {::type      ::generation-failure
                      :retryable? false
@@ -821,14 +849,16 @@
    input gives nil."
   ([subject word-meta]
    (generate-one! subject word-meta max-generation-attempts))
-  ([{:keys [context translations word]} word-meta max-attempts]
-   (let [target-ids (target-lemma-ids word)]
+  ([{:keys [context pos translations word]} word-meta max-attempts]
+   (let [target-ids (target-lemma-ids word)
+         ;; Only a pick the lookup honoured can be held against the example.
+         picked-pos (when (= pos (:partOfSpeech word-meta)) pos)]
      (loop [attempt       1
             retry-context nil]
        (let [example  (generate-attempt! word translations context word-meta retry-context)
              failure? (generation-failure? example)
              refused? (= ::moderated (::type example))
-             result   (when-not (or failure? refused?) (example-issue word target-ids example))
+             result   (when-not (or failure? refused?) (example-issue word target-ids picked-pos example))
              issue    (:issue result)]
          (cond
            ;; The same input would be refused again.

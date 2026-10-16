@@ -399,7 +399,11 @@
    {:value "erhöht" :pos "adj" :rank 250 :forms []
     :translations [{:lang "ru" :value "повышенный"}]}
    {:value "nehmen" :pos "verb" :rank 950 :forms ["nahm" "nimmt"]
-    :translations [{:lang "ru" :value "брать"}]}])
+    :translations [{:lang "ru" :value "брать"}]}
+   {:value "der Rauch" :pos "noun" :rank 600 :forms []
+    :translations [{:lang "ru" :value "дым"}]}
+   {:value "rauch" :pos "adj" :rank 300 :forms []
+    :translations [{:lang "ru" :value "густой"} {:lang "ru" :value "волосатый"}]}])
 
 
 (defn- temp-dir
@@ -469,16 +473,69 @@
     (fn []
       (is (= #{"schon" "schön"}
              (set (map :value (dictionary/lookup-dictionary-entries "schon")))))
-      (is (= "adv" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["уже"])))
+      (is (= "adv" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["уже"] nil)))
           "the gloss picks the word typed, not its twin")
-      (is (= "adj" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["красивый"])))))))
+      (is (= "adj" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["красивый"] nil)))))))
+
+
+(deftest a-picked-part-of-speech-decides-the-entry
+  (with-dictionary
+    (fn []
+      (are [translations pos lemma] (= lemma (:lemma (dictionary/lookup-word-meta "rauch" translations pos)))
+        []                    nil    "der Rauch"
+        ["густой"]            nil    "rauch"
+        []                    "adj"  "rauch"
+        ["дым"]               "adj"  "rauch"
+        []                    "noun" "der Rauch"
+        ["густой"]            "noun" "der Rauch"
+        []                    "verb" "der Rauch"))))
+
+
+(deftest the-adjective-and-the-noun-do-not-share-a-cached-example
+  (with-dictionary
+    (fn []
+      (let [key-of (fn [pos]
+                     (let [subject (sut/subject {:word "rauch" :pos pos})]
+                       (sut/subject-key subject (sut/word-meta subject))))]
+        (is (not= (key-of "adj") (key-of nil)))
+        (is (= (key-of "noun") (key-of nil))
+            "the noun is what the lookup chooses without a pick, so it shares that row")))))
+
+
+(deftest a-picked-part-of-speech-rejects-the-word-of-another-one
+  (with-dictionary
+    (fn []
+      (let [example (fn [sentence used form]
+                      {:value       sentence
+                       :translation "Дым фабрики густой."
+                       :structure   [{:usedForm used :dictionaryForm form :translation "дым"}]})
+            noun    (example "Der Rauch der Fabrik ist dicht." "Rauch" "der Rauch")
+            adj     (example "Ihre Haare sind sehr rauch." "rauch" "rauch")]
+        (are [pos example issue] (= issue (:issue (#'sut/example-issue "rauch" (sut/target-lemma-ids "rauch") pos example)))
+          "adj" noun :wrong-part-of-speech
+          "adj" adj  nil
+          nil   noun nil))
+      (let [participle {:value       "Die explodierte Bombe war laut."
+                        :translation "Взорванная бомба была громкой."
+                        :structure   [{:usedForm "explodierte" :dictionaryForm "explodieren" :translation "взрываться"}]}]
+        (are [target pos issue] (= issue (:issue (#'sut/example-issue target (sut/target-lemma-ids target) pos participle)))
+          "explodiert" "adj"  nil
+          "explodiert" "verb" nil
+          "explodiert" "noun" :wrong-part-of-speech)))))
+
+
+(deftest a-subject-keeps-the-picked-part-of-speech
+  (are [pos expected] (= expected (:pos (sut/subject {:word "rauch" :pos pos})))
+    nil     nil
+    "  "    nil
+    " adj " "adj"))
 
 
 (deftest a-word-the-dictionary-does-not-know-has-no-entry
   (with-dictionary
     (fn []
       (is (= [] (dictionary/lookup-dictionary-entries "Quatsch")))
-      (is (nil? (dictionary/lookup-word-meta "Quatsch" ["чушь"]))))))
+      (is (nil? (dictionary/lookup-word-meta "Quatsch" ["чушь"] nil))))))
 
 
 (deftest a-missing-dictionary-file-stops-the-start-naming-the-file

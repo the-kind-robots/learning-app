@@ -33,13 +33,14 @@
 (defn- subject
   "What a request for `pair` asks the backend about."
   [{:keys [collection-name word]}]
-  {:collection-name collection-name
-   :translations (into []
-                       (comp (filter #(= "ru" (:lang %)))
-                             (map :value)
-                             (filter utils/non-blank))
-                       (:translation word))
-   :word (:value word)})
+  (cond-> {:collection-name collection-name
+           :translations (into []
+                               (comp (filter #(= "ru" (:lang %)))
+                                     (map :value)
+                                     (filter utils/non-blank))
+                               (:translation word))
+           :word (:value word)}
+    (:pos word) (assoc :pos (:pos word))))
 
 
 (defn first-missing

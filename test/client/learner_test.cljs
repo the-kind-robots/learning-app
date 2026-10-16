@@ -235,7 +235,7 @@
       [{:keys [dbs learner store]}]
       (await ((:learner/delete-word! learner) "vocab:der hund"))
       (let [capabilities {:learner (assoc learner :learner/active-collection (constantly nil))}
-            {:keys [created?]} (await (vocabulary/add! capabilities "der Hund" "пёс" :word))
+            {:keys [created?]} (await (vocabulary/add! capabilities "der Hund" "пёс" :word nil))
             memory       (:learner/memory @store)]
         (is (true? created?))
         (is (= ["review-1"] (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review"))))
