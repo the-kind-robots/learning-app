@@ -11,7 +11,7 @@
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [domain.lesson :as domain]
-   [ports.learner :as ports]
+   [domain.retention :as retention]
    [use-cases.lesson :as sut]
    [use-cases.vocabulary :as vocabulary]
    [utils :as utils]))
@@ -48,7 +48,7 @@
 (defn- test-capabilities
   [dbs]
   {::dbs    dbs
-   :clock   clock
+   :world   {:world/clock clock}
    :learner (assoc (::learner dbs) :learner/active-collection (fn [] nil))})
 
 
@@ -63,7 +63,7 @@
   [capabilities opts]
   (let [dbs    (::dbs capabilities)
         memory (await (db-seed/memory-of (:user/db dbs)))]
-    (sut/start ports/reads memory ((get-in capabilities [:learner :learner/active-collection])) opts (time/now-ms))))
+    (sut/start learner/reads memory ((get-in capabilities [:learner :learner/active-collection])) (merge {:random (constantly 0.5)} opts) (time/now-ms))))
 
 
 (defn- ^:async started
@@ -79,11 +79,11 @@
   (let [dbs    (::dbs capabilities)
         memory (await (db-seed/memory-of (:user/db dbs)))
         now    (time/now-ms)
-        levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows ports/reads memory {} now)))]
+        levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows learner/reads memory {} now)))]
     {:words (mapv (fn [{:keys [word] :as card}]
                     {:id      (:id word)
                      :retention-level (levels (:id word))
-                     :urgency (vocabulary/urgency-of card now)})
+                     :urgency (retention/urgency (:reviews card) now)})
                   (memory/collection-cards memory nil))}))
 
 

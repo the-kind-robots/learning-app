@@ -4,9 +4,6 @@
    [domain.collections :as collections]))
 
 
-(def max-name-length 80)
-
-
 (defn listed
   "Every collection the learner's data in memory has, oldest first."
   [learner memory]
@@ -24,16 +21,18 @@
    :total-words ((:learner/word-count learner) memory)})
 
 
-(defn- clamped
-  "`raw-name` trimmed and cut to `max-name-length`. A cut that would fall
-   inside a character written as two UTF-16 units, such as an emoji, falls
-   before it instead: half a character cannot be sent in a URL."
+(defn- sendable-name
+  "`raw-name` as `collections/entered-name` makes it. A cut that fell inside
+   a character written as two UTF-16 units, such as an emoji, falls before
+   it instead: half a character cannot be sent in a URL."
   [raw-name]
-  (let [trimmed (str/trim (or raw-name ""))
-        end     (min (count trimmed) max-name-length)
-        splits? (and (< 0 end (count trimmed))
-                     (<= 0xD800 (.charCodeAt trimmed (dec end)) 0xDBFF))]
-    (subs trimmed 0 (if splits? (dec end) end))))
+  (let [name    (collections/entered-name raw-name)
+        cut?    (< (count name) (count (str/trim (or raw-name ""))))
+        splits? (and cut?
+                     (pos? (count name))
+                     (<= 0xD800 (.charCodeAt name (dec (count name))) 0xDBFF))]
+    (cond-> name
+      splits? (subs 0 (dec (count name))))))
 
 
 (defn- ^:async name-taken?
@@ -42,24 +41,25 @@
    up with the databases, so a collection a replication brought a moment
    ago counts."
   [learner own-id name]
-  (await ((:learner/catch-up! learner)))
-  (boolean (some #(and (not= own-id (:id %)) (collections/same-name? (:name %) name))
-                 ((:learner/collections learner) ((:learner/memory learner))))))
+  (let [memory (await ((:learner/fresh-memory learner)))]
+    (collections/name-taken? ((:learner/collections learner) memory) own-id name)))
 
 
 (defn ^:async create!
   "Creates a new collection from a raw name. Trims whitespace and clamps
-   to `max-name-length`. Returns {:ok :created :id id}, {:error :invalid-name}
+   to `collections/max-name-length`. Returns {:ok :created :id id}, {:error :invalid-name}
    for a blank name, or {:noop :duplicate} when a collection with the
    same name (trimmed, case-insensitive) already exists — the call is
    silently ignored so an accidental re-create doesn't fragment the user's
    data."
-  [{:keys [learner]} raw-name]
-  (let [name (clamped raw-name)]
+  [{:keys [learner world]} raw-name]
+  (let [name (sendable-name raw-name)]
     (cond
       (str/blank? name) {:error :invalid-name}
       (await (name-taken? learner nil name)) {:noop :duplicate}
-      :else (let [{:keys [id]} (await ((:learner/create-collection! learner) name))]
+      :else (let [{:keys [id]} (await ((:learner/insert! learner)
+                                          :entity/collection
+                                          (collections/new-collection name ((:clock/now-iso (:world/clock world))))))]
               {:ok :created :id id}))))
 
 
@@ -68,7 +68,7 @@
    Deleted while active, it is simply gone from memory, and «Всё подряд» is
    active."
   [{:keys [learner]} coll-id]
-  ((:learner/delete-collection! learner) coll-id))
+  ((:learner/change! learner) :entity/collection coll-id (constantly :entity/deleted)))
 
 
 (defn switch-active!
@@ -79,18 +79,23 @@
 
 (defn ^:async rename-active!
   "Renames the active collection. Trims input and clamps to
-   `max-name-length`; a blank value keeps the current name (no write), and
+   `collections/max-name-length`; a blank value keeps the current name (no write), and
    so does a name another collection already carries by the equality
    `create!` and the folder lookup use — two documents under one name
    would show as a folder plus a stray tile. Returns {:name final-name},
    with `:renamed? true` when the document was written, `:noop :duplicate`
    when the name was taken, or nil when no collection is active."
-  [{:keys [learner]} new-name]
+  [{:keys [learner world]} new-name]
   (when-let [{active-id :id current :name} ((:learner/active-collection learner))]
-    (let [trimmed (clamped new-name)
+    (let [trimmed (sendable-name new-name)
           taken?  (await (name-taken? learner active-id trimmed))
           renamed (when-not (or (str/blank? trimmed) taken? (= trimmed current))
-                    (await ((:learner/rename-collection! learner) active-id trimmed)))]
+                    (await ((:learner/change! learner)
+                            :entity/collection
+                            active-id
+                            (fn [collection]
+                              (some-> collection
+                                      (collections/renamed-collection trimmed ((:clock/now-iso (:world/clock world)))))))))]
       (cond-> {:name (if renamed (:name renamed) current)}
         renamed (assoc :renamed? true)
         taken?  (assoc :noop :duplicate)))))
