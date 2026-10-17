@@ -90,6 +90,7 @@ jobs:
         with:
           cli: latest
           clj-kondo: 2026.05.25
+          bb: 1.12.218
 
       - id: cache-clojure
         uses: actions/cache/restore@v6.1.0
@@ -112,6 +113,11 @@ jobs:
       # through :config-paths (.clj-kondo/layering/config.edn).
       - name: Lint (incl. client layering)
         run: clj-kondo --lint src --fail-level error
+
+      # An adapter reaches no adapter of another name (what the ns groups above
+      # cannot say); see scripts/check_adapter_layering.clj.
+      - name: Adapters stand apart
+        run: bb scripts/check_adapter_layering.clj
 
       - uses: actions/cache/save@v6.1.0
         if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}
