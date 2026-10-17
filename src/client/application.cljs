@@ -1,17 +1,13 @@
 (ns application
   (:require
-   ["qrcode" :as QRCode]
-   [adapters.learner.memory :as memory]
-   [adapters.identity :as identity]
-   [application.presenter :as presenter]
-   [application.shell :as shell]
-   [install-guide.view :as install-guide]
+   [application.pages :as pages]
+   [application.sync.actions]
+   [application.sync.effects]
+   [application.view :as view]
+   [install-guide.core]
+   [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
-   [pages.collections.view :as pages.collections.view]
-   [pages.home.view :as pages.home.view]
-   [pages.lesson.view :as pages.lesson.view]
-   [pages.words.view :as pages.words.view]
    [replicant.dom :as r]))
 
 
@@ -33,7 +29,7 @@
 
 (nxr/register-effect! :effect/save
   (fn save [_ system m]
-    (swap! (:store system) merge m)))
+    (swap! (:app-state system) merge m)))
 
 
 (nxr/register-effect! :effect/log-warning
@@ -43,41 +39,38 @@
 
 (nxr/register-effect! :effect/navigate
   (fn navigate-effect [{:keys [capabilities dispatch]} _ page]
-    (when-let [navigate! (get-in capabilities [:navigation :navigation/navigate])]
+    (when-let [navigate! (get-in capabilities [:browser :browser/navigate])]
       (navigate! page #(dispatch [[:effect/enter :action/open-home]])))))
 
 
-(nxr/register-effect! :effect/sync-pull
-  ;; What a pull brings reaches the screen through memory, which follows the
-  ;; local change feed; the pull itself reloads nothing. Only the pairing
-  ;; dialog asks after it: the receipt is itself a pulled document.
-  (fn sync-pull [{:keys [capabilities dispatch]} _ & [reason]]
-    (when-let [pull! (get-in capabilities [:capabilities/sync :sync/pull!])]
-      (some-> (pull! reason)
-              (.then (fn [{:keys [pulled]}]
-                       (when (and pulled (pos? pulled))
-                         (dispatch [[:action/confirm-pairing]]))))))))
-
-
-(defn- page-context
-  "What a page's content needs besides app state: the active collection,
-   or nil for «Всё подряд», the learner port, whose reads of memory a page
-   uses, and the time retention is measured at. The context is marked so
-   that Nexus hands it over as it is: the collection carries every word id
-   of a theme, and Nexus would otherwise walk them all for placeholders on
-   every keystroke."
-  [capabilities]
-  (with-meta {:active-collection ((get-in capabilities [:learner :learner/active-collection]))
-              :learner (:learner capabilities)
-              :now-ms  ((get-in capabilities [:clock :clock/now-ms]))}
-             {:nexus/skip-interpolation true}))
+(nxr/register-effect! :effect/sync
+  ;; What a sync brings reaches the screen through memory, which follows the
+  ;; local change feed; the sync itself reloads nothing.
+  (fn sync [{:keys [capabilities]} _ & [reason]]
+    (when-let [sync! (get-in capabilities [:learner :learner/sync!])]
+      (sync! reason)
+      nil)))
 
 
 (nxr/register-effect! :effect/enter
   ;; A page's action, handed what it cannot read from state — then `args` —
   ;; and dispatched in the same task: a route's entry, a query, a page more.
   (fn enter [{:keys [capabilities dispatch]} _ action & args]
-    (dispatch [(into [action (page-context capabilities)] args)])))
+    (dispatch [(into [action
+                      ;; What a page's content needs besides app state: the
+                      ;; active collection, or nil for «Всё подряд», the learner
+                      ;; port, whose reads of memory a page uses, the time
+                      ;; retention is measured at, and the source of randomness.
+                      ;; The context is marked so that Nexus hands it over as it
+                      ;; is: the collection carries every word id of a theme, and
+                      ;; Nexus would otherwise walk them all for placeholders on
+                      ;; every keystroke.
+                      (with-meta {:active-collection ((get-in capabilities [:learner :learner/active-collection]))
+                                  :learner           (:learner capabilities)
+                                  :now-ms            ((get-in capabilities [:world :world/clock :clock/now-ms]))
+                                  :random            (get-in capabilities [:world :world/random])}
+                                 {:nexus/skip-interpolation true})]
+                     args)])))
 
 
 (nxr/register-effect! :effect/after-paint
@@ -90,49 +83,20 @@
 
 
 ;;
-;; The learner's data in memory (ADR-0016). `adapters.learner.loader` reads the
-;; databases and follows their change feeds, and hands what it reads to these
-;; two effects; nothing else writes memory. A screen reads memory when it is
-;; entered, and does not follow memory while it is open.
+;; The learner's data in memory (ADR-0016). The learner reads the databases
+;; into memory it owns, then follows their change feeds and writes each change
+;; into memory itself. A screen reads memory when it is entered, and does not
+;; follow memory while it is open; `start-rendering!` refreshes the screen
+;; once, when the load arrives.
 ;;
-
-
-(nxr/register-effect! :effect/memory-loaded
-  ;; Everything user-db held at start. Nothing is rendered before this
-  ;; write, so the server's splash is still on display. The write renders
-  ;; the screen from the slice its route entry computed from empty memory,
-  ;; and the refresh renders it again from memory. Both renders run in this
-  ;; task, so only the second is painted, in place of the splash.
-  (fn memory-loaded [{:keys [dispatch]} {:keys [store]} memory]
-    (swap! store assoc :learner/memory memory :learner/loaded? true)
-    (dispatch [[:effect/enter :action/refresh-page]])))
-
-
-(nxr/register-effect! :effect/memory-changed
-  ;; A batch user-db stored after the load — this app's own write, a
-  ;; replication, another tab — and the feed position after it. The open
-  ;; screen is left as it is.
-  (fn memory-changed [_ {:keys [store]} docs position]
-    (swap! store update :learner/memory memory/with-changes docs position)))
 
 
 (nxr/register-action! :action/refresh-page
   ;; The screen on display computed again from memory: after the load, and
   ;; after the reader's own change on it.
   (fn refresh-page [state context]
-    (case (:page/current state)
-      :page/collections [[:action/show-collections context]]
-      :page/home        [[:action/show-home context]]
-      :page/lesson      (when (and (nil? (:lesson/state state))
-                                   (not (:lesson/empty? state)))
-                          [[:effect/enter :action/open-lesson]])
-      :page/words       [[:action/show-words context]]
-      nil)))
-
-
-;; Past the frame that renders the emptied region, so the accessibility tree
-;; sees it empty before the message and speaks a repeated one again.
-(def ^:private announce-delay-ms 100)
+    (when-let [refresh (:refresh (pages/table (:page/current state)))]
+      (refresh state context))))
 
 
 (nxr/register-effect! :effect/announce
@@ -143,14 +107,16 @@
   (fn announce [_ _ region-id message]
     (when-let [region (js/document.getElementById region-id)]
       (set! (.-textContent region) "")
-      (js/setTimeout #(set! (.-textContent region) message) announce-delay-ms))))
+      ;; Past the frame that renders the emptied region, so the accessibility
+      ;; tree sees it empty before the message and speaks a repeated one again.
+      (js/setTimeout #(set! (.-textContent region) message) 100))))
 
 
 (nxr/register-effect! :effect/load-account
   (fn load-account [{:keys [capabilities dispatch]} _]
     (dispatch
      [[:effect/save
-       {:app/account-id (get-in capabilities [:capabilities/sync :sync/account-id])}]])))
+       {:app/has-account? (get-in capabilities [:learner :learner/has-account?])}]])))
 
 
 (nxr/register-effect! :effect/show-modal
@@ -187,32 +153,21 @@
       (.setSelectionRange node len len))))
 
 
-(defn- css-sized?
-  "Whether the browser sizes this textarea itself through `field-sizing`.
-   Asked by the CSS property name: `fieldSizing` is missing from Closure's
-   externs, so the dotted accessor survives :advanced only as long as extern
-   inference keeps resolving it. A string never has to be resolved."
-  [node]
-  (-> (js/getComputedStyle node)
-      (.getPropertyValue "field-sizing")
-      (= "content")))
-
-
-(defn- autogrow!
-  "Fits a textarea's height to its content: collapse, then measure. The
-   fallback for Safari, which lacks `field-sizing: content` — where the
-   property works, measuring only overrides a height the browser got right.
-   `scrollHeight` omits the borders a border-box height must carry."
-  [node]
-  (when (and node (not (css-sized? node)))
-    (set! (.. node -style -height) "auto")
-    (let [borders (- (.-offsetHeight node) (.-clientHeight node))]
-      (set! (.. node -style -height) (str (+ (.-scrollHeight node) borders) "px")))))
-
-
 (nxr/register-effect! :effect/autogrow-target
+  ;; Fits a textarea's height to its content: collapse, then measure. The
+  ;; fallback for Safari, which lacks `field-sizing: content` — where the
+  ;; property works, measuring only overrides a height the browser got right.
+  ;; `scrollHeight` omits the borders a border-box height must carry.
   (fn autogrow-target [{:keys [dispatch-data]} _]
-    (autogrow! (some-> dispatch-data :replicant/dom-event .-target))))
+    (let [node (some-> dispatch-data :replicant/dom-event .-target)]
+      ;; The browser sizing it itself is asked by the CSS property name:
+      ;; `fieldSizing` is missing from Closure's externs, so the dotted
+      ;; accessor survives :advanced only as long as extern inference keeps
+      ;; resolving it. A string never has to be resolved.
+      (when (and node (not= "content" (.getPropertyValue (js/getComputedStyle node) "field-sizing")))
+        (set! (.. node -style -height) "auto")
+        (let [borders (- (.-offsetHeight node) (.-clientHeight node))]
+          (set! (.. node -style -height) (str (+ (.-scrollHeight node) borders) "px")))))))
 
 
 (nxr/register-effect! :effect/clear-autogrow
@@ -362,311 +317,48 @@
        [:effect/request-submit]])))
 
 
-(nxr/register-action! :action/open-sync-menu
-  (fn open-sync-menu [_]
-    [[:effect/save {:app/sync-menu-open? true}]]))
-
-
-(nxr/register-action! :action/close-sync-menu
-  (fn close-sync-menu [_]
-    [[:effect/save {:app/sync-menu-open? false}]]))
-
-
-(nxr/register-action! :action/show-pairing-dialog
-  (fn show-pairing-dialog [_ pairing]
-    [[:effect/save
-      {:app/sync-menu-open? false
-       :app/pairing pairing}]]))
-
-
-(nxr/register-action! :action/close-pairing-dialog
-  (fn close-pairing-dialog [_]
-    [[:effect/save {:app/pairing nil}]]))
-
-
-(nxr/register-action! :action/confirm-pairing
-  (fn confirm-pairing [state]
-    (when-some [nonce (get-in state [:app/pairing :nonce])]
-      [[:effect/confirm-pairing nonce]])))
-
-
-(nxr/register-effect! :effect/confirm-pairing
-  ;; Runs after every pull while the dialog waits. Only the receipt carrying
-  ;; this dialog's own nonce closes it — pokes from ordinary writes on other
-  ;; devices and socket reconnects change nothing.
-  (fn ^:async confirm-pairing
-    [{:keys [capabilities dispatch]} _ nonce]
-    (when-some [confirmed! (get-in capabilities [:capabilities/sync :sync/pairing-confirmed!])]
-      (when (await (confirmed! nonce))
-        (dispatch [[:action/close-pairing-dialog]])))))
-
-
-(defn- account-key-url
-  "The QR/recovery URL a device opens to adopt this account. The token rides in
-   the fragment, which browsers never send to the server, keeping it out of
-   access logs and Referer headers (ADR-0006)."
-  [{:keys [token]}]
-  (str (.. js/window -location -origin) "/#key=" token))
-
-
-(nxr/register-effect! :effect/create-recovery-link
-  (fn ^:async create-recovery-link
-    [_ _]
-    (try
-      (when-let [identity (await (identity/load-identity!))]
-        (let [url (account-key-url identity)]
-          (if (exists? js/navigator.share)
-            (await (js/navigator.share #js {:title "Sprecha: восстановление доступа" :url url}))
-            (do
-              (await (.. js/navigator -clipboard (writeText url)))
-              (js/alert "Ссылка скопирована в буфер обмена")))))
-      (catch js/Error err
-        (log/error :effect/create-recovery-link {:error (str err)})))))
-
-
-(nxr/register-effect! :effect/open-pairing
-  (fn ^:async open-pairing
-    [{:keys [dispatch]} _]
-    (try
-      (when-let [identity (await (identity/load-identity!))]
-        ;; The nonce tags one pairing round: the QR carries it out, the new
-        ;; device echoes it back as a receipt, and only that echo closes
-        ;; this dialog.
-        (let [nonce    (js/crypto.randomUUID)
-              pair-url (str (account-key-url identity) "&pair=" nonce)
-              qr-url   (await (.toDataURL QRCode pair-url))]
-          (dispatch [[:action/show-pairing-dialog
-                      {:nonce nonce :pair-url pair-url :qr-url qr-url}]])))
-      (catch js/Error err
-        (log/error :effect/open-pairing {:error (str err)})))))
-
-
 ;;
 ;; Render
 ;;
 
 
-(defn sync-virtual-keyboard!
-  []
-  (when (js-in "virtualKeyboard" js/navigator)
-    (when-let [vk (.-virtualKeyboard js/navigator)]
-      (set! (.-overlaysContent vk)
-            (boolean (js/document.querySelector "[data-vk-overlay]"))))))
-
-
-(defn- collections-icon
-  []
-  [:button.app-shell__corner-icon
-   {:type       "button"
-    :aria-label "Открыть наборы"
-    :title      "Наборы"
-    :on         {:click [[:action/go-to-collections]]}}
-   [:svg.app-shell__corner-icon-svg
-    {:viewBox "0 0 16 16" :aria-hidden "true"}
-    [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
-    [:rect {:x 10 :y 2 :width 4 :height 4 :rx 1}]
-    [:rect {:x 2 :y 10 :width 4 :height 4 :rx 1}]
-    [:rect {:x 10 :y 10 :width 4 :height 4 :rx 1}]]])
-
-
-(defn- close-icon
-  []
-  [:button.app-shell__corner-icon
-   {:type       "button"
-    :aria-label "Закрыть"
-    :title      "Закрыть"
-    :on         {:click [[:action/close-screen]]}}
-   [:svg.app-shell__corner-icon-svg
-    {:viewBox "0 0 16 16" :aria-hidden "true"}
-    [:path
-     {:d "M4 4 L12 12 M12 4 L4 12"
-      :stroke "currentColor"
-      :stroke-width 2
-      :stroke-linecap "round"}]]])
-
-
-(defn- install-icon
-  []
-  [:svg.app-shell__icon
-   {:aria-hidden    "true"
-    :fill           "none"
-    :stroke         "currentColor"
-    :stroke-linecap "round"
-    :stroke-linejoin "round"
-    :stroke-width   "1.8"
-    :viewBox        "0 0 24 24"}
-   [:path {:d "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}]
-   [:polyline {:points "7 10 12 15 17 10"}]
-   [:line {:x1 "12" :y1 "15" :x2 "12" :y2 "3"}]])
-
-
-(defn- trace-export-icon
-  []
-  [:svg.app-shell__icon
-   {:aria-hidden    "true"
-    :fill           "none"
-    :stroke         "currentColor"
-    :stroke-linecap "round"
-    :stroke-linejoin "round"
-    :stroke-width   "1.8"
-    :viewBox        "0 0 24 24"}
-   [:path {:d "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"}]
-   [:polyline {:points "14 3 14 8 19 8"}]
-   [:line {:x1 "12" :y1 "11" :x2 "12" :y2 "17"}]
-   [:polyline {:points "9 14 12 17 15 14"}]])
-
-
-(defn- devices-icon
-  "A laptop beside a phone: connecting devices, not reloading the page."
-  []
-  [:svg.app-shell__icon
-   {:aria-hidden    "true"
-    :fill           "none"
-    :stroke         "currentColor"
-    :stroke-linecap "round"
-    :stroke-linejoin "round"
-    :stroke-width   "1.8"
-    :viewBox        "0 0 24 24"}
-   [:path {:d "M13 14H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1"}]
-   [:path {:d "M1.5 18H13"}]
-   [:rect {:x "16" :y "9" :width "6" :height "11" :rx "1.5"}]
-   [:path {:d "M19 17.2h0"}]])
-
-
-(defn- sync-menu-dialog
-  [{:keys [show-account-actions?]}]
-  [:dialog.sync-menu-dialog.modal
-   {:replicant/on-mount [[:action/open-dialog]]
-    :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
-         :close [[:action/close-sync-menu]]}}
-   [:div.sync-menu-dialog__content
-    (when show-account-actions?
-      (list
-       [:button.sync-menu-dialog__item
-        {:type "button"
-         :on   {:click [[:effect/open-pairing]]}}
-        "Подключить устройство"]
-       [:button.sync-menu-dialog__item
-        {:type "button"
-         :on   {:click [[:effect/create-recovery-link]]}}
-        "Ссылка восстановления"]))
-    [:button.sync-menu-dialog__item.sync-menu-dialog__item--cancel
-     {:type "button"
-      :on   {:click [[:action/close-sync-menu]]}}
-     "Отмена"]]])
-
-
-(defn- pairing-dialog
-  [{:keys [qr-url pair-url]}]
-  [:dialog.pairing-dialog.modal
-   {:replicant/on-mount [[:action/open-dialog]]
-    :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
-         :close [[:action/close-pairing-dialog]]}}
-   [:div.pairing-dialog__content
-    [:h2.pairing-dialog__title "Подключить устройство"]
-    [:p.pairing-dialog__hint "Отсканируйте QR-код на новом устройстве"]
-    [:img.pairing-dialog__qr {:src qr-url :alt "QR-код для подключения устройства"}]
-    [:button.pairing-dialog__close
-     {:type "button"
-      :on   {:click [[:action/close-pairing-dialog]]}}
-     "Закрыть"]]])
-
-
-(defn- render
-  [state]
-  (let [{:keys [build-mark corner menu-open? page pairing read-error show-install? show-sync?]}
-        (presenter/shell-props state)]
-    (list
-     ;; One bar across the top holds the three slots: the word mark, the build
-     ;; mark and the actions. It is fixed, as the word mark and the actions
-     ;; were on their own, so no page's content moves for it; the side slots
-     ;; share the free space equally, which is what centres the build mark in
-     ;; the bar rather than between its neighbours.
-     [:div.app-shell__bar
-      [:div.app-shell__bar-slot
-       [:button.app-shell__logo
-        {:type "button"
-         :on   {:click [[:action/go-to-home]]}}
-        "Sprecha"
-        ;; A development build's word mark ends in a red D. A letter of the
-        ;; name, nothing to tap; the ^boolean on the flag is what lets Closure
-        ;; drop it, and the build mark below, from a release.
-        (when ^boolean goog/DEBUG
-          [:span.app-shell__dev-mark "D"])]]
-      ;; Which bundle the page loaded, and the tap that reloads onto the
-      ;; newest one: a check for a new build, taking it if one waits or is
-      ;; installing, otherwise a plain reload.
-      (when ^boolean goog/DEBUG
-        [:button.app-shell__build-mark
-         {:type       "button"
-          :aria-label "Перезагрузить сборку"
-          :title      "Перезагрузить сборку"
-          :on         {:click [[:effect/get-newest-build]]}}
-         build-mark])
-      [:div.app-shell__actions
-       ;; The trace export leads the row: a development build's control among
-       ;; the shell's own, not a character beside the word mark.
-       (when ^boolean goog/DEBUG
-         [:button.app-shell__icon-button
-          {:type       "button"
-           :title      "Экспортировать трассу"
-           :aria-label "Экспортировать трассу"
-           :on         {:click [[:effect/export-trace]]}}
-          (trace-export-icon)])
-       ;; Install stands on its own — it is not a sync action, and it is offered
-       ;; before any account exists.
-       (when show-install?
-         [:button.app-shell__icon-button
-          {:type       "button"
-           :title      "Установить приложение"
-           :aria-label "Установить приложение"
-           :on         {:click [[:action/pwa-install-requested]]}}
-          (install-icon)])
-       (when show-sync?
-         [:button.app-shell__icon-button
-          {:type       "button"
-           :title      "Синхронизация"
-           :aria-label "Синхронизация"
-           :on         {:click [[:action/open-sync-menu]]}}
-          (devices-icon)])
-       (case corner
-         :collections (collections-icon)
-         :close       (close-icon)
-         nil)]]
-     (install-guide/render state)
-     (when menu-open?
-       (sync-menu-dialog (presenter/sync-menu-props state)))
-     (when pairing
-       (pairing-dialog pairing))
-     (case page
-       :page/collections (pages.collections.view/page state)
-       :page/home        (pages.home.view/page state)
-       :page/lesson      (pages.lesson.view/page state)
-       :page/words       (pages.words.view/page state)
-       (when read-error
-         [:div.app-shell__read-error read-error]))
-     shell/status-region)))
-
-
 (defn render!
-  [state]
-  (r/render js/document.body (render state))
+  "Renders the shell of `state`, then lets the browser's virtual keyboard
+   follow what the screen asks of it (`sync-virtual-keyboard!`, the browser
+   capability's)."
+  [state sync-virtual-keyboard!]
+  (r/render js/document.body (view/shell state))
   (sync-virtual-keyboard!))
 
 
+(defn state
+  "The state the screens are computed from: the interface's own, in
+   `:app-state` of `system`, with the learner's data in memory and whether it
+   is loaded or unreadable."
+  [{:keys [app-state capabilities]}]
+  (let [{:learner/keys [loaded? memory unreadable?]} (:learner capabilities)]
+    (assoc @app-state
+           :learner/loaded?     (loaded?)
+           :learner/memory      (memory)
+           :learner/unreadable? (unreadable?))))
+
+
 (defn start-render!
-  "Renders the state now and again on every change to it, and only on change.
-   `identical?` is enough: CLJS `assoc`/`merge` hand back the same map when
-   nothing differs, so a dispatch that saves nothing costs no render. A
-   dispatch that saves several times renders several times; the owner chose
-   this simplicity over a coalescing counter (#213)."
-  [store render-fn]
-  (add-watch store
-             ::render
-             (fn [_ _ old state]
-               (when-not (identical? old state)
-                 (render-fn state))))
-  (render-fn @store))
+  "Renders the state now and again on every change to the interface's state or
+   the learner's data, and only on change. `identical?` is enough: CLJS
+   `assoc`/`merge` hand back the same map when nothing differs, so a dispatch
+   that saves nothing costs no render. A dispatch that saves several times
+   renders several times; the owner chose this simplicity over a coalescing
+   counter (#213)."
+  [{:keys [app-state capabilities] :as system} render-fn]
+  (let [render! #(render-fn (state system))]
+    (add-watch app-state
+               ::render
+               (fn [_ _ old new]
+                 (when-not (identical? old new)
+                   (render!))))
+    ((get-in capabilities [:learner :learner/on-change]) render!)
+    (render!)))
 
 
 (def ^:private fonts-cap-ms
@@ -717,17 +409,59 @@
                   :key  [:event.keyboard/key]}]]))))
 
 
-(defn- entered
-  "A route's controllers: its screen computed from memory in the task that
-   changed the route, the pull after the paint."
-  [dispatch open]
-  [{:start #(dispatch [[:effect/enter open]
-                       [:effect/after-paint [[:effect/sync-pull]]]])}])
+(nxr/register-effect! :effect/follow-routes
+  ;; A page is entered: its screen computed from memory in the task that
+  ;; changed the route, the pull after the paint. The page the address matched
+  ;; before this ran is entered at once.
+  (fn follow-routes [{:keys [capabilities dispatch]} _]
+    ((get-in capabilities [:browser :browser/on-route])
+     (fn [page]
+       (dispatch [[:effect/enter (:open (pages/table page))]
+                  [:effect/after-paint [[:effect/sync]]]])))))
 
 
-(defn routes
-  [dispatch]
-  [["/home" {:name :page/home :controllers (entered dispatch :action/open-home)}]
-   ["/words" {:name :page/words :controllers (entered dispatch :action/open-words)}]
-   ["/lesson" {:name :page/lesson :controllers (entered dispatch :action/open-lesson)}]
-   ["/collections" {:name :page/collections :controllers (entered dispatch :action/open-collections)}]])
+(defn start-rendering!
+  "Makes the app show: guards double clicks, listens for the lesson hotkey,
+   and renders the state of `system` (`state`), now and on every change to it,
+   once memory is loaded."
+  [{:keys [capabilities] :as system} dispatch]
+  (guard-double-clicks!)
+  (listen-for-lesson-hotkey! dispatch)
+  ;; Everything user-db held at start arrives in memory in one write.
+  ;; Nothing is rendered before it, so the server's splash is still on
+  ;; display. The write renders the screen from the slice its route entry
+  ;; computed from empty memory, and the refresh renders it again from memory.
+  ;; Both renders run in this task, so only the second is painted, in place of
+  ;; the splash. The refresh is a microtask of the same task: a watch that
+  ;; saves would have the render watch see the load's state after the
+  ;; refresh's. A load that came before this ran is refreshed at once.
+  (let [{:learner/keys [loaded? on-change]} (:learner capabilities)
+        refresh!                            #(dispatch {} [[:effect/enter :action/refresh-page]])
+        was-loaded?                         (volatile! (loaded?))]
+    (on-change (fn []
+                 (let [now-loaded? (loaded?)]
+                   (when (and now-loaded? (not @was-loaded?))
+                     (js/queueMicrotask refresh!))
+                   (vreset! was-loaded? now-loaded?))))
+    (when @was-loaded?
+      (refresh!)))
+  ;; Nothing is rendered until memory is loaded, so the
+  ;; server's splash stays until the first screen
+  ;; replaces it. When the start read fails, the shell
+  ;; is rendered in its place to ask for a reload.
+  ;; The first screen replaces the splash, so it
+  ;; waits for the fonts: they are on the screen
+  ;; from its first paint, not swapped in after it.
+  (.then (fonts-settled)
+         (fn [_]
+           (start-render!
+            system
+            (fn [state]
+              (when (or (:learner/loaded? state)
+                        (:learner/unreadable? state))
+                (let [render-state! #(render! % (get-in capabilities [:browser :browser/sync-virtual-keyboard!]))]
+                  (if ^boolean goog/DEBUG
+                    (instrumentation/render! render-state! state)
+                    (render-state! state))))))))
+  (when ^boolean goog/DEBUG
+    (instrumentation/install!)))

@@ -2,36 +2,29 @@
   "The learner port over test databases, with memory loaded from them and
    following their change feeds, as the app runs it."
   (:require
+   [adapters.learner :as adapter]
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
-   [application]
-   [domain.examples :as examples]
-   [nexus.registry :as nxr]
-   [ports.learner :as learner]))
+   [domain.examples :as examples]))
 
 
-(defn store-dispatch
-  "A dispatch that runs the memory loader's effects on `store`, as the app
-   runs them. The store shows no screen, so the refresh those effects ask for
-   changes nothing."
-  [store]
-  (nxr/register-system->state! #(-> % :store deref))
-  (let [system {:capabilities {:clock   {:clock/now-ms (constantly 0)}
-                               :learner {:learner/active-collection (constantly nil)}}
-                :store        store}]
-    (fn [effects]
-      (nxr/dispatch system {} effects))))
+(def reads
+  "The reads of memory, each a function of a memory value, as the learner
+   offers them (`adapters.learner/capabilities`)."
+  (adapter/capabilities {}))
 
 
 (defn ^:async started
-  "Starts memory over `dbs` into a new store, and the learner port over both.
-   Resolves once memory is fully loaded, with `{:learner :stop :store}`:
-   the port's functions, a function that stops following the feeds, and the
-   store."
-  [dbs clock]
+  "Starts memory over `dbs` into a new store, and the learner capability over
+   both. Resolves once memory is fully loaded, with `{:learner :stop :store}`:
+   the capability's functions, a function that stops following the feeds, and
+   the store. `world` is the clock, the map of `:clock/*` functions."
+  [dbs world]
   (let [store (atom {:learner/memory memory/empty-memory})
-        stop  (await (loader/start! dbs store (store-dispatch store)))]
-    {:learner (learner/start! {:clock clock :db dbs :store store})
+        stop  (await (loader/start! dbs store))]
+    {:learner (adapter/capabilities
+               {:databases dbs
+                :learner   (adapter/new-learner {:databases dbs :store store :world {:world/clock world}})})
      :stop    stop
      :store   store}))
 
@@ -56,7 +49,7 @@
 
 (defn missing-in
   "The pairs `memory` is missing an example for, by the rule the example
-   fetcher uses (`domain.examples/missing-pairs`)."
+   backfill uses (`domain.examples/missing-pairs`)."
   [memory]
   (let [collections (memory/collections memory)]
     (into []

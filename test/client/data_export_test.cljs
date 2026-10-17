@@ -2,7 +2,7 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.data-export :as sut]
+   [adapters.learner.backup :as sut]
    [adapters.learner.documents :as documents]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [client.support.db-fixtures :as db-fixtures]

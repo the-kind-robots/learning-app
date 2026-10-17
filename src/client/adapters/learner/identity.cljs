@@ -1,4 +1,4 @@
-(ns adapters.identity
+(ns adapters.learner.identity
   (:require
    [auth :as auth]
    [db :as db]))
@@ -11,7 +11,7 @@
   ;; Held rather than reopened: in ClojureScript `db/use` is a PouchDB
   ;; constructor call, so asking for the database twice builds two objects over
   ;; the same store. Opened here instead of taken from the system's db map
-  ;; because an incoming credential is handled before `:db/pouch` starts, when
+  ;; because an incoming credential is handled before the databases open, when
   ;; that map does not exist yet.
   (delay (db/use "device-db")))
 
@@ -41,7 +41,7 @@
 (defn use-identity!
   "Makes the server authenticate requests as this identity by writing its
    token to the cookie `/auth/check` reads. Not HttpOnly — the client owns the
-   token, it builds the QR and the recovery link from it."
+   token, it builds the sync link from it."
   [{:keys [token]}]
   (set! js/document.cookie
         (str auth/token-cookie "=" token "; path=/; SameSite=Lax; Secure")))

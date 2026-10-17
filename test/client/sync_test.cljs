@@ -2,11 +2,11 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.identity :as identity]
+   [adapters.learner.identity :as identity]
+   [adapters.learner.sync :as sut]
    [client.support.db-fixtures :as db-fixtures]
    [cljs.test :refer-macros [deftest is testing use-fixtures]]
-   [db :as db]
-   [sync :as sut]))
+   [db :as db]))
 
 
 (def user-db-name (db-fixtures/db-name "client.sync-test.user"))
@@ -257,8 +257,8 @@
   (set! (.-window js/globalThis) #js {:location #js {:hash "#key=token-of-the-other"}})
   (try
     (with-redefs [db/use (fn [name] (if (= "device-db" name) device-db user-db))
-                  identity/load-identity! (fn [] (js/Promise.resolve {:id 1 :token "old"}))
                   identity/account-id! (fn [_] (js/Promise.resolve account-id))
+                  identity/load-identity! (fn [] (js/Promise.resolve {:id 1 :token "old"}))
                   identity/save-identity! (fn [_] (js/Promise.resolve nil))]
       (await (sut/check-incoming-auth! nil)))
     (finally

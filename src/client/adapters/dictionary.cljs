@@ -49,6 +49,12 @@
    ORDER BY top.has_exact DESC, top.rank DESC, lemma ASC")
 
 
+(defn open!
+  "Opens the dictionary's SQLite over the worker. Resolves with its handle."
+  [deps]
+  (sqlite/init! deps))
+
+
 (defn ready?
   "Whether this tab has the dictionary right now, for a caller that has to say
    so. Nothing on the query path reads it."

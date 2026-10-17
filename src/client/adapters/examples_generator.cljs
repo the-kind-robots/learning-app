@@ -1,4 +1,4 @@
-(ns adapters.example-fetch
+(ns adapters.examples-generator
   "The browser's side of fetching examples: the request to the backend,
    whether the device is online, and whether the tab is visible. What to
    ask for, and what a failure does, is decided in `use-cases.examples`."

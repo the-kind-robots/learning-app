@@ -5,11 +5,12 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.identity :as identity]
+   [adapters.learner.identity :as identity]
+   [adapters.learner.sync :as sut]
    [cljs.test :refer-macros [deftest is]]
+   [db :as db]
    [db.pouch :as pouch]
-   [goog.functions :as gfn]
-   [sync :as sut]))
+   [goog.functions :as gfn]))
 
 
 (defn- change
@@ -26,7 +27,11 @@
    it is played. The page is the test's own: online."
   [sync-once! f]
   (let [feed (atom nil)
-        page {:page/online? (constantly true)}]
+        browser {:browser/active?              (constantly false)
+                 :browser/on-offline           (constantly nil)
+                 :browser/on-online            (constantly nil)
+                 :browser/on-visibility-change (constantly nil)
+                 :browser/online?              (constantly true)}]
     (with-redefs [gfn/throttle           (fn [g _] g)
                   identity/load-identity! (fn [] (js/Promise.resolve {:id "account" :token "t"}))
                   identity/use-identity! (fn [_] nil)
@@ -34,10 +39,10 @@
                                            (reset! feed handler)
                                            (fn [] nil))
                   pouch/sync-once!       sync-once!]
-      (let [{:sync/keys [pull!] :as started} (await (sut/start! {:db {} :page page}))]
+      (let [{:keys [sync!] :as started} (await (sut/start! {:browser browser :databases {}}))]
         (await (f {:feed!        #(@feed (change %1 %2))
-                   :request!     pull!
-                   :start-again! #(sut/start! {:db {} :page page})
+                   :request!     sync!
+                   :start-again! #(sut/start! {:browser browser :databases {}})
                    :started      started}))))))
 
 
@@ -92,6 +97,76 @@
                   (vec (await (answered (js/Promise.all answers)))))
                "every caller hears the one pass")
            (is (= 1 @started) "and no pass follows it"))))))))
+
+
+(deftest a-device-that-joined-is-told-once
+  (async-testing "the callback runs after a pull that brought the proof for its nonce, and once"
+    (let [{:keys [finish! sync-once]} (held-passes)
+          receipts                    (atom [])]
+      ;; Multi-arity, as the originals are: a call site names the arity.
+      (with-redefs [db/all-docs (fn
+                                  ([_]
+                                   (js/Promise.resolve {:rows []}))
+                                  ([_ _]
+                                   (js/Promise.resolve {:rows (mapv (fn [id] {:doc {:_id id}}) @receipts)})))
+                    db/remove   (fn
+                                  ([_ _]
+                                   (js/Promise.resolve nil))
+                                  ([_ _ _]
+                                   (js/Promise.resolve nil)))]
+        (await
+         (with-sync!
+          sync-once
+          (^:async fn
+           [{:keys [request! started]}]
+           (let [calls       (atom 0)
+                 _           ((:on-device-joined started) "n1" #(swap! calls inc))
+                 pull!       (^:async fn
+                              []
+                              (let [pulling (request!)]
+                                (await (settled))
+                                (finish! {:pulled 1 :pulled-ids {} :pulled-revs #{} :pushed 0})
+                                (await (answered pulling))
+                                (await (settled))))]
+             (await (pull!))
+             (is (= 0 @calls) "a pull that brought no proof for the nonce")
+             (reset! receipts ["pairing:other"])
+             (await (pull!))
+             (is (= 0 @calls) "the proof of another nonce")
+             (reset! receipts ["pairing:n1"])
+             (await (pull!))
+             (is (= 1 @calls) "the proof for the nonce")
+             (await (pull!))
+             (is (= 1 @calls) "once")))))))))
+
+
+(deftest a-device-no-longer-waited-for-is-not-told
+  (async-testing "after stop-waiting-for-device the callback does not run, whatever a pull brings"
+    (let [{:keys [finish! sync-once]} (held-passes)]
+      (with-redefs [db/all-docs (fn
+                                  ([_]
+                                   (js/Promise.resolve {:rows []}))
+                                  ([_ _]
+                                   (js/Promise.resolve {:rows [{:doc {:_id "pairing:n1"}}]})))
+                    db/remove   (fn
+                                  ([_ _]
+                                   (js/Promise.resolve nil))
+                                  ([_ _ _]
+                                   (js/Promise.resolve nil)))]
+        (await
+         (with-sync!
+          sync-once
+          (^:async fn
+           [{:keys [request! started]}]
+           (let [calls (atom 0)]
+             ((:on-device-joined started) "n1" #(swap! calls inc))
+             ((:stop-waiting-for-device started) "n1")
+             (let [pulling (request!)]
+               (await (settled))
+               (finish! {:pulled 1 :pulled-ids {} :pulled-revs #{} :pushed 0})
+               (await (answered pulling))
+               (await (settled)))
+             (is (= 0 @calls))))))))))
 
 
 (deftest a-request-during-a-pass-gets-exactly-one-more
@@ -199,7 +274,7 @@
         sync-once
         (^:async fn
          [{:keys [request! start-again! started]}]
-         (let [first-pass (:sync/first-pass started)]
+         (let [first-pass (:first-pass started)]
            (is (= ::unanswered (await (answered first-pass))) "no pass has run")
            (request!)
            (await (settled))
@@ -211,13 +286,13 @@
            (is (nil? (await (answered first-pass))) "the first pass that completes resolves it")
            (sut/stop! started)
            (let [again (await (start-again!))]
-             (is (= ::unanswered (await (answered (:sync/first-pass again))))
+             (is (= ::unanswered (await (answered (:first-pass again))))
                  "a start after a stop waits for a pass of its own")))))))))
 
 
 (deftest a-device-without-an-account-has-no-pass-to-wait-for
   (async-testing "its first pass is resolved at once"
     (with-redefs [identity/load-identity! (fn [] (js/Promise.resolve nil))]
-      (let [started (await (sut/start! {:db {}}))]
-        (is (nil? (:sync/account-id started)))
-        (is (nil? (await (answered (:sync/first-pass started)))))))))
+      (let [started (await (sut/start! {:databases {}}))]
+        (is (false? (:has-account? started)))
+        (is (nil? (await (answered (:first-pass started)))))))))
