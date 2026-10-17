@@ -1,4 +1,4 @@
-(ns service-worker
+(ns adapters.browser.service-worker
   "The worker's registration, and how a new build reaches the page
    (ADR-0022).
 
@@ -16,30 +16,12 @@
    onto it, or reloads plainly when nothing is new. That path, and the
    message it sends, exist only under goog/DEBUG.
 
-   The registration belongs to the running system, not to this namespace:
-   `start!` hands it back as a promise, `:app/render` takes it as a
-   dependency, and so every effect finds it under `:service-worker` in the
-   system Nexus passes it."
+   The registration belongs to the running app, not to this namespace:
+   `start!` hands it back as a promise, the browser port holds it as
+   `:browser/registration`, and an effect finds it there."
   (:require
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]))
-
-
-(def ^:private serve-now-request
-  "The message that makes the worker receiving it call skipWaiting. Only a
-   development build sends it."
-  #js {:type "activate-waiting"})
-
-
-(def ^:private serve-now-timeout-ms
-  "How long the build mark waits for the worker to activate before it
-   reloads anyway."
-  3000)
-
-
-(defn- ask-to-serve-now!
-  [^js worker]
-  (.postMessage worker serve-now-request))
 
 
 (defn- when-install-ends!
@@ -100,23 +82,22 @@
                   nil)))))
 
 
-(defn- registration
-  "The registration the system holds, as a promise. Before `register!`
+(defn registration
+  "The registration `capabilities` hold, as a promise. Before `register!`
    settles there is nothing to act on, so an effect that fires in that window
    acts when there is; a page with no worker resolves to nil rather than
    leaving the effect a promise that never settles."
-  [system]
-  (or (some-> system :service-worker :registration)
+  [capabilities]
+  (or (get-in capabilities [:browser :browser/registration])
       (js/Promise.resolve nil)))
 
 
 (defn start!
-  "Registers the worker and hands the rest of the system the one thing it
-   needs from it: the registration, which arrives once and asynchronously.
-   Depends on nothing, which is what lets it start before render. Returns at
-   once: the page does not wait on the registration."
-  [_]
-  {:registration (register!)})
+  "Registers the worker and answers a promise of the registration, which
+   arrives once and asynchronously (nil where there is no worker). It returns
+   at once: the page does not wait on the registration."
+  []
+  (register!))
 
 
 ;; The build mark's tap, and only a development build has a mark: registered
@@ -130,7 +111,7 @@
 ;; until they are reloaded themselves.
 (when ^boolean goog/DEBUG
   (nxr/register-effect! :effect/get-newest-build
-    (fn get-newest-build [_ system]
+    (fn get-newest-build [{:keys [capabilities]} _]
       (letfn [(reload! []
                 (js/location.reload))
               (take-or-reload! [^js reg]
@@ -149,10 +130,14 @@
                                        "statechange"
                                        #(when (contains? #{"activated" "redundant"} (.-state waiting))
                                           (reload-once!)))
-                    (js/setTimeout reload-once! serve-now-timeout-ms)
-                    (ask-to-serve-now! waiting))
+                    ;; How long the build mark waits for the worker to activate before it
+                    ;; reloads anyway.
+                    (js/setTimeout reload-once! 3000)
+                    ;; The message makes the worker receiving it call skipWaiting. Only a
+                    ;; development build sends it.
+                    (.postMessage waiting #js {:type "activate-waiting"}))
                   (reload!)))]
-        (-> (registration system)
+        (-> (registration capabilities)
             (.then (fn [^js reg]
                      (if reg
                        (-> (check-for-new-build! reg)

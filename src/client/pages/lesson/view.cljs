@@ -9,8 +9,8 @@
     (into
      [:p.lesson__answer-body {:lang "de"}]
      (interpose " ")
-     (for [{:keys [expanded? type text word-index]} correct-answer-segments]
-       (if (= :annotated-word type)
+     (for [{:keys [annotated? expanded? text word-index]} correct-answer-segments]
+       (if annotated?
          [:button.lesson__answer-token
           {:type "button"
            :data-word-index word-index
@@ -102,15 +102,18 @@
 
 
 (defn- hint-card
-  [{:keys [action-label data-dismiss status-note translation word word-index]}]
+  [{:keys [data-dismiss translation word word-index word-state]}]
   [:div.token-card
    (cond-> {}
      data-dismiss (assoc :data-dismiss data-dismiss))
    [:p.token-card__word {:lang "de"} word]
    [:p.token-card__translation {:lang "ru"} translation]
-   (when status-note
-     [:p.token-card__state status-note])
-   (when action-label
+   (when (= :word-state/known-with-translation word-state)
+     [:p.token-card__state "✓ В словаре"])
+   (when-let [action-label (case word-state
+                             :word-state/known-missing-translation "+ ДОБАВИТЬ ПЕРЕВОД"
+                             :word-state/unknown-word              "+ В СЛОВАРЬ"
+                             nil)]
      [:button.token-card__button
       {:type "button"
        :on   {:click [[:action/save-lesson-word
@@ -151,10 +154,14 @@
 
 (defn challenge
   [lesson-state]
-  (let [{:keys [prompt instruction]} (presenter/challenge-props lesson-state)]
+  (let [{:keys [kind prompt]} (presenter/challenge-props lesson-state)]
     [:div#lesson-challenge.lesson__challenge
      [:h2.lesson__prompt {:lang "ru"} prompt]
-     [:p.lesson__instruction instruction]]))
+     [:p.lesson__instruction
+      (case kind
+        :trial/example "Переведите предложение на немецкий"
+        :trial/phrase  "Переведите фразу на немецкий"
+        :trial/word    "Переведите слово на немецкий")]]))
 
 
 (defn empty-state

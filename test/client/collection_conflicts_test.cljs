@@ -13,7 +13,7 @@
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [db.pouch :as pouch]
-   [sync :as sut]))
+   [adapters.learner.sync :as sut]))
 
 
 (def phone-name (db-fixtures/db-name "client.collection-conflicts-test.phone"))
@@ -175,7 +175,7 @@
               clock
               (^:async fn
                [{:keys [learner]}]
-               (await ((:learner/delete-collection! learner) "c1")))))
+               (await ((:learner/change! learner) :entity/collection "c1" (constantly :entity/deleted))))))
       (is (nil? (await (db/get (:user/db phone) "c1"))))
       (is (zero? (await (live-count phone))))
       (await (replication/replicated! (:user/db phone) (:user/db laptop)))
@@ -194,7 +194,7 @@
               clock
               (^:async fn
                [{:keys [learner]}]
-               (await ((:learner/delete-collection! learner) "c1")))))
+               (await ((:learner/change! learner) :entity/collection "c1" (constantly :entity/deleted))))))
       (await (settled! devices))
       (doseq [dbs [phone laptop]]
         (is (= ["vocab:katze"] (:word-ids (await (db/get (:user/db dbs) "c1")))))

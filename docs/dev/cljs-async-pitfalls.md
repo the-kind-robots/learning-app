@@ -53,4 +53,4 @@ Plain ClojureScript calls `.call` directly.
 - Compile the form and read the output: `.shadow-cljs/builds/<build>/dev/out/cljs-runtime/<ns>.js`.
 - Keep a behaviour test for anything that races or aborts a promise.
 
-`use-cases.examples/waiting` and `first-pass-or-timeout` exist for this reason.
+`application.example-backfill/waiting` and `adapters.learner/initialize` exist for this reason.

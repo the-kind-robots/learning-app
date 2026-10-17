@@ -46,7 +46,7 @@
 
 
 (defn- missing
-  "The pairs memory is missing an example for, as the example fetcher reads
+  "The pairs memory is missing an example for, as the example backfill reads
    them, over the learner port in `capabilities`."
   [{:keys [learner]}]
   (learner/missing-in ((:learner/memory learner))))
@@ -69,7 +69,7 @@
                        :value         "Satz"
                        :translation   "фраза"})))
   (await (learner/caught-up dbs (::store dbs)))
-  {:clock   clock
+  {:world   {:world/clock clock}
    :learner (assoc (::learner dbs)
                    :learner/active-collection
                    (fn [] (get-in ((:learner/memory (::learner dbs))) [:collections active-id])))})

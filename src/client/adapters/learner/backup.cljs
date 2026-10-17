@@ -1,4 +1,4 @@
-(ns adapters.data-export
+(ns adapters.learner.backup
   (:require
    [adapters.learner.documents :as documents]
    [db :as db]
@@ -9,8 +9,8 @@
 (defn ^:async export-data!
   "Exports every user-db doc, so no doc type can be silently dropped.
    Returns {:schema 2 :exported-at iso :docs [...]}."
-  [db-map]
-  (let [{rows :rows} (await (db/all-docs (:user/db db-map) {:include-docs true}))]
+  [databases]
+  (let [{rows :rows} (await (db/all-docs (:user/db databases) {:include-docs true}))]
     {:schema      2
      :exported-at (utils/now-iso)
      :docs        (mapv #(dissoc (:doc %) :_rev) rows)}))
@@ -45,8 +45,8 @@
    :modified-at, anything else insert-if-absent. An example is written as
    the app writes it (`documents/example-doc`), so it gets the id and the
    revision it has on every device, whatever build exported it."
-  [db-map payload]
-  (let [user-db (:user/db db-map)
+  [databases payload]
+  (let [user-db (:user/db databases)
         docs    (payload-docs payload)]
     (log/info :data-export/importing {:count (count docs)})
     (await (js/Promise.all

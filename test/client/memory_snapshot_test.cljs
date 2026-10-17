@@ -19,8 +19,7 @@
    [db :as db]
    [db.pouch :as pouch]
    [domain.lesson :as lesson]
-   [domain.retention :as retention]
-   [use-cases.vocabulary :as vocabulary]))
+   [domain.retention :as retention]))
 
 
 (def user-db-name (db-fixtures/db-name "client.memory-snapshot-test.user"))
@@ -249,8 +248,9 @@
                    (into #{}
                          (map (comp :id :word))
                          (lesson/pick-vocab (memory/collection-cards m nil)
-                                            #(vocabulary/urgency-of % now)
-                                            2)))]
+                                            #(retention/urgency (:reviews %) now)
+                                            2
+                                            (constantly 0.5))))]
     (is (= (levels rebuilt) (levels restored)) "retention levels")
     (is (= (picked rebuilt) (picked restored)) "the words a lesson picks")
     (is (= (map :id (memory/words rebuilt)) (map :id (memory/words restored))) "the word list")

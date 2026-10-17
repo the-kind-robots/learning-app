@@ -30,6 +30,44 @@
           (remove #(seen (:value %)) new-translations))))
 
 
+(defn translation-state
+  "How the learner's vocabulary stands to `translation` of a word: the
+   `existing` entry is nil (`:word-state/unknown-word`), has that translation
+   (`:word-state/known-with-translation`) or lacks it
+   (`:word-state/known-missing-translation`)."
+  [existing translation]
+  (cond
+    (nil? existing)
+    :word-state/unknown-word
+
+    (some #(= translation (:value %)) (:translation existing))
+    :word-state/known-with-translation
+
+    :else
+    :word-state/known-missing-translation))
+
+
+(defn merged-entry
+  "`stored`, a word or phrase, with the translations of `entry` added to
+   its own. It keeps its kind and the rest of what it has."
+  [stored entry]
+  (update stored :translation merge-translations (:translation entry)))
+
+
+(defn merged-word
+  "The one word that conflicting `versions` of it come to: the fields of the
+   last written, by `:modified-at` (the later in `versions` when equal), and
+   the translations of every version, so the same word added on two devices
+   keeps both meanings."
+  [versions]
+  (let [latest (reduce (fn [a b]
+                         (if (pos? (compare (:modified-at a) (:modified-at b)))
+                           a
+                           b))
+                       versions)]
+    (assoc latest :translation (reduce merge-translations [] (map :translation versions)))))
+
+
 (def id-prefix
   "What every vocabulary id starts with (ADR-0008). Here because it is the
    naming rule itself, not a storage detail: whoever reads vocabulary by key
@@ -40,12 +78,6 @@
 (defn vocab-id
   [value]
   (str id-prefix (normalize-value value)))
-
-
-(defn- without-prefix
-  [id]
-  (cond-> id
-    (str/starts-with? id id-prefix) (subs (count id-prefix))))
 
 
 (def ^:private article
@@ -66,7 +98,11 @@
    (#438). Memory keeps the word list in the order of this key
    (`adapters.learner.memory`)."
   [id]
-  [(str/replace (without-prefix id) article "") id])
+  [(str/replace (cond-> id
+                  (str/starts-with? id id-prefix) (subs (count id-prefix)))
+                article
+                "")
+   id])
 
 
 (defn completes?
@@ -114,6 +150,56 @@
    :value       value})
 
 
+(defn collapsed
+  "`s` with every run of whitespace made a single space, and trimmed."
+  [s]
+  (-> (str s)
+      (str/replace #"\s+" " ")
+      (str/trim)))
+
+
+(defn translation-entry
+  "The one translation entry that `translation` makes, never split."
+  [translation]
+  {:lang "ru" :value (collapsed translation)})
+
+
+(defn new-phrase
+  "A phrase shares the vocabulary namespace: the id is the value, so the same
+   text is one entry whichever kind it is, and the kind can be corrected later
+   without rebuilding the document."
+  [value translation]
+  {:id          (vocab-id value)
+   :kind        "phrase"
+   :translation [(translation-entry translation)]
+   :value       (collapsed value)})
+
+
+(defn entered-translation
+  "The translation text as it is kept for an entry of `kind`: a phrase's text
+   is collapsed to single spaces, because its field is multi-line and the
+   line breaks are visual only."
+  [kind translation]
+  (cond-> translation
+    (= :phrase kind) collapsed))
+
+
+(defn entered-entry
+  "The word, or the phrase when `kind` is `:phrase`, that `value` and the
+   entered `translation` make, or nil when the translation gives no entry.
+   One entered translation is one entry for a phrase. `pos` is the part of
+   speech of the suggestion a word was picked from, or nil; a phrase keeps
+   none."
+  [kind value translation pos]
+  (let [translation (entered-translation kind translation)]
+    (if (= :phrase kind)
+      (when-not (str/blank? translation)
+        (new-phrase value translation))
+      (when-let [entries (seq (parse-translations translation))]
+        (cond-> (new-word value (vec entries))
+          pos (assoc :pos pos))))))
+
+
 (defn new-review
   [word-id retained translation]
   {:word-id     word-id
@@ -122,5 +208,5 @@
 
 
 (defn update-word
-  [doc translation]
-  (assoc doc :translation (parse-translations translation)))
+  [word translation]
+  (assoc word :translation (parse-translations translation)))

@@ -1,25 +1,43 @@
-;; Client storage barrier (was test/client/layering_test.cljs). Gated in CI by the
+;; Client layering (was test/client/layering_test.cljs). Gated in CI by the
 ;; `clj-kondo --lint src --fail-level error` step, see integration.yml. ../config.edn
 ;; pulls this file in via :config-paths.
 ;;
-;; Engine namespaces (db.*, db-migrations, sync) are listed twice below, in
-;; `engine` and in `above-adapters`; keep both regexes in step.
-;; The engine is reached only by adapters.*,
-;; main; use cases and pages reach adapters through ports;
-;; only views require presenters. `above-adapters` is default-deny: every client
-;; namespace is in it except the explicit allow-list of engine-side ones, so a
-;; new top-level namespace is checked without being registered.
-{:ns-groups [{:name engine :pattern "^(db\\..*|db-migrations|sync)$"}
+;; Only ports.* require adapters.*: a port is the one place that names its
+;; adapter, so an adapter can be swapped by editing its port alone. The rule is
+;; default-deny for everything outside ports and adapters (`outside-ports`).
+;; An adapter may require its own parts (`adapters.learner` and
+;; `adapters.learner.memory`) and nothing of an adapter of another
+;; top-level name; what it needs from elsewhere comes in through its port. ns
+;; groups cannot say "another segment", so that half is a script,
+;; scripts/check_adapter_layering.clj, which reads clj-kondo's namespace usages
+;; and covers every adapter by default (CI runs it after this lint).
+;;
+;; The engine (db.*, db-migrations) is reached only by adapters.*; its regexes
+;; are listed twice, in `engine` and in `above-adapters`: keep both in step.
+;; Use cases do not schedule work (browser, abort); only views require
+;; presenters. The bare `db` is lib/db, the raw Pouch/Couch client, which the
+;; backend shares; so it is barred from the client's logic layers by name
+;; (`client-logic`), not from every namespace. `above-adapters` is
+;; default-deny: every client namespace is in it except the explicit
+;; allow-list of engine-side ones, so a new top-level namespace is checked
+;; without being registered.
+{:ns-groups [{:name engine :pattern "^(db\\..*|db-migrations)$"}
              {:name adapters :pattern "^adapters\\..*$"}
              {:name presenters :pattern "^.*\\.presenter$"}
              {:name above-adapters
-              :pattern "^(?!(db\\..*|db-migrations|sync|adapters\\..*|main)$).*$"}
-             {:name use-cases-and-pages :pattern "^(use-cases|pages)\\..*$"}
+              :pattern "^(?!(db\\..*|db-migrations|adapters\\..*)$).*$"}
+             {:name outside-ports :pattern "^(?!(ports\\..*|adapters\\..*)$).*$"}
+             {:name engine-lib :pattern "^db$"}
+             {:name client-logic :pattern "^(application(\\..*)?|use-cases\\..*|pages\\..*|domain\\..*|ports\\..*)$"}
+             {:name use-cases :pattern "^use-cases\\..*$"}
+             {:name scheduling :pattern "^(browser|abort)$"}
              {:name presenter-free :pattern "^(use-cases\\..*|.*\\.actions|.*\\.effects)$"}]
 
  :config-in-ns
- {above-adapters      {:linters {:discouraged-namespace {engine {:message "Only adapters, the engine and main require the engine"}}}}
-  use-cases-and-pages {:linters {:discouraged-namespace {adapters {:message "Use cases and pages reach adapters through ports"}}}}
+ {above-adapters      {:linters {:discouraged-namespace {engine {:message "Only adapters and the engine require the engine"}}}}
+  outside-ports       {:linters {:discouraged-namespace {adapters {:message "Only ports require adapters"}}}}
+  client-logic        {:linters {:discouraged-namespace {engine-lib {:message "The raw database client is for adapters and the engine"}}}}
+  use-cases           {:linters {:discouraged-namespace {scheduling {:message "A use case decides; how work is scheduled is an adapter's"}}}}
   presenter-free      {:linters {:discouraged-namespace {presenters {:message "A presenter is for the view only"}}}}}
 
  :linters {:discouraged-namespace {:level :error}}}

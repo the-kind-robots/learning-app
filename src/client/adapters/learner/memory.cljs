@@ -436,3 +436,25 @@
             found (into [] (if ids (filter #(ids (:id %))) identity) (vals words))]
         (vreset! collection-cache [words all id found])
         found))))
+
+
+(defonce ^:private matches-cache
+  ;; The last answer of `matching-words`, with what it was computed from.
+  (volatile! nil))
+
+
+(defn matching-words
+  "The words of `collection` (`collection-words`) whose search text holds
+   `query`, or all of them when `query` is nil. The result is kept for the
+   last scope and query, because the next page cuts the same matches."
+  [memory collection query]
+  (let [scope (collection-words memory collection)]
+    (if-not query
+      scope
+      (let [[cached-scope cached-query cached] @matches-cache]
+        (if (and (identical? cached-scope scope) (= cached-query query))
+          cached
+          (let [matched (into [] (filter #(vocabulary/matches? (:search %) query)) scope)]
+            (vreset! matches-cache [scope query matched])
+            matched))))))
+

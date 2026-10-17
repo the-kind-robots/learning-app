@@ -1,6 +1,6 @@
 (ns domain.examples
   "Which examples a read sees, and which pairs of entry and collection have
-   none. A lesson and the example fetcher read the same rule.")
+   none. A lesson and the example backfill read the same rule.")
 
 
 (defn visible-in

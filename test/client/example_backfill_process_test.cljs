@@ -1,5 +1,5 @@
-(ns client.examples-fetcher-test
-  "The example fetcher, driven by a clock the test moves by hand: what it
+(ns client.example-backfill-process-test
+  "The example backfill, driven by a clock the test moves by hand: what it
    sends, when, and what each answer does (`specs/example-backfill/spec.md`).
    Its surroundings are fakes — memory in an atom, a fetch the test answers,
    a tab the test hides and shows — except in the last tests, which run it
@@ -11,6 +11,8 @@
    [adapters.learner :as learner-adapter]
    [adapters.learner.documents :as documents]
    [adapters.learner.memory :as memory]
+   [application.example-backfill :as backfill]
+   [browser :as browser]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.db-seed :as db-seed]
@@ -19,7 +21,6 @@
    [client.support.wait :as wait]
    [cljs.test :refer-macros [are deftest is use-fixtures]]
    [domain.vocabulary :as vocabulary]
-   [ports.learner :as ports]
    [use-cases.examples :as sut]))
 
 
@@ -29,7 +30,7 @@
 
 
 (defn- ^:async settled
-  "Resolves once the fetcher's walk has had its tasks: a walk yields to
+  "Resolves once the backfill's walk has had its tasks: a walk yields to
    the event loop between its steps, on real time, while the test's clock
    stands still."
   []
@@ -58,7 +59,7 @@
                    (reset! now until)
                    (await (settled))))
      :pending  #(count @timers)
-     :clock    {:clock/after   (fn [ms f]
+     :world    {:clock/after   (fn [ms f]
                                  (let [timer [(+ @now ms) (swap! ids inc)]]
                                    (swap! timers assoc timer f)
                                    #(swap! timers dissoc timer)))
@@ -119,7 +120,7 @@
 
 
 ;;
-;; The fetcher's surroundings
+;; The backfill's surroundings
 ;;
 
 
@@ -132,14 +133,14 @@
 
 
 (defn- world
-  "A fetcher's surroundings over `docs`, held in memory. `:first-pass` and
-   `:moved` are promises, resolved unless given. `:answer`, when given, is
+  "A backfill's surroundings over `docs`, held in memory. `:initialized` is a
+   promise, resolved unless given. `:answer`, when given, is
    called with each request's subject and its place in the order of
    requests; what it returns answers the request at once, and nil leaves
    it for `answer!`. Without it, every request waits for `answer!`. The tab
    is visible until `hide!`."
-  [docs {:keys [answer first-pass moved]}]
-  (let [{:keys [clock] :as ticking} (clock)
+  [docs {:keys [answer initialized]}]
+  (let [{clock :world :as ticking} (clock)
         store         (atom {:learner/memory (memory-of docs)})
         reads         (atom 0)
         requests      (atom [])
@@ -158,9 +159,8 @@
     (merge
      ticking
      {:capabilities
-      {:capabilities/sync {:sync/account-id "account" :sync/first-pass (or first-pass (js/Promise.resolve nil))}
-       :clock    clock
-       :examples {:examples/fetch     (fn [subject ^js signal]
+      {:world    {:world/clock clock}
+       :examples-generator {:examples-generator/fetch     (fn [subject ^js signal]
                                         (js/Promise.
                                          (fn [resolve reject]
                                            (.addEventListener signal "abort" #(resolve {:failure :failure/aborted}))
@@ -174,26 +174,26 @@
                                                 :signal  signal})
                                              (when-let [answered (some-> answer (apply [subject n]))]
                                                (resolve answered))))))}
-       :page     {:page/active?      active?
-                  :page/until-active (fn []
+       :browser  {:browser/active?      active?
+                  :browser/yield        browser/yield
+                  :browser/until-active (fn []
                                        (js/Promise.
                                         (fn [resolve]
                                           (if (active?)
                                             (resolve nil)
                                             (swap! waiting conj resolve)))))
-                  :page/on-inactive  (fn [f ^js signal]
+                  :browser/on-inactive  (fn [f ^js signal]
                                        (reset! on-inactive f)
                                        (.addEventListener signal "abort" #(reset! on-inactive nil)))}
-       :learner  (assoc ports/reads
-                        :learner/move-examples! (constantly nil)
-                        :learner/examples-moved (constantly (or moved (js/Promise.resolve nil)))
-                        :learner/catch-up!      #(js/Promise.resolve nil)
-                        :learner/loaded         #(js/Promise.resolve nil)
+       :learner  (assoc learner/reads
+                        :learner/fresh-memory   #(js/Promise.resolve (:learner/memory @store))
+                        :learner/has-account?   true
+                        :learner/initialized    (or initialized (js/Promise.resolve nil))
                         :learner/memory         (fn []
                                                   (swap! reads inc)
                                                   (:learner/memory @store))
                         :learner/changed-since  #(learner-adapter/changed-since {:store store} %1 %2)
-                        :learner/save-example!  (fn [example]
+                        :learner/insert!         (fn [_ example]
                                                   (swap! saves conj [(:word example)])
                                                   (swap! store
                                                     update
@@ -239,19 +239,25 @@
   ((:reject (nth @requests n)) (js/Error. "boom")))
 
 
+(defn- start!
+  "Starts the backfill as the app does."
+  [capabilities]
+  (backfill/start! capabilities))
+
+
 (def ^:private an-example
   {:example {:structure [] :translation "перевод" :value "Ein Satz."}})
 
 
 (defn- started
-  "Starts the fetcher in `world`; hands back the world with `:stop`."
+  "Starts the backfill in `world`; hands back the world with `:stop`."
   [world]
-  (assoc world :stop (sut/start! (:capabilities world))))
+  (assoc world :stop (start! (:capabilities world))))
 
 
 (defn- ^:async run
-  "Starts the fetcher over `docs` with `options`, calls `f` with the world,
-   and stops the fetcher afterwards."
+  "Starts the backfill over `docs` with `options`, calls `f` with the world,
+   and stops the backfill afterwards."
   [docs options f]
   (let [world (started (world docs options))]
     (try
@@ -269,21 +275,23 @@
 ;;
 
 
-(deftest the-first-missing-pair-is-the-first-entry-without-an-example
+(deftest the-next-pair-is-the-first-entry-without-an-example
   (let [hund   {:id "vocab:hund" :value "Hund" :translation []}
         katze  {:id "vocab:katze" :value "Katze" :translation []}
         tiere  {:id "coll-tiere" :name "Tiere" :word-ids ["vocab:hund"]}
-        asking (fn [options entries]
-                 (sut/first-missing (merge {:collections-of  (constantly [])
-                                            :examples-of     (constantly [])
-                                            :failed-subjects #{}}
-                                           options)
-                                    entries))]
+        asking (fn [{:keys [collections-of examples-of failed-subjects]} entries]
+                 (sut/next-pair (assoc learner/reads
+                                       :learner/collections-of (or collections-of (constantly []))
+                                       :learner/examples-of    (or examples-of (constantly [])))
+                                {}
+                                (or failed-subjects #{})
+                                entries))]
     (is (= {:word hund} (asking {} [hund katze])))
-    (is (= {:word katze} (asking {:examples-of #(if (= hund %) [{:collection-id nil}] [])} [hund katze]))
+    (is (= {:word katze} (asking {:examples-of (fn [_ ids] (if (= ["vocab:hund"] ids) [{:collection-id nil}] []))}
+                                 [hund katze]))
         "an entry with an example is passed over")
     (is (= {:collection-id "coll-tiere" :collection-name "Tiere" :word hund}
-           (asking {:collections-of #(if (= hund %) [tiere] [])} [hund katze]))
+           (asking {:collections-of (fn [_ id] (if (= "vocab:hund" id) [tiere] []))} [hund katze]))
         "an entry in a collection is asked for there")
     (is (= {:word katze}
            (asking {:failed-subjects #{{:collection-name nil :translations [] :word "Hund"}}} [hund katze]))
@@ -291,13 +299,25 @@
     (is (nil? (asking {} [])))))
 
 
+(deftest a-request-asks-about-the-russian-translations-and-the-part-of-speech
+  (is (= {:collection-name nil :pos "noun" :translations ["пёс"] :word "Hund"}
+         (sut/subject {:word {:pos         "noun"
+                              :translation [{:lang "ru" :value "пёс"} {:lang "en" :value "dog"}]
+                              :value       "Hund"}}))))
+
+
+(defn- answered
+  [state subject response active?]
+  (backfill/after-response state subject response active?))
+
+
 (deftest outages-pause-by-a-doubling-back-off-and-never-stop
   (let [state-after (fn [failures response]
-                      (reduce (fn [state _] (sut/after-response state {} response true))
-                              {:failed-subjects #{} :outages 0 :status :status/running}
+                      (reduce (fn [state _] (answered state {} response true))
+                              backfill/initial-state
                               (range failures)))
         pause-after (fn [failures response]
-                      (sut/pause-ms (:outages (state-after failures response)) (:retry-after-ms response)))]
+                      (backfill/pause-ms (:outages (state-after failures response)) (:retry-after-ms response)))]
     (are [failures pause] (= pause (pause-after failures {:failure :failure/unavailable}))
      1 5000
      2 10000
@@ -316,7 +336,7 @@
 
 (deftest each-failure-kind-has-one-effect
   (let [after (fn [response active?]
-                (sut/after-response {:failed-subjects #{} :outages 0} :subject response active?))]
+                (answered backfill/initial-state :subject response active?))]
     (are [kind] (= #{:subject} (:failed-subjects (after {:failure kind} true)))
      :failure/invalid-subject
      :failure/invalid-response
@@ -328,13 +348,12 @@
 
 
 (deftest an-answer-that-is-not-an-outage-ends-the-run-of-outages
-  (let [outage (fn [state] (sut/after-response state :subject {:failure :failure/unavailable} true))
-        reject (fn [state] (sut/after-response state :subject {:failure :failure/rejected} true))
-        state  (nth (iterate (comp reject outage) {:failed-subjects #{} :outages 0 :status :status/running})
-                    20)]
-    (is (= 5000 (sut/pause-ms (:outages (outage state)) nil)) "outage, 422, outage, 422: the back-off never grows")
+  (let [outage (fn [state] (answered state :subject {:failure :failure/unavailable} true))
+        reject (fn [state] (answered state :subject {:failure :failure/rejected} true))
+        state  (nth (iterate (comp reject outage) backfill/initial-state) 20)]
+    (is (= 5000 (backfill/pause-ms (:outages (outage state)) nil)) "outage, 422, outage, 422: the back-off never grows")
     (is (= 0 (:outages state)))
-    (are [kind] (= 0 (:outages (sut/after-response {:failed-subjects #{} :outages 3} :subject {:failure kind} true)))
+    (are [kind] (= 0 (:outages (answered (assoc backfill/initial-state :outages 3) :subject {:failure kind} true)))
      :failure/invalid-subject
      :failure/invalid-response
      :failure/rejected)))
@@ -345,23 +364,19 @@
 ;;
 
 
-(deftest nothing-is-sent-before-the-device-knows-what-the-account-holds
-  (async-testing "the move, then the first pass; the session cookie is written before either"
-    (let [[moved move-done!]      (deferred)
-          [first-pass pass-done!] (deferred)]
+(deftest nothing-is-sent-before-the-learner-is-initialized
+  (async-testing "memory loaded and the first pass done, whatever the learner says it waits for; the session cookie is written before"
+    (let [[initialized initialized!] (deferred)]
       (await
        (run three-words
-            {:first-pass first-pass :moved moved}
+            {:initialized initialized}
             (^:async fn
              [{:keys [advance!] :as world}]
              (await (advance! 30000))
-             (is (empty? (asked world)) "nothing while device-db is being emptied")
-             (move-done! nil)
-             (await (advance! 20000))
-             (is (empty? (asked world)) "nothing before the first pass")
-             (pass-done! nil)
+             (is (empty? (asked world)) "nothing before the learner is initialized")
+             (initialized! nil)
              (await (advance! 0))
-             (is (= ["Hund"] (asked world)) "the first pass completes, and the first entry goes")))))))
+             (is (= ["Hund"] (asked world)) "initialized, and the first entry goes")))))))
 
 
 (deftest memory-catches-up-before-the-first-pick
@@ -370,40 +385,12 @@
           catch-up (fn []
                      (swap! (:store w) update :learner/memory memory/with-docs [(example-doc "Hund" nil)])
                      (js/Promise.resolve nil))
-          stop     (sut/start! (assoc-in (:capabilities w) [:learner :learner/catch-up!] catch-up))]
+          stop     (start! (assoc-in (:capabilities w) [:learner :learner/fresh-memory] catch-up))]
       (try
         (await ((:advance! w) 0))
         (is (= ["Katze"] (asked w)) "Hund was answered by the catch-up")
         (finally
          (stop))))))
-
-
-(deftest the-minutes-timer-goes-when-the-first-pass-wins
-  (async-testing "the first pass at 30 s, nothing left to ask by 50 s: no timer is pending before the 60 s mark"
-    (let [[first-pass pass-done!] (deferred)]
-      (await
-       (run [(word-doc "Hund" 1)]
-            {:answer (constantly an-example) :first-pass first-pass}
-            (^:async fn
-             [{:keys [advance! pending]}]
-             (await (advance! 30000))
-             (is (= 1 (pending)) "the 60 s timer")
-             (pass-done! nil)
-             (await (advance! 20000))
-             (is (zero? (pending)) "cancelled when the first pass won")))))))
-
-
-(deftest a-first-pass-that-never-comes-is-waited-for-a-minute
-  (async-testing "60 s after the start, the fetcher stops waiting for it"
-    (await
-     (run three-words
-          {:first-pass (js/Promise. (fn [_]))}
-          (^:async fn
-           [{:keys [advance!] :as world}]
-           (await (advance! 59999))
-           (is (empty? (asked world)))
-           (await (advance! 1))
-           (is (= ["Hund"] (asked world))))))))
 
 
 ;;
@@ -617,7 +604,7 @@
           (^:async fn
            [{:keys [advance! pending stop]}]
            (await (advance! 0))
-           (is (pos? (pending)) "the fetcher is pausing")
+           (is (pos? (pending)) "the backfill is pausing")
            (stop)
            (await (advance! 0))
            (is (zero? (pending)) "the pause's timer is gone"))))))
@@ -658,7 +645,7 @@
 
 
 (deftest pauses-leave-no-listener-behind
-  (async-testing "after many pauses the fetcher's signal holds the current wait's listeners only"
+  (async-testing "after many pauses the backfill's signal holds the current wait's listeners only"
     (let [docs (mapv #(word-doc (str "w" %) %) (range 8))]
       (await
        (with-abort-listeners
@@ -671,13 +658,13 @@
                 [{:keys [advance! requests]}]
                 (dotimes [_ 6]
                   (await (advance! 5000)))
-                (is (<= 6 (count @requests)) "the fetcher paused at least six times")
+                (is (<= 6 (count @requests)) "the backfill paused at least six times")
                 (is (<= (held (map :signal @requests)) 3)
                     "only the wait it is in now listens (its pause and its race), plus the one release of the inactivity watch"))))))))))
 
 
 (deftest stopping-leaves-no-watch-on-the-store
-  (async-testing "a fetcher waiting for a change in memory holds a watch, and stop removes it"
+  (async-testing "a backfill waiting for a change in memory holds a watch, and stop removes it"
     (await
      (run [(word-doc "Hund" 1)]
           {:answer (constantly an-example)}
@@ -708,17 +695,12 @@
 
 
 (deftest a-device-without-an-account-asks-nothing
-  (async-testing "the endpoint would answer 401, so nothing is sent; device-db is tidied all the same"
-    (let [w      (world three-words {})
-          tidied (atom 0)
-          stop   (sut/start! (-> (:capabilities w)
-                                 (assoc-in [:capabilities/sync :sync/account-id] nil)
-                                 (assoc-in [:learner :learner/move-examples!]
-                                  #(do (swap! tidied inc) (js/Promise.resolve nil)))))]
+  (async-testing "the endpoint would answer 401, so nothing is sent"
+    (let [w    (world three-words {})
+          stop (start! (assoc-in (:capabilities w) [:learner :learner/has-account?] false))]
       (try
         (await ((:advance! w) 600000))
         (is (empty? (asked w)))
-        (is (= 1 @tidied))
         (finally
          (stop))))))
 
@@ -952,7 +934,7 @@
 
 (deftest a-throwing-step-is-retried-after-the-back-off
   (async-testing
-    "the port promises never to reject; if it does, that is an outage and nobody has to wake the fetcher"
+    "the port promises never to reject; if it does, that is an outage and nobody has to wake the backfill"
     (await
      (run three-words
           {}
@@ -971,27 +953,24 @@
 ;;
 
 
-(def device-db-name (db-fixtures/db-name "client.examples-fetcher-test.device"))
+(def user-db-name (db-fixtures/db-name "client.example-backfill-process-test.user"))
 
 
-(def user-db-name (db-fixtures/db-name "client.examples-fetcher-test.user"))
+(use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name]))
 
 
-(use-fixtures :each (db-fixtures/db-fixture-multi [device-db-name user-db-name]))
-
-
-(deftest a-start-asks-for-what-the-move-did-not-bring-and-saves-it
-  (async-testing "an example an earlier build kept in device-db answers its pair; the fetched one reaches user-db"
+(deftest a-start-asks-for-what-memory-lacks-and-saves-it
+  (async-testing "an example user-db holds answers its pair; the fetched one reaches user-db"
     (await
      (db-fixtures/with-test-dbs
-      [device-db-name user-db-name]
+      [user-db-name]
       (^:async fn
-       [[device-db user-db]]
-       (let [dbs {:device/db device-db :user/db user-db}]
+       [[user-db]]
+       (let [dbs {:user/db user-db}]
          (await (db-seed/seed-vocabulary! user-db
                                           [{:value "Hund" :translation "собака"}
                                            {:value "Katze" :translation "кошка"}]))
-         (await (db-seed/seed-examples! device-db
+         (await (db-seed/seed-examples! user-db
                                         [{:_id         "3F2B9C1A"
                                           :word-id     (vocabulary/vocab-id "Hund")
                                           :word        "Hund"
@@ -1007,15 +986,15 @@
                                                   {:answer (constantly {:example {:structure   []
                                                                                   :translation "Кошка спит."
                                                                                   :value       "Die Katze schläft."}})})
-                  stop (sut/start! (-> (:capabilities w)
-                                       (assoc :capabilities/sync
-                                              {:sync/account-id "account" :sync/first-pass (js/Promise.resolve nil)})
-                                       (assoc :learner (:learner started))))]
+                  stop (start! (-> (:capabilities w)
+                                       (assoc :learner (assoc (:learner started)
+                                                              :learner/has-account? true
+                                                              :learner/initialized (js/Promise.resolve nil)))))]
               (try
-                ;; Memory changed as it started; the fetcher picks once it
+                ;; Memory changed as it started; the backfill picks once it
                 ;; has been still, by the test's clock.
                 (await (wait/until (fn [] (.then (advance! 1000) #(seq (asked w))))))
-                (is (= ["Katze"] (asked w)) "the moved example answers Hund")
+                (is (= ["Katze"] (asked w)) "the stored example answers Hund")
                 (await (advance! 2000))
                 (await (wait/until #(seq (memory/examples-of (:learner/memory @store)
                                                              [(vocabulary/vocab-id "Katze")]))))
@@ -1023,6 +1002,5 @@
                        (map :value (memory/examples-of (:learner/memory @store) [(vocabulary/vocab-id "Katze")]))))
                 (is (= #{"Der Hund bellt." "Die Katze schläft."}
                        (set (map :value (await (db-queries/fetch-examples user-db))))))
-                (is (empty? (await (db-queries/fetch-examples device-db))))
                 (finally
                  (stop)))))))))))))

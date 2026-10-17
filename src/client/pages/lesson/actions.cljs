@@ -27,10 +27,10 @@
   ;; lives in app state only: leaving the screen drops it. Entered while
   ;; memory loads, behind the splash, it is drawn once memory is in place
   ;; (`:action/refresh-page`).
-  (fn open-lesson [state {:keys [active-collection learner now-ms]}]
+  (fn open-lesson [state {:keys [active-collection learner now-ms random]}]
     [[:effect/save
       (shown (when (:learner/loaded? state)
-               (lesson/start learner (:learner/memory state) active-collection {} now-ms)))]]))
+               (lesson/start learner (:learner/memory state) active-collection {:random random} now-ms)))]]))
 
 
 (nxr/register-action! :action/update-lesson

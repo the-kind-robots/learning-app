@@ -120,3 +120,18 @@
 
 (deftest a-word-without-umlauts-has-one-search-line-per-text
   (is (= "hund\nпёс" (sut/search-text {:value "Hund" :translation [{:lang "ru" :value "пёс"}]}))))
+
+
+(deftest conflicting-versions-merge-into-the-last-written-with-every-translation
+  (let [older {:modified-at "2026-01-01" :translation [{:lang "ru" :value "пёс"}] :value "Hund"}
+        newer {:modified-at "2026-02-01" :translation [{:lang "ru" :value "собака"}] :value "der Hund"}]
+    (is (= {:modified-at "2026-02-01"
+            :translation [{:lang "ru" :value "пёс"} {:lang "ru" :value "собака"}]
+            :value       "der Hund"}
+           (sut/merged-word [older newer]))
+        "the newer fields win; the translations of both are kept")
+    (is (= #{{:lang "ru" :value "пёс"} {:lang "ru" :value "собака"}}
+           (set (:translation (sut/merged-word [newer older]))))
+        "whatever the order")
+    (is (= "b" (:value (sut/merged-word [(assoc older :value "a") (assoc older :value "b")])))
+        "equal dates: the later version")))

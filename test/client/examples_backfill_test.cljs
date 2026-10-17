@@ -1,8 +1,8 @@
 (ns client.examples-backfill-test
   "Which pairs of an entry have no example: the rule
-   (`domain.examples/missing-pairs`), without a database. The fetcher that
+   (`domain.examples/missing-pairs`), without a database. The backfill that
    walks memory and asks for them is tested in
-   `client.examples-fetcher-test`."
+   `client.example-backfill-process-test`."
   (:require
    [cljs.test :refer-macros [deftest is testing]]
    [domain.examples :as sut]
