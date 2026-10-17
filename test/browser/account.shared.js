@@ -1,4 +1,4 @@
-// A device with an account, for specs that need one. The example fetcher asks
+// A device with an account, for specs that need one. The example backfill asks
 // nothing of a device without an account (the endpoint answers it 401), and
 // the suite's backend has no CouchDB to provision one against.
 //

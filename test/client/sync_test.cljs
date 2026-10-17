@@ -233,63 +233,32 @@
 ;;
 
 
-(defn- ^:async device-doc-ids
-  [device-db]
-  (let [{rows :rows} (await (db/all-docs device-db))]
-    (set (map :id rows))))
-
-
-(defn- ^:async seed-device-db!
-  "What a device holds after a while on one account: an example an earlier
-   build kept here and the move has not taken to user-db yet, and the two
-   documents that belong to the device rather than to the account."
-  [device-db]
-  (await (db/insert device-db {:_id "example-hund" :type "example" :word-id "vocab:hund"}))
-  (await (db/insert device-db {:_id "identity:local" :type "identity" :user-id 1 :token "old"}))
-  (await (db/insert device-db {:_id "migration:001" :type "migration"})))
-
-
 (defn- ^:async adopt-key!
-  "Runs the incoming-credential path for `#key=...`, with the databases it
-   opens by name pointed at the test ones and the network call answered with
-   `account-id`."
-  [device-db user-db account-id]
+  "Runs the incoming-credential path for `#key=...`, with the network call
+   answered with `account-id` and the stored identity that of account 1.
+   Resolves with the databases it destroyed."
+  [account-id]
   (set! (.-window js/globalThis) #js {:location #js {:hash "#key=token-of-the-other"}})
-  (try
-    (with-redefs [db/use (fn [name] (if (= "device-db" name) device-db user-db))
-                  identity/account-id! (fn [_] (js/Promise.resolve account-id))
-                  identity/load-identity! (fn [] (js/Promise.resolve {:id 1 :token "old"}))
-                  identity/save-identity! (fn [_] (js/Promise.resolve nil))]
-      (await (sut/check-incoming-auth! nil)))
-    (finally
-     (js/Reflect.deleteProperty js/globalThis "window"))))
+  (let [destroyed (atom [])]
+    (try
+      (with-redefs [db/destroy              (fn [handle]
+                                              (swap! destroyed conj handle)
+                                              (js/Promise.resolve nil))
+                    db/use                  (fn [name] name)
+                    identity/account-id!    (fn [_] (js/Promise.resolve account-id))
+                    identity/load-identity! (fn [] (js/Promise.resolve {:id 1 :token "old"}))
+                    identity/save-identity! (fn [_] (js/Promise.resolve nil))]
+        (await (sut/check-incoming-auth! nil)))
+      (finally
+       (js/Reflect.deleteProperty js/globalThis "window")))
+    @destroyed))
 
 
-(deftest a-key-of-another-account-takes-the-old-account-s-examples-with-it
-  (async-testing "examples not moved yet are the account's; the identity is the device's"
-    (await
-     (db-fixtures/with-test-dbs
-      [user-db-name device-db-name]
-      (^:async fn
-       [[user-db device-db]]
-       (await (seed-device-db! device-db))
-       (await (adopt-key! device-db user-db 2))
-       (let [ids (await (device-doc-ids device-db))]
-         (is (not (contains? ids "example-hund"))
-             "the move would carry it into the next account, under a content-addressed id")
-         (testing "and what belongs to the device stays"
-           (is (contains? ids "identity:local"))
-           (is (contains? ids "migration:001")))))))))
+(deftest a-key-of-another-account-clears-the-local-data
+  (async-testing "user-db is destroyed before the databases open; device-db is not"
+    (is (= ["user-db"] (await (adopt-key! 2))))))
 
 
 (deftest a-key-of-the-same-account-keeps-everything
   (async-testing "the same account on another device is a merge, not a change of hands"
-    (await
-     (db-fixtures/with-test-dbs
-      [user-db-name device-db-name]
-      (^:async fn
-       [[user-db device-db]]
-       (await (seed-device-db! device-db))
-       (await (adopt-key! device-db user-db 1))
-       (let [ids (await (device-doc-ids device-db))]
-         (is (contains? ids "example-hund"))))))))
+    (is (= [] (await (adopt-key! 1))))))

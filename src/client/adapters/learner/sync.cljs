@@ -386,40 +386,6 @@
       no-account)))
 
 
-(defn- of-the-account?
-  "Whether a device-db document was held on behalf of the account, rather than
-   on behalf of this device: an example an earlier build kept here that has
-   not moved to user-db.
-   The stored identity and the migration records belong to the device and
-   outlive any account it carries.
-
-   Asked of the schema that owns those documents, so a type renamed there is
-   renamed here."
-  [{:keys [type]}]
-  (= (:type documents/example-schema) type))
-
-
-(defn ^:async forget-account-data!
-  "Deletes what device-db held for the account that was here. The account's
-   examples in user-db go when user-db is destroyed.
-
-   Vocabulary ids are content-addressed (ADR-0008), so an example not moved
-   yet would move into the new account, and the example backfill, finding those pairs
-   answered, would never ask for its own.
-
-   Addressed rather than destroyed: device-db is also where the identity this
-   device is about to store lives."
-  [device-db]
-  (try
-    (let [{rows :rows} (await (db/all-docs device-db {:include-docs true}))
-          theirs       (filter #(of-the-account? (:doc %)) rows)]
-      (when (seq theirs)
-        (log/info :sync/forgetting-account-data {:count (count theirs)})
-        (await (db/bulk-docs device-db (mapv #(documents/tombstone (:doc %)) theirs)))))
-    (catch :default err
-      (log/warn :sync/forget-account-data-failed {:error (ex-message err)}))))
-
-
 (defn ^:async check-incoming-auth!
   "Handles an incoming credential: #key=TOKEN (QR pair, recovery, share) or
    #invite=TOKEN (provision a new account, ADR-0006).
@@ -427,8 +393,7 @@
    A key is validated against the server before this device adopts it, and the
    local data is cleared only when the key turns out to belong to a different
    account than the one stored — otherwise the local data stays and merges.
-   Clearing is user-db destroyed and, in device-db, what belonged to that
-   account (`forget-account-data!`). Must run before the databases open, so that
+   Clearing is user-db destroyed. Must run before the databases open, so that
    a wipe leaves the fresh PouchDB instance empty. The cookie is not written here: `start!` derives it
    from the stored identity later in the same boot.
 
@@ -451,8 +416,7 @@
               ;; own: a handle that existed at destroy time never errors, it
               ;; hangs on every later call.
               (when (not= (:id stored) account-id)
-                (await (db/destroy (db/use "user-db")))
-                (await (forget-account-data! (db/use "device-db")))))
+                (await (db/destroy (db/use "user-db")))))
             (await (identity/save-identity! {:id account-id :token token}))
             ;; The echo that ends pairing (ADR-0009): the QR carried a nonce,
             ;; the receipt carries it back through ordinary replication, and

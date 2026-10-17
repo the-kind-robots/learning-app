@@ -413,8 +413,8 @@
 
 (defn ^:async start!
   "Starts the learner's data: the incoming credential is handled before the
-   databases open; the databases open, their background migrations run and the
-   request that protects storage goes out; memory is read, replication starts
+   databases open; the databases open and the request that protects storage
+   goes out; memory is read, replication starts
    and memory follows the databases. The parts start in that order
    (`runtime.system`), each returning at once with what it waits for as a
    promise in its value — `:checked` of memory, `:ready` of `:initialized` —
@@ -433,8 +433,6 @@
            :persistence {:start (fn [_] (databases/persist!))}
            :databases   {:after [:credential]
                          :start (fn [_] (databases/open-pouch!))}
-           :migrations  {:after [:databases]
-                         :start (fn [_] (databases/run-background-migrations!))}
            ;; Reads memory, then follows the databases; returns at once. The
            ;; snapshot check sits in the value as a promise, under :checked. A
            ;; promise returned bare would make every later part wait for it.

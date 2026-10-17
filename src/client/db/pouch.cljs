@@ -54,36 +54,6 @@
   1000)
 
 
-(def ^:private retry-ms
-  "How long `retried` waits before it tries again: each wait is the next
-   one here, and after the last the last is repeated."
-  [1000 2000 4000 8000 16000 30000])
-
-
-(defn- ^:async retried-after
-  [operation failed waits]
-  (let [[wait & more] waits
-        result        (try
-                        {:value (await (operation))}
-                        (catch :default err
-                          {:error err}))]
-    (if (contains? result :value)
-      (:value result)
-      (do (failed (:error result) wait)
-          (await (js/Promise. (fn [resolve] (js/setTimeout resolve wait))))
-          (await (retried-after operation failed (or more [wait])))))))
-
-
-(defn retried
-  "Resolves with what `operation`, a function returning a promise, resolves
-   with. When the promise rejects — a locked or evicted database, a quota
-   error — this calls `failed` with the error and the wait before the next
-   try, waits, and calls `operation` again, until it succeeds. The waits
-   grow as `retry-ms` says. It never rejects."
-  [operation failed]
-  (retried-after operation failed retry-ms))
-
-
 (defn- ^:async pages
   "Reads every document of `db` with an id from `:start` to `:end`, a page
    at a time, with a task between pages. With `:types`, a set, it keeps only
@@ -108,26 +78,6 @@
         docs
         (do (await (browser/yield))
             (recur docs (.-id ^js (aget rows (dec (.-length rows))))))))))
-
-
-(defn ^:async read-page
-  "One page of the documents of `db-key` with an id after `:after`, or from
-   the first when it is nil: `{:docs :next}`. The page reads
-   `:limit` ids. `:docs` are the documents among them, only those of the
-   types in `:types` when it is given. `:next` is the id to read the next
-   page after, or nil when this page was the last."
-  [dbs db-key {:keys [after limit types]}]
-  (let [options  (cond-> #js {:include_docs true :limit limit}
-                   after (doto (aset "startkey" (str after "\u0000"))))
-        ^js page (await (.allDocs ^js (db-key dbs) options))
-        rows     (.-rows page)]
-    {:docs (into []
-                 (comp (map #(.-doc ^js %))
-                       (filter #(or (nil? types) (contains? types (.-type ^js %))))
-                       (map db/couch->clj))
-                 rows)
-     :next (when (= limit (.-length rows))
-             (.-id ^js (aget rows (dec limit))))}))
 
 
 (defn read-docs

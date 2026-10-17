@@ -1,9 +1,7 @@
 (ns adapters.learner.databases
   "Opening the databases of the learner's data: PouchDB's user-db and
-   device-db, the migrations that need no waiting, and the request that
-   protects them from eviction."
+   device-db, and the request that protects them from eviction."
   (:require
-   [db-migrations]
    [db.pouch :as pouch]
    [lambdaisland.glogi :as log]))
 
@@ -13,12 +11,6 @@
    map of the databases."
   []
   (pouch/init!))
-
-
-(defn run-background-migrations!
-  "Starts the once-per-device migrations that need no waiting."
-  []
-  (db-migrations/run-in-background!))
 
 
 (defn persist!

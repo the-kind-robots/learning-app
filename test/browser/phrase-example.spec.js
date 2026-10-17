@@ -4,7 +4,7 @@ const { token } = require('./lesson-answer.shared');
 const { becomeAccount } = require('./account.shared');
 
 // A phrase gets an example, like a word does (GH-371). The path CI does not
-// otherwise exercise: add form -> memory -> the example fetcher -> /api/examples -> stored
+// otherwise exercise: add form -> memory -> the example backfill -> /api/examples -> stored
 // example -> a lesson trial locked behind the phrase trial.
 //
 // The endpoint is stubbed with `page.route`. The suite's backend has no
@@ -56,7 +56,7 @@ async function addPhrase(page) {
 }
 
 // The stored example is the only honest evidence that the answer landed: it is
-// written by the example fetcher, and nothing renders it until a lesson starts.
+// written by the example backfill, and nothing renders it until a lesson starts.
 // Read at the engine level, as test/browser/README.md prescribes.
 const storedExampleValues = async (page) =>
   (await docsOfType(page, 'user-db', 'example')).map((d) => d.value);
@@ -68,7 +68,7 @@ async function addPhraseAndAwaitItsExample(page) {
   // Only a device with an account asks for examples.
   await becomeAccount(page);
   await addPhrase(page);
-  // The example fetcher decides when the request goes out, so wait for the
+  // The example backfill decides when the request goes out, so wait for the
   // condition rather than for a duration.
   await expect.poll(() => requested.length, { timeout: 15000 }).toBeGreaterThan(0);
   await expect.poll(() => storedExampleValues(page), { timeout: 15000 }).toEqual([SENTENCE]);

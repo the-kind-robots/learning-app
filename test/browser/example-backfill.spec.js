@@ -1,7 +1,7 @@
 const { test, expect } = require('./fixtures');
 const { becomeAccount } = require('./account.shared');
 
-// The example fetcher (#523, ADR-0021): a visible tab of a device with an
+// The example backfill (#523, ADR-0021): a visible tab of a device with an
 // account asks, and every failure has one effect that ends on its own. The
 // endpoint is stubbed with `page.route`; what is asserted is when, and how
 // often, the app asks.
@@ -66,7 +66,7 @@ async function open(page, respond, { account = true } = {}) {
 }
 
 // Words without examples, written past the app as a replication writes them;
-// memory takes them from the change feed and the fetcher looks at them.
+// memory takes them from the change feed and the backfill looks at them.
 async function seedWords(page, values) {
   await page.evaluate(async (values) => {
     const now = new Date().toISOString();
