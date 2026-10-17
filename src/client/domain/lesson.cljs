@@ -7,18 +7,16 @@
 (def default-vocab-per-lesson 3)
 
 
-(def default-trial-selector rand-nth)
-
-
 (defn pick-vocab
   "The `n` most due of `rows`, most due first, ranked by `urgency-of`. Rows
    that tie are taken in random order, so a tied vocabulary is never cut
    alphabetically (#431).
 
-   One pass keeps the top `n` in a small array, each with a random tie key;
-   the vocabulary is not sorted. `##Inf` compares, it is never subtracted. An
+   One pass keeps the top `n` in a small array, each with a tie key from
+   `random`, a function of nothing that returns a number in [0, 1); the
+   vocabulary is not sorted. `##Inf` compares, it is never subtracted. An
    urgency that is not a number ranks last."
-  [rows urgency-of n]
+  [rows urgency-of n random]
   (let [n       (or n 0)
         top     #js []
         before? (fn [u t ^js kept]
@@ -26,7 +24,7 @@
                       (and (== u (aget kept 1)) (< t (aget kept 2)))))]
     (doseq [row   rows
             :let  [u (let [u (urgency-of row)] (if (js/Number.isNaN u) ##-Inf u))
-                   t (js/Math.random)]
+                   t (random)]
             :when (and (pos? n)
                        (or (< (.-length top) n)
                            (before? u t (aget top (dec (.-length top))))))]
@@ -72,32 +70,6 @@
   (not (example-trial? trial)))
 
 
-(defn- vocab->trial
-  "A word or a phrase becomes the trial its kind calls for. `:word-id` keeps
-   its name because reviews and examples are stored under it."
-  [vocab]
-  {:type    (if (= "phrase" (:kind vocab))
-              trial-type-phrase
-              trial-type-word)
-   :word-id (:id vocab)
-   :prompt  (->> (:translation vocab)
-                 (filter #(= "ru" (:lang %)))
-                 (map :value)
-                 (str/join ", "))
-   :answer  (:value vocab)
-   :locked? false})
-
-
-(defn- example->trial
-  [example]
-  {:type      trial-type-example
-   :word-id   (:word-id example)
-   :prompt    (:translation example)
-   :answer    (:value example)
-   :structure (:structure example)
-   :locked?   true})
-
-
 (defn generate-trials
   "The trials of a lesson over `vocab`, its words and phrases, and
    `examples`, the examples a read in the lesson's collection sees: one
@@ -107,9 +79,32 @@
    same one every time."
   [vocab examples]
   (let [example-of (update-vals (group-by :word-id examples) #(first (sort-by :id %)))]
-    (into (mapv vocab->trial vocab)
-          (comp (map :word-id) (distinct) (map example-of) (map example->trial))
-          examples)))
+    (into
+     ;; A word or a phrase becomes the trial its kind calls for. `:word-id`
+     ;; keeps its name because reviews and examples are stored under it.
+     (mapv (fn [entry]
+             {:type    (if (= "phrase" (:kind entry))
+                         trial-type-phrase
+                         trial-type-word)
+              :word-id (:id entry)
+              :prompt  (->> (:translation entry)
+                            (filter #(= "ru" (:lang %)))
+                            (map :value)
+                            (str/join ", "))
+              :answer  (:value entry)
+              :locked? false})
+           vocab)
+     (comp (map :word-id)
+           (distinct)
+           (map example-of)
+           (map (fn [example]
+                  {:type      trial-type-example
+                   :word-id   (:word-id example)
+                   :prompt    (:translation example)
+                   :answer    (:value example)
+                   :structure (:structure example)
+                   :locked?   true})))
+     examples)))
 
 
 (defn trial-id
@@ -122,34 +117,30 @@
   (true? (:locked? trial)))
 
 
-(defn- unlock-example-trial
-  [word-id trial]
-  (cond-> trial
-    (and (example-trial? trial) (-> trial :word-id (= word-id)))
-    (assoc :locked? false)))
-
-
 (defn- unlock-example-trials
   [trials word-id]
-  (mapv #(unlock-example-trial word-id %) trials))
+  (mapv #(cond-> %
+           (and (example-trial? %) (-> % :word-id (= word-id)))
+           (assoc :locked? false))
+        trials))
 
 
-(defn- select-trial
-  [trials trial-selector]
-  (let [trial-selector (case trial-selector
-                         :first  first
-                         :random rand-nth
-                         default-trial-selector)]
-    (trial-selector trials)))
+(defn random-trial
+  "One of `trials`, picked with `random`, a function of nothing that returns
+   a number in [0, 1)."
+  [random trials]
+  (nth trials (js/Math.floor (* (random) (count trials)))))
 
 
 (defn initial-state
-  [vocab examples trial-selector]
+  "A lesson over `vocab` and `examples`. `select-trial`, a function of the
+   trials to pick from, chooses the first and every next trial."
+  [vocab examples select-trial]
   (let [trials (generate-trials vocab examples)]
-    {:options          {:trial-selector trial-selector}
+    {:options          {:trial-selector select-trial}
      :trials           trials
      :remaining-trials trials
-     :current-trial    (select-trial (remove locked-trial? trials) trial-selector)
+     :current-trial    (select-trial (remove locked-trial? trials))
      :last-result      nil}))
 
 
@@ -205,22 +196,16 @@
       (update :failed-trials (fnil conj #{}) (trial-id current-trial)))))
 
 
-(defn- available-trials
-  [remaining-trials current-trial]
-  (let [unlocked-trials (filterv (complement locked-trial?) remaining-trials)]
-    (if (> (count unlocked-trials) 1)
-      (remove-trial unlocked-trials current-trial)
-      unlocked-trials)))
-
-
 (defn advance
   [state]
-  (let [remaining      (:remaining-trials state)
-        trial-selector (-> state :options :trial-selector)
-        available      (available-trials remaining (:current-trial state))]
+  (let [select-trial   (-> state :options :trial-selector)
+        unlocked       (filterv (complement locked-trial?) (:remaining-trials state))
+        available      (if (> (count unlocked) 1)
+                         (remove-trial unlocked (:current-trial state))
+                         unlocked)]
     (when (seq available)
       (assoc state
-             :current-trial (select-trial available trial-selector)
+             :current-trial (select-trial available)
              :last-result   nil))))
 
 
@@ -249,17 +234,12 @@
   (:last-result state))
 
 
-(defn- split-answer-words
-  [answer]
-  (str/split (str/trim (or answer "")) #"\s+"))
-
-
 (defn answer-segments
   [trial]
   (let [structure-by-index (into {}
                                  (map (juxt :wordIndex identity))
                                  (:structure trial))]
-    (->> (split-answer-words (:answer trial))
+    (->> (str/split (str/trim (or (:answer trial) "")) #"\s+")
          (map-indexed
           (fn [word-index word]
             (if-let [item (get structure-by-index word-index)]

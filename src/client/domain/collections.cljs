@@ -69,13 +69,67 @@
            vec))
 
 
-(defn reconcile
+(def max-name-length 80)
+
+
+(defn entered-name
+  "`raw-name` trimmed and cut to `max-name-length` characters."
+  [raw-name]
+  (let [trimmed (str/trim (or raw-name ""))]
+    (subs trimmed 0 (min (count trimmed) max-name-length))))
+
+
+(defn name-taken?
+  "Whether a collection of `all-collections` other than `own-id` is called
+   `name`, by the equality that the folder lookup uses."
+  [all-collections own-id name]
+  (boolean (some #(and (not= own-id (:id %)) (same-name? (:name %) name))
+                 all-collections)))
+
+
+(defn new-collection
+  "A collection called `name`, with no words, made at `now`."
+  [name now]
+  {:created-at now
+   :name       name
+   :renamed-at now
+   :word-ids   []})
+
+
+(defn renamed-collection
+  "`collection` called `name` since `now`; the very same collection when it
+   is called that already."
+  [collection name now]
+  (if (= name (:name collection))
+    collection
+    (assoc collection :name name :renamed-at now)))
+
+
+(defn with-word
+  "`collection` listing `word-id`; the very same collection when it lists it
+   already."
+  [collection word-id]
+  (if (some #{word-id} (:word-ids collection))
+    collection
+    (update collection :word-ids conj word-id)))
+
+
+(defn without-word
+  "`collection` not listing `word-id`; the very same collection when it does
+   not list it."
+  [collection word-id]
+  (if (some #{word-id} (:word-ids collection))
+    (update collection :word-ids (partial filterv #(not= word-id %)))
+    collection))
+
+
+(defn merged-collection
   "The one of two versions of a collection that was renamed last, with the
-   word ids of both sorted. The order of the arguments, and how several
-   reconciliations are grouped, change nothing."
-  [a b]
+   word ids of both sorted. A version's `tie-break` value, a comparable,
+   decides between two renamed at the same time. The order of the versions,
+   and how several are grouped, change nothing."
+  [tie-break a b]
   (let [renamed-at (fn [version]
-                     (let [[generation hash] (str/split (:_rev version) #"-" 2)]
-                       [(or (:renamed-at version) (:created-at version)) (js/parseInt generation 10) hash]))
+                     [(or (:renamed-at version) (:created-at version)) (tie-break version)])
         winner     (if (neg? (compare (renamed-at a) (renamed-at b))) b a)]
     (assoc winner :word-ids (->> (concat (:word-ids a) (:word-ids b)) distinct sort vec))))

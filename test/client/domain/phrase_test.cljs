@@ -6,8 +6,8 @@
 
 (deftest a-document-without-a-kind-is-a-word
   (testing "documents written before phrases existed are words"
-    (is (true? (sut/phrase-doc? {:kind "phrase" :type "vocab"})))
-    (is (false? (sut/phrase-doc? {:type "vocab"})))))
+    (is (true? (sut/phrase? {:kind "phrase" :type "vocab"})))
+    (is (false? (sut/phrase? {:type "vocab"})))))
 
 
 (deftest the-input-is-a-phrase-when-it-has-more-than-a-word-and-its-article
