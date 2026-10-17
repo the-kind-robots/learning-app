@@ -4,7 +4,7 @@
 
 
 (defn- word-list-item
-  [{:keys [id phrase? retention-color retention-title translation value]}]
+  [{:keys [id phrase? retention-band retention-color retention-percent translation value]}]
   [:li.word-item
    {:id (str "word-" id)}
    [:button.word-item__display
@@ -13,7 +13,12 @@
                      {:id id :phrase? phrase? :value value :translation translation}]]}}
     [:div.word-item__retention
      {:style {:background-color retention-color}
-      :title retention-title}]
+      :title (str (case retention-band
+                    :retention/excellent "Отлично запомнено"
+                    :retention/good      "Хорошо изучено"
+                    :retention/due       "Нужно повторить"
+                    :retention/new       "Новое слово")
+                  " (" retention-percent "%)")}]
     [:span.word-item__value
      {:lang "de" :class (when phrase? "word-item__value--phrase")}
      value]
@@ -32,7 +37,7 @@
 
 
 (defn- edit-dialog
-  [{:keys [id phrase? value translation]}]
+  [{:keys [id phrase? value translation]} in-collection?]
   [:dialog.word-edit-dialog.modal
    {:replicant/key id
     :replicant/on-mount [[:action/open-dialog]]
@@ -78,31 +83,43 @@
       "Отмена"]
      [:button.word-edit-dialog__delete
       {:type "button"
-       :on   {:click [[:action/remove-word {:id id :value value}]]}}
+       :on   {:click [[:action/remove-word
+                       {:confirm-message (if in-collection?
+                                           (str "Убрать «" value "» из набора?")
+                                           (str "Удалить «" value "» окончательно?"))
+                        :id              id
+                        :value           value}]]}}
       "Удалить"]]]])
 
 
 (defn- empty-state
-  [{:keys [cta hint text]}]
+  [kind]
   [:div.vocabulary__empty-state
-   [:p.vocabulary__empty-state-text text]
-   [:p.vocabulary__empty-state-hint hint]
-   (when cta
-     [:button.vocabulary__empty-state-cta
-      {:on {:click [[:action/go-to-home]]}}
-      cta])])
+   [:p.vocabulary__empty-state-text
+    (case kind
+      :empty/first-run  "Слов пока нет"
+      :empty/no-matches "Ничего не найдено")]
+   [:p.vocabulary__empty-state-hint
+    (case kind
+      :empty/first-run  "Добавьте первое слово на главной странице"
+      :empty/no-matches "Попробуйте другой запрос")]
+   (case kind
+     :empty/first-run  [:button.vocabulary__empty-state-cta
+                        {:on {:click [[:action/go-to-home]]}}
+                        "Добавить слово"]
+     :empty/no-matches nil)])
 
 
 (defn page
   [state]
-  (let [{:keys [editing items known? more? search vocabulary?] placeholder :empty-state}
+  (let [{:keys [editing in-collection? items known? more? search vocabulary?] placeholder :empty-state}
         (presenter/page-props state)]
     ;; `data-vk-overlay`, as on home: the keyboard is laid over the page, so
     ;; it covers the lesson button fixed at the bottom while the search bar,
     ;; which closes the column, stands on the keyboard's inset.
     [:div.vocabulary
      {:data-vk-overlay true}
-     (when editing (edit-dialog editing))
+     (when editing (edit-dialog editing in-collection?))
      (cond
        (not known?)
        nil

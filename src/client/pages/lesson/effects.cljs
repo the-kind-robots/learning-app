@@ -56,6 +56,6 @@
       ;; the popover's on-update then repositions the shell.
       (dispatch [[:action/annotate-answer
                   lesson-state
-                  (assoc hints word-index :known-with-translation)]])
+                  (assoc hints word-index :word-state/known-with-translation)]])
       (catch js/Error err
         (log/error :effect/add-token {:error (str err)})))))

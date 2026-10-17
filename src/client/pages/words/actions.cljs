@@ -22,8 +22,9 @@
   "The rows the word list shows, cut from the learner's data in `state` by the
    query and the row count the list holds: `:words/rows`, `:words/total` (the
    words in scope before the query, which is how an empty vocabulary and a
-   query with no match tell apart) and `:words/more?` (whether the query
-   matched more than the rows shown)."
+   query with no match tell apart), `:words/more?` (whether the query
+   matched more than the rows shown) and `:words/in-collection?` (whether
+   the list is a collection's)."
   [state {:keys [active-collection learner now-ms]}]
   (let [memory (:learner/memory state)
         {:keys [matches total words]}
@@ -33,9 +34,10 @@
                           :search     (:words/search state)
                           :collection active-collection}
                          now-ms)]
-    {:words/more? (< (count words) matches)
-     :words/rows  words
-     :words/total total}))
+    {:words/in-collection? (some? active-collection)
+     :words/more?          (< (count words) matches)
+     :words/rows           words
+     :words/total          total}))
 
 
 (defn- shown

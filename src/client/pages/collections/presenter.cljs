@@ -1,6 +1,6 @@
 (ns pages.collections.presenter
   "What the themes screen shows, from the collections alone: one
-   alphabetical sequence of tiles, «Всё подряд» first; names with a `/`
+   alphabetical sequence of tiles, the main one («Всё подряд») first; names with a `/`
    folded into one folder tile (ADR-0013). The CSS pours that sequence into
    columns, read down each in turn. Every predicate the view needs is
    decided here."
@@ -23,15 +23,14 @@
 (defn- target
   "One tappable thing: a tile, a folder header or a row."
   [state {:keys [id name lang count tap active? deletable?]}]
-  {:id           id
-   :name         name
-   :lang         lang
-   :count        count
-   :active?      active?
-   :editing?     (= id (:collections/editing-id state))
-   :deletable?   deletable?
-   :delete-label (when deletable? (str "Удалить набор «" name "»"))
-   :tap          tap})
+  {:id         id
+   :name       name
+   :lang       lang
+   :count      count
+   :active?    active?
+   :editing?   (= id (:collections/editing-id state))
+   :deletable? deletable?
+   :tap        tap})
 
 
 (defn- collection-target
@@ -50,13 +49,13 @@
   [state]
   (assoc (target state
                  {:id         main-target
-                  :name       "Всё подряд"
                   :count      (:collections/total-words state)
                   :active?    (nil? (:collections/active-id state))
                   :deletable? false
                   :tap        [[:action/handle-main-tab-click]]})
+         :folder? false
          :key     main-target
-         :folder? false))
+         :main?   true))
 
 
 (defn- plain-tile

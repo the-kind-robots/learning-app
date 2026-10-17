@@ -74,18 +74,14 @@
 
 (nxr/register-effect! :effect/delete-word
   (fn ^:async delete-word
-    [{:keys [capabilities dispatch]} _ {:keys [id value]}]
-    (let [collection ((get-in capabilities [:learner :learner/active-collection]))
-          prompt     (if collection
-                       (str "Убрать «" value "» из набора?")
-                       (str "Удалить «" value "» окончательно?"))]
-      (when (js/confirm prompt)
-        ;; The dialog closes here rather than on the rows that follow: rows
-        ;; change for reasons of their own, and declining the prompt above
-        ;; leaves the reader where they were (#439).
-        (dispatch [[:action/close-word-edit]])
-        (try
-          (await (vocabulary/remove-from-active! capabilities id))
-          (dispatch [[:effect/enter :action/refresh-page]])
-          (catch js/Error err
-            (log/error :effect/delete-word {:error (str err)})))))))
+    [{:keys [capabilities dispatch]} _ {:keys [confirm-message id]}]
+    (when (js/confirm confirm-message)
+      ;; The dialog closes here rather than on the rows that follow: rows
+      ;; change for reasons of their own, and declining the prompt above
+      ;; leaves the reader where they were (#439).
+      (dispatch [[:action/close-word-edit]])
+      (try
+        (await (vocabulary/remove-from-active! capabilities id))
+        (dispatch [[:effect/enter :action/refresh-page]])
+        (catch js/Error err
+          (log/error :effect/delete-word {:error (str err)}))))))

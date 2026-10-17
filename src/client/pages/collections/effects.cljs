@@ -58,17 +58,6 @@
   (or (some-> js/document .-scrollingElement .-scrollTop) 0))
 
 
-(defn- trace!
-  [kind data]
-  (when ^boolean goog/DEBUG
-    (instrumentation/trace! kind (clj->js data))))
-
-
-(defn- card-of
-  [^js node]
-  (some-> node (.closest "[data-collection-id]") (.getAttribute "data-collection-id")))
-
-
 (defn- swallow-next-click!
   "Once a gesture has fired there is nothing left for its click to do — the
    click Chrome may still deliver after a cancelled touch, or after a long
@@ -79,7 +68,9 @@
     (js/window.addEventListener
      "click"
      (fn [^js click]
-       (when (= card-id (card-of (.-target click)))
+       (when (= card-id (some-> ^js (.-target click)
+                                (.closest "[data-collection-id]")
+                                (.getAttribute "data-collection-id")))
          (.abort listener)
          (.stopPropagation click)
          (.preventDefault click)))
@@ -142,7 +133,9 @@
                 (finish)
                 (when-let [tap (on-lift (assoc @gesture :scroll-delta (- (scroll-top) start-st)))]
                   (vreset! gesture tap)
-                  (trace! "tap-recovered" {:movedPx (:moved-px tap) :scrollDelta (:scroll-delta tap)})
+                  (when ^boolean goog/DEBUG
+                    (instrumentation/trace! "tap-recovered"
+                                            (clj->js {:movedPx (:moved-px tap) :scrollDelta (:scroll-delta tap)})))
                   (swallow-next-click! card-id)
                   (dispatch tap-actions)))))))
 
@@ -162,19 +155,11 @@
     (track-gesture! ctx card-id tap-actions nil)))
 
 
-(nxr/register-effect! :effect/exit-editing-on-background
-  (fn exit-editing-on-background [{:keys [dispatch dispatch-data]} system _]
-    (let [event (:replicant/dom-event dispatch-data)]
-      (when (and (= (.-target event) (.-currentTarget event))
-                 (:collections/editing-id @(:store system)))
-        (dispatch [[:effect/save {:collections/editing-id nil}]])))))
-
-
 (nxr/register-effect! :effect/prompt-create-collection
   (fn ^:async prompt-create-collection
-    [{:keys [capabilities dispatch]} _]
+    [{:keys [capabilities dispatch]} _ message]
     (try
-      (when-let [raw-name (js/prompt "Название нового набора:")]
+      (when-let [raw-name (js/prompt message)]
         (await (collections/create! capabilities raw-name))
         (dispatch [[:effect/enter :action/refresh-page]]))
       (catch js/Error err
@@ -190,24 +175,19 @@
     (or (first after) (last before))))
 
 
-(defn- target-ids
-  "The ids of the themes screen's targets, in document order."
-  []
-  (->> (js/Array.from (js/document.querySelectorAll ".masonry [data-collection-id]"))
-       (map #(.getAttribute ^js % "data-collection-id"))))
-
-
 (nxr/register-effect! :effect/delete-collection
   (fn ^:async delete-collection!
-    [{:keys [capabilities dispatch]} _ {:keys [id name status-region]}]
+    [{:keys [capabilities dispatch]} _ {:keys [deleted-message id status-region]}]
     ;; Picked before the delete: afterwards the deleted target is gone.
-    (let [focus-id (neighbour (target-ids) id)]
+    (let [focus-id (neighbour (->> (js/Array.from (js/document.querySelectorAll ".masonry [data-collection-id]"))
+                                   (map #(.getAttribute ^js % "data-collection-id")))
+                              id)]
       (try
         (await (collections/delete! capabilities id))
         (dispatch [[:effect/enter :action/show-deleted
-                    {:name          name
-                     :focus-id      focus-id
-                     :status-region status-region}]])
+                    {:deleted-message deleted-message
+                     :focus-id        focus-id
+                     :status-region   status-region}]])
         (catch js/Error err
           (log/error :effect/delete-collection {:error (str err)}))))))
 
