@@ -50,7 +50,7 @@
                                               :type     "collection"
                                               :name     "listed"
                                               :word-ids (vec word-ids)}]))]
-    (sut/rows memory
+    (sut/rows (test-learner/of-memory memory)
               (cond-> (dissoc opts :word-ids)
                 word-ids (assoc :collection (get-in memory [:collections "collection:listed"])))
               (time/now-ms))))

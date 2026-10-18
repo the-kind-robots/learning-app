@@ -7,20 +7,20 @@
 
 
 (defn listed
-  "Every collection the learner's data in memory has, oldest first."
-  [memory]
-  (->> (learner/collections memory)
+  "Every collection the learner has, oldest first."
+  [learner]
+  (->> (learner/collections learner)
        (sort-by :created-at)
        vec))
 
 
 (defn summary
-  "What the themes screen shows, out of memory: every collection —
+  "What the themes screen shows of the learner's data: every collection —
    `{:id :name :word-ids :created-at}` — and the words count for «Всё
    подряд». Grouping and counting are the presenter's."
-  [memory]
-  {:items       (listed memory)
-   :total-words (learner/word-count memory)})
+  [learner]
+  {:items       (listed learner)
+   :total-words (learner/word-count learner)})
 
 
 (defn- sendable-name
@@ -41,8 +41,8 @@
   "Whether a collection other than `own-id` is called `name`, by the folder lookup's equality. Asked of
    memory once caught up, so a collection a replication just brought counts."
   [learner own-id name]
-  (let [memory (await (learner/fresh-memory learner))]
-    (collections/name-taken? (learner/collections memory) own-id name)))
+  (await (learner/fresh-memory learner))
+  (collections/name-taken? (learner/collections learner) own-id name))
 
 
 (defn ^:async create!
@@ -89,7 +89,7 @@
                                                     (fn [collection]
                                                       (some-> collection
                                                               (collections/renamed-collection trimmed (world/clock world :now-iso))))]]))
-                      (learner/collection (learner/memory learner) active-id)))]
+                      (learner/collection learner active-id)))]
       (cond-> {:name (if renamed (:name renamed) current)}
         renamed (assoc :renamed? true)
         taken?  (assoc :noop :duplicate)))))

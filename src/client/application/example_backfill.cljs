@@ -99,11 +99,11 @@
 
 
 (defn- ^:async missing-pair
-  "The next pair to ask for in `memory`, or nil. It reads 200 entries per task."
-  [{:keys [page state]} memory]
-  (loop [chunks (partition-all (:chunk-size limits) (learner/words memory))]
+  "The next pair to ask for among the learner's words, or nil. It reads 200 entries per task."
+  [{:keys [learner page state]}]
+  (loop [chunks (partition-all (:chunk-size limits) (learner/words learner))]
     (when-let [[chunk & more] (seq chunks)]
-      (or (examples/next-pair memory (:failed-subjects @state) chunk)
+      (or (examples/next-pair learner (:failed-subjects @state) chunk)
           (do (await (page/yield page))
               (recur more))))))
 
@@ -150,7 +150,7 @@
   (if-not (page/active? page)
     [:wait/active]
     (let [memory (learner/memory learner)]
-      (if-let [pair (await (missing-pair backfill memory))]
+      (if-let [pair (await (missing-pair backfill))]
         (let [subject  (examples/subject pair)
               response (await (ask backfill subject))
               before   (:outages @state)

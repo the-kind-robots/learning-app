@@ -12,7 +12,8 @@
 
 (defprotocol Learner
   (memory [l]
-    "The learner's data in memory as it stands now; the reads below take it.")
+    "The learner's data in memory as it stands now, as one value; a caller that compares two reads of it by
+     identity needs it. The reads below read it for everything else.")
   (fresh-memory [l]
     "A promise of memory once it has everything stored, which a write or a replication may have just brought.")
   (change! [l ops]
@@ -89,71 +90,71 @@
 
 
 ;;
-;; Reads of memory. Each takes the memory value `memory` hands out.
+;; Reads of memory. Each takes the learner.
 ;;
 
 
 (defn collection
-  "The collection `id` in `memory`, or nil."
-  [mem id]
-  (memory/collection mem id))
+  "The collection `id` of the learner, or nil."
+  [learner id]
+  (memory/collection (memory learner) id))
 
 
 (defn collection-cards
   "A card for every word in scope of `coll`, nil for all: the word with its reviews."
-  [mem coll]
-  (memory/collection-cards mem coll))
+  [learner coll]
+  (memory/collection-cards (memory learner) coll))
 
 
 (defn collection-words
   "The words in scope of `coll`, nil for all."
-  [mem coll]
-  (memory/collection-words mem coll))
+  [learner coll]
+  (memory/collection-words (memory learner) coll))
 
 
 (defn collections
-  "Every collection in `memory`."
-  [mem]
-  (memory/collections mem))
+  "Every collection of the learner."
+  [learner]
+  (memory/collections (memory learner)))
 
 
 (defn collections-of
   "The collections that list the word `word-id`."
-  [mem word-id]
-  (memory/collections-of mem word-id))
+  [learner word-id]
+  (memory/collections-of (memory learner) word-id))
 
 
 (defn examples-of
   "The examples of the words `word-ids`."
-  [mem word-ids]
-  (memory/examples-of mem word-ids))
+  [learner word-ids]
+  (memory/examples-of (memory learner) word-ids))
 
 
 (defn matching-words
   "The words in scope of `coll` that match `query`."
-  [mem coll query]
-  (memory/matching-words mem coll query))
+  [learner coll query]
+  (memory/matching-words (memory learner) coll query))
 
 
 (defn review-history
   "The reviews of the word `word-id`."
-  [mem word-id]
-  (memory/review-history mem word-id))
+  [learner word-id]
+  (memory/review-history (memory learner) word-id))
 
 
 (defn word
-  "The word or phrase `id` in `memory`, or nil."
-  [mem id]
-  (memory/word mem id))
+  "The word or phrase `id` of the learner, or nil."
+  [learner id]
+  (memory/word (memory learner) id))
 
 
 (defn word-count
-  "How many words and phrases `memory` holds."
-  [mem]
-  (memory/word-count mem))
+  "How many words and phrases the learner has."
+  [learner]
+  (memory/word-count (memory learner)))
 
 
 (defn words
-  "Every word and phrase in `memory`."
-  [mem]
-  (memory/words mem))
+  "Every word and phrase of the learner."
+  [learner]
+  (memory/words (memory learner)))

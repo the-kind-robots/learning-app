@@ -2,9 +2,9 @@
   (:require
    [clojure.string :as str]
    [domain.phrase :as phrase]
-   [domain.vocabulary :as vocabulary]
+   [domain.vocabulary :as domain]
    [nexus.registry :as nxr]
-   [ports.learner :as learner]))
+   [use-cases.vocabulary :as vocabulary]))
 
 
 (def ^:private empty-suggestions nil)
@@ -39,14 +39,11 @@
 
 
 (defn content
-  "What home shows of the learner's data in `state`: the active collection's
-   heading and whether there is anything to study."
-  [state {collection :active-collection}]
-  (let [memory (:learner/memory state)]
-    {:home/active-coll-id   (:id collection)
-     :home/active-coll-name (:name collection)
-     ;; The words in scope, as the word list and the lesson count them: a collection may still list a word deleted elsewhere.
-     :home/empty-vocab?     (empty? (learner/collection-words memory collection))}))
+  "What home shows of the learner's data: the active collection's heading and whether there is anything to study."
+  [_ {collection :active-collection :keys [learner]}]
+  {:home/active-coll-id   (:id collection)
+   :home/active-coll-name (:name collection)
+   :home/empty-vocab?     (vocabulary/empty-in? learner collection)})
 
 
 (def ^:private fresh-form
@@ -136,7 +133,7 @@
    Returns nil when none are left."
   [{:suggestions/keys [items active-idx]} value]
   (let [active (get items (or active-idx 0))
-        kept   (filterv #(vocabulary/completes? value %) items)]
+        kept   (filterv #(domain/completes? value %) items)]
     (when (seq kept)
       (suggestions kept (max 0 (.indexOf kept active))))))
 

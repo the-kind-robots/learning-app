@@ -59,6 +59,7 @@
                       ;; Marked skip-interpolation: Nexus would otherwise walk every word id of a theme
                       ;; for placeholders on each keystroke.
                       (with-meta {:active-collection (learner/active-collection (:learner capabilities))
+                                  :learner           (:learner capabilities)
                                   :now-ms            (world/clock (:world capabilities) :now-ms)
                                   :random            #(world/random (:world capabilities))}
                                  {:nexus/skip-interpolation true})]
@@ -296,12 +297,11 @@
 
 (defn state
   "The state the screens are computed from: the interface's own, in
-   `:app-state` of `system`, with the learner's data in memory and whether it
-   is loading, loaded or unreadable (`:learner/status`)."
+   `:app-state` of `system`, with whether the learner's data is loading, loaded or unreadable (`:learner/status`).
+   The data itself is read from the learner, which `:effect/enter` hands to the actions."
   [{:keys [app-state capabilities]}]
   (let [{:keys [learner]} capabilities]
     (assoc @app-state
-           :learner/memory (learner/memory learner)
            :learner/status (learner/status learner))))
 
 

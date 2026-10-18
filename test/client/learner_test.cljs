@@ -158,11 +158,11 @@
         (is (= rev-1 (:_rev (await (stored)))) "a word the collection lists is not written again")
         (await (vocabulary/add! scoped time/world "die Katze" "кошка" :word nil))
         (is (= ["vocab:der hund" "vocab:die katze"] (:word-ids (await (stored)))))
-        (is (= ["coll-tiere"] (map :id (learner/collections-of (:learner/memory @store) "vocab:die katze")))
+        (is (= ["coll-tiere"] (map :id (learner/collections-of learner "vocab:die katze")))
             "memory answers which collections name a word")
         (await (vocabulary/remove-from-active! scoped "vocab:der hund"))
         (is (= ["vocab:die katze"] (:word-ids (await (stored)))))
-        (is (= [] (learner/collections-of (:learner/memory @store) "vocab:der hund")))
+        (is (= [] (learner/collections-of learner "vocab:der hund")))
         (await (collections/rename-active! scoped time/world "Haustiere"))
         (is (= {:id "coll-tiere" :created-at "2026-01-01" :name "Haustiere" :word-ids ["vocab:die katze"]}
                (get-in @store [:learner/memory :collections "coll-tiere"]))

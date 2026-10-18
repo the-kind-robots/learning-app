@@ -21,13 +21,12 @@
 
 
 (defn content
-  "The rows the word list shows, cut from the learner's data in `state` by the held query and row count:
+  "The rows the word list shows, cut from the learner's data by the held query and row count:
    `:words/rows`, `:words/total` (words in scope before the query, which tells an empty vocabulary from a
    query with no match), `:words/more?` and `:words/in-collection?`."
-  [state {:keys [active-collection now-ms]}]
-  (let [memory (:learner/memory state)
-        {:keys [matches total words]}
-        (vocabulary/rows memory
+  [state {:keys [active-collection learner now-ms]}]
+  (let [{:keys [matches total words]}
+        (vocabulary/rows learner
                          {:limit      (:words/limit state)
                           :search     (:words/search state)
                           :collection active-collection}
@@ -73,13 +72,18 @@
 (nxr/register-action! :action/edit-spelling
   ;; The text typed into the dialog's word field, kept with what it means for saving: whether it is another
   ;; word's spelling, and whether it is a new word instead of this one.
-  (fn edit-spelling [state text]
+  (fn edit-spelling [_ text]
+    [[:effect/enter :action/show-spelling text]]))
+
+
+(nxr/register-action! :action/show-spelling
+  (fn show-spelling [state {:keys [learner]} text]
     (let [{:keys [id] :as editing} (:words/editing state)]
       [[:effect/save
         {:words/editing (assoc editing
                                :draft-value text
                                :renamed? (and (not (str/blank? text)) (not= id (domain/vocab-id text)))
-                               :spelling-taken? (vocabulary/spelling-taken? (:learner/memory state) id text))}]])))
+                               :spelling-taken? (vocabulary/spelling-taken? learner id text))}]])))
 
 
 (nxr/register-action! :action/close-word-edit

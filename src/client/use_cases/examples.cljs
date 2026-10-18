@@ -26,13 +26,13 @@
 
 
 (defn next-pair
-  "The first pair of `entries`, a chunk of the words in `memory`, that has
+  "The first pair of `entries`, a chunk of the learner's words, that has
    no example and whose subject is not in `failed-subjects`, or nil."
-  [memory failed-subjects entries]
+  [learner failed-subjects entries]
   (some (fn [entry]
           (->> (examples/missing-pairs entry
-                                       (learner/collections-of memory (:id entry))
-                                       (learner/examples-of memory [(:id entry)]))
+                                       (learner/collections-of learner (:id entry))
+                                       (learner/examples-of learner [(:id entry)]))
                (remove (comp failed-subjects subject))
                first))
         entries))

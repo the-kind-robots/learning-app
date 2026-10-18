@@ -9,15 +9,15 @@
 
 
 (defn start
-  "A new lesson out of `memory`: `{:lesson-state ..}` or `{:error :no-words-available}`, over the most due
+  "A new lesson out of the learner's words: `{:lesson-state ..}` or `{:error :no-words-available}`, over the most due
    words, ties in random order. opts: `:random`, `:vocab-per-lesson` (default 3), `:trial-selector`
    (`:first`, otherwise random)."
-  [memory collection
+  [learner collection
    {:keys [random vocab-per-lesson trial-selector]
     :or   {vocab-per-lesson domain/default-vocab-per-lesson}}
    now-ms]
   ;; Every word in scope, unranked: `pick-vocab` owns the whole selection policy, ties included.
-  (let [cards    (learner/collection-cards memory collection)
+  (let [cards    (learner/collection-cards learner collection)
         selected (map :word
                       (domain/pick-vocab cards
                                          #(retention/urgency (:reviews %) now-ms)
@@ -30,7 +30,7 @@
         ;; Which examples a read in this collection sees is one rule, in `domain.examples`.
         {:lesson-state (domain/initial-state
                         vocab
-                        (->> (learner/examples-of memory word-ids)
+                        (->> (learner/examples-of learner word-ids)
                              (examples/visible-in (:id collection)))
                         (if (= :first trial-selector)
                           first

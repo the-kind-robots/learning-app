@@ -48,7 +48,7 @@
   "What entering the lesson does: draw it, from the main card, from memory loaded off `dbs`."
   [dbs opts]
   (let [memory (await (db-seed/memory-of (:user/db dbs)))]
-    (sut/start memory nil (merge {:random (constantly 0.5)} opts) (time/now-ms))))
+    (sut/start (test-learner/of-memory memory) nil (merge {:random (constantly 0.5)} opts) (time/now-ms))))
 
 
 (defn- ^:async started
@@ -63,7 +63,7 @@
   [dbs]
   (let [memory (await (db-seed/memory-of (:user/db dbs)))
         now    (time/now-ms)
-        levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows memory {} now)))]
+        levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows (test-learner/of-memory memory) {} now)))]
     {:words (mapv (fn [{:keys [word] :as card}]
                     {:id      (:id word)
                      :retention-level (levels (:id word))

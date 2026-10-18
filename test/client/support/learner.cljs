@@ -28,6 +28,13 @@
      :store   store}))
 
 
+(defn of-memory
+  "A Learner that holds `memory`, a memory value, and offers nothing else."
+  [memory]
+  (reify learner/Learner
+    (memory [_] memory)))
+
+
 (defn with-active-collection
   "`learner`, but the collection active is the one `active-collection` returns, a function of no arguments."
   [learner active-collection]

@@ -273,9 +273,9 @@
   [docs options f]
   (let [world (world docs options)]
     ;; A look at the words is what `reads` counts.
-    (with-redefs [learner/words (fn [memory]
-                                       (swap! (:reads world) inc)
-                                       (memory/words memory))]
+    (with-redefs [learner/words (fn [learner]
+                                  (swap! (:reads world) inc)
+                                  (memory/words (learner/memory learner)))]
       (let [world (started world)]
         (try
           (await (f world))
@@ -298,7 +298,7 @@
         tiere  (collection-doc "coll-tiere" "Tiere" ["Hund"])
         held   (example-doc "Hund" nil)
         asking (fn [{:keys [docs failed-subjects]} entries]
-                 (sut/next-pair (memory-of (or docs []))
+                 (sut/next-pair (test-learner/of-memory (memory-of (or docs [])))
                                 (or failed-subjects #{})
                                 entries))]
     (is (= {:word hund} (asking {} [hund katze])))
