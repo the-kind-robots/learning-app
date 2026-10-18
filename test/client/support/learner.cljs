@@ -5,19 +5,21 @@
    [adapters.learner :as adapter]
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
-   [domain.examples :as examples]))
+   [domain.examples :as examples]
+   [ports.world :as world]))
 
 
 (defn ^:async started
   "Starts memory over `dbs` into a new store, and the learner capability over
    both. Resolves once memory is fully loaded, with `{:learner :stop :store}`:
    the capability's functions, a function that stops following the feeds, and
-   the store. `world` is the clock, the map of `:clock/*` functions."
+   the store. `world` is the World the learner reads the time from."
   [dbs world]
   (let [store (atom {:learner/memory memory/empty-memory})
         stop  (await (loader/start! dbs store))]
     {:learner (adapter/capabilities
-               {:learner (adapter/new-learner {:databases dbs :store store :world {:world/clock world}})})
+               {:learner (adapter/new-learner {:databases dbs :store store :world {:now-iso #(world/clock world :now-iso)
+                                                                                    :sleep   #(world/clock world :sleep %1 %2)}})})
      :stop    stop
      :store   store}))
 

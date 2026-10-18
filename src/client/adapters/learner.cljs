@@ -1,7 +1,7 @@
 (ns adapters.learner
   "The learner's data: memory to read, every write, the active collection, and what they rest on (`start!`).
    The learner owns its memory in `store`; a write goes to PouchDB, then memory catches up (ADR-0019).
-   `learner` is `{:databases :store :world}`."
+   `learner` is `{:databases :store :world}`, with `world` the `:now-iso` and `:sleep` functions it needs."
   (:require
    [abort]
    [adapters.learner.active-id :as active-id]
@@ -94,7 +94,7 @@
   "`word` stamped modified now; a word with no creation time is also
    stamped created now."
   [learner word]
-  (let [now ((:clock/now-iso (:world/clock (:world learner))))]
+  (let [now ((:now-iso (:world learner)))]
     (cond-> (assoc word :modified-at now)
       (nil? (:created-at word)) (assoc :created-at now))))
 
@@ -252,7 +252,7 @@
   "Resolves nil once memory is loaded and the first sync pass has completed (`first-pass`), or once
    `initialized-wait-ms` have passed without it; `waited` cancels the timer however the wait ends."
   [{:keys [store world]} first-pass ^js waited]
-  (let [{:clock/keys [sleep]} (:world/clock world)]
+  (let [{:keys [sleep]} world]
     (-> (until-store store :learner/loaded? nil)
         (.then (fn []
                  (js/Promise.race #js [first-pass

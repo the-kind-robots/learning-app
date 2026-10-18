@@ -22,11 +22,6 @@
 (use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name device-db-name]))
 
 
-(def ^:private clock
-  {:clock/now-iso time/now-iso
-   :clock/now-ms  time/now-ms})
-
-
 (defn- with-test-dbs
   "Calls `f` with the test databases, under which `::learner` is the
    learner port over them."
@@ -38,7 +33,7 @@
     (with-redefs [utils/now-iso time/now-iso
                   utils/now-ms  time/now-ms]
       (let [dbs {:device/db device-db :user/db user-db}]
-        (await (learner/with-learner dbs clock #(f (assoc dbs ::learner (:learner %) ::store (:store %))))))))))
+        (await (learner/with-learner dbs time/world #(f (assoc dbs ::learner (:learner %) ::store (:store %))))))))))
 
 
 (def ^:private phrase-id
@@ -69,7 +64,7 @@
                        :value         "Satz"
                        :translation   "фраза"})))
   (await (learner/caught-up dbs (::store dbs)))
-  {:world   {:world/clock clock}
+  {:world   time/world
    :learner (assoc (::learner dbs)
                    :learner/active-collection
                    (fn [] (get-in ((:learner/memory (::learner dbs))) [:collections active-id])))})

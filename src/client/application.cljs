@@ -8,6 +8,7 @@
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
+   [ports.world :as world]
    [replicant.dom :as r]))
 
 
@@ -58,8 +59,8 @@
                       ;; Marked skip-interpolation: Nexus would otherwise walk every word id of a theme
                       ;; for placeholders on each keystroke.
                       (with-meta {:active-collection ((get-in capabilities [:learner :learner/active-collection]))
-                                  :now-ms            ((get-in capabilities [:world :world/clock :clock/now-ms]))
-                                  :random            (get-in capabilities [:world :world/random])}
+                                  :now-ms            (world/clock (:world capabilities) :now-ms)
+                                  :random            #(world/random (:world capabilities))}
                                  {:nexus/skip-interpolation true})]
                      args)])))
 

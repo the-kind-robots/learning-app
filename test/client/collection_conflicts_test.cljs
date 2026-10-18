@@ -28,11 +28,6 @@
 (use-fixtures :each (db-fixtures/db-fixture-multi [phone-name laptop-name device-name]))
 
 
-(def ^:private clock
-  {:clock/now-iso time/now-iso
-   :clock/now-ms  time/now-ms})
-
-
 (def ^:private kurs
   {:_id "c1" :type "collection" :name "Kurs" :word-ids [] :created-at "2026-01-01"})
 
@@ -172,7 +167,7 @@
       (await (replication/replicated! (:user/db laptop) (:user/db phone)))
       (await (learner/with-learner
               phone
-              clock
+              time/world
               (^:async fn
                [{:keys [learner]}]
                (await ((:learner/change! learner) [[:entity/collection "c1" (constantly :entity/deleted)]])))))
@@ -191,7 +186,7 @@
       (await (add-word! laptop "vocab:katze"))
       (await (learner/with-learner
               phone
-              clock
+              time/world
               (^:async fn
                [{:keys [learner]}]
                (await ((:learner/change! learner) [[:entity/collection "c1" (constantly :entity/deleted)]])))))

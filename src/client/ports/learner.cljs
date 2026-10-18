@@ -4,14 +4,16 @@
    account. `adapters.learner` does the work."
   (:require
    [adapters.learner :as learner]
-   [adapters.learner.memory :as memory]))
+   [adapters.learner.memory :as memory]
+   [ports.world :as world]))
 
 
 (defn ^:async start!
   "Starts the learner's data (`adapters.learner/start!`) and resolves with its capabilities, given `world`
    and `browser`. What it waits for sits in them (`:learner/initialized`)."
-  [deps]
-  (await (learner/start! deps)))
+  [{:keys [world] :as deps}]
+  (await (learner/start! (assoc deps :world {:now-iso #(world/clock world :now-iso)
+                         :sleep   #(world/clock world :sleep %1 %2)}))))
 
 
 ;;

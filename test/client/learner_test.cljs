@@ -33,16 +33,11 @@
 (use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name device-db-name]))
 
 
-(def ^:private clock
-  {:clock/now-iso time/now-iso
-   :clock/now-ms  time/now-ms})
-
-
 (defn- capabilities
   "What the use cases are handed over `learner`, with `collection-id` the
    active collection, or none."
   [learner collection-id]
-  {:world   {:world/clock clock}
+  {:world   time/world
    :learner (assoc learner
                    :learner/active-collection
                    #(some->> collection-id (memory/collection ((:learner/memory learner)))))})
@@ -68,7 +63,7 @@
      [dbs]
      (doseq [doc docs]
        (await (db/insert (:user/db dbs) doc)))
-     (await (learner/with-learner dbs clock #(f (assoc % :dbs dbs))))))))
+     (await (learner/with-learner dbs time/world #(f (assoc % :dbs dbs))))))))
 
 
 (def ^:private hund
@@ -141,7 +136,7 @@
        (is (= "der Pudel" (:value (await (db/get (:user/db dbs) "vocab:der hund")))))
        (await
         (learner/with-learner dbs
-                              clock
+                              time/world
                               (^:async fn
                                [{:keys [learner]}]
                                (await ((:learner/change! learner) [[:entity/word "vocab:der hund" #(update % :value str "!")]]))
@@ -304,13 +299,13 @@
        (await (db/insert (:user/db dbs) hund))
        (await (db/insert (:user/db dbs) review))
        (await
-        (learner/with-learner dbs clock (fn [{:keys [learner]}] (vocabulary/delete! (capabilities learner nil) "vocab:der hund"))))
+        (learner/with-learner dbs time/world (fn [{:keys [learner]}] (vocabulary/delete! (capabilities learner nil) "vocab:der hund"))))
        ;; Another device made the word again, with a review, and a pull
        ;; brought both.
        (await (db/insert (:user/db dbs) (dissoc hund :_rev)))
        (await (db/insert (:user/db dbs) (assoc review :_id "review-2")))
        (dotimes [_ 2]
-         (await (learner/with-learner dbs clock (fn [_] (js/Promise.resolve nil)))))
+         (await (learner/with-learner dbs time/world (fn [_] (js/Promise.resolve nil)))))
        (is (= #{"review-1" "review-2"} (set (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review"))))))
        (is (= 1 (count (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))))))))))
 
@@ -524,12 +519,12 @@
     {:aborted? aborted
      :slept    slept
      :wake!    #(@wake nil)
-     :world    {:world/clock {:clock/sleep (fn [ms ^js signal]
-                                             (reset! slept ms)
-                                             (js/Promise.
-                                              (fn [resolve]
-                                                (reset! wake resolve)
-                                                (.addEventListener signal "abort" #(reset! aborted true)))))}}}))
+     :world    {:sleep (fn [ms ^js signal]
+                         (reset! slept ms)
+                         (js/Promise.
+                          (fn [resolve]
+                            (reset! wake resolve)
+                            (.addEventListener signal "abort" #(reset! aborted true)))))}}))
 
 
 (defn- ^:async settled

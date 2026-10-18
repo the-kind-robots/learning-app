@@ -22,6 +22,7 @@
    [cljs.test :refer-macros [are deftest is use-fixtures]]
    [domain.vocabulary :as vocabulary]
    [ports.learner :as learner-port]
+   [ports.world :as world]
    [use-cases.examples :as sut]))
 
 
@@ -41,7 +42,7 @@
 
 (defn- clock
   "A clock that stands still until `advance!` moves it, and calls what
-   `:clock/after` scheduled as it passes."
+   `after` scheduled as it passes."
   []
   (let [now    (atom 0)
         timers (atom (sorted-map))
@@ -60,21 +61,25 @@
                    (reset! now until)
                    (await (settled))))
      :pending  #(count @timers)
-     :world    {:clock/after   (fn [ms f]
-                                 (let [timer [(+ @now ms) (swap! ids inc)]]
-                                   (swap! timers assoc timer f)
-                                   #(swap! timers dissoc timer)))
-                :clock/sleep   (fn [ms signal]
-                                 (js/Promise.
-                                  (fn [resolve]
-                                    (let [unlisten (volatile! (fn []))
-                                          timer    [(+ @now ms) (swap! ids inc)]
-                                          cancel   #(swap! timers dissoc timer)]
-                                      (swap! timers assoc timer
-                                             (fn [] (@unlisten) (resolve nil)))
-                                      (vreset! unlisten (abort/on-abort signal (fn [] (cancel) (@unlisten) (resolve nil))))))))
-                :clock/now-iso time/now-iso
-                :clock/now-ms  #(deref now)}
+     :world    (reify world/World
+                 (clock [_ effect]
+                   (case effect
+                     :now-iso (time/now-iso)
+                     :now-ms  @now))
+                 (clock [_ effect ms f]
+                   (case effect
+                     :after (let [timer [(+ @now ms) (swap! ids inc)]]
+                              (swap! timers assoc timer f)
+                              #(swap! timers dissoc timer))
+                     :sleep (js/Promise.
+                             (fn [resolve]
+                               (let [unlisten (volatile! (fn []))
+                                     timer    [(+ @now ms) (swap! ids inc)]
+                                     cancel   #(swap! timers dissoc timer)]
+                                 (swap! timers assoc timer
+                                        (fn [] (@unlisten) (resolve nil)))
+                                 (vreset! unlisten (abort/on-abort f (fn [] (cancel) (@unlisten) (resolve nil)))))))))
+                 (random [_] 0.5))
      :now      now}))
 
 
@@ -141,7 +146,7 @@
    it for `answer!`. Without it, every request waits for `answer!`. The tab
    is visible until `hide!`."
   [docs {:keys [answer initialized]}]
-  (let [{clock :world :as ticking} (clock)
+  (let [{world :world :as ticking} (clock)
         store         (atom {:learner/memory (memory-of docs)})
         reads         (atom 0)
         requests      (atom [])
@@ -160,7 +165,7 @@
     (merge
      ticking
      {:capabilities
-      {:world    {:world/clock clock}
+      {:world    world
        :examples-generator {:examples-generator/fetch     (fn [subject ^js signal]
                                         (js/Promise.
                                          (fn [resolve reject]
@@ -168,7 +173,7 @@
                                            (let [n (count @requests)]
                                              (swap! requests
                                                conj
-                                               {:at      ((:clock/now-ms clock))
+                                               {:at      (world/clock world :now-ms)
                                                 :subject subject
                                                 :reject  reject
                                                 :resolve resolve
@@ -981,7 +986,7 @@
          (await
           (learner/with-learner
            dbs
-           {:clock/now-iso time/now-iso :clock/now-ms time/now-ms}
+           time/world
            (^:async fn
             [{:keys [store] :as started}]
             (let [{:keys [advance!] :as w} (world []

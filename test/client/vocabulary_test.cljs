@@ -24,11 +24,6 @@
 (use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name device-db-name]))
 
 
-(def ^:private clock
-  {:clock/now-iso time/now-iso
-   :clock/now-ms  time/now-ms})
-
-
 (defn- with-test-dbs
   "Calls `f` with the test databases, under which `::capabilities` is
    what the use cases are handed: the learner port over those databases,
@@ -43,11 +38,11 @@
       (let [dbs {:device/db device-db :user/db user-db}]
         (await (learner/with-learner
                 dbs
-                clock
+                time/world
                 (fn [{learner-port :learner}]
                   (f (assoc dbs
                             ::capabilities
-                            {:world   {:world/clock clock}
+                            {:world   time/world
                              :learner (assoc learner-port :learner/active-collection (fn [] nil))}))))))))))
 
 

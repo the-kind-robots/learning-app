@@ -2,7 +2,8 @@
   (:require
    [clojure.string :as str]
    [domain.collections :as collections]
-   [ports.learner :as learner-port]))
+   [ports.learner :as learner-port]
+   [ports.world :as world]))
 
 
 (defn listed
@@ -55,7 +56,7 @@
       (await (name-taken? learner nil name)) {:noop :duplicate}
       :else (let [{:keys [id]} (await ((:learner/insert! learner)
                                           :entity/collection
-                                          (collections/new-collection name ((:clock/now-iso (:world/clock world))))))]
+                                          (collections/new-collection name (world/clock world :now-iso))))]
               {:ok :created :id id}))))
 
 
@@ -87,7 +88,7 @@
                                     active-id
                                     (fn [collection]
                                       (some-> collection
-                                              (collections/renamed-collection trimmed ((:clock/now-iso (:world/clock world))))))]]))
+                                              (collections/renamed-collection trimmed (world/clock world :now-iso))))]]))
                       (learner-port/collection ((:learner/memory learner)) active-id)))]
       (cond-> {:name (if renamed (:name renamed) current)}
         renamed (assoc :renamed? true)

@@ -6,6 +6,7 @@
    [domain.retention :as retention]
    [domain.vocabulary :as domain]
    [ports.learner :as learner-port]
+   [ports.world :as world]
    [utils :as utils]))
 
 
@@ -22,7 +23,7 @@
    :entity/review
    (assoc (domain/new-review word-id retained translation)
           :created-at
-          ((:clock/now-iso (:world/clock world))))))
+          (world/clock world :now-iso))))
 
 
 (defn ^:async add!

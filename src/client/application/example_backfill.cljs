@@ -6,6 +6,7 @@
    [abort]
    [lambdaisland.glogi :as log]
    [ports.learner :as learner-port]
+   [ports.world :as world]
    [use-cases.examples :as examples]))
 
 
@@ -110,15 +111,14 @@
   "The response to the request about `subject`. A request unanswered for
    110 s counts as a timeout."
   [{:keys [controller examples-generator world]} subject]
-  (let [{:clock/keys [after]} (:world/clock world)
-        {:examples-generator/keys [fetch]} examples-generator
+  (let [{:examples-generator/keys [fetch]} examples-generator
         request    (js/AbortController.)
         timed-out? (volatile! false)
-        cancel     (after
-                    (:timeout-ms limits)
-                    (fn []
-                      (vreset! timed-out? true)
-                      (.abort request)))]
+        cancel     (world/clock world :after
+                                (:timeout-ms limits)
+                                (fn []
+                                  (vreset! timed-out? true)
+                                  (.abort request)))]
     (reset! controller request)
     (try
       (let [response (await (fetch subject (.-signal request)))]
@@ -206,10 +206,9 @@
 (defn- waiting
   "The promise for the `wait` a step asked for, with its `arg`."
   [{:keys [browser signal world] :as backfill} wait arg]
-  (let [{:clock/keys [sleep]}          (:world/clock world)
-        {:browser/keys [until-active]} browser]
+  (let [{:browser/keys [until-active]} browser]
     (case wait
-      :wait/pause         (sleep arg signal)
+      :wait/pause         (world/clock world :sleep arg signal)
       :wait/active        (until-active signal)
       :wait/memory-change (memory-changed backfill arg signal))))
 

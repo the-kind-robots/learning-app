@@ -3,6 +3,7 @@
    [client.support.test :refer [async-testing]])
   (:require
    [cljs.test :refer-macros [are deftest is testing]]
+   [client.support.time :as time]
    [clojure.string :as str]
    [clojure.test.check :as tc]
    [clojure.test.check.generators :as gen]
@@ -47,7 +48,7 @@
   ([active-id renames]
    (let [by-id  (into {} (map (juxt :id identity)) items)
          memory (atom {:collections by-id})]
-     {:world   {:world/clock {:clock/now-iso (constantly "2026-01-01T00:00:00.000Z")}}
+     {:world   time/world
       :learner {:learner/active-collection (fn [] (by-id active-id))
                 :learner/memory (fn [] @memory)
                 :learner/fresh-memory (fn [] (js/Promise.resolve @memory))
