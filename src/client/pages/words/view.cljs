@@ -4,7 +4,7 @@
 
 
 (defn- word-list-item
-  [{:keys [id phrase? retention-color retention-title translation value]}]
+  [{:keys [id phrase? retention-band retention-color retention-percent translation value]}]
   [:li.word-item
    {:id (str "word-" id)}
    [:button.word-item__display
@@ -13,7 +13,12 @@
                      {:id id :phrase? phrase? :value value :translation translation}]]}}
     [:div.word-item__retention
      {:style {:background-color retention-color}
-      :title retention-title}]
+      :title (str (case retention-band
+                    :retention/excellent "Отлично запомнено"
+                    :retention/good      "Хорошо изучено"
+                    :retention/due       "Нужно повторить"
+                    :retention/new       "Новое слово")
+                  " (" retention-percent "%)")}]
     [:span.word-item__value
      {:lang "de" :class (when phrase? "word-item__value--phrase")}
      value]
@@ -32,7 +37,7 @@
 
 
 (defn- edit-dialog
-  [{:keys [id phrase? value translation]}]
+  [{:keys [id phrase? value translation]} in-collection?]
   [:dialog.word-edit-dialog.modal
    {:replicant/key id
     :replicant/on-mount [[:action/open-dialog]]
@@ -46,10 +51,8 @@
      {:class (when phrase? "word-edit-dialog__inputs--phrase")}
      [:span.word-edit-dialog__value {:lang "de"} value]
      [:span.word-edit-dialog__arrow {:aria-hidden "true"} "→"]
-     ;; A textarea for both kinds: a word's translation may span several lines
-     ;; too (GH-365), and an `input` silently swallows the line breaks it is
-     ;; given. Enter therefore belongs to the text here — Ctrl/Cmd+Enter and
-     ;; the save button submit, as on the add form.
+     ;; A textarea for both kinds: a translation may span several lines, and an `input` swallows line breaks.
+     ;; Enter belongs to the text; Ctrl/Cmd+Enter and the save button submit, as on the add form.
      [:textarea.word-edit-dialog__input.word-edit-dialog__input--multiline
       {:name         "translation"
        :rows         (if phrase? 2 1)
@@ -68,7 +71,7 @@
                                  {:key   [:event.keyboard/key]
                                   :ctrl? [:event.keyboard/ctrl?]
                                   :meta? [:event.keyboard/meta?]}]]}}
-      ;; textarea ignores a value attribute — the default rides as child text
+      ;; A textarea ignores a value attribute: the default rides as child text.
       translation]]
     [:div.word-edit-dialog__actions
      [:button.word-edit-dialog__save {:type "submit"} "Сохранить"]
@@ -78,31 +81,42 @@
       "Отмена"]
      [:button.word-edit-dialog__delete
       {:type "button"
-       :on   {:click [[:action/remove-word {:id id :value value}]]}}
+       :on   {:click [[:action/remove-word
+                       {:confirm-message (if in-collection?
+                                           (str "Убрать «" value "» из набора?")
+                                           (str "Удалить «" value "» окончательно?"))
+                        :id              id
+                        :value           value}]]}}
       "Удалить"]]]])
 
 
 (defn- empty-state
-  [{:keys [cta hint text]}]
+  [kind]
   [:div.vocabulary__empty-state
-   [:p.vocabulary__empty-state-text text]
-   [:p.vocabulary__empty-state-hint hint]
-   (when cta
-     [:button.vocabulary__empty-state-cta
-      {:on {:click [[:action/go-to-home]]}}
-      cta])])
+   [:p.vocabulary__empty-state-text
+    (case kind
+      :empty/first-run  "Слов пока нет"
+      :empty/no-matches "Ничего не найдено")]
+   [:p.vocabulary__empty-state-hint
+    (case kind
+      :empty/first-run  "Добавьте первое слово на главной странице"
+      :empty/no-matches "Попробуйте другой запрос")]
+   (case kind
+     :empty/first-run  [:button.vocabulary__empty-state-cta
+                        {:on {:click [[:action/go-to-home]]}}
+                        "Добавить слово"]
+     :empty/no-matches nil)])
 
 
 (defn page
   [state]
-  (let [{:keys [editing items known? more? search vocabulary?] placeholder :empty-state}
+  (let [{:keys [editing in-collection? items known? more? search vocabulary?] placeholder :empty-state}
         (presenter/page-props state)]
-    ;; `data-vk-overlay`, as on home: the keyboard is laid over the page, so
-    ;; it covers the lesson button fixed at the bottom while the search bar,
-    ;; which closes the column, stands on the keyboard's inset.
+    ;; `data-vk-overlay`, as on home: the keyboard covers the lesson button fixed at the bottom while the
+    ;; search bar, which closes the column, stands on the keyboard's inset.
     [:div.vocabulary
      {:data-vk-overlay true}
-     (when editing (edit-dialog editing))
+     (when editing (edit-dialog editing in-collection?))
      (cond
        (not known?)
        nil
@@ -116,8 +130,7 @@
 
        :else
        (list
-        ;; The screen is left by the shell's corner ✕; the heading stays for
-        ;; assistive technology only.
+        ;; The shell's corner ✕ leaves the screen; the heading stays for assistive technology only.
         [:h1.vocabulary__title.visually-hidden "Мои слова"]
         [:div.vocabulary__list
          [:ul.word-list
@@ -126,10 +139,8 @@
             [:li.word-list__empty (empty-state placeholder)]
             (concat (map word-list-item items)
                     (when more? [(sentinel)])))]]
-        ;; The search field sits under the thumb, above the lesson button and
-        ;; as wide as it. It closes the column rather than joining the footer:
-        ;; the footer is fixed and stays behind an open keyboard, the field
-        ;; rides on top of it.
+        ;; The search field sits under the thumb. It closes the column rather than joining the footer: the
+        ;; footer is fixed and stays behind an open keyboard, the field rides on top of it.
         [:form.vocabulary__search-bar
          {:autocapitalize "none"
           :autocorrect "off"

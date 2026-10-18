@@ -1,8 +1,6 @@
 (ns pages.collections.presenter
-  "What the themes screen shows, from the collections alone: one
-   alphabetical sequence of tiles, «Всё подряд» first; names with a `/`
-   folded into one folder tile (ADR-0013). The CSS pours that sequence into
-   columns, read down each in turn. Every predicate the view needs is
+  "What the themes screen shows, from the collections alone: one alphabetical sequence of tiles, «Всё
+   подряд» first, names with a `/` folded into a folder tile (ADR-0013). Every predicate the view needs is
    decided here."
   (:require
    [clojure.string :as str]
@@ -23,15 +21,14 @@
 (defn- target
   "One tappable thing: a tile, a folder header or a row."
   [state {:keys [id name lang count tap active? deletable?]}]
-  {:id           id
-   :name         name
-   :lang         lang
-   :count        count
-   :active?      active?
-   :editing?     (= id (:collections/editing-id state))
-   :deletable?   deletable?
-   :delete-label (when deletable? (str "Удалить набор «" name "»"))
-   :tap          tap})
+  {:id         id
+   :name       name
+   :lang       lang
+   :count      count
+   :active?    active?
+   :editing?   (= id (:collections/editing-id state))
+   :deletable? deletable?
+   :tap        tap})
 
 
 (defn- collection-target
@@ -50,13 +47,13 @@
   [state]
   (assoc (target state
                  {:id         main-target
-                  :name       "Всё подряд"
                   :count      (:collections/total-words state)
                   :active?    (nil? (:collections/active-id state))
                   :deletable? false
                   :tap        [[:action/handle-main-tab-click]]})
+         :folder? false
          :key     main-target
-         :folder? false))
+         :main?   true))
 
 
 (defn- plain-tile
@@ -72,10 +69,8 @@
 
 
 (defn- folder-tile
-  "A header for the parent and a row per child. With a parent document the
-   header is that collection; without one it is a label with nothing to
-   tap, until the user creates the parent through «+». Both count the
-   union of what they cover."
+  "A header for the parent and a row per child. Without a parent document the header is a label with nothing
+   to tap, until the user creates the parent; both count the union of what they cover."
   [state {:keys [name parent children]}]
   (let [head (if parent
                (assoc (collection-target state parent name)
@@ -95,10 +90,8 @@
 
 
 (defn- entries
-  "Plain collections and folders, unsorted. A collection whose name has a
-   `/` is a child of the folder before it; a collection named as a folder's
-   key is that folder's parent, not a plain tile. A folder without a parent
-   is named by its first child's key."
+  "Plain collections and folders, unsorted. A name with a `/` is a child of the folder before it; a
+   collection named as a folder's key is its parent; a folder without one is named by its first child's key."
   [items]
   (let [by-folder (group-by #(some-> (collections/folder-key (:name %)) collections/canonical) items)
         plain     (get by-folder nil)
@@ -120,10 +113,8 @@
 
 
 (defn tiles
-  "Every tile in reading order: «Всё подряд», then the collections and
-   folders alphabetically by name. The accent is the position in that order,
-   and the tiles are the masonry's only children, so the CSS counts them
-   itself rather than being handed a class per tile."
+  "Every tile in reading order: «Всё подряд», then collections and folders alphabetically. The accent is the
+   position in that order, which the CSS counts itself, since the tiles are the masonry's only children."
   [state]
   (->> (entries (:collections/items state))
        (sort-by :name collections/compare-names)

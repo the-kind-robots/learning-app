@@ -3,20 +3,16 @@
    [clojure.string :as str]
    [domain.phrase :as phrase]
    [domain.vocabulary :as vocabulary]
-   [nexus.registry :as nxr]))
+   [nexus.registry :as nxr]
+   [ports.learner :as learner-port]))
 
 
 (def ^:private empty-suggestions nil)
 
 
 (defn- prefill-text
-  "The text a completion puts into the translation field. Several translations
-   read as `пёс, собака`; one arrives and is handed over untouched. Each piece
-   is trimmed before rejoining: the dictionary now carries translations as
-   elements (#362), but a stored value may still have its own padding, and a
-   completion that predates the rebuild may still arrive split. It matters more
-   than it used to — whatever the field holds is stored as one translation, so
-   what is shown here is what is saved."
+  "The text a completion puts into the translation field: several translations read as
+   `пёс, собака`, each piece trimmed. Whatever the field holds is stored as one translation."
   [translations]
   (->> translations
        (map str/trim)
@@ -29,12 +25,9 @@
     [[:effect/navigate :page/home]]))
 
 
-;; The screen's other job is the lesson, and its button sits in the footer
-;; below the add form — a pointer away from the field the user is typing in.
-;; `Alt`+`Enter` starts it without leaving the keyboard. The handler is on the
-;; document, so it works wherever the focus sits, nowhere at all included, and
-;; the action means nothing off the home screen. An empty vocabulary hides the
-;; footer, and the keystroke offers no more than the screen does.
+;; `Alt`+`Enter` starts the lesson without leaving the keyboard. The handler is on the document,
+;; so it works wherever the focus sits; an empty vocabulary hides the footer button, and the keystroke
+;; offers no more than the screen does.
 (nxr/register-action! :action/start-lesson-if-alt-enter
   (fn start-lesson-if-alt-enter [state {:keys [alt? key]}]
     (when (and alt?
@@ -48,13 +41,12 @@
 (defn content
   "What home shows of the learner's data in `state`: the active collection's
    heading and whether there is anything to study."
-  [state {collection :active-collection :keys [learner]}]
+  [state {collection :active-collection}]
   (let [memory (:learner/memory state)]
     {:home/active-coll-id   (:id collection)
      :home/active-coll-name (:name collection)
-     ;; The words present in scope, as the word list and the lesson count
-     ;; them: a collection may still list a word deleted elsewhere.
-     :home/empty-vocab?     (empty? ((:learner/collection-words learner) memory collection))}))
+     ;; The words in scope, as the word list and the lesson count them: a collection may still list a word deleted elsewhere.
+     :home/empty-vocab?     (empty? (learner-port/collection-words memory collection))}))
 
 
 (def ^:private fresh-form
@@ -67,32 +59,27 @@
 
 
 (nxr/register-action! :action/open-home
-  ;; Home is computed from memory and saved in one write, in the task of the
-  ;; tap. Entering home again while it is on display — the `popstate` of the
-  ;; step back a close already rendered home for — leaves the form alone.
+  ;; Home is computed from memory in the task of the tap. Entering home again while it is on display
+  ;; (the `popstate` of a step back) leaves the form alone.
   (fn open-home [state context]
     (let [shown? (= :page/home (:page/current state))]
       (cond-> [[:effect/save
                 (merge (when-not shown? fresh-form)
                        {:page/current :page/home}
                        (content state context))]]
-        ;; Only Safari ever measures a height here, and only it needs the
-        ;; reset: where `field-sizing` works the browser has already forgotten
-        ;; the content the old height was measured for.
+        ;; Only Safari measures a height here; where `field-sizing` works the browser has forgotten the old height.
         (not shown?) (conj [:effect/clear-autogrow "new-word-value"]
                            [:effect/clear-autogrow "new-word-translation"])))))
 
 
 (nxr/register-action! :action/show-home
-  ;; Home computed again from memory without touching the form: after the
-  ;; load and after the reader's own change on it.
+  ;; Home computed again from memory without touching the form: after the load and the reader's own change.
   (fn show-home [state context]
     [[:effect/save (content state context)]]))
 
 
 (nxr/register-action! :action/word-added
-  ;; The form empties once the word is stored, and home is computed again
-  ;; from memory, which took the word when PouchDB did.
+  ;; The form empties once the word is stored; home is computed again from memory, which took the word with PouchDB.
   (fn word-added [_]
     [[:effect/save fresh-form]
      [:effect/clear-autogrow "new-word-value"]
@@ -111,10 +98,8 @@
 
 
 (defn- suggestions
-  "The index is the only record of which entry is active. It used to be kept
-   twice — the index and the completion it names — and the two readers took
-   different copies: the handler moved the index, the view compared the value
-   and never matched (#412)."
+  "The index is the only record of which entry is active; a second copy would let the handler
+   and the view disagree."
   ([completions]
    (suggestions completions 0))
   ([completions active-idx]
@@ -124,16 +109,11 @@
 
 (nxr/register-action! :action/update-suggestions
   (fn update-suggestions [state {:keys [completions value]}]
-    ;; Guarded by the value the query was made for: a debounced answer landing
-    ;; after more typing (say, the pre-space prefix of a phrase) must neither
-    ;; show a stale list nor prefill the translation with a stale word.
+    ;; Guarded by the value the query was made for: a debounced answer landing after more typing must
+    ;; neither show a stale list nor prefill a stale word.
     (when (= value (:home/word state))
-      ;; While the user has not typed a translation, the field belongs to the
-      ;; dictionary and follows its current answer — including an answer with
-      ;; nothing to offer, or the word it was filled for would linger under a
-      ;; phrase that no longer has anything to do with it (GH-178 kept the
-      ;; prefill; the owner asked for it). A typed or picked translation is
-      ;; theirs, and late answers leave it alone.
+      ;; While no translation is typed the field follows the dictionary's current answer, an empty one
+      ;; included, or the word it was filled for would linger. A typed or picked translation is the user's.
       (let [{:keys [translations]} (first completions)]
         [[:effect/save
           (cond-> {:home/suggestions (suggestions completions)}
@@ -161,11 +141,9 @@
       (suggestions kept (max 0 (.indexOf kept active))))))
 
 
-;; Keeps the shown suggestions that still complete the new value; the next
-;; answer replaces them, and an emptied input clears them.
+;; Keeps the shown suggestions that still complete the new value; the next answer replaces them.
 (nxr/register-action! :action/update-word
   (fn update-word [state value]
-    ;; Emptying the German field drops a prefilled translation.
     [[:effect/save
       (cond-> {:home/word value}
         (:home/suggestions state)
@@ -177,8 +155,7 @@
 
 (nxr/register-action! :action/update-translation
   (fn update-translation [_ value]
-    ;; Clearing the field hands it back to the dictionary: the next answer may
-    ;; prefill it again.
+    ;; Clearing the field hands it back to the dictionary: the next answer may prefill it again.
     [[:effect/save
       {:home/translation        value
        :home/translation-typed? (not (str/blank? value))}]]))
@@ -205,13 +182,10 @@
 
 (defn- select-item
   [{:keys [lemma pos translations] :as item} element-id]
-  ;; Picking a suggestion decides the mode by its pos, overriding the space
-  ;; heuristic: a multi-word pos=phrase lemma is a phrase, anything else a
-  ;; word. Click payloads carry a precomputed :phrase?, keyboard selection
-  ;; hands the raw completion with :pos — accept either. The lemma is stored
-  ;; with it: the decision was about that lemma and expires when the value
-  ;; stops being it (GH-358). So does its part of speech, which the example
-  ;; request carries to tell `rauch` the adjective from `der Rauch` (GH-585).
+  ;; Picking a suggestion decides the mode by its pos, over the space heuristic: a multi-word pos=phrase
+  ;; lemma is a phrase, anything else a word. Click payloads carry `:phrase?`, keyboard selection the raw
+  ;; completion with `:pos`. The lemma and its part of speech are stored with the decision and expire
+  ;; when the value stops being it; the example request carries the part of speech to tell `rauch` from `der Rauch`.
   [[:effect/save
     {:home/mode-override {:mode  (if (or (:phrase? item) (phrase/phrase-suggestion? item))
                                    :phrase
@@ -220,8 +194,7 @@
                           :value lemma}
      :home/suggestions   empty-suggestions
      :home/translation   (prefill-text translations)
-     ;; A deliberate pick owns the field: later dictionary answers must not
-     ;; overwrite what the user chose.
+     ;; A deliberate pick owns the field: later dictionary answers must not overwrite it.
      :home/translation-typed? true
      :home/word          lemma}]
    [:effect/focus element-id]])
@@ -253,10 +226,8 @@
         [[:effect/prevent-default]
          [:effect/save {:home/suggestions empty-suggestions}]]
 
-        ;; No suggestions on screen: Enter moves on to the translation field —
-        ;; the phrase flow's typing rhythm (phrase, Enter, translation, and
-        ;; then Ctrl/Cmd+Enter or the button, since Enter belongs to the text
-        ;; in a field that takes several lines).
+        ;; No suggestions on screen: Enter moves on to the translation field, the phrase flow's rhythm
+        ;; (Enter belongs to the text of a multi-line field; Ctrl/Cmd+Enter submits).
         (and (zero? n) (= key "Enter"))
         [[:effect/prevent-default]
          [:effect/focus focus-id]]))))

@@ -3,54 +3,17 @@
    [nexus.registry :as nxr]))
 
 
-(defonce ^:private install-prompt (atom nil))
-
-
-(defn- standalone?
-  []
-  (or (true? (.-standalone js/navigator))
-      (.. js/window (matchMedia "(display-mode: standalone)") -matches)
-      (.. js/window (matchMedia "(display-mode: fullscreen)") -matches)))
-
-
-(defn- ios?
-  []
-  (or (boolean (re-find #"(?i)iphone|ipod|ipad" (.-userAgent js/navigator)))
-      (and (= "MacIntel" (.-platform js/navigator))
-           (> (.-maxTouchPoints js/navigator) 1))))
-
-
-(nxr/register-effect! :effect/pwa-init
-  (fn pwa-init [{:keys [dispatch]} _]
-    (when-not (standalone?)
-      (when (ios?)
-        (dispatch [[:effect/save {:pwa/install-available? true}]]))
-      (js/window.addEventListener
-       "beforeinstallprompt"
-       (fn [e]
-         (.preventDefault e)
-         (reset! install-prompt e)
-         (dispatch [[:effect/save {:pwa/install-available? true}]])))
-      (js/window.addEventListener
-       "appinstalled"
-       (fn [_]
-         (reset! install-prompt nil)
-         (dispatch [[:effect/save {:pwa/install-available? false}]]))))))
-
-
-(nxr/register-effect! :effect/pwa-trigger-prompt
-  (fn pwa-trigger-prompt [_ _]
-    (when-let [prompt @install-prompt]
-      (.prompt prompt)
-      (-> (.-userChoice prompt)
-          (.finally #(reset! install-prompt nil))))))
-
-
 (nxr/register-action! :action/pwa-install-requested
   (fn pwa-install-requested [_]
-    (if (ios?)
-      [[:effect/save {:pwa/show-guide? true}]]
-      [[:effect/pwa-trigger-prompt]])))
+    [[:effect/request-install]]))
+
+
+(nxr/register-effect! :effect/request-install
+  ;; On iOS the guide is the way to install; elsewhere the browser's prompt.
+  (fn request-install [{:keys [capabilities dispatch]} _]
+    (if ((get-in capabilities [:browser :browser/ios?]))
+      (dispatch [[:effect/save {:pwa/show-guide? true}]])
+      ((get-in capabilities [:browser :browser/prompt-install!])))))
 
 
 (nxr/register-action! :action/dismiss-install-guide

@@ -5,13 +5,9 @@
    [use-cases.vocabulary :as vocabulary]))
 
 
-;; The sentinel observer and the node it watches, kept together. Replicant
-;; appends unmount hooks after mount hooks (`get-hooks-to-call`), so on a
-;; subtree swap the new observer is registered before the old node's unmount
-;; runs — a handle holding the observer alone would have that unmount
-;; disconnect the new observer, and infinite scroll would die silently for the
-;; rest of the visit (#439). The `:replicant/key` on the sentinel is what keeps
-;; this rare; it is not what makes it safe.
+;; The sentinel observer and its node, kept together: Replicant appends unmount hooks after mount
+;; hooks, so on a subtree swap the new observer is registered before the old node's unmount runs, and
+;; a handle holding the observer alone would disconnect the new one and kill infinite scroll silently.
 (defonce ^:private sentinel-watch (atom nil))
 
 
@@ -37,12 +33,8 @@
 
 
 (nxr/register-effect! :effect/observe-words-sentinel
-  ;; The sentinel is keyed, so appending rows in front of it reuses the node
-  ;; and this runs once per visit to the screen. The root is the list — the
-  ;; box that actually clips the sentinel. Left to its default the root is the
-  ;; viewport, which never clips it, so `rootMargin` widened a rectangle that
-  ;; decided nothing and the page was asked for only once the reader had
-  ;; scrolled the sentinel into view (#439).
+  ;; The sentinel is keyed, so this runs once per visit. The root is the list, the box that clips the
+  ;; sentinel: by default the viewport never clips it and `rootMargin` would widen nothing.
   (fn observe-words-sentinel
     [{:keys [dispatch dispatch-data]} _]
     (when-let [node (:replicant/node dispatch-data)]
@@ -74,18 +66,13 @@
 
 (nxr/register-effect! :effect/delete-word
   (fn ^:async delete-word
-    [{:keys [capabilities dispatch]} _ {:keys [id value]}]
-    (let [collection ((get-in capabilities [:learner :learner/active-collection]))
-          prompt     (if collection
-                       (str "Убрать «" value "» из набора?")
-                       (str "Удалить «" value "» окончательно?"))]
-      (when (js/confirm prompt)
-        ;; The dialog closes here rather than on the rows that follow: rows
-        ;; change for reasons of their own, and declining the prompt above
-        ;; leaves the reader where they were (#439).
-        (dispatch [[:action/close-word-edit]])
-        (try
-          (await (vocabulary/remove-from-active! capabilities id))
-          (dispatch [[:effect/enter :action/refresh-page]])
-          (catch js/Error err
-            (log/error :effect/delete-word {:error (str err)})))))))
+    [{:keys [capabilities dispatch]} _ {:keys [confirm-message id]}]
+    (when (js/confirm confirm-message)
+      ;; The dialog closes here, not on the rows that follow: rows change for their own reasons, and
+      ;; declining the prompt leaves the reader where they were.
+      (dispatch [[:action/close-word-edit]])
+      (try
+        (await (vocabulary/remove-from-active! capabilities id))
+        (dispatch [[:effect/enter :action/refresh-page]])
+        (catch js/Error err
+          (log/error :effect/delete-word {:error (str err)}))))))
