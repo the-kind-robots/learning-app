@@ -62,3 +62,12 @@
   "Replaces the phrase translation with one whole entry — never split."
   [word translation]
   (assoc word :translation [(vocabulary/translation-entry translation)]))
+
+
+(defn edited-word
+  "`word`, a word or a phrase, with the `value` and `translation` typed into the edit dialog, read as its kind
+   reads them."
+  [word value translation]
+  (if (phrase? word)
+    (assoc (update-phrase word translation) :value (vocabulary/collapsed value))
+    (assoc (vocabulary/update-word word translation) :value (str/trim value))))

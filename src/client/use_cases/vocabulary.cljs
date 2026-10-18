@@ -1,5 +1,6 @@
 (ns use-cases.vocabulary
   (:require
+   [clojure.string :as str]
    [domain.collections :as collections]
    [domain.phrase :as phrase]
    [domain.retention :as retention]
@@ -27,13 +28,13 @@
 (defn ^:async add!
   "Adds an entry of `kind` (`:word` or `:phrase`) to the vocabulary and the active collection; a new word
    gets an initial review unless memory holds its history, and a duplicate value merges translations.
-   Resolves with `{:word-id :created?}` or `{:error :empty-translations}`."
+   Resolves with `{:word-id :created?}` or `{:error :failure/empty-translations}`."
   ;; `kind` has no default: optional, `:static-fns` compiles call sites to an arity property a plain test stub lacks.
   [{:keys [learner] :as capabilities} value translation kind pos]
   (let [translation (domain/entered-translation kind translation)
         entry       (domain/entered-entry kind value translation pos)]
     (if-not entry
-      {:error :empty-translations}
+      {:error :failure/empty-translations}
       (let [collection ((:learner/active-collection learner))
             created?   (volatile! false)
             _          (await ((:learner/change! learner)
@@ -75,19 +76,44 @@
                     page)}))
 
 
+(defn spelling-taken?
+  "True when `value` is the spelling of a word other than `word-id`, as `memory` has it."
+  [memory word-id value]
+  (let [id (domain/vocab-id value)]
+    (and (not= id word-id)
+         (some? (learner-port/word memory id)))))
+
+
 (defn ^:async update!
-  "Updates a word's translation. Resolves with the updated word, once
-   memory has it, or nil when there is no such word."
-  [{:keys [learner]} word-id translation]
-  (when (await ((:learner/change! learner)
-                [[:entity/word
-                  word-id
-                  (fn [word]
-                    (cond
-                      (nil? word)           nil
-                      (phrase/phrase? word) (phrase/update-phrase word translation)
-                      :else                 (domain/update-word word translation)))]]))
-    (learner-port/word ((:learner/memory learner)) word-id)))
+  "Edits the word `word-id` in place: its `value` (the same vocab id, spelled differently) and `translation`.
+   Resolves with whether memory took the change."
+  [{:keys [learner]} word-id value translation]
+  (await ((:learner/change! learner)
+          [[:entity/word word-id #(some-> % (phrase/edited-word value translation))]])))
+
+
+(defn ^:async rename!
+  "Makes a new word of `value` and `translation` in the place of the word `word-id`: the same collections, the
+   old word gone. A new word gets an initial review unless memory holds its history. Resolves with whether
+   memory took the change."
+  [{:keys [learner] :as capabilities} word-id value translation]
+  (let [kind        (if (phrase/phrase-value? value []) :phrase :word)
+        translation (domain/entered-translation kind translation)
+        entry       (domain/entered-entry kind (str/trim value) translation nil)
+        memory      (await ((:learner/fresh-memory learner)))]
+    (if (or (nil? entry) (nil? (learner-port/word memory word-id)))
+      false
+      (let [written (await ((:learner/change! learner)
+                            (-> [[:entity/word (:id entry) #(or % entry)]
+                                 [:entity/word word-id (constantly :entity/deleted)]]
+                                (into (map (fn [{:keys [id]}]
+                                             [:entity/collection
+                                              id
+                                              #(some-> % (collections/replace-word word-id (:id entry)))]))
+                                      (learner-port/collections-of memory word-id)))))]
+        (when (and written (zero? (count (:ids (learner-port/review-history memory (:id entry))))))
+          (await (add-review capabilities (:id entry) true translation)))
+        written))))
 
 
 (defn ^:async delete!

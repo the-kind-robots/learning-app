@@ -119,6 +119,15 @@
     collection))
 
 
+(defn replace-word
+  "`collection` listing `new-id` where it listed `old-id`, once; the very same collection when it does not
+   list `old-id`."
+  [collection old-id new-id]
+  (if (some #{old-id} (:word-ids collection))
+    (update collection :word-ids #(vec (distinct (replace {old-id new-id} %))))
+    collection))
+
+
 (defn merged-collection
   "The one of two versions of a collection renamed last, with both versions' word ids sorted; `tie-break`
    decides between two renamed together. The order of versions changes nothing."
