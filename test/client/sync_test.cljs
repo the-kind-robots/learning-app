@@ -5,7 +5,7 @@
    [adapters.learner.identity :as identity]
    [adapters.learner.sync :as sut]
    [client.support.db-fixtures :as db-fixtures]
-   [cljs.test :refer-macros [deftest is testing use-fixtures]]
+   [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]))
 
 
@@ -233,18 +233,12 @@
 ;;
 
 
-(defn- ^:async device-doc-ids
-  [device-db]
-  (let [{rows :rows} (await (db/all-docs device-db))]
-    (set (map :id rows))))
-
-
-(defn- ^:async seed-device-db!
-  "What a device holds after a while on one account: an example an earlier
-   build kept here and the move has not taken to user-db yet, and the two
-   documents that belong to the device rather than to the account."
-  [device-db]
-  (await (db/insert device-db {:_id "example-hund" :type "example" :word-id "vocab:hund"}))
+(defn- ^:async seed-databases!
+  "What a device holds after a while on one account: a word in user-db, and in
+   device-db the identity and a migration record, which belong to the device
+   rather than to the account."
+  [device-db user-db]
+  (await (db/insert user-db {:_id "vocab:hund" :type "vocab" :value "Hund"}))
   (await (db/insert device-db {:_id "identity:local" :type "identity" :user-id 1 :token "old"}))
   (await (db/insert device-db {:_id "migration:001" :type "migration"})))
 
@@ -257,29 +251,34 @@
   (set! (.-window js/globalThis) #js {:location #js {:hash "#key=token-of-the-other"}})
   (try
     (with-redefs [db/use (fn [name] (if (= "device-db" name) device-db user-db))
-                  identity/account-id! (fn [_] (js/Promise.resolve account-id))
                   identity/load-identity! (fn [] (js/Promise.resolve {:id 1 :token "old"}))
+                  identity/account-id! (fn [_] (js/Promise.resolve account-id))
                   identity/save-identity! (fn [_] (js/Promise.resolve nil))]
       (await (sut/check-incoming-auth! nil)))
     (finally
      (js/Reflect.deleteProperty js/globalThis "window"))))
 
 
-(deftest a-key-of-another-account-takes-the-old-account-s-examples-with-it
-  (async-testing "examples not moved yet are the account's; the identity is the device's"
+(defn- ^:async doc-ids
+  "The ids of the documents the database `db-name` holds, read through a handle
+   opened after the adoption: the one the wipe destroyed hangs on every call."
+  [db-name]
+  (set (map :id (:rows (await (db/all-docs (db/use db-name)))))))
+
+
+(deftest a-key-of-another-account-clears-the-local-data
+  (async-testing "user-db is emptied before the databases open; what belongs to the device stays"
     (await
      (db-fixtures/with-test-dbs
       [user-db-name device-db-name]
       (^:async fn
        [[user-db device-db]]
-       (await (seed-device-db! device-db))
+       (await (seed-databases! device-db user-db))
        (await (adopt-key! device-db user-db 2))
-       (let [ids (await (device-doc-ids device-db))]
-         (is (not (contains? ids "example-hund"))
-             "the move would carry it into the next account, under a content-addressed id")
-         (testing "and what belongs to the device stays"
-           (is (contains? ids "identity:local"))
-           (is (contains? ids "migration:001")))))))))
+       (is (empty? (await (doc-ids user-db-name))) "the wipe happened")
+       (let [ids (await (doc-ids device-db-name))]
+         (is (contains? ids "identity:local"))
+         (is (contains? ids "migration:001"))))))))
 
 
 (deftest a-key-of-the-same-account-keeps-everything
@@ -289,7 +288,6 @@
       [user-db-name device-db-name]
       (^:async fn
        [[user-db device-db]]
-       (await (seed-device-db! device-db))
+       (await (seed-databases! device-db user-db))
        (await (adopt-key! device-db user-db 1))
-       (let [ids (await (device-doc-ids device-db))]
-         (is (contains? ids "example-hund"))))))))
+       (is (contains? (await (doc-ids user-db-name)) "vocab:hund")))))))

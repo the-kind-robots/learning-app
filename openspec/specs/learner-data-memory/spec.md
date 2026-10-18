@@ -220,7 +220,7 @@ Memory SHALL be loaded at start in one go, from a snapshot when one passes its c
 - **THEN** memory stays the same value, and nothing renders for it
 
 #### Scenario: device-db is written
-- **WHEN** the start deletes what an earlier build left in device-db
+- **WHEN** something is written to device-db, such as the stored identity
 - **THEN** memory reads nothing for it and stays the same value
 
 #### Scenario: The same revision twice

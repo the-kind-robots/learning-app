@@ -10,7 +10,7 @@ Define how a device asks for the example sentences memory is missing: which pair
 The device SHALL ask, eventually, for an example for every pair memory has no example for, and for
 nothing else, in any order and at any pace. It SHALL decide whether a pair has an example from memory
 as it stands when it looks, and SHALL keep no stored list of pairs: a pair answered since — by
-replication, by the move from `device-db`, by another tab — is no longer asked for, and a word or
+replication, by another tab — is no longer asked for, and a word or
 collection deleted since asks for nothing. It SHALL read memory in chunks, each well under a frame.
 
 The pairs follow the lookup rules in `specs/examples-schema/spec.md`:
@@ -91,10 +91,9 @@ changes neither and SHALL NOT wake it. There is no periodic look.
 
 ### Requirement: Nothing is asked for before the device knows what the account holds
 
-The device SHALL send no example request before memory is loaded, the examples kept in `device-db`
-have moved to `user-db` (`specs/data-model/spec.md`), and the first replication pass of this session
-has completed. So an example the move brings, or one the account already holds on another device,
-answers its pair before anything is asked. When the first pass has not completed 60 s after the
+The device SHALL send no example request before memory is loaded and the first replication pass of
+this session has completed. So an example the account already holds on another device answers its
+pair before anything is asked. When the first pass has not completed 60 s after the
 device began waiting, the device SHALL stop waiting for it.
 
 A device without an account SHALL send no example request: the endpoint answers only a session of
@@ -110,7 +109,7 @@ an account (`specs/examples/spec.md`).
 #### Scenario: A device starts with examples kept on the device
 
 - **WHEN** the application starts on a device whose `device-db` holds the example of a word
-- **THEN** no request is sent for that word's pair
+- **THEN** that example is not read, and a request is sent for that word's pair
 
 #### Scenario: A device without an account
 

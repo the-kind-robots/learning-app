@@ -71,10 +71,9 @@
       (await (sut/ensure-migrated!))
       (is (= more-than-a-page (count (await (db-queries/fetch-by-type user-db "vocab")))))
       (is (= 1 (count (await (db-queries/fetch-by-type user-db "review")))))
-      (doseq [doc-type ["example" "lesson"]]
-        (is (= 1 (count (await (db-queries/fetch-by-type device-db doc-type)))) doc-type))
-      (await (#'sut/run-in-background))
-      (is (empty? (await (db-queries/fetch-by-type device-db "task"))) "the sweep, run after the split, clears the task queue")))))
+      (doseq [doc-type ["example" "lesson" "task"]]
+        (is (= 1 (count (await (db-queries/fetch-by-type device-db doc-type))))
+            (str "the split leaves device-db's " doc-type " document alone")))))))
 
 
 (deftest a-migration-that-ran-does-not-run-again
@@ -116,76 +115,3 @@
           (is (= "rejected" (try (await (sut/ensure-migrated!)) (catch :default _ "rejected"))))
           (is (true? (await (sut/ensure-migrated!))))
           (is (= ["v1"] (mapv :_id (await (db-queries/fetch-by-type user-db "vocab")))))))))))
-
-
-(defn- ^:async seed-task-queue!
-  "What an earlier build's task queue left in device-db: `n` tasks under
-   queue ids, one under a generated id, the queue's index and the engine's
-   `by-type` index; and the device's identity."
-  [device-db n]
-  (await (db/bulk-docs device-db
-                       (conj (mapv (fn [i] {:_id (str "task:example-fetch:vocab:w" (+ 1000 i) ":") :type "task"})
-                                   (range n))
-                             {:_id "0C1D2E3F" :task-type "example-fetch" :type "task"}
-                             {:_id "identity" :type "identity"})))
-  (await (db/create-index device-db [:type :run-at :created-at]
-                          {:ddoc "by-type-run-at-created-at" :name "by-type-run-at-created-at"}))
-  (await (db/create-index device-db [:type] {:ddoc "by-type" :name "by-type"})))
-
-
-(defn- ^:async ids
-  [device-db]
-  (into #{} (map :id) (:rows (await (db/all-docs device-db)))))
-
-
-(deftest the-task-queue-is-swept-away-once
-  (async-testing "more tasks than a page, whatever their ids, and both indexes go; the identity stays; it runs once"
-    (with-app-dbs
-     (^:async fn
-      [{:keys [device-db]}]
-      (await (seed-task-queue! device-db 1200))
-      (await (sut/ensure-migrated!))
-      (await (#'sut/run-in-background))
-      (is (= #{"identity" "migration:local-db-split" "migration:task-queue-sweep"} (await (ids device-db)))
-          "no task and no design document stays")
-      (is (empty? (await (db-queries/index-names device-db))))
-      (await (db/insert device-db {:_id "task:late" :type "task"}))
-      (await (#'sut/run-in-background))
-      (is (contains? (await (ids device-db)) "task:late") "a recorded sweep does not run again")))))
-
-
-(deftest the-sweep-is-idempotent-on-a-clean-device
-  (async-testing "a device with no queue gets only the record"
-    (with-app-dbs
-     (^:async fn
-      [{:keys [device-db]}]
-      (await (sut/ensure-migrated!))
-      (await (#'sut/run-in-background))
-      (is (= #{"migration:local-db-split" "migration:task-queue-sweep"} (await (ids device-db))))
-      (is (empty? (await (db-queries/index-names device-db))))))))
-
-
-(deftest the-start-does-not-wait-for-background-migrations
-  (async-testing "opening the databases resolves while the sweep never does"
-    (with-app-dbs
-     (^:async fn
-      [{:keys [device-db]}]
-      (await (seed-task-queue! device-db 3))
-      (with-redefs [sut/run-in-background (fn [] (js/Promise. (fn [_ _])))]
-        (is (true? (await (sut/ensure-migrated!))))
-        (is (nil? (sut/run-in-background!))))
-      (is (not (contains? (await (ids device-db)) "migration:task-queue-sweep"))
-          "the start leaves the sweep unrecorded")))))
-
-
-(deftest a-failed-background-migration-is-logged-and-run-again-at-the-next-start
-  (async-testing "no record is made, and the next run deletes the tasks"
-    (with-app-dbs
-     (^:async fn
-      [{:keys [device-db]}]
-      (await (seed-task-queue! device-db 3))
-      (with-redefs [db/bulk-docs (fn [& _] (js/Promise.reject (js/Error. "boom")))]
-        (await (#'sut/run-in-background)))
-      (is (not (contains? (await (ids device-db)) "migration:task-queue-sweep")))
-      (await (#'sut/run-in-background))
-      (is (contains? (await (ids device-db)) "migration:task-queue-sweep"))))))

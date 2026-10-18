@@ -286,7 +286,7 @@
 
 
 (defn ^:async start!
-  "Starts the learner's data. The incoming credential is handled before the databases open and their background migrations start; memory is read
+  "Starts the learner's data. The incoming credential is handled before the databases open; memory is read
    and followed without awaiting, and sync passes wait for the snapshot check (ADR-0018). Resolves with the
    capabilities."
   [{:keys [browser world]}]
@@ -294,7 +294,6 @@
         _ (databases/persist!)
         _ (await (sync/check-incoming-auth! nil))
         databases (await (databases/open-pouch!))
-        _ (databases/run-background-migrations!)
         checked (loader/start-reading! databases store)
         _ (loader/start! databases store)
         replication (await (sync/start! {:browser         browser
