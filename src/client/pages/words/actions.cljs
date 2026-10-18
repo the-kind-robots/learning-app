@@ -1,8 +1,11 @@
 (ns pages.words.actions
   (:require
    [clojure.string :as str]
-   [domain.vocabulary :as domain]
    [nexus.registry :as nxr]
+   [pages.words.edit :as edit]
+   [ports.learner :as learner]
+   [use-cases.collections :as collections-of]
+   [use-cases.examples :as examples]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -32,9 +35,9 @@
                           :collection active-collection}
                          now-ms)]
     {:words/in-collection? (some? active-collection)
-     :words/more?          (< (count words) matches)
-     :words/rows           words
-     :words/total          total}))
+     :words/more? (< (count words) matches)
+     :words/rows  words
+     :words/total total}))
 
 
 (defn- shown
@@ -65,13 +68,83 @@
 
 
 (nxr/register-action! :action/open-word-edit
-  (fn open-word-edit [_ word]
-    [[:effect/save {:words/editing word}]]))
+  ;; `:examples` start as the opened ones, which «Сбросить» brings back.
+  (fn open-word-edit [_ {:keys [active-collection learner]} word-id]
+    (when-let [{:keys [phrase? translations word]} (vocabulary/editable-word learner word-id)]
+      (let [listing  (collections-of/listed learner)
+            examples (learner/examples-of learner [word-id])
+            ids      (edit/collection-ids word-id active-collection listing examples)
+            opened   (edit/opened-examples ids examples)]
+        [[:effect/save {:words/editing {:collection-ids      ids
+                                        :collections         (mapv #(select-keys % [:id :name]) listing)
+                                        :examples            opened
+                                        :id                  word-id
+                                        :opened-examples     opened
+                                        :phrase?             phrase?
+                                        :stored-translations translations
+                                        :stored-word         word
+                                        :translation-lines   translations
+                                        :word                word}}]]))))
+
+
+(nxr/register-action! :action/edit-translations
+  ;; The text of the translations field, as its lines, blank ones kept: Enter makes a new line.
+  (fn edit-translations [state text]
+    [[:effect/save {:words/editing (assoc (:words/editing state) :translation-lines (str/split text #"\n" -1))}]]))
+
+
+(nxr/register-action! :action/edit-example
+  ;; The word-by-word breakdown of a generated sentence no longer describes it once it is typed over.
+  (fn edit-example [state collection-id field text]
+    [[:effect/save {:words/editing (update-in (:words/editing state)
+                                              [:examples collection-id]
+                                              #(-> % (assoc field text) (dissoc :structure)))}]]))
+
+
+(nxr/register-action! :action/reset-word-edit
+  ;; Back to what the dialog opened with; it stays open.
+  (fn reset-word-edit [state]
+    (let [editing (:words/editing state)]
+      [[:effect/abort-example-request]
+       [:effect/save {:words/editing (assoc editing
+                                            :example-request nil
+                                            :examples (:opened-examples editing)
+                                            :translation-lines (:stored-translations editing)
+                                            :word (:stored-word editing)
+                                            :word-taken? false)}]])))
+
+
+(nxr/register-action! :action/regenerate-example
+  ;; One request at a time; the sentence on the card goes along as the one not to repeat.
+  (fn regenerate-example [state {:keys [learner]} collection-id]
+    (let [{:keys [example-request examples id] :as editing} (:words/editing state)
+          sentence (:value (get examples collection-id))]
+      (when-not (= :request/pending (:status example-request))
+        [[:effect/save {:words/editing (assoc editing
+                                              :example-request {:collection-id collection-id
+                                                                :status        :request/pending})}]
+         [:effect/request-another-example
+          {:avoid   (if (str/blank? sentence) [] [sentence])
+           :subject (examples/subject {:collection-name (:name (learner/collection learner collection-id))
+                                       :word            (learner/word learner id)})
+           :word-id id}]]))))
+
+
+(nxr/register-action! :action/example-arrived
+  ;; A failure keeps the sentence on the card.
+  (fn example-arrived [state word-id {:keys [example]}]
+    (let [{:keys [example-request id] :as editing} (:words/editing state)]
+      (when (and (= word-id id) (= :request/pending (:status example-request)))
+        [[:effect/save {:words/editing (if example
+                                         (-> editing
+                                             (assoc-in [:examples (:collection-id example-request)]
+                                                       (select-keys example [:structure :translation :value]))
+                                             (assoc :example-request nil))
+                                         (assoc editing :example-request (assoc example-request :status :request/failed)))}]]))))
 
 
 (nxr/register-action! :action/edit-spelling
-  ;; The text typed into the dialog's word field, kept with what it means for saving: whether it is another
-  ;; word's spelling, and whether it is a new word instead of this one.
+  ;; The text typed into the dialog's word field, kept with whether it is another word's spelling.
   (fn edit-spelling [_ text]
     [[:effect/enter :action/show-spelling text]]))
 
@@ -81,14 +154,14 @@
     (let [{:keys [id] :as editing} (:words/editing state)]
       [[:effect/save
         {:words/editing (assoc editing
-                               :draft-value text
-                               :renamed? (and (not (str/blank? text)) (not= id (domain/vocab-id text)))
-                               :spelling-taken? (vocabulary/spelling-taken? learner id text))}]])))
+                               :word text
+                               :word-taken? (vocabulary/spelling-taken? learner id text))}]])))
 
 
 (nxr/register-action! :action/close-word-edit
   (fn close-word-edit [_]
-    [[:effect/save {:words/editing nil}]]))
+    [[:effect/abort-example-request]
+     [:effect/save {:words/editing nil}]]))
 
 
 (nxr/register-action! :action/search-words
@@ -127,16 +200,22 @@
 ;; An edit or a removal goes to PouchDB, which memory follows; the list is computed again at the row
 ;; count on screen, so neither throws the reader back to the first page.
 (nxr/register-action! :action/save-word
+  ;; The dialog closes after the examples are written: reopened sooner, it would show the one that is going.
   (fn save-word [state {:keys [id translation value]}]
-    ;; Saving closes the dialog; rows arriving for any other reason do not. A blank or taken spelling
-    ;; saves nothing: the button is off, and so is a submit by the keyboard.
-    (let [{:keys [renamed? spelling-taken?]} (:words/editing state)
-          word {:id id :translation translation :value value}]
-      (when-not (or (str/blank? value) spelling-taken?)
-        [[:effect/save {:words/editing nil}]
-         (if renamed?
-           [:effect/rename-word word]
-           [:effect/update-word word])]))))
+    (let [editing      (:words/editing state)
+          renamed?     (edit/renamed? editing)
+          ;; A renamed word is a new one: its examples are asked for again, not carried over.
+          replacements (when-not renamed?
+                         (for [{:keys [collection-id example]} (edit/changed-examples editing)]
+                           {:collection-id collection-id
+                            :example       (-> example (update :value str/trim) (update :translation str/trim))
+                            :word          value
+                            :word-id       id}))
+          write        [:effect/write-word {:id id :renamed? renamed? :translation translation :value value}]]
+      (when (edit/valid? editing)
+        (if (seq replacements)
+          [write [:effect/replace-example replacements]]
+          [[:effect/abort-example-request] [:effect/save {:words/editing nil}] write])))))
 
 
 (nxr/register-action! :action/remove-word

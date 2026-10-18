@@ -4,6 +4,7 @@
    decided here."
   (:require
    [clojure.string :as str]
+   [collection-accents :as colours]
    [domain.collections :as collections]))
 
 
@@ -89,40 +90,14 @@
                    (mapv (fn [[row-name child]] (collection-target state child row-name))))}))
 
 
-(defn- entries
-  "Plain collections and folders, unsorted. A name with a `/` is a child of the folder before it; a
-   collection named as a folder's key is its parent; a folder without one is named by its first child's key."
-  [items]
-  (let [by-folder (group-by #(some-> (collections/folder-key (:name %)) collections/canonical) items)
-        plain     (get by-folder nil)
-        folders   (dissoc by-folder nil)
-        parent-of (fn [key] (some #(when (= key (collections/canonical (:name %))) %) plain))
-        parents   (set (keep parent-of (keys folders)))]
-    (concat
-     (for [collection plain
-           :when      (not (parents collection))]
-       {:folder? false :name (str/trim (:name collection)) :collection collection})
-     (for [[key children] folders
-           :let [parent (parent-of key)]]
-       {:folder?  true
-        :name     (if parent
-                    (str/trim (:name parent))
-                    (collections/folder-key (:name (first (sort-by :name collections/compare-names children)))))
-        :parent   parent
-        :children children}))))
-
-
 (defn tiles
-  "Every tile in reading order: «Всё подряд», then collections and folders alphabetically. The accent is the
-   position in that order, which the CSS counts itself, since the tiles are the masonry's only children."
+  "Every tile in reading order: «Всё подряд», then collections and folders alphabetically, each with its colour."
   [state]
-  (->> (entries (:collections/items state))
-       (sort-by :name collections/compare-names)
-       (map (fn [{:keys [folder? collection] :as entry}]
-              (if folder?
-                (folder-tile state entry)
-                (plain-tile state collection))))
-       (cons (main-tile state))
+  (->> (colours/reading-order (:collections/items state))
+       (map-indexed (fn [position {:keys [folder? collection] :as entry}]
+                      (assoc (if folder? (folder-tile state entry) (plain-tile state collection))
+                             :accent (colours/accent-at (inc position)))))
+       (cons (assoc (main-tile state) :accent (colours/accent-at 0)))
        vec))
 
 

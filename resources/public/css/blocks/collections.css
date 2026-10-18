@@ -94,19 +94,17 @@ body:has(.switcher) {
 }
 
 /*
- * Palette cycled by position in the reading order. Tiles are the masonry's
- * only children, so the rule counts them itself and the presenter hands over
- * no class; everything inside a tile — a folder's rows included — reads the
- * colour through the inherited custom property.
+ * The colour the presenter gives a tile; everything inside
+ * a tile, a folder's rows included, reads the colour through the inherited custom property.
  */
-.masonry > .tile:nth-child(8n + 1) { --accent: rgb(var(--color-owl)); }
-.masonry > .tile:nth-child(8n + 2) { --accent: rgb(var(--color-macaw)); }
-.masonry > .tile:nth-child(8n + 3) { --accent: rgb(var(--color-fox)); }
-.masonry > .tile:nth-child(8n + 4) { --accent: rgb(var(--color-starfish)); }
-.masonry > .tile:nth-child(8n + 5) { --accent: rgb(var(--color-beetle)); }
-.masonry > .tile:nth-child(8n + 6) { --accent: rgb(var(--color-bee)); }
-.masonry > .tile:nth-child(8n + 7) { --accent: rgb(var(--color-cardinal)); }
-.masonry > .tile:nth-child(8n + 8) { --accent: rgb(var(--color-peacock)); }
+.tile--owl { --accent: rgb(var(--color-owl)); }
+.tile--macaw { --accent: rgb(var(--color-macaw)); }
+.tile--fox { --accent: rgb(var(--color-fox)); }
+.tile--starfish { --accent: rgb(var(--color-starfish)); }
+.tile--beetle { --accent: rgb(var(--color-beetle)); }
+.tile--bee { --accent: rgb(var(--color-bee)); }
+.tile--cardinal { --accent: rgb(var(--color-cardinal)); }
+.tile--peacock { --accent: rgb(var(--color-peacock)); }
 
 .tile__name {
   color: rgb(var(--color-black-text));

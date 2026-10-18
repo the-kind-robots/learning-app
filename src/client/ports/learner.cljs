@@ -17,7 +17,7 @@
      write nothing, or `:entity/deleted`. A promise of true, nil when nothing was written, or false when the write was taken back.")
   (insert! [l entity value]
     "Writes a new `entity` of `value` (`:entity/collection`, `:entity/review` or `:entity/example`). A promise
-     of the entity written, for an example whether the learner holds it afterwards.")
+     of the entity written, its id included; for an example nil when the learner does not hold it afterwards.")
   (active-collection [l]
     "The collection active on this device, or nil for «Всё подряд».")
   (set-active-collection! [l id]

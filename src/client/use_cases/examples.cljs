@@ -39,11 +39,28 @@
 
 
 (defn save-example!
-  "Saves the fetched `example` of `pair`. Resolves true when the learner's
-   data holds it afterwards."
+  "Saves the fetched `example` of `pair`. Resolves with the example's entity, or nil when the learner's data
+   does not hold it afterwards."
   [learner pair example]
   (learner/insert! learner :entity/example
                    {:collection-id (:collection-id pair)
                     :example       example
                     :word          (:value (:word pair))
                     :word-id       (:id (:word pair))}))
+
+
+(defn ^:async replace!
+  "Stores the example of `replacement`, `{:collection-id :word-id :word :example}`, and deletes the other
+   examples of its collection and word. Resolves true when only the new one is left, false when it was not
+   stored or the delete was taken back."
+  [learner {:keys [collection-id word-id] :as replacement}]
+  (if-let [stored (await (learner/insert! learner :entity/example replacement))]
+    (let [replaced (->> (learner/examples-of learner [word-id])
+                        (filter #(= collection-id (:collection-id %)))
+                        (map :id)
+                        (remove #{(:id stored)}))]
+      (or (empty? replaced)
+          (not (false? (await (learner/change! learner
+                                               (mapv (fn [id] [:entity/example id (constantly :entity/deleted)])
+                                                     replaced)))))))
+    false))
