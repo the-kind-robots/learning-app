@@ -560,6 +560,82 @@
     :index-files []}))
 
 
+(defn regeneration-request
+  "What a regeneration body asks: `{:params … :avoid […]}`, the subject's
+   fields and the sentences to avoid, or `{:error …}` when the body cannot be
+   answered. Entries of the lists that are not strings are dropped."
+  [body]
+  (let [strings (fn [values]
+                  (filter string? (when (sequential? values) values)))
+        avoid   (vec (strings (:avoid body)))
+        word    (:word body)]
+    (cond
+      (not (map? body))
+      {:error "Invalid JSON body"}
+
+      (not (and (string? word) (not (str/blank? word))))
+      {:error "Missing 'word' parameter"}
+
+      (or (< 5 (count avoid))
+          (some #(< 300 (count %)) avoid))
+      {:error "Too many or too long 'avoid' sentences"}
+
+      :else
+      {:params {:context     (when (string? (:context body)) (:context body))
+                :pos         (when (string? (:pos body)) (:pos body))
+                :translation (vec (strings (:translations body)))
+                :word        word}
+       :avoid  avoid})))
+
+
+(defn- bad-request
+  [message]
+  {:status  400
+   :headers {"Content-Type" "application/json"}
+   :body    (cheshire/generate-string {:error message})})
+
+
+(defn- example-response
+  "The HTTP answer to what `examples/get!` or `examples/regenerate!` returned."
+  [result]
+  (case (examples/outcome result)
+    ;; A hit answers without the provider — that saving is the
+    ;; whole point of the table. Authentication still ran above.
+    ;; The cache holds the example as data, so a hit renders here
+    ;; exactly as a fresh generation does.
+    :outcome/success
+    {:status  200
+     :headers {"Content-Type" "application/json"}
+     :body    (cheshire/generate-string result)}
+
+    ;; The pair's failure: no candidate passed, or the input was
+    ;; refused.
+    :outcome/rejected
+    {:status  422
+     :headers {"Content-Type" "application/json"}
+     :body    (cheshire/generate-string
+               {:error "No example could be generated for this word"})}
+
+    ;; The provider's own delay; no delay sends no header.
+    :outcome/throttled
+    (let [seconds (some-> (:retry-after-ms result) (/ 1000.0) Math/ceil long)]
+      {:status  429
+       :headers (cond-> {"Content-Type" "application/json"}
+                  (and seconds (pos? seconds))
+                  (assoc "Retry-After" (str seconds)))
+       :body    (cheshire/generate-string
+                 {:error "Examples are temporarily unavailable"})})
+
+    ;; The service's problem, never the session's: the
+    ;; provider's 401 or 403 does not reach the client.
+    :outcome/unavailable
+    {:status  503
+     :headers {"Content-Type" "application/json"
+               "Retry-After"  "30"}
+     :body    (cheshire/generate-string
+               {:error "Examples are temporarily unavailable"})}))
+
+
 (def app-handler
   (http/ring-handler
    ;; Main handler
@@ -620,42 +696,24 @@
                :else
                ;; One subject value feeds both the cache key and the prompt.
                (let [result (examples/get! db (examples/subject (:params request)))]
-                 (case (examples/outcome result)
-                   ;; A hit answers without the provider — that saving is the
-                   ;; whole point of the table. Authentication still ran above.
-                   ;; The cache holds the example as data, so a hit renders here
-                   ;; exactly as a fresh generation does.
-                   :outcome/success
-                   {:status  200
-                    :headers {"Content-Type" "application/json"}
-                    :body    (cheshire/generate-string result)}
+                 (example-response result))))))
 
-                   ;; The pair's failure: no candidate passed, or the input was
-                   ;; refused.
-                   :outcome/rejected
-                   {:status  422
-                    :headers {"Content-Type" "application/json"}
-                    :body    (cheshire/generate-string
-                              {:error "No example could be generated for this word"})}
-
-                   ;; The provider's own delay; no delay sends no header.
-                   :outcome/throttled
-                   (let [seconds (some-> (:retry-after-ms result) (/ 1000.0) Math/ceil long)]
-                     {:status  429
-                      :headers (cond-> {"Content-Type" "application/json"}
-                                 (and seconds (pos? seconds))
-                                 (assoc "Retry-After" (str seconds)))
-                      :body    (cheshire/generate-string
-                                {:error "Examples are temporarily unavailable"})})
-
-                   ;; The service's problem, never the session's: the
-                   ;; provider's 401 or 403 does not reach the client.
-                   :outcome/unavailable
-                   {:status  503
-                    :headers {"Content-Type" "application/json"
-                              "Retry-After"  "30"}
-                    :body    (cheshire/generate-string
-                              {:error "Examples are temporarily unavailable"})}))))))}]
+      ;; A different example for the same subject. The body carries what the
+      ;; learner already has; the answer is theirs alone and never cached.
+      :post
+      (fn [request]
+        (on-connection [db db-spec]
+          (if (nil? (authenticated-user-id db (request-token request)))
+            {:status 401 :body ""}
+            (let [body    (try
+                            (some-> (:body request) io/reader (cheshire/parse-stream true))
+                            (catch Exception _
+                              nil))
+                  {:keys [avoid error params]} (regeneration-request body)]
+              (if error
+                (bad-request error)
+                (example-response
+                 (examples/regenerate! db (examples/subject params) avoid)))))))}]
 
      ["/api/sync/updates"
       {:get
