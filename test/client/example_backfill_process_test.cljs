@@ -16,12 +16,12 @@
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.db-seed :as db-seed]
-   [client.support.learner :as learner]
+   [client.support.learner :as test-learner]
    [client.support.time :as time]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [are deftest is use-fixtures]]
    [domain.vocabulary :as vocabulary]
-   [ports.learner :as learner-port]
+   [ports.learner :as learner]
    [ports.page :as page]
    [ports.world :as world]
    [use-cases.examples :as sut]))
@@ -141,12 +141,14 @@
 
 (defn- world
   "A backfill's surroundings over `docs`, held in memory. `:initialized` is a
-   promise, resolved unless given. `:answer`, when given, is
+   promise, resolved unless given. The account exists unless `:account-exists?`
+   is false; `:catch-up`, when given, takes the store and answers `fresh-memory`
+   with a promise. `:answer`, when given, is
    called with each request's subject and its place in the order of
    requests; what it returns answers the request at once, and nil leaves
    it for `answer!`. Without it, every request waits for `answer!`. The tab
    is visible until `hide!`."
-  [docs {:keys [answer initialized]}]
+  [docs {:keys [account-exists? answer catch-up initialized]}]
   (let [{world :world :as ticking} (clock)
         store         (atom {:learner/memory (memory-of docs)})
         reads         (atom 0)
@@ -193,26 +195,29 @@
                    (on-inactive [_ f ^js signal]
                      (reset! on-inactive f)
                      (.addEventListener signal "abort" #(reset! on-inactive nil))))
-       :learner  (assoc {}
-                        :learner/account        {:account/exists? true}
-                        :learner/fresh-memory   #(js/Promise.resolve (:learner/memory @store))
-                        :learner/initialized    (or initialized (js/Promise.resolve nil))
-                        :learner/memory         (fn []
-                                                  (:learner/memory @store))
-                        :learner/on-change      #(learner-adapter/on-change {:store store} %)
-                        :learner/insert!         (fn [_ example]
-                                                  (swap! saves conj [(:word example)])
-                                                  (swap! store
-                                                    update
-                                                    :learner/memory
-                                                    memory/with-docs
-                                                    [(assoc (documents/example-doc (:word-id example)
-                                                                                   (:word example)
-                                                                                   (:collection-id example)
-                                                                                   (:example example))
-                                                            :_rev
-                                                            "1-a")])
-                                                  (js/Promise.resolve true)))}
+       :account  (reify learner/Account
+                   (exists? [_] (not (false? account-exists?))))
+       :learner  (reify learner/Learner
+                   (fresh-memory [_]
+                     (if catch-up
+                       (catch-up store)
+                       (js/Promise.resolve (:learner/memory @store))))
+                   (initialized [_] (or initialized (js/Promise.resolve nil)))
+                   (memory [_] (:learner/memory @store))
+                   (on-change [_ f] (learner-adapter/on-change {:store store} f))
+                   (insert! [_ _ example]
+                     (swap! saves conj [(:word example)])
+                     (swap! store
+                            update
+                            :learner/memory
+                            memory/with-docs
+                            [(assoc (documents/example-doc (:word-id example)
+                                                           (:word example)
+                                                           (:collection-id example)
+                                                           (:example example))
+                                    :_rev
+                                    "1-a")])
+                     (js/Promise.resolve true)))}
       :change! #(swap! store update :learner/memory memory/with-docs %)
       :hide! (fn [] (reset! visible false) (change-page!))
       :reads reads
@@ -268,7 +273,7 @@
   [docs options f]
   (let [world (world docs options)]
     ;; A look at the words is what `reads` counts.
-    (with-redefs [learner-port/words (fn [memory]
+    (with-redefs [learner/words (fn [memory]
                                        (swap! (:reads world) inc)
                                        (memory/words memory))]
       (let [world (started world)]
@@ -390,11 +395,11 @@
 
 (deftest memory-catches-up-before-the-first-pick
   (async-testing "an example the pass brought but the feed dropped is in memory before anything is asked"
-    (let [w        (world three-words {})
-          catch-up (fn []
-                     (swap! (:store w) update :learner/memory memory/with-docs [(example-doc "Hund" nil)])
-                     (js/Promise.resolve nil))
-          stop     (start! (assoc-in (:capabilities w) [:learner :learner/fresh-memory] catch-up))]
+    (let [w    (world three-words
+                     {:catch-up (fn [store]
+                                  (swap! store update :learner/memory memory/with-docs [(example-doc "Hund" nil)])
+                                  (js/Promise.resolve nil))})
+          stop (start! (:capabilities w))]
       (try
         (await ((:advance! w) 0))
         (is (= ["Katze"] (asked w)) "Hund was answered by the catch-up")
@@ -705,8 +710,8 @@
 
 (deftest a-device-without-an-account-asks-nothing
   (async-testing "the endpoint would answer 401, so nothing is sent"
-    (let [w    (world three-words {})
-          stop (start! (assoc-in (:capabilities w) [:learner :learner/account :account/exists?] false))]
+    (let [w    (world three-words {:account-exists? false})
+          stop (start! (:capabilities w))]
       (try
         (await ((:advance! w) 600000))
         (is (empty? (asked w)))
@@ -986,7 +991,7 @@
                                           :value       "Der Hund bellt."
                                           :translation "Собака лает."}]))
          (await
-          (learner/with-learner
+          (test-learner/with-learner
            dbs
            time/world
            (^:async fn
@@ -995,10 +1000,7 @@
                                                   {:answer (constantly {:example {:structure   []
                                                                                   :translation "Кошка спит."
                                                                                   :value       "Die Katze schläft."}})})
-                  stop (start! (-> (:capabilities w)
-                                       (assoc :learner (assoc (:learner started)
-                                                              :learner/account {:account/exists? true}
-                                                              :learner/initialized (js/Promise.resolve nil)))))]
+                  stop (start! (assoc (:capabilities w) :learner (:learner started)))]
               (try
                 ;; Memory changed as it started; the backfill picks once it
                 ;; has been still, by the test's clock.

@@ -4,11 +4,12 @@
   (:require
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
-   [client.support.learner :as learner]
+   [client.support.learner :as test-learner]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [domain.vocabulary :as vocabulary]
+   [ports.learner :as learner]
    [use-cases.vocabulary :as sut]
    [utils :as utils]))
 
@@ -33,7 +34,7 @@
     (with-redefs [utils/now-iso time/now-iso
                   utils/now-ms  time/now-ms]
       (let [dbs {:device/db device-db :user/db user-db}]
-        (await (learner/with-learner dbs time/world #(f (assoc dbs ::learner (:learner %) ::store (:store %))))))))))
+        (await (test-learner/with-learner dbs time/world #(f (assoc dbs ::learner (:learner %) ::store (:store %))))))))))
 
 
 (def ^:private phrase-id
@@ -44,7 +45,7 @@
   "The pairs memory is missing an example for, as the example backfill reads
    them, over the learner port in `capabilities`."
   [{:keys [learner]}]
-  (learner/missing-in ((:learner/memory learner))))
+  (test-learner/missing-in (learner/memory learner)))
 
 
 (defn- ^:async test-capabilities
@@ -63,11 +64,11 @@
                        :word-id       phrase-id
                        :value         "Satz"
                        :translation   "фраза"})))
-  (await (learner/caught-up dbs (::store dbs)))
+  (await (test-learner/caught-up dbs (::store dbs)))
   {:world   time/world
-   :learner (assoc (::learner dbs)
-                   :learner/active-collection
-                   (fn [] (get-in ((:learner/memory (::learner dbs))) [:collections active-id])))})
+   :learner (test-learner/with-active-collection
+             (::learner dbs)
+             (fn [] (get-in (learner/memory (::learner dbs)) [:collections active-id])))})
 
 
 (deftest a-new-phrase-is-stored-with-a-first-review-and-is-missing-an-example

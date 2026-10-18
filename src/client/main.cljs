@@ -43,11 +43,12 @@
         install            (install/start!)
         examples-generator (examples-generator/start!)
         ;; The dictionary opens SQLite while the learner opens PouchDB; neither waits for the other.
-        ;; The learner's sync writes the session cookie. `:learner/initialized` is a promise: memory loaded,
+        ;; The learner's sync writes the session cookie. The learner's `initialized` is a promise: memory loaded,
         ;; first sync pass done.
-        [dictionary learner] (await (js/Promise.all #js [(dictionary/start!)
-                                                         (learner/start! {:page page :world world})]))
-        capabilities       {:dictionary         dictionary
+        [dictionary {:keys [account learner]}] (await (js/Promise.all #js [(dictionary/start!)
+                                                                           (learner/start! {:page page :world world})]))
+        capabilities       {:account            account
+                            :dictionary         dictionary
                             :examples-generator examples-generator
                             :install            install
                             :learner            learner
@@ -67,9 +68,9 @@
      install
      #(swap! app-state assoc :pwa/install-available? true)
      #(swap! app-state assoc :pwa/install-available? false))
-    (swap! app-state assoc :app/has-account? (get-in learner [:learner/account :account/exists?]))
+    (swap! app-state assoc :app/has-account? (learner/exists? account))
     ;; After render, so the first route has a screen to compute. Starting the router reads the address,
-    ;; which `learner/start!` has already handled.
+    ;; which `ports.learner/start!` has already handled.
     (navigation/follow! navigation
                         (fn [entered]
                           (let [current-page (pages/table entered)]

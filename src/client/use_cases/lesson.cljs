@@ -4,7 +4,7 @@
    [domain.lesson :as domain]
    [domain.retention :as retention]
    [domain.vocabulary :as vocabulary-domain]
-   [ports.learner :as learner-port]
+   [ports.learner :as learner]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -17,7 +17,7 @@
     :or   {vocab-per-lesson domain/default-vocab-per-lesson}}
    now-ms]
   ;; Every word in scope, unranked: `pick-vocab` owns the whole selection policy, ties included.
-  (let [cards    (learner-port/collection-cards memory collection)
+  (let [cards    (learner/collection-cards memory collection)
         selected (map :word
                       (domain/pick-vocab cards
                                          #(retention/urgency (:reviews %) now-ms)
@@ -30,7 +30,7 @@
         ;; Which examples a read in this collection sees is one rule, in `domain.examples`.
         {:lesson-state (domain/initial-state
                         vocab
-                        (->> (learner-port/examples-of memory word-ids)
+                        (->> (learner/examples-of memory word-ids)
                              (examples/visible-in (:id collection)))
                         (if (= :first trial-selector)
                           first

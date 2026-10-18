@@ -7,12 +7,13 @@
   (:require
    [adapters.learner.documents :as documents]
    [client.support.db-fixtures :as db-fixtures]
-   [client.support.learner :as learner]
+   [client.support.learner :as test-learner]
    [client.support.replication :as replication]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [db.pouch :as pouch]
+   [ports.learner :as learner]
    [adapters.learner.sync :as sut]))
 
 
@@ -165,12 +166,12 @@
       (await (add-word! phone "vocab:hund"))
       (await (add-word! laptop "vocab:katze"))
       (await (replication/replicated! (:user/db laptop) (:user/db phone)))
-      (await (learner/with-learner
+      (await (test-learner/with-learner
               phone
               time/world
               (^:async fn
                [{:keys [learner]}]
-               (await ((:learner/change! learner) [[:entity/collection "c1" (constantly :entity/deleted)]])))))
+               (await (learner/change! learner [[:entity/collection "c1" (constantly :entity/deleted)]])))))
       (is (nil? (await (db/get (:user/db phone) "c1"))))
       (is (zero? (await (live-count phone))))
       (await (replication/replicated! (:user/db phone) (:user/db laptop)))
@@ -184,12 +185,12 @@
      (^:async fn
       [{:keys [laptop phone] :as devices}]
       (await (add-word! laptop "vocab:katze"))
-      (await (learner/with-learner
+      (await (test-learner/with-learner
               phone
               time/world
               (^:async fn
                [{:keys [learner]}]
-               (await ((:learner/change! learner) [[:entity/collection "c1" (constantly :entity/deleted)]])))))
+               (await (learner/change! learner [[:entity/collection "c1" (constantly :entity/deleted)]])))))
       (await (settled! devices))
       (doseq [dbs [phone laptop]]
         (is (= ["vocab:katze"] (:word-ids (await (db/get (:user/db dbs) "c1")))))

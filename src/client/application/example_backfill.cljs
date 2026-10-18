@@ -5,7 +5,7 @@
   (:require
    [abort]
    [lambdaisland.glogi :as log]
-   [ports.learner :as learner-port]
+   [ports.learner :as learner]
    [ports.page :as page]
    [ports.world :as world]
    [use-cases.examples :as examples]))
@@ -101,7 +101,7 @@
 (defn- ^:async missing-pair
   "The next pair to ask for in `memory`, or nil. It reads 200 entries per task."
   [{:keys [page state]} memory]
-  (loop [chunks (partition-all (:chunk-size limits) (learner-port/words memory))]
+  (loop [chunks (partition-all (:chunk-size limits) (learner/words memory))]
     (when-let [[chunk & more] (seq chunks)]
       (or (examples/next-pair memory (:failed-subjects @state) chunk)
           (do (await (page/yield page))
@@ -147,34 +147,32 @@
    `[:wait/active]`, `[:wait/memory-change memory]` (nothing is missing; `memory` holds its words and
    collections), or nil when the session was refused and the backfill halts."
   [{:keys [learner page state] :as backfill}]
-  (let [{read-memory :learner/memory} learner]
-    (if-not (page/active? page)
-      [:wait/active]
-      (let [memory (read-memory)]
-        (if-let [pair (await (missing-pair backfill memory))]
-          (let [subject  (examples/subject pair)
-                response (await (ask backfill subject))
-                before   (:outages @state)
-                after    (swap! state #(after-response % subject response (page/active? page)))]
-            (when (and (:failure response) (not= :failure/aborted (:failure response)))
-              (log/warn :examples/fetch-failed
-                        (assoc (select-keys response [:failure :message :status]) :word (:word subject))))
-            (when-let [example (:example response)]
-              (await (save! backfill pair subject example)))
-            (when (= :status/running (:status after))
-              ;; Only an outage waits longer than the spacing.
-              [:wait/pause (pause-after before (:outages after) (:retry-after-ms response))]))
-          [:wait/memory-change (select-keys memory [:words :collections])])))))
+  (if-not (page/active? page)
+    [:wait/active]
+    (let [memory (learner/memory learner)]
+      (if-let [pair (await (missing-pair backfill memory))]
+        (let [subject  (examples/subject pair)
+              response (await (ask backfill subject))
+              before   (:outages @state)
+              after    (swap! state #(after-response % subject response (page/active? page)))]
+          (when (and (:failure response) (not= :failure/aborted (:failure response)))
+            (log/warn :examples/fetch-failed
+                      (assoc (select-keys response [:failure :message :status]) :word (:word subject))))
+          (when-let [example (:example response)]
+            (await (save! backfill pair subject example)))
+          (when (= :status/running (:status after))
+            ;; Only an outage waits longer than the spacing.
+            [:wait/pause (pause-after before (:outages after) (:retry-after-ms response))]))
+        [:wait/memory-change (select-keys memory [:words :collections])]))))
 
 
 (defn- ^:async ready
   "Resolves once the learner is initialized: memory loaded, and the session's
    first sync pass completed or waited for long enough
-   (`:learner/initialized`). Stopping the backfill ends the wait."
+   (`initialized` of the Learner). Stopping the backfill ends the wait."
   [{:keys [learner] :as backfill}]
-  (let [{:learner/keys [fresh-memory initialized]} learner]
-    (await (unless-closed backfill initialized))
-    (await (fresh-memory))))
+  (await (unless-closed backfill (learner/initialized learner)))
+  (await (learner/fresh-memory learner)))
 
 
 (defn- memory-changed
@@ -182,22 +180,22 @@
    once when they already do. Reviews and examples don't count. When `signal` aborts first it stays pending
    and the watch is gone."
   [{:keys [learner]} seen signal]
-  (let [{:learner/keys [memory on-change]} learner
-        {:keys [collections words]}        seen
-        differs?                           (fn []
-                                             (let [now (memory)]
-                                               (not (and (identical? words (:words now))
-                                                         (identical? collections (:collections now))))))]
+  (let [{:keys [collections words]} seen
+        differs?                    (fn []
+                                      (let [now (learner/memory learner)]
+                                        (not (and (identical? words (:words now))
+                                                  (identical? collections (:collections now))))))]
     (js/Promise.
      (fn [resolve]
        (if (differs?)
          (resolve nil)
          (let [unsubscribe (volatile! (fn []))]
            (vreset! unsubscribe
-                    (on-change (fn []
-                                 (when (differs?)
-                                   (@unsubscribe)
-                                   (resolve nil)))))
+                    (learner/on-change learner
+                                       (fn []
+                                         (when (differs?)
+                                           (@unsubscribe)
+                                           (resolve nil)))))
            (abort/on-abort signal #(@unsubscribe))))))))
 
 
@@ -233,16 +231,19 @@
 (defn start!
   "Starts fetching and returns the function that stops it. A device without an
    account fetches nothing."
-  [{:keys [page learner] :as capabilities}]
-  (if-not (get-in learner [:learner/account :account/exists?])
+  [{:keys [account examples-generator learner page world]}]
+  (if-not (learner/exists? account)
     (do (log/info :examples/no-account {})
         (fn stop []))
     (let [controller (atom nil)
           closing    (js/AbortController.)
-          backfill    (assoc (select-keys capabilities [:page :examples-generator :learner :world])
-                            :controller controller
-                            :signal     (.-signal closing)
-                            :state      (atom initial-state))]
+          backfill   {:controller         controller
+                      :examples-generator examples-generator
+                      :learner            learner
+                      :page               page
+                      :signal             (.-signal closing)
+                      :state              (atom initial-state)
+                      :world              world}]
       (page/on-inactive page #(some-> @controller .abort) (.-signal closing))
       (-> (fetch-loop backfill)
           (.catch (fn [err]

@@ -5,7 +5,7 @@
    [domain.phrase :as phrase]
    [domain.retention :as retention]
    [domain.vocabulary :as domain]
-   [ports.learner :as learner-port]
+   [ports.learner :as learner]
    [ports.world :as world]
    [utils :as utils]))
 
@@ -13,17 +13,17 @@
 (defn find-duplicate
   "The word or phrase memory has under the same value, or nil."
   [{:keys [learner]} value]
-  (learner-port/word ((:learner/memory learner)) (domain/vocab-id value)))
+  (learner/word (learner/memory learner) (domain/vocab-id value)))
 
 
 (defn add-review
   "Writes a review of a word. Resolves once memory has it."
   [{:keys [learner world]} word-id retained translation]
-  ((:learner/insert! learner)
-   :entity/review
-   (assoc (domain/new-review word-id retained translation)
-          :created-at
-          (world/clock world :now-iso))))
+  (learner/insert! learner
+                   :entity/review
+                   (assoc (domain/new-review word-id retained translation)
+                          :created-at
+                          (world/clock world :now-iso))))
 
 
 (defn ^:async add!
@@ -36,25 +36,25 @@
         entry       (domain/entered-entry kind value translation pos)]
     (if-not entry
       {:error :failure/empty-translations}
-      (let [collection ((:learner/active-collection learner))
+      (let [collection (learner/active-collection learner)
             created?   (volatile! false)
-            _          (await ((:learner/change! learner)
-                               [[:entity/word
-                                 (:id entry)
-                                 (fn [stored]
-                                   (vreset! created? (nil? stored))
-                                   (if stored
-                                     (domain/merged-entry stored entry)
-                                     entry))]]))
+            _          (await (learner/change! learner
+                                               [[:entity/word
+                                                 (:id entry)
+                                                 (fn [stored]
+                                                   (vreset! created? (nil? stored))
+                                                   (if stored
+                                                     (domain/merged-entry stored entry)
+                                                     entry))]]))
             created?   @created?
-            history    (learner-port/review-history ((:learner/memory learner)) (:id entry))]
+            history    (learner/review-history (learner/memory learner) (:id entry))]
         (when (and created? (zero? (count (:ids history))))
           (await (add-review capabilities (:id entry) true translation)))
         (when collection
-          (await ((:learner/change! learner)
-                  [[:entity/collection
-                    (:id collection)
-                    #(some-> % (collections/with-word (:id entry)))]])))
+          (await (learner/change! learner
+                                  [[:entity/collection
+                                    (:id collection)
+                                    #(some-> % (collections/with-word (:id entry)))]])))
         {:created? created? :word-id (:id entry)}))))
 
 
@@ -62,9 +62,9 @@
   "The word list's rows out of memory, paged by `:offset`/`:limit`, narrowed by `:collection` and `:search`,
    each with its retention level. `:total` counts the words before the search, `:matches` after it."
   [memory {:keys [collection limit offset search]} now-ms]
-  (let [scope   (learner-port/collection-words memory collection)
+  (let [scope   (learner/collection-words memory collection)
         query   (when (utils/non-blank search) (domain/query search))
-        matched (learner-port/matching-words memory collection query)
+        matched (learner/matching-words memory collection query)
         page    (cond->> matched
                   offset (drop offset)
                   limit  (take limit))]
@@ -72,7 +72,7 @@
      :total   (count scope)
      :words   (mapv #(assoc (select-keys % [:id :kind :translation :value])
                             :retention-level
-                            (retention/level (retention/urgency (learner-port/review-history memory (:id %))
+                            (retention/level (retention/urgency (learner/review-history memory (:id %))
                                                                 now-ms)))
                     page)}))
 
@@ -82,15 +82,15 @@
   [memory word-id value]
   (let [id (domain/vocab-id value)]
     (and (not= id word-id)
-         (some? (learner-port/word memory id)))))
+         (some? (learner/word memory id)))))
 
 
 (defn ^:async update!
   "Edits the word `word-id` in place: its `value` (the same vocab id, spelled differently) and `translation`.
    Resolves with whether memory took the change."
   [{:keys [learner]} word-id value translation]
-  (await ((:learner/change! learner)
-          [[:entity/word word-id #(some-> % (phrase/edited-word value translation))]])))
+  (await (learner/change! learner
+                          [[:entity/word word-id #(some-> % (phrase/edited-word value translation))]])))
 
 
 (defn ^:async rename!
@@ -101,18 +101,18 @@
   (let [kind        (if (phrase/phrase-value? value []) :phrase :word)
         translation (domain/entered-translation kind translation)
         entry       (domain/entered-entry kind (str/trim value) translation nil)
-        memory      (await ((:learner/fresh-memory learner)))]
-    (if (or (nil? entry) (nil? (learner-port/word memory word-id)))
+        memory      (await (learner/fresh-memory learner))]
+    (if (or (nil? entry) (nil? (learner/word memory word-id)))
       false
-      (let [written (await ((:learner/change! learner)
-                            (-> [[:entity/word (:id entry) #(or % entry)]
-                                 [:entity/word word-id (constantly :entity/deleted)]]
-                                (into (map (fn [{:keys [id]}]
-                                             [:entity/collection
-                                              id
-                                              #(some-> % (collections/replace-word word-id (:id entry)))]))
-                                      (learner-port/collections-of memory word-id)))))]
-        (when (and written (zero? (count (:ids (learner-port/review-history memory (:id entry))))))
+      (let [written (await (learner/change! learner
+                                            (-> [[:entity/word (:id entry) #(or % entry)]
+                                                 [:entity/word word-id (constantly :entity/deleted)]]
+                                                (into (map (fn [{:keys [id]}]
+                                                             [:entity/collection
+                                                              id
+                                                              #(some-> % (collections/replace-word word-id (:id entry)))]))
+                                                      (learner/collections-of memory word-id)))))]
+        (when (and written (zero? (count (:ids (learner/review-history memory (:id entry))))))
           (await (add-review capabilities (:id entry) true translation)))
         written))))
 
@@ -121,24 +121,24 @@
   "Deletes a word and its place in every collection in one write; its reviews and examples stay. Resolves
    true when it wrote, nil when there was nothing to write, false when the write was taken back."
   [{:keys [learner]} word-id]
-  (let [memory  (await ((:learner/fresh-memory learner)))
-        listing (learner-port/collections-of memory word-id)]
-    (await ((:learner/change! learner)
-            (into [[:entity/word word-id (constantly :entity/deleted)]]
-                  (map (fn [{:keys [id]}]
-                         [:entity/collection id #(some-> % (collections/without-word word-id))]))
-                  listing)))))
+  (let [memory  (await (learner/fresh-memory learner))
+        listing (learner/collections-of memory word-id)]
+    (await (learner/change! learner
+                            (into [[:entity/word word-id (constantly :entity/deleted)]]
+                                  (map (fn [{:keys [id]}]
+                                         [:entity/collection id #(some-> % (collections/without-word word-id))]))
+                                  listing)))))
 
 
 (defn ^:async remove-from-active!
   "Removes a word within the active scope: from a named collection and its children only the membership
    goes; from the implicit main the word and its place in every collection."
   [{:keys [learner] :as capabilities} word-id]
-  (if-let [collection ((:learner/active-collection learner))]
-    (let [scope (collections/family (learner-port/collections ((:learner/memory learner)))
+  (if-let [collection (learner/active-collection learner)]
+    (let [scope (collections/family (learner/collections (learner/memory learner))
                                     (:id collection))]
-      (await ((:learner/change! learner)
-              (mapv (fn [id]
-                      [:entity/collection id #(some-> % (collections/without-word word-id))])
-                    (or (seq (map :id scope)) [(:id collection)])))))
+      (await (learner/change! learner
+                              (mapv (fn [id]
+                                      [:entity/collection id #(some-> % (collections/without-word word-id))])
+                                    (or (seq (map :id scope)) [(:id collection)])))))
     (await (delete! capabilities word-id))))

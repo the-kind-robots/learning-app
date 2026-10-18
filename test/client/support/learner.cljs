@@ -6,22 +6,41 @@
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
    [domain.examples :as examples]
+   [ports.learner :as learner]
    [ports.world :as world]))
 
 
 (defn ^:async started
-  "Starts memory over `dbs` into a new store, and the learner capability over
+  "Starts memory over `dbs` into a new store, and the Learner over
    both. Resolves once memory is fully loaded, with `{:learner :stop :store}`:
-   the capability's functions, a function that stops following the feeds, and
+   the Learner, a function that stops following the feeds, and
    the store. `world` is the World the learner reads the time from."
   [dbs world]
   (let [store (atom {:learner/memory memory/empty-memory})
         stop  (await (loader/start! dbs store))]
-    {:learner (adapter/capabilities
-               {:learner (adapter/new-learner {:databases dbs :store store :world {:now-iso #(world/clock world :now-iso)
-                                                                                    :sleep   #(world/clock world :sleep %1 %2)}})})
+    {:learner (learner/as-learner
+               (adapter/new-learner {:databases dbs
+                                     :store     store
+                                     :world     {:now-iso #(world/clock world :now-iso)
+                                                 :sleep   #(world/clock world :sleep %1 %2)}})
+               (js/Promise.resolve nil))
      :stop    stop
      :store   store}))
+
+
+(defn with-active-collection
+  "`learner`, but the collection active is the one `active-collection` returns, a function of no arguments."
+  [learner active-collection]
+  (reify learner/Learner
+    (memory [_] (learner/memory learner))
+    (fresh-memory [_] (learner/fresh-memory learner))
+    (change! [_ ops] (learner/change! learner ops))
+    (insert! [_ entity value] (learner/insert! learner entity value))
+    (active-collection [_] (active-collection))
+    (set-active-collection! [_ id] (learner/set-active-collection! learner id))
+    (on-change [_ f] (learner/on-change learner f))
+    (status [_] (learner/status learner))
+    (initialized [_] (learner/initialized learner))))
 
 
 (defn ^:async with-learner

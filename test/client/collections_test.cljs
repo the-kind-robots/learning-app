@@ -9,6 +9,7 @@
    [clojure.test.check.generators :as gen]
    [clojure.test.check.properties :as prop :include-macros true]
    [domain.collections :as collections]
+   [ports.learner :as learner]
    [use-cases.collections :as sut]))
 
 
@@ -49,18 +50,19 @@
    (let [by-id  (into {} (map (juxt :id identity)) items)
          memory (atom {:collections by-id})]
      {:world   time/world
-      :learner {:learner/active-collection (fn [] (by-id active-id))
-                :learner/memory (fn [] @memory)
-                :learner/fresh-memory (fn [] (js/Promise.resolve @memory))
-                :learner/insert! (fn [_ {:keys [name]}] (js/Promise.resolve {:id (str "c:" name)}))
-                :learner/change! (fn [[[_ id change]]]
-                                   (let [collection (get-in @memory [:collections id])
-                                         changed    (change collection)]
-                                     (if (or (nil? changed) (identical? changed collection))
-                                       (js/Promise.resolve nil)
-                                       (do (swap! renames conj [id (:name changed)])
-                                           (swap! memory assoc-in [:collections id] changed)
-                                           (js/Promise.resolve true)))))}})))
+      :learner (reify learner/Learner
+                 (active-collection [_] (by-id active-id))
+                 (memory [_] @memory)
+                 (fresh-memory [_] (js/Promise.resolve @memory))
+                 (insert! [_ _ {:keys [name]}] (js/Promise.resolve {:id (str "c:" name)}))
+                 (change! [_ [[_ id change]]]
+                   (let [collection (get-in @memory [:collections id])
+                         changed    (change collection)]
+                     (if (or (nil? changed) (identical? changed collection))
+                       (js/Promise.resolve nil)
+                       (do (swap! renames conj [id (:name changed)])
+                           (swap! memory assoc-in [:collections id] changed)
+                           (js/Promise.resolve true))))))})))
 
 
 (deftest rename-refuses-a-name-another-collection-carries

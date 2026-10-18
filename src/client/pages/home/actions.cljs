@@ -4,7 +4,7 @@
    [domain.phrase :as phrase]
    [domain.vocabulary :as vocabulary]
    [nexus.registry :as nxr]
-   [ports.learner :as learner-port]))
+   [ports.learner :as learner]))
 
 
 (def ^:private empty-suggestions nil)
@@ -46,7 +46,7 @@
     {:home/active-coll-id   (:id collection)
      :home/active-coll-name (:name collection)
      ;; The words in scope, as the word list and the lesson count them: a collection may still list a word deleted elsewhere.
-     :home/empty-vocab?     (empty? (learner-port/collection-words memory collection))}))
+     :home/empty-vocab?     (empty? (learner/collection-words memory collection))}))
 
 
 (def ^:private fresh-form

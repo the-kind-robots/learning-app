@@ -2,7 +2,8 @@
   (:require
    ["qrcode" :as QRCode]
    [lambdaisland.glogi :as log]
-   [nexus.registry :as nxr]))
+   [nexus.registry :as nxr]
+   [ports.learner :as learner]))
 
 
 (nxr/register-effect! :effect/share-sync-link
@@ -10,7 +11,7 @@
   (fn ^:async share-sync-link
     [{:keys [capabilities]} _ {:keys [copied-message title]}]
     (try
-      (when-let [url (await ((get-in capabilities [:learner :learner/account :account/join-link])))]
+      (when-let [url (await (learner/sync-link (:account capabilities)))]
         (if (exists? js/navigator.share)
           (await (js/navigator.share #js {:title title :url url}))
           (do
@@ -26,10 +27,10 @@
     (try
       ;; The nonce tags one round: the QR carries it out, the opener echoes it back, and only that echo closes the dialog.
       (let [nonce (js/crypto.randomUUID)
-            {:account/keys [join-link on-device-joined]} (:learner/account (:learner capabilities))]
-        (when-let [link (await (join-link nonce))]
+            account (:account capabilities)]
+        (when-let [link (await (learner/sync-link account nonce))]
           (let [qr-url (await (.toDataURL QRCode link))]
-            (on-device-joined nonce #(dispatch [[:action/device-joined nonce]]))
+            (learner/on-device-joined account nonce #(dispatch [[:action/device-joined nonce]]))
             (dispatch [[:action/show-sync-qr
                         {:link   link
                          :nonce  nonce

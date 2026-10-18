@@ -6,12 +6,13 @@
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.db-seed :as db-seed]
-   [client.support.learner :as learner]
+   [client.support.learner :as test-learner]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [domain.lesson :as domain]
    [domain.retention :as retention]
+   [ports.learner :as learner]
    [use-cases.lesson :as sut]
    [use-cases.vocabulary :as vocabulary]
    [utils :as utils]))
@@ -37,20 +38,20 @@
     (with-redefs [utils/now-iso time/now-iso
                   utils/now-ms  time/now-ms]
       (let [dbs {:device/db device-db :user/db user-db}]
-        (await (learner/with-learner dbs time/world #(f (assoc dbs ::learner (:learner %) ::store (:store %))))))))))
+        (await (test-learner/with-learner dbs time/world #(f (assoc dbs ::learner (:learner %) ::store (:store %))))))))))
 
 
 (defn- test-capabilities
   [dbs]
   {::dbs    dbs
    :world   time/world
-   :learner (assoc (::learner dbs) :learner/active-collection (fn [] nil))})
+   :learner (test-learner/with-active-collection (::learner dbs) (fn [] nil))})
 
 
 (defn- ^:async caught-up!
   "Resolves once memory has what the test seeded."
   [dbs]
-  (await (learner/caught-up dbs (::store dbs))))
+  (await (test-learner/caught-up dbs (::store dbs))))
 
 
 (defn- ^:async start!
@@ -58,7 +59,7 @@
   [capabilities opts]
   (let [dbs    (::dbs capabilities)
         memory (await (db-seed/memory-of (:user/db dbs)))]
-    (sut/start memory ((get-in capabilities [:learner :learner/active-collection])) (merge {:random (constantly 0.5)} opts) (time/now-ms))))
+    (sut/start memory (learner/active-collection (:learner capabilities)) (merge {:random (constantly 0.5)} opts) (time/now-ms))))
 
 
 (defn- ^:async started

@@ -39,7 +39,7 @@
                                            (reset! feed handler)
                                            (fn [] nil))
                   pouch/sync-once!       sync-once!]
-      (let [{:account/keys [sync!] :as started} (await (sut/start! {:browser browser :databases {}}))]
+      (let [{:keys [sync!] :as started} (await (sut/start! {:browser browser :databases {}}))]
         (await (f {:feed!        #(@feed (change %1 %2))
                    :request!     sync!
                    :start-again! #(sut/start! {:browser browser :databases {}})
@@ -120,7 +120,7 @@
           (^:async fn
            [{:keys [request! started]}]
            (let [calls       (atom 0)
-                 _           ((:account/on-device-joined started) "n1" #(swap! calls inc))
+                 _           ((:on-device-joined started) "n1" #(swap! calls inc))
                  pull!       (^:async fn
                               []
                               (let [pulling (request!)]
@@ -265,5 +265,5 @@
   (async-testing "its first pass is resolved at once"
     (with-redefs [identity/load-identity! (fn [] (js/Promise.resolve nil))]
       (let [started (await (sut/start! {:databases {}}))]
-        (is (false? (:account/exists? started)))
+        (is (false? (:exists? started)))
         (is (nil? (await (answered (:first-pass started)))))))))

@@ -6,7 +6,7 @@
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.db-seed :as db-seed]
-   [client.support.learner :as learner]
+   [client.support.learner :as test-learner]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
@@ -36,14 +36,14 @@
     (with-redefs [utils/now-iso time/now-iso
                   utils/now-ms  time/now-ms]
       (let [dbs {:device/db device-db :user/db user-db}]
-        (await (learner/with-learner
+        (await (test-learner/with-learner
                 dbs
                 time/world
-                (fn [{learner-port :learner}]
+                (fn [{started :learner}]
                   (f (assoc dbs
                             ::capabilities
                             {:world   time/world
-                             :learner (assoc learner-port :learner/active-collection (fn [] nil))}))))))))))
+                             :learner (test-learner/with-active-collection started (fn [] nil))}))))))))))
 
 
 (defn- test-capabilities

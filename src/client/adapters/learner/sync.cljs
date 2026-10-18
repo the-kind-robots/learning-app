@@ -110,14 +110,14 @@
   "What `start!` returns for a device without an account. Such a device runs
    no pass, so its sync is inert, there is no first pass to wait for, and no
    device can join."
-  {:account/exists?          false
-   :account/join-link        (fn [& _] (js/Promise.resolve nil))
-   :account/on-device-joined (fn [_ _] nil)
-   :account/sync!            (constantly nil)
+  {:exists?          false
+   :sync-link        (fn [& _] (js/Promise.resolve nil))
+   :on-device-joined (fn [_ _] nil)
+   :sync!            (constantly nil)
    :first-pass               (js/Promise.resolve nil)})
 
 
-(defn- ^:async join-link
+(defn- ^:async sync-link
   "The link another device opens to join this device's account, or to recover it
    (ADR-0006). With a `nonce` the opener echoes it back, so whoever showed the link can
    tell it joined. Resolves nil without a stored identity."
@@ -283,10 +283,10 @@
           ((:on-online browser) request!)
           ;; Push channel (ADR-0009): a poke pulls through the normal path.
           (connect-push! browser request!)
-          {:account/exists?          true
+          {:exists?          true
            ;; `f` is called once the device that opened the link carrying `nonce` has joined; the proof
            ;; it echoes arrives with a pull. The hook forgets itself then.
-           :account/on-device-joined (fn on-device-joined
+           :on-device-joined (fn on-device-joined
                                        [nonce f]
                                        (let [done        (volatile! false)
                                              unsubscribe (volatile! nil)]
@@ -299,8 +299,8 @@
                                                                               (@unsubscribe)
                                                                               (f))))))))
                                          nil))
-           :account/join-link        join-link
-           :account/sync!            request!
+           :sync-link        sync-link
+           :sync!            request!
            :first-pass               first-pass
            :unwatch                  unwatch}))
       (do

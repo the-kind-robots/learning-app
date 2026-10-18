@@ -265,30 +265,11 @@
                  nil)))))
 
 
-(defn capabilities
-  "What the learner offers the app: memory and its status with `on-change`, writes, the active collection,
-   `:learner/initialized` (a promise: memory loaded and the first sync pass done, or a minute passed) and
-   `:learner/account` (`:account/exists?`, `sync!`, `join-link`, `on-device-joined`)."
-  [{:keys [initialized learner sync]}]
-  {:learner/account                {:account/exists?          (:account/exists? sync)
-                                    :account/join-link        (:account/join-link sync)
-                                    :account/on-device-joined (:account/on-device-joined sync)
-                                    :account/sync!            (:account/sync! sync)}
-   :learner/active-collection      (partial active-collection learner)
-   :learner/change!                (partial change! learner)
-   :learner/fresh-memory           (partial fresh-memory learner)
-   :learner/initialized            initialized
-   :learner/insert!                (partial insert! learner)
-   :learner/memory                 (partial current-memory learner)
-   :learner/on-change              (partial on-change learner)
-   :learner/set-active-collection! (partial set-active-collection! learner)
-   :learner/status                 (partial status learner)})
-
-
 (defn ^:async start!
   "Starts the learner's data. The incoming credential is handled before the databases open; memory is read
-   and followed without awaiting, and sync passes wait for the snapshot check (ADR-0018). Resolves with the
-   capabilities."
+   and followed without awaiting, and sync passes wait for the snapshot check (ADR-0018). Resolves with
+   `{:initialized :learner :sync}`: `initialized` is a promise (memory loaded and the first sync pass done, or a minute
+   passed), `sync` what `adapters.learner.sync/start!` returned."
   [{:keys [browser world]}]
   (let [store (atom {:learner/memory memory/empty-memory})
         _ (databases/persist!)
@@ -301,6 +282,6 @@
                                          :passes-wait-for checked}))
         learner (new-learner {:databases databases :store store :world world})
         initialized (initialize learner (:first-pass replication) (js/AbortController.))]
-    (capabilities {:initialized initialized
-                   :learner     learner
-                   :sync        replication})))
+    {:initialized initialized
+     :learner     learner
+     :sync        replication}))
