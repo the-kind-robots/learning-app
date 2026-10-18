@@ -1,5 +1,5 @@
-(ns adapters.browser.page
-  "The page as the browser reports it: shown or hidden, online or offline."
+(ns adapters.page
+  "The page as the browser reports it: shown or hidden, online or offline, and the virtual keyboard over it."
   (:require
    [abort]
    [browser]))
@@ -98,11 +98,10 @@
 
 
 
-(defn sync-virtual-keyboard!
-  "Tells the virtual keyboard, where the browser has one, to overlay the
-   content when the page has an element that wants that (`data-vk-overlay`)."
-  []
+(defn overlay-keyboard!
+  "Tells the virtual keyboard, where the browser has one, whether it overlays the content (`overlays?`, nil
+   for no) or resizes it."
+  [overlays?]
   (when (js-in "virtualKeyboard" js/navigator)
     (when-let [vk (.-virtualKeyboard js/navigator)]
-      (set! (.-overlaysContent vk)
-            (boolean (js/document.querySelector "[data-vk-overlay]"))))))
+      (set! (.-overlaysContent vk) overlays?))))

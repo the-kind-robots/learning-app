@@ -8,6 +8,7 @@
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
+   [ports.navigation :as navigation]
    [ports.world :as world]
    [replicant.dom :as r]))
 
@@ -39,9 +40,8 @@
 
 
 (nxr/register-effect! :effect/navigate
-  (fn navigate-effect [{:keys [capabilities dispatch]} _ page]
-    (when-let [navigate! (get-in capabilities [:browser :browser/navigate])]
-      (navigate! page #(dispatch [[:effect/enter :action/open-home]])))))
+  (fn navigate-effect [{:keys [capabilities]} _ page]
+    (navigation/navigate (:navigation capabilities) page)))
 
 
 (nxr/register-effect! :effect/sync
@@ -289,12 +289,9 @@
 
 
 (defn render!
-  "Renders the shell of `state`, then lets the browser's virtual keyboard
-   follow what the screen asks of it (`sync-virtual-keyboard!`, the browser
-   capability's)."
-  [state sync-virtual-keyboard!]
-  (r/render js/document.body (view/shell state))
-  (sync-virtual-keyboard!))
+  "Renders the shell of `state`."
+  [state]
+  (r/render js/document.body (view/shell state)))
 
 
 (defn state
@@ -397,9 +394,8 @@
             system
             (fn [state]
               (when (not= :status/loading (:learner/status state))
-                (let [render-state! #(render! % (get-in capabilities [:browser :browser/sync-virtual-keyboard!]))]
-                  (if ^boolean goog/DEBUG
-                    (instrumentation/render! render-state! state)
-                    (render-state! state))))))))
+                (if ^boolean goog/DEBUG
+                  (instrumentation/render! render! state)
+                  (render! state)))))))
   (when ^boolean goog/DEBUG
     (instrumentation/install!)))

@@ -175,7 +175,7 @@
             "/api/sync/updates"))
      (connect! []
        (when (and (nil? @push-socket)
-                  ((:browser/active? browser)))
+                  ((:active? browser)))
          (let [socket (js/WebSocket. (url))]
            (reset! push-socket socket)
            (set! (.-onopen socket) (fn [_] (on-poke)))
@@ -190,24 +190,26 @@
        (when-some [socket @push-socket]
          (reset! push-socket nil)
          (.close socket)))]
-    ((:browser/on-visibility-change browser)
+    ((:on-visibility-change browser)
      (fn []
-       (if ((:browser/visible? browser))
+       (if ((:visible? browser))
          (connect!)
          (disconnect!))))
     ;; A socket that survived a network change may be a zombie; recycling is free, the reconnect pulls anyway.
-    ((:browser/on-online browser)
+    ((:on-online browser)
      (fn []
        (disconnect!)
        (connect!)))
-    ((:browser/on-offline browser) disconnect!)
+    ((:on-offline browser) disconnect!)
     (connect!)))
 
 
 (defn ^:async start!
   "Drives replication when the device has an account: requests during a pass share one more pass, and what
    a pass pulled is not a local write (ADR-0006). `passes-wait-for` holds every pass until the snapshot
-   check is done (ADR-0018); `:first-pass` resolves when the first pass of this start has completed."
+   check is done (ADR-0018); `:first-pass` resolves when the first pass of this start has completed.
+   `browser` is the page as plain functions: `:active?`, `:online?`, `:visible?`, `:on-offline`, `:on-online`,
+   `:on-visibility-change`."
   [{:keys [browser databases passes-wait-for]}]
   (try
     (if-let [{:keys [id] :as device-identity} (await (identity/load-identity!))]
@@ -257,7 +259,7 @@
                                (run! (merged-passes done result)))))))
               request!
               (fn [& _]
-                (when ((:browser/online? browser))
+                (when ((:online? browser))
                   (reset! wanted true)
                   (or @running
                       (reset! running
@@ -278,7 +280,7 @@
                                          (swap! written conj (pouch/change-revision change))
                                          (push!)))]
           (log/info :sync/ready {:user-id id})
-          ((:browser/on-online browser) request!)
+          ((:on-online browser) request!)
           ;; Push channel (ADR-0009): a poke pulls through the normal path.
           (connect-push! browser request!)
           {:account/exists?          true

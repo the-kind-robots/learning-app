@@ -5,15 +5,23 @@
   (:require
    [adapters.learner :as learner]
    [adapters.learner.memory :as memory]
+   [ports.page :as page]
    [ports.world :as world]))
 
 
 (defn ^:async start!
   "Starts the learner's data (`adapters.learner/start!`) and resolves with its capabilities, given `world`
-   and `browser`. What it waits for sits in them (`:learner/initialized`)."
-  [{:keys [world] :as deps}]
-  (await (learner/start! (assoc deps :world {:now-iso #(world/clock world :now-iso)
-                         :sleep   #(world/clock world :sleep %1 %2)}))))
+   and `page`. What it waits for sits in them (`:learner/initialized`)."
+  [{:keys [page world] :as deps}]
+  (await (learner/start! (assoc deps
+                         :browser {:active?               #(page/active? page)
+                                   :on-offline            #(page/on-offline page %)
+                                   :on-online             #(page/on-online page %)
+                                   :on-visibility-change  #(page/on-visibility-change page %)
+                                   :online?               #(page/online? page)
+                                   :visible?              #(page/visible? page)}
+                         :world   {:now-iso #(world/clock world :now-iso)
+                                   :sleep   #(world/clock world :sleep %1 %2)}))))
 
 
 ;;

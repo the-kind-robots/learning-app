@@ -22,6 +22,7 @@
    [cljs.test :refer-macros [are deftest is use-fixtures]]
    [domain.vocabulary :as vocabulary]
    [ports.learner :as learner-port]
+   [ports.page :as page]
    [ports.world :as world]
    [use-cases.examples :as sut]))
 
@@ -180,17 +181,18 @@
                                           :signal  signal})
                                   (when-let [answered (some-> answer (apply [subject n]))]
                                     (resolve answered))))))
-       :browser  {:browser/active?      active?
-                  :browser/yield        browser/yield
-                  :browser/until-active (fn []
-                                       (js/Promise.
-                                        (fn [resolve]
-                                          (if (active?)
-                                            (resolve nil)
-                                            (swap! waiting conj resolve)))))
-                  :browser/on-inactive  (fn [f ^js signal]
-                                       (reset! on-inactive f)
-                                       (.addEventListener signal "abort" #(reset! on-inactive nil)))}
+       :page     (reify page/Page
+                   (active? [_] (active?))
+                   (yield [_] (browser/yield))
+                   (until-active [_ _]
+                     (js/Promise.
+                      (fn [resolve]
+                        (if (active?)
+                          (resolve nil)
+                          (swap! waiting conj resolve)))))
+                   (on-inactive [_ f ^js signal]
+                     (reset! on-inactive f)
+                     (.addEventListener signal "abort" #(reset! on-inactive nil))))
        :learner  (assoc {}
                         :learner/account        {:account/exists? true}
                         :learner/fresh-memory   #(js/Promise.resolve (:learner/memory @store))

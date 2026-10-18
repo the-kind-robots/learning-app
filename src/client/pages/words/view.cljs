@@ -138,10 +138,7 @@
   [state]
   (let [{:keys [editing in-collection? items known? more? search vocabulary?] placeholder :empty-state}
         (presenter/page-props state)]
-    ;; `data-vk-overlay`, as on home: the keyboard covers the lesson button fixed at the bottom while the
-    ;; search bar, which closes the column, stands on the keyboard's inset.
     [:div.vocabulary
-     {:data-vk-overlay true}
      (when editing (edit-dialog editing in-collection?))
      (cond
        (not known?)

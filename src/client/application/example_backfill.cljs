@@ -6,6 +6,7 @@
    [abort]
    [lambdaisland.glogi :as log]
    [ports.learner :as learner-port]
+   [ports.page :as page]
    [ports.world :as world]
    [use-cases.examples :as examples]))
 
@@ -99,11 +100,11 @@
 
 (defn- ^:async missing-pair
   "The next pair to ask for in `memory`, or nil. It reads 200 entries per task."
-  [{:keys [browser state]} memory]
+  [{:keys [page state]} memory]
   (loop [chunks (partition-all (:chunk-size limits) (learner-port/words memory))]
     (when-let [[chunk & more] (seq chunks)]
       (or (examples/next-pair memory (:failed-subjects @state) chunk)
-          (do (await ((:browser/yield browser)))
+          (do (await (page/yield page))
               (recur more))))))
 
 
@@ -113,7 +114,8 @@
   [{:keys [controller examples-generator world]} subject]
   (let [request    (js/AbortController.)
         timed-out? (volatile! false)
-        cancel     (world/clock world :after
+        cancel     (world/clock world
+                                :after
                                 (:timeout-ms limits)
                                 (fn []
                                   (vreset! timed-out? true)
@@ -144,17 +146,16 @@
   "Asks for one missing example and saves it. Resolves with what the loop waits for next: `[:wait/pause ms]`,
    `[:wait/active]`, `[:wait/memory-change memory]` (nothing is missing; `memory` holds its words and
    collections), or nil when the session was refused and the backfill halts."
-  [{:keys [browser learner state] :as backfill}]
-  (let [{read-memory :learner/memory} learner
-        {:browser/keys [active?]}     browser]
-    (if-not (active?)
+  [{:keys [learner page state] :as backfill}]
+  (let [{read-memory :learner/memory} learner]
+    (if-not (page/active? page)
       [:wait/active]
       (let [memory (read-memory)]
         (if-let [pair (await (missing-pair backfill memory))]
           (let [subject  (examples/subject pair)
                 response (await (ask backfill subject))
                 before   (:outages @state)
-                after    (swap! state #(after-response % subject response (active?)))]
+                after    (swap! state #(after-response % subject response (page/active? page)))]
             (when (and (:failure response) (not= :failure/aborted (:failure response)))
               (log/warn :examples/fetch-failed
                         (assoc (select-keys response [:failure :message :status]) :word (:word subject))))
@@ -204,12 +205,11 @@
 ;; See docs/dev/cljs-async-pitfalls.md.
 (defn- waiting
   "The promise for the `wait` a step asked for, with its `arg`."
-  [{:keys [browser signal world] :as backfill} wait arg]
-  (let [{:browser/keys [until-active]} browser]
-    (case wait
-      :wait/pause         (world/clock world :sleep arg signal)
-      :wait/active        (until-active signal)
-      :wait/memory-change (memory-changed backfill arg signal))))
+  [{:keys [page signal world] :as backfill} wait arg]
+  (case wait
+    :wait/pause         (world/clock world :sleep arg signal)
+    :wait/active        (page/until-active page signal)
+    :wait/memory-change (memory-changed backfill arg signal)))
 
 
 (defn- ^:async fetch-loop
@@ -233,18 +233,17 @@
 (defn start!
   "Starts fetching and returns the function that stops it. A device without an
    account fetches nothing."
-  [{:keys [browser learner] :as capabilities}]
+  [{:keys [page learner] :as capabilities}]
   (if-not (get-in learner [:learner/account :account/exists?])
     (do (log/info :examples/no-account {})
         (fn stop []))
-    (let [{:browser/keys [on-inactive]} browser
-          controller (atom nil)
+    (let [controller (atom nil)
           closing    (js/AbortController.)
-          backfill    (assoc (select-keys capabilities [:browser :examples-generator :learner :world])
+          backfill    (assoc (select-keys capabilities [:page :examples-generator :learner :world])
                             :controller controller
                             :signal     (.-signal closing)
                             :state      (atom initial-state))]
-      (on-inactive #(some-> @controller .abort) (.-signal closing))
+      (page/on-inactive page #(some-> @controller .abort) (.-signal closing))
       (-> (fetch-loop backfill)
           (.catch (fn [err]
                     (log/error :examples/backfill-failed {:error (ex-message err)}))))

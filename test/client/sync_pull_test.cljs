@@ -27,11 +27,11 @@
    it is played. The page is the test's own: online."
   [sync-once! f]
   (let [feed (atom nil)
-        browser {:browser/active?              (constantly false)
-                 :browser/on-offline           (constantly nil)
-                 :browser/on-online            (constantly nil)
-                 :browser/on-visibility-change (constantly nil)
-                 :browser/online?              (constantly true)}]
+        browser {:active?              (constantly false)
+                 :on-offline           (constantly nil)
+                 :on-online            (constantly nil)
+                 :on-visibility-change (constantly nil)
+                 :online?              (constantly true)}]
     (with-redefs [gfn/throttle           (fn [g _] g)
                   identity/load-identity! (fn [] (js/Promise.resolve {:id "account" :token "t"}))
                   identity/use-identity! (fn [_] nil)
