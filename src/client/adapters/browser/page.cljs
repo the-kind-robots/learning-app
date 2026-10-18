@@ -1,7 +1,8 @@
-(ns adapters.page
+(ns adapters.browser.page
   "The page as the browser reports it: shown or hidden, online or offline."
   (:require
-   [abort]))
+   [abort]
+   [browser]))
 
 
 (defn visible?
@@ -84,8 +85,24 @@
                        (when (active?)
                          (release)
                          (resolve nil)))]
-         ;; The listeners are recorded before the abort listener: an already
-         ;; aborted signal calls `release` back at once.
+         ;; The listeners are recorded before the abort listener: an already aborted signal calls `release` back at once.
          (vreset! stops [(on-visibility-change check)
                          (on-online check)])
          (vswap! stops conj (abort/on-abort signal release)))))))
+
+
+(defn yield
+  "A promise that resolves once the page has had a turn to paint."
+  []
+  (browser/yield))
+
+
+
+(defn sync-virtual-keyboard!
+  "Tells the virtual keyboard, where the browser has one, to overlay the
+   content when the page has an element that wants that (`data-vk-overlay`)."
+  []
+  (when (js-in "virtualKeyboard" js/navigator)
+    (when-let [vk (.-virtualKeyboard js/navigator)]
+      (set! (.-overlaysContent vk)
+            (boolean (js/document.querySelector "[data-vk-overlay]"))))))

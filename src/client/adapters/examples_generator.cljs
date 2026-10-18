@@ -1,4 +1,4 @@
-(ns adapters.example-fetch
+(ns adapters.examples-generator
   "The browser's side of fetching examples: the request to the backend,
    whether the device is online, and whether the tab is visible. What to
    ask for, and what a failure does, is decided in `use-cases.examples`."
@@ -7,11 +7,8 @@
 
 
 (defn- url
-  "The address that asks the backend for an example of `subject`: the
-   entry's text `word`, glossed by `translations`, in the collection called
-   `collection-name`, with the part of speech `pos` when the learner picked
-   one. Throws a URIError when a part cannot be encoded, as
-   half of a character written as two UTF-16 units cannot."
+  "The address that asks the backend for an example of `subject`. Throws a URIError when a part cannot be
+   encoded, as half of a character written as two UTF-16 units cannot."
   [{:keys [collection-name pos translations word]}]
   (cond-> (reduce (fn [url translation]
                     (str url "&translation=" (js/encodeURIComponent translation)))
@@ -41,8 +38,7 @@
   (cond
     (#{401 403} status) :failure/unauthorized
     (= 429 status)      :failure/throttled
-    ;; 408 and 425: the server timed out or refused early data. That says
-    ;; nothing about the subject, so they count as a 5xx.
+    ;; 408 and 425: the server timed out or refused early data. That says nothing about the subject, so they count as 5xx.
     (#{408 425} status) :failure/unavailable
     (<= 500 status)     :failure/unavailable
     :else               :failure/rejected))
@@ -60,25 +56,14 @@
 
 
 (defn ^:async fetch-one
-  "Asks the backend for an example of `subject`, `{:word :translations
-   :collection-name :pos}`. `signal` is an AbortSignal that aborts the request.
-
-   It never rejects. It resolves with `{:example example}` for a valid
-   example, and otherwise with `{:failure kind}`, where kind is one of
-   `:failure/invalid-subject` (the subject cannot be put in a URL, so
-   nothing is sent), `:failure/invalid-response`, `:failure/rejected`,
-   `:failure/unauthorized`, `:failure/throttled`, `:failure/unavailable`,
-   `:failure/network` and `:failure/aborted`. A failure carries `:status`
-   and the server's `:message` when the backend answered, and
-   `:retry-after-ms` when the answer named a wait."
+  "Asks the backend for an example of `subject`; `signal` aborts the request. Never rejects: resolves with
+   `{:example example}`, or `{:failure kind}` with `:status`, `:message` and `:retry-after-ms` when the
+   backend answered (`:failure/invalid-subject` sends nothing)."
   [subject signal]
   (if-let [address (try (url subject) (catch js/URIError _ nil))]
     (try
-      ;; The endpoint authenticates by the session cookie, so the request
-      ;; must carry it. Relative and same-origin, the browser would attach
-      ;; it under the default anyway; "include" keeps it attached even if
-      ;; the URL ever gains an origin, where the default would silently
-      ;; stop sending it and every example would come back 401.
+      ;; The endpoint authenticates by the session cookie. "include" keeps it attached if the URL ever gains an
+      ;; origin, where the default would stop sending it and every example would come back 401.
       (let [^js response (await (js/fetch address #js {:credentials "include" :signal signal}))
             status       (.-status response)
             content      (await (body response))]

@@ -1,9 +1,9 @@
-(ns client.adapters.page-test
+(ns client.adapters.browser.page-test
   "`until-active`: a wait a signal can cancel, with no listener left behind."
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.page :as page]
+   [adapters.browser.page :as page]
    [cljs.test :refer-macros [deftest is]]))
 
 
