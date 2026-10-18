@@ -1,17 +1,16 @@
-(ns client.adapters.clock-test
+(ns client.adapters.world-test
   "`:clock/sleep`: a timer a signal can cancel, with nothing left behind."
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
    [cljs.test :refer-macros [deftest is]]
-   [ports.clock :as clock]))
+   [adapters.world :as clock]))
 
 
 (defn- sleep
   "Starts a sleep. Plain, so the promise is not awaited on the way out."
   [ms signal]
-  (let [sleep (:clock/sleep (clock/start! {}))]
-    (sleep ms signal)))
+  (clock/sleep ms signal))
 
 
 (defn- ^:async watching

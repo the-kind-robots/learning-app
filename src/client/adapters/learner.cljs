@@ -1,37 +1,16 @@
 (ns adapters.learner
-  "The learner's data for the use cases: memory to read, every write, and
-   the active collection.
-
-   A write reads the document it changes from PouchDB by id — the winner —
-   makes its change to that, and writes it (`db.pouch/write-latest!`). Then
-   it catches memory up with user-db's change log (`catch-up!`), so the
-   screen that asked for it can show it at once. Memory takes the write the
-   way it takes every other change: in the order the database stored it,
-   through the change feed's catch-up (ADR-0019). A decision that
-   needs every collection — whether a name is taken, which collections
-   list a word — reads memory once it has caught up with user-db. A
-   write queries no index.
-
-   Deleting a word removes the word and its place in every collection. Its
-   reviews and its examples stay, and come back with the word when it is
-   added again. Deleting a collection removes the collection only.
-
-   Examples an earlier build kept in device-db move to user-db, and the
-   task queue it kept there is swept away by a migration
-   (`db-migrations`). Fetched examples are saved by `save-example!`.
-
-   `learner` is `{:clock :dbs :store}`: the clock, the databases, and the
-   app store that keeps memory under `:learner/memory`."
+  "The learner's data: memory to read, every write, the active collection, and what they rest on (`start!`).
+   The learner owns its memory in `store`; a write goes to PouchDB, then memory catches up (ADR-0019).
+   `learner` is `{:databases :store :world}`."
   (:require
    [abort]
-   [adapters.active-collection :as active-collection]
+   [adapters.learner.active-id :as active-id]
+   [adapters.learner.databases :as databases]
    [adapters.learner.documents :as documents]
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
-   [browser :as browser]
-   [db.pouch :as dbs]
-   [domain.collections :as domain-collections]
-   [domain.vocabulary :as vocabulary]
+   [adapters.learner.sync :as sync]
+   [db.pouch :as pouch]
    [lambdaisland.glogi :as log]))
 
 
@@ -42,26 +21,31 @@
 
 
 (defn active-collection
-  "The collection that is active on this device, as memory has it, or nil
-   when «Всё подряд» is active. The device stores the id of its choice in
-   localStorage. When memory has no collection under that id, because the
-   collection was deleted here or on another device, «Всё подряд» is active."
+  "The collection active on this device, or nil for «Всё подряд». The id is kept in localStorage; when
+   memory has no collection under it (deleted here or elsewhere), «Всё подряд» is active."
   [learner]
-  (memory/collection (current-memory learner) (active-collection/active-collection-id)))
+  (memory/collection (current-memory learner) (active-id/active-collection-id)))
 
 
 (defn set-active-collection!
   "Stores `collection-id` as this device's active collection; nil makes
    «Всё подряд» active."
   [_learner collection-id]
-  (active-collection/set-active-collection! collection-id))
+  (active-id/set-active-collection! collection-id))
+
+
+(defn new-learner
+  "The learner over the world (time), the `databases` and the `store`, the
+   atom that keeps memory."
+  [{:keys [databases store world]}]
+  {:databases databases
+   :store     store
+   :world     world})
 
 
 (defn- until-store
-  "A promise that resolves once `(pred state)` holds for the store's state,
-   at once if it holds now. When `signal`, an AbortSignal, aborts first, the
-   promise stays pending and the watch on the store is gone. A nil `signal`
-   never aborts."
+  "A promise that resolves once `(pred state)` holds for the store's state, at once if it holds now. When
+   `signal` aborts first it stays pending and the watch is gone."
   [store pred signal]
   (js/Promise.
    (fn [resolve]
@@ -69,8 +53,7 @@
        (resolve nil)
        (let [watch-key (gensym "until-store-")
              unlisten  (volatile! (fn []))]
-         ;; The watch goes in before the abort listener: an already aborted
-         ;; signal calls `on-abort` back at once, and must find the watch.
+         ;; The watch goes in before the abort listener: an already aborted signal calls back at once and must find it.
          (add-watch store
                     watch-key
                     (fn [_ _ _ state]
@@ -81,364 +64,243 @@
          (vreset! unlisten (abort/on-abort signal #(remove-watch store watch-key))))))))
 
 
-(defn loaded
-  "Resolves once memory has everything user-db held at start."
-  [{:keys [store]}]
-  (until-store store :learner/loaded? nil))
-
-
-(defn ^:async catch-up!
-  "Resolves once memory has whatever user-db stored that its change feed
-   has not brought yet (`adapters.learner.loader/catch-up!`). Every
-   document a write of the learner's data makes, and every document a
-   decision here reads, lives in user-db. After a write, this is how memory
-   takes it."
-  [{:keys [store]}]
-  (await (loader/catch-up! store)))
+(defn ^:async fresh-memory
+  "Resolves with memory once it has whatever user-db stored that its change feed has not brought yet
+   (`adapters.learner.loader/catch-up!`). After a write, this is how memory takes it."
+  [{:keys [store] :as learner}]
+  (await (loader/catch-up! store))
+  (current-memory learner))
 
 
 (defn- ^:async persist!
   "Writes the new document `doc` of `schema`'s type to PouchDB, and catches
    memory up with it. Resolves with the entity written."
   [learner schema doc]
-  (let [written (await (dbs/insert (:dbs learner) schema doc))]
-    (await (catch-up! learner))
+  (let [written (await (pouch/insert (:databases learner) schema doc))]
+    (await (fresh-memory learner))
     (documents/entity written)))
 
 
-(def ^:private word-kind
-  "A word: its schema, and how its stored document becomes the entity."
-  {:from-doc documents/doc->word
-   :schema   documents/vocab-schema})
-
-
-(def ^:private collection-kind
-  "A collection: its schema, and how its stored document becomes the
-   entity."
-  {:from-doc documents/doc->collection
-   :schema   documents/collection-schema})
-
-
-(defn- ^:async update!
-  "Writes the entity `id`, of `kind`, as `change` makes it out of the
-   version PouchDB holds as the winner (`db.pouch/write-latest!`), and
-   catches memory up with it. The fields the stored document has and the
-   entity does not are kept. `change` takes that entity, or nil when there
-   is none, and returns the entity to write, or nil to write nothing.
-   Resolves with `{:stored :written}`: the entity the change was made to,
-   and the entity written; nil when nothing was written."
-  [learner {:keys [from-doc schema]} id change]
-  (when-let [{:keys [stored written]}
-             (await (dbs/write-latest! (:dbs learner)
-                                       schema
-                                       id
-                                       (fn [stored]
-                                         (when-let [changed (some-> (change (some-> stored from-doc)) documents/doc)]
-                                           (merge (apply dissoc stored (keys (documents/doc (some-> stored from-doc))))
-                                                  changed)))))]
-    (await (catch-up! learner))
-    {:stored  (some-> stored from-doc)
-     :written (documents/entity written)}))
-
-
-(defn- now-iso
-  [{:keys [clock]}]
-  ((:clock/now-iso clock)))
+(def ^:private kinds
+  "The entities a change reaches: each one's schema, and how its stored
+   document becomes the entity."
+  {:entity/collection {:from-doc documents/doc->collection
+                       :schema   documents/collection-schema}
+   :entity/word       {:from-doc documents/doc->word
+                       :schema   documents/vocab-schema}})
 
 
 (defn- stamped
   "`word` stamped modified now; a word with no creation time is also
    stamped created now."
   [learner word]
-  (let [now (now-iso learner)]
+  (let [now ((:clock/now-iso (:world/clock (:world learner))))]
     (cond-> (assoc word :modified-at now)
       (nil? (:created-at word)) (assoc :created-at now))))
 
 
-(defn ^:async add-word!
-  "Adds the word or phrase `entry` to the vocabulary. When a word is stored
-   under its id already, the entry's translations are merged into the
-   stored ones, and the stored word keeps its kind and its creation time.
-   Resolves with `{:word :created?}`: the word as written, and whether it
-   is new."
-  [learner entry]
-  (let [{:keys [stored written]}
-        (await (update! learner
-                        word-kind
-                        (:id entry)
-                        (fn [stored]
-                          (stamped learner
-                                   (if stored
-                                     (update stored :translation vocabulary/merge-translations (:translation entry))
-                                     entry)))))]
-    {:created? (nil? stored) :word written}))
-
-
-(defn ^:async update-word!
-  "Changes the word `word-id` with `change`, a function from the stored word
-   to the changed one, and stamps it modified now. Resolves with the word
-   as written, or nil when there is no such word."
-  [learner word-id change]
-  (:written (await (update! learner
-                            word-kind
-                            word-id
-                            (fn [stored]
-                              (when stored
-                                (stamped learner (change stored))))))))
-
-
-(defn add-review!
-  "Writes a new review of `word-id`: whether the word was `retained`, and the
-   `translation` it was asked with."
-  [learner word-id retained translation]
-  (persist! learner
-            documents/review-schema
-            (assoc (vocabulary/new-review word-id retained translation)
-                   :created-at
-                   (now-iso learner))))
-
-
-(defn create-collection!
-  "Writes a new, empty collection called `name`. Resolves with the
-   collection as written."
-  [learner name]
-  (persist! learner
-            documents/collection-schema
-            {:created-at (now-iso learner)
-             :name       name
-             :renamed-at (now-iso learner)
-             :word-ids   []}))
-
-
-(defn- ^:async update-collection!
-  "Writes the collection `collection-id` as `change` turns it. It writes
-   nothing when there is no such collection, or when `change` leaves it as
-   it was. Resolves with the collection as written, or nil."
-  [learner collection-id change]
-  (:written (await (update! learner
-                            collection-kind
-                            collection-id
-                            (fn [collection]
-                              (when collection
-                                (let [changed (change collection)]
-                                  (when (not= changed collection)
-                                    changed))))))))
-
-
-(defn rename-collection!
-  "Gives the collection `collection-id` the name `new-name`. Resolves with
-   the collection as written, or nil when nothing was written."
-  [learner collection-id new-name]
-  (update-collection! learner
-                      collection-id
-                      (fn [collection]
-                        (cond-> collection
-                          (not= new-name (:name collection)) (assoc :name new-name :renamed-at (now-iso learner))))))
-
-
-(defn add-to-collection!
-  "Adds the word `word-id` to the collection `collection-id`, unless the
-   collection lists it already."
-  [learner word-id collection-id]
-  (update-collection! learner
-                      collection-id
-                      (fn [{:keys [word-ids] :as collection}]
-                        (cond-> collection
-                          (not (some #{word-id} word-ids)) (update :word-ids conj word-id)))))
-
-
-(defn ^:async remove-from-collection!
-  "Takes the word `word-id` out of the collection `collection-id` and out of
-   every child of it, the scope its word list shows. The word itself stays."
-  [learner word-id collection-id]
-  (let [scope (domain-collections/family (memory/collections (current-memory learner))
-                                         collection-id)]
-    (doseq [id (or (seq (map :id scope)) [collection-id])]
-      (await (update-collection! learner
-                                 id
-                                 (fn [collection]
-                                   (update collection :word-ids (partial filterv #(not= word-id %)))))))))
-
-
-(defn- ^:async word-deletion
-  "The documents that delete the word `word-id` in one bulk write, as
-   PouchDB holds them now: a deletion of every live version of the word (a
-   replication may leave it more than one, and the one left alive would
-   bring the word back), and every collection that lists the word, without
-   it. Which collections list it is asked of memory once it has caught up."
-  [{:keys [dbs] :as learner} word-id]
-  (await (catch-up! learner))
-  (let [listing  (into []
-                       (comp (filter #(some #{word-id} (:word-ids %))) (map :id))
-                       (memory/collections (current-memory learner)))
-        stored   (await (dbs/read-ids dbs :user/db listing))
-        versions (await (dbs/doc-versions dbs documents/vocab-schema word-id))]
-    (-> (into []
-              (keep (fn [{:keys [_deleted word-ids] :as doc}]
-                      (when (and (not _deleted) (some #{word-id} word-ids))
-                        (assoc doc :word-ids (filterv #(not= word-id %) word-ids)))))
-              stored)
-        (into (comp (remove :_deleted) (map documents/tombstone)) versions))))
-
-
-(defn- ^:async attempt-word-deletion!
-  "Writes the deletion of the word `word-id` once, and catches memory up
-   with what it wrote. Resolves with `{:docs :written}`: the documents it
-   meant to write and those PouchDB accepted."
-  [{:keys [dbs] :as learner} word-id]
-  (let [docs    (await (word-deletion learner word-id))
-        written (await (dbs/bulk-docs dbs documents/vocab-schema docs))]
-    (await (catch-up! learner))
-    {:docs docs :written written}))
-
-
-(defn ^:async delete-word!
-  "Deletes the word `word-id` and takes it out of every collection that
-   lists it, in one write. Its reviews and its examples stay: when the word
-   is added again, they come back with it.
-
-   PouchDB writes the documents of one bulk write one by one, and refuses
-   one whose revision another write has just replaced. So when any is
-   refused, this reads them again and writes once more. Refused again, the
-   delete has failed: the collections it took the word out of get it back
-   while the word lives, the failure is logged, and this resolves false.
-   Otherwise it resolves true when PouchDB had the word, and nil when it
-   had none."
-  [learner word-id]
-  (let [complete? (fn [{:keys [docs written]}] (= (count docs) (count written)))
-        deleted?  (fn [{:keys [written]}] (boolean (some #(and (= word-id (:_id %)) (:_deleted %)) written)))
-        emptied   (fn [{:keys [written]}] (into [] (comp (remove :_deleted) (map :_id)) written))
-        first-try (await (attempt-word-deletion! learner word-id))
-        result    (if (complete? first-try) first-try (await (attempt-word-deletion! learner word-id)))]
+(defn- next-document
+  "What `change` makes of the `stored` document of `entity`: nil to write nothing, `:entity/deleted`, or the
+   document to write. Fields the stored document has and the entity lacks are kept."
+  [learner entity stored change]
+  (let [{:keys [from-doc]} (kinds entity)
+        before (some-> stored from-doc)
+        after  (change before)]
     (cond
-      (complete? result)
-      (when (some :_deleted (:docs first-try)) true)
+      (or (nil? after) (identical? after before)) nil
+      (= :entity/deleted after) :entity/deleted
+      :else (merge (apply dissoc stored (keys (documents/doc before)))
+                   (documents/doc (cond->> after
+                                    (= :entity/word entity) (stamped learner)))))))
 
-      (or (deleted? first-try) (deleted? result))
-      (do (log/error :learner/word-delete-incomplete {:word-id word-id})
-          false)
+
+(defn- ^:async live-versions
+  "Every live version of the document `id` of `schema`'s type: a
+   replication may leave it more than one, and the one left alive would
+   bring the entity back."
+  [databases schema id]
+  (into [] (remove :_deleted) (await (pouch/doc-versions databases schema id))))
+
+
+(defn- ^:async writes-of
+  "What the operation `[entity id change]` writes, as PouchDB holds the
+   document now: a vector of `{:doc :previous}`, the document to write and
+   the one it replaces."
+  [{:keys [databases] :as learner} [entity id change]]
+  (let [{:keys [schema]} (kinds entity)
+        stored (await (pouch/get databases schema id))
+        doc    (next-document learner entity stored change)]
+    (cond
+      (nil? doc)
+      []
+
+      (= :entity/deleted doc)
+      (mapv (fn [version] {:doc (documents/tombstone version) :previous version})
+            (await (live-versions databases schema id)))
 
       :else
-      (do (doseq [collection-id (into (emptied first-try) (emptied result))]
-            (await (add-to-collection! learner word-id collection-id)))
-          (log/error :learner/word-delete-failed {:word-id word-id})
+      [{:doc      (cond-> (-> doc (dissoc :_rev) (assoc :_id id :type (:type schema)))
+                    stored (assoc :_rev (:_rev stored)))
+        :previous stored}])))
+
+
+(defn- ^:async attempt-writes!
+  "Writes the operations `ops` once, in one bulk write, and catches memory up
+   with what was written. Resolves with `{:writes :written}`: the writes it
+   meant to make and the documents PouchDB accepted."
+  [{:keys [databases] :as learner} ops]
+  (let [writes  (loop [ops ops
+                       out []]
+                  (if-let [[op & more] (seq ops)]
+                    (recur more (into out (await (writes-of learner op))))
+                    out))
+        written (await (pouch/bulk-docs databases documents/vocab-schema (mapv :doc writes)))]
+    (await (fresh-memory learner))
+    {:writes writes :written written}))
+
+
+(defn- complete?
+  [{:keys [writes written]}]
+  (= (count writes) (count written)))
+
+
+(defn- restorations
+  "The documents that put what `attempt` wrote back to the version it
+   replaced. PouchDB accepts documents in the order it was given them, so
+   each accepted one is the next write with its id."
+  [{:keys [writes written]}]
+  (loop [writes   writes
+         accepted written
+         out      []]
+    (if-let [[{:keys [doc previous]} & more] (seq writes)]
+      (let [[head & rest-accepted] accepted]
+        (if (and head (= (:_id head) (:_id doc)) (= (boolean (:_deleted head)) (boolean (:_deleted doc))))
+          (recur more
+                 rest-accepted
+                 (conj out
+                       (if previous
+                         (assoc previous :_rev (:_rev head))
+                         (documents/tombstone head))))
+          (recur more accepted out)))
+      out)))
+
+
+(defn ^:async change!
+  "Applies `ops`, `[entity id change]` each, in one bulk write, and catches memory up; `change` returns the
+   new entity, nil to write nothing, or `:entity/deleted`. A refused write is read and retried once, then
+   taken back: false; otherwise true, or nil when nothing was written."
+  [{:keys [databases] :as learner} ops]
+  (let [first-try (await (attempt-writes! learner ops))
+        result    (if (complete? first-try) first-try (await (attempt-writes! learner ops)))]
+    (if (complete? result)
+      (when (seq (:writes first-try)) true)
+      (do (when-let [docs (seq (into (restorations first-try) (restorations result)))]
+            (await (pouch/bulk-docs databases documents/vocab-schema (vec docs)))
+            (await (fresh-memory learner)))
+          (log/error :learner/change-failed {:ids (mapv (comp :_id :doc) (:writes result))})
           false))))
 
 
-(defn ^:async delete-collection!
-  "Deletes the collection `collection-id`, every live version of it. Its words
-   stay, and so do the examples made for it: a collection made again has a new
-   id, so they are not shown in it. «Всё подряд» shows them like any other
-   example."
-  [learner collection-id]
-  (let [dbs        (:dbs learner)
-        schema     documents/collection-schema
-        versions   (await (dbs/doc-versions dbs schema collection-id))
-        tombstones (->> versions (remove :_deleted) (mapv documents/tombstone))]
-    (when (seq (await (dbs/bulk-docs dbs schema tombstones)))
-      (await (catch-up! learner)))))
+(defn ^:async insert!
+  "Writes a new `entity` of `value`, and catches memory up. A review or a collection resolves with the entity
+   written. An example, `{:word-id :word :collection-id :example}`, is written under the id its content gives
+   it (`documents/example-doc`), one already held is kept, and it resolves whether user-db holds it afterwards."
+  [{:keys [databases] :as learner} entity value]
+  (case entity
+    :entity/collection (await (persist! learner documents/collection-schema value))
+    :entity/review     (await (persist! learner documents/review-schema value))
+    :entity/example    (let [{:keys [collection-id example word word-id]} value
+                             doc  (documents/example-doc word-id word collection-id example)
+                             held (await (pouch/insert-all-if-absent databases documents/example-schema [doc]))]
+                         (await (fresh-memory learner))
+                         (boolean (held (:_id doc))))))
 
 
-(def ^:private device-example-schema
-  "Where an earlier build kept examples: the example type, in device-db.
-   Only the move reads it."
-  (assoc documents/example-schema :db :device/db))
+(defn on-change
+  "Calls `f`, with no arguments, whenever the learner's data in `store`
+   changes: memory, or its status. Returns a function that stops it."
+  [{:keys [store]} f]
+  (let [watch-key (gensym "on-change-")]
+    (add-watch store
+               watch-key
+               (fn [_ _ old state]
+                 (when-not (identical? old state)
+                   (f))))
+    (fn unsubscribe
+      []
+      (remove-watch store watch-key))))
 
 
-(def ^:private move-page-size
-  "How many device-db documents the move reads, and how many examples it
-   writes and deletes, in one task."
-  100)
+(defn status
+  "`:status/unreadable` when memory could not be read from the databases,
+   `:status/loaded` once it is loaded, otherwise `:status/loading`."
+  [{:keys [store]}]
+  (let [{:learner/keys [loaded? unreadable?]} @store]
+    (cond
+      unreadable? :status/unreadable
+      loaded?     :status/loaded
+      :else       :status/loading)))
 
 
-(defn- ^:async move-page!
-  "Moves one page of device-db examples, `docs`. It writes each of them to
-   user-db under the id its content gives it, in one bulk write; an example
-   user-db holds already is not written again. Then it deletes, in one
-   bulk write, every example of the page that user-db now holds. Resolves
-   with how many it deleted."
-  [dbs docs]
-  (let [moved (into {}
-                    (map (juxt :_id #(documents/example-doc (:word-id %) (:word %) (:collection-id %) %)))
-                    docs)
-        held  (await (dbs/insert-all-if-absent dbs documents/example-schema (vals moved)))]
-    (count (await (dbs/bulk-docs
-                   dbs
-                   device-example-schema
-                   (into [] (comp (filter #(held (:_id (moved (:_id %))))) (map documents/tombstone)) docs))))))
+(def ^:private initialized-wait-ms
+  "How long a first sync pass is waited for once memory is loaded."
+  60000)
 
 
-(defn ^:async tidy-device-db!
-  "Moves device-db's examples to user-db: what an earlier build kept in
-   device-db for the account. They move to user-db, where they replicate:
-   every one of them, including the examples of a word or a collection
-   deleted since, which come back with it or show outside every collection.
-   Every distinct example of a pair is kept; identical examples become one
-   document.
-
-   It reads device-db a page at a time, with a task between pages, and
-   moves the examples of each page as it reads it (`move-page!`). When it
-   moved anything, it then catches memory up, so that memory holds what was
-   moved.
-
-   It is safe to run again and to interrupt. A run after an interrupted one
-   writes nothing that user-db holds and deletes the copies left behind. A
-   device-db example that could not be written stays for the next run.
-   Resolves with how many device-db examples it deleted."
-  [{:keys [dbs] :as learner}]
-  (let [deleted (loop [after   nil
-                       deleted 0]
-                  (let [{:keys [docs next]} (await (dbs/read-page dbs
-                                                                  (:db device-example-schema)
-                                                                  {:after after
-                                                                   :limit move-page-size
-                                                                   :types #{(:type device-example-schema)}}))
-                        deleted (+ deleted (if (seq docs) (await (move-page! dbs docs)) 0))]
-                    (if next
-                      (do (await (browser/yield))
-                          (recur next deleted))
-                      deleted)))]
-    (when (pos? deleted)
-      (await (catch-up! learner))
-      (log/info :learner/examples-moved {:deleted deleted}))
-    deleted))
+;; Plain, not async: an async function would await the promise `sleep` returns (docs/dev/cljs-async-pitfalls.md).
+(defn initialize
+  "Resolves nil once memory is loaded and the first sync pass has completed (`first-pass`), or once
+   `initialized-wait-ms` have passed without it; `waited` cancels the timer however the wait ends."
+  [{:keys [store world]} first-pass ^js waited]
+  (let [{:clock/keys [sleep]} (:world/clock world)]
+    (-> (until-store store :learner/loaded? nil)
+        (.then (fn []
+                 (js/Promise.race #js [first-pass
+                                       (.then (sleep initialized-wait-ms (.-signal waited))
+                                              (constantly ::timed-out))])))
+        (.then (fn [won]
+                 (when (= ::timed-out won)
+                   (log/info :learner/gave-up-waiting-for-sync {:waited-ms initialized-wait-ms}))
+                 (.abort waited)
+                 nil)))))
 
 
-(defn ^:async examples-moved!
-  "Waits for memory to load, and then empties device-db of the examples an
-   earlier build kept there: it moves them to user-db (`tidy-device-db!`).
-   A failed run is logged
-   and run again after a wait, until one succeeds (`db.pouch/retried`).
-   Resolves nil once one has."
-  [learner]
-  (await (loaded learner))
-  (await (dbs/retried #(tidy-device-db! learner)
-                      (fn [err wait]
-                        (log/warn :learner/examples-move-failed {:error (str err) :retry-ms wait}))))
-  nil)
+(defn capabilities
+  "What the learner offers the app: memory and its status with `on-change`, writes, the active collection,
+   `:learner/initialized` (a promise: memory loaded and the first sync pass done, or a minute passed) and
+   `:learner/account` (`:account/exists?`, `sync!`, `join-link`, `on-device-joined`)."
+  [{:keys [initialized learner sync]}]
+  {:learner/account                {:account/exists?          (:account/exists? sync)
+                                    :account/join-link        (:account/join-link sync)
+                                    :account/on-device-joined (:account/on-device-joined sync)
+                                    :account/sync!            (:account/sync! sync)}
+   :learner/active-collection      (partial active-collection learner)
+   :learner/change!                (partial change! learner)
+   :learner/fresh-memory           (partial fresh-memory learner)
+   :learner/initialized            initialized
+   :learner/insert!                (partial insert! learner)
+   :learner/memory                 (partial current-memory learner)
+   :learner/on-change              (partial on-change learner)
+   :learner/set-active-collection! (partial set-active-collection! learner)
+   :learner/status                 (partial status learner)})
 
 
-(defn ^:async save-example!
-  "Writes `example`, `{:word-id :word :collection-id :example}`, to user-db
-   under the id its content gives it (`documents/example-doc`), and then
-   catches memory up. An example user-db holds already is kept as it is.
-   Resolves true when user-db holds the example afterwards, and false when
-   its write failed."
-  [{:keys [dbs] :as learner} {:keys [collection-id example word word-id]}]
-  (let [doc  (documents/example-doc word-id word collection-id example)
-        held (await (dbs/insert-all-if-absent dbs documents/example-schema [doc]))]
-    (await (catch-up! learner))
-    (boolean (held (:_id doc)))))
-
-
-(defn changed-since
-  "Resolves when memory's words or collections differ from `seen`, the ones
-   a look read. New reviews and examples don't count. Aborting `signal`
-   only drops the watch."
-  [{:keys [store]} seen signal]
-  (let [{:keys [words collections]} seen]
-    (until-store store
-                 (fn [{:learner/keys [memory]}]
-                   (not (and (identical? words (:words memory))
-                             (identical? collections (:collections memory)))))
-                 signal)))
+(defn ^:async start!
+  "Starts the learner's data. The incoming credential is handled before the databases open; memory is read
+   and followed without awaiting, and sync passes wait for the snapshot check (ADR-0018). Resolves with the
+   capabilities."
+  [{:keys [browser world]}]
+  (let [store (atom {:learner/memory memory/empty-memory})
+        _ (databases/persist!)
+        _ (await (sync/check-incoming-auth! nil))
+        databases (await (databases/open-pouch!))
+        checked (loader/start-reading! databases store)
+        _ (loader/start! databases store)
+        replication (await (sync/start! {:browser         browser
+                                         :databases       databases
+                                         :passes-wait-for checked}))
+        learner (new-learner {:databases databases :store store :world world})
+        initialized (initialize learner (:first-pass replication) (js/AbortController.))]
+    (capabilities {:initialized initialized
+                   :learner     learner
+                   :sync        replication})))

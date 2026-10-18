@@ -3,11 +3,11 @@
    [client.support.test :refer [async-testing]])
   (:require
    [cljs.test :refer-macros [are deftest is testing]]
+   [clojure.string :as str]
    [clojure.test.check :as tc]
    [clojure.test.check.generators :as gen]
    [clojure.test.check.properties :as prop :include-macros true]
    [domain.collections :as collections]
-   [ports.learner :as learner]
    [use-cases.collections :as sut]))
 
 
@@ -45,14 +45,21 @@
   ([active-id]
    (port active-id (atom [])))
   ([active-id renames]
-   {:learner (assoc learner/reads
-                    :learner/active-collection (fn [] (some #(when (= active-id (:id %)) %) items))
-                    :learner/memory (fn [] {:collections (into {} (map (juxt :id identity)) items)})
-                    :learner/catch-up! (fn [] (js/Promise.resolve nil))
-                    :learner/create-collection! (fn [name] (js/Promise.resolve {:id (str "c:" name)}))
-                    :learner/rename-collection! (fn [id name]
-                                                  (swap! renames conj [id name])
-                                                  (js/Promise.resolve {:id id :name name})))}))
+   (let [by-id  (into {} (map (juxt :id identity)) items)
+         memory (atom {:collections by-id})]
+     {:world   {:world/clock {:clock/now-iso (constantly "2026-01-01T00:00:00.000Z")}}
+      :learner {:learner/active-collection (fn [] (by-id active-id))
+                :learner/memory (fn [] @memory)
+                :learner/fresh-memory (fn [] (js/Promise.resolve @memory))
+                :learner/insert! (fn [_ {:keys [name]}] (js/Promise.resolve {:id (str "c:" name)}))
+                :learner/change! (fn [[[_ id change]]]
+                                   (let [collection (get-in @memory [:collections id])
+                                         changed    (change collection)]
+                                     (if (or (nil? changed) (identical? changed collection))
+                                       (js/Promise.resolve nil)
+                                       (do (swap! renames conj [id (:name changed)])
+                                           (swap! memory assoc-in [:collections id] changed)
+                                           (js/Promise.resolve true)))))}})))
 
 
 (deftest rename-refuses-a-name-another-collection-carries
@@ -88,16 +95,27 @@
       (is (= {:error :invalid-name} (await (sut/create! (port nil) "   ")))))))
 
 
+(defn- reconciled
+  "The collections' reconciliation, ordering ties by the revision a stored
+   version carries, as the sync adapter does."
+  [a b]
+  (collections/merged-collection (fn [version]
+                                       (let [[generation hash] (str/split (:_rev version) #"-" 2)]
+                                         [(js/parseInt generation 10) hash]))
+                                     a
+                                     b))
+
+
 (deftest two-versions-of-a-collection-reconcile-into-the-one-renamed-last-with-every-word
   (let [phone  {:_id "c" :_rev "2-a" :name "Kurs" :word-ids ["a" "b"] :created-at "2026-01-01" :renamed-at "2026-03-01"}
         laptop {:_id "c" :_rev "2-b" :name "Kurs 2" :word-ids ["b" "c"] :created-at "2026-01-01" :renamed-at "2026-05-01"}]
     (is (= {:_id "c" :_rev "2-b" :name "Kurs 2" :word-ids ["a" "b" "c"] :created-at "2026-01-01" :renamed-at "2026-05-01"}
-           (collections/reconcile phone laptop))
+           (reconciled phone laptop))
         "the name and the revision are the last renamed version's; the words of both are listed once, sorted")))
 
 
 (deftest a-version-never-renamed-counts-from-its-creation
-  (are [expected-name a b] (= expected-name (:name (collections/reconcile a b)))
+  (are [expected-name a b] (= expected-name (:name (reconciled a b)))
     "Neu"  {:_rev "1-a" :name "Alt" :created-at "2026-01-01"}
     {:_rev "1-b" :name "Neu" :created-at "2026-02-01"}
     "Neu"  {:_rev "2-a" :name "Alt" :created-at "2026-01-01" :renamed-at "2026-01-02"}
@@ -121,20 +139,20 @@
 (def ^:private reconcile-order-changes-nothing
   (prop/for-all [a gen-version
                  b gen-version]
-    (= (collections/reconcile a b) (collections/reconcile b a))))
+    (= (reconciled a b) (reconciled b a))))
 
 
 (def ^:private reconcile-grouping-changes-nothing
   (prop/for-all [a gen-version
                  b gen-version
                  c gen-version]
-    (= (collections/reconcile (collections/reconcile a b) c)
-       (collections/reconcile a (collections/reconcile b c)))))
+    (= (reconciled (reconciled a b) c)
+       (reconciled a (reconciled b c)))))
 
 
 (def ^:private reconciling-a-version-with-itself-changes-nothing
   (prop/for-all [a gen-version]
-    (= a (collections/reconcile a a))))
+    (= a (reconciled a a))))
 
 
 (deftest reconciling-versions-does-not-depend-on-their-order-or-grouping

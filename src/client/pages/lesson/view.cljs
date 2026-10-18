@@ -9,8 +9,8 @@
     (into
      [:p.lesson__answer-body {:lang "de"}]
      (interpose " ")
-     (for [{:keys [expanded? type text word-index]} correct-answer-segments]
-       (if (= :annotated-word type)
+     (for [{:keys [annotated? expanded? text word-index]} correct-answer-segments]
+       (if annotated?
          [:button.lesson__answer-token
           {:type "button"
            :data-word-index word-index
@@ -72,8 +72,7 @@
       [:button.big-button
        {:id   (if finished? "lesson-finish" "lesson-next")
         :type "button"
-        ;; A native button already clicks on Enter; a keydown handler
-        ;; clicking it again advanced the lesson twice (#277).
+        ;; A native button already clicks on Enter; a keydown handler clicking it again advanced the lesson twice.
         :on   {:click (if finished?
                         [[:action/go-to-home]]
                         [[:action/next-trial]])}}
@@ -102,15 +101,18 @@
 
 
 (defn- hint-card
-  [{:keys [action-label data-dismiss status-note translation word word-index]}]
+  [{:keys [data-dismiss translation word word-index word-state]}]
   [:div.token-card
    (cond-> {}
      data-dismiss (assoc :data-dismiss data-dismiss))
    [:p.token-card__word {:lang "de"} word]
    [:p.token-card__translation {:lang "ru"} translation]
-   (when status-note
-     [:p.token-card__state status-note])
-   (when action-label
+   (when (= :word-state/known-with-translation word-state)
+     [:p.token-card__state "✓ В словаре"])
+   (when-let [action-label (case word-state
+                             :word-state/known-missing-translation "+ ДОБАВИТЬ ПЕРЕВОД"
+                             :word-state/unknown-word              "+ В СЛОВАРЬ"
+                             nil)]
      [:button.token-card__button
       {:type "button"
        :on   {:click [[:action/save-lesson-word
@@ -121,10 +123,8 @@
 
 
 (defn answer-hint-popover
-  "Popover shell anchored to the clicked answer word. The Popover API gives
-   light-dismiss and top-layer rendering; pages.lesson.popover opens the shell
-   at the clicked token (from the click's dispatch data) and re-positions it
-   when the card's content changes."
+  "Popover shell anchored to the clicked answer word: the Popover API gives light-dismiss and top-layer
+   rendering; `pages.lesson.popover` opens and re-positions it."
   [props]
   [:div#popover.popover
    {:popover "auto"
@@ -151,10 +151,14 @@
 
 (defn challenge
   [lesson-state]
-  (let [{:keys [prompt instruction]} (presenter/challenge-props lesson-state)]
+  (let [{:keys [kind prompt]} (presenter/challenge-props lesson-state)]
     [:div#lesson-challenge.lesson__challenge
      [:h2.lesson__prompt {:lang "ru"} prompt]
-     [:p.lesson__instruction instruction]]))
+     [:p.lesson__instruction
+      (case kind
+        :trial/example "Переведите предложение на немецкий"
+        :trial/phrase  "Переведите фразу на немецкий"
+        :trial/word    "Переведите слово на немецкий")]]))
 
 
 (defn empty-state
@@ -178,8 +182,7 @@
     (:lesson/empty? state)
     (empty-state)
 
-    ;; Opened before the learner's data is in memory: the lesson is drawn
-    ;; once it is, and until then there is no trial to show.
+    ;; Opened before memory is loaded: the lesson is drawn once it is, and until then there is no trial.
     (nil? (:lesson/state state))
     [:div.lesson
      [:h1.lesson__title.visually-hidden "Урок"]]

@@ -15,8 +15,7 @@
                                   :pos          pos
                                   :translations translations
                                   :focus-id     "new-word-translation"}]]
-                  ;; Keep input focus during the click so :blur on the input
-                  ;; doesn't fire and clear the suggestions before :click runs.
+                  ;; Keep input focus during the click, or :blur clears the suggestions before :click runs.
                   :pointerdown [[:effect/prevent-default]]}}
    [:span {:lang "de"} lemma]
    (when phrase?
@@ -24,7 +23,7 @@
 
 
 (defn- add-form
-  [{:keys [error-text legend placeholder suggestions translation translation-invalid? value-label word]}]
+  [{:keys [error phrase? suggestions translation translation-invalid? word]}]
   (let [{:keys [items]} suggestions]
     [:form.home__add-form
      {:id "home-add-form"
@@ -36,11 +35,13 @@
                       :translation [:event.form.field/value "translation"]
                       :focus-id    "new-word-value"}]]}}
      [:fieldset.home__add-fieldset
-      [:legend.home__add-legend.visually-hidden legend]
+      ;; The mode has no control of its own: the legend and the label say which the form is about to save.
+      [:legend.home__add-legend.visually-hidden (if phrase? "Добавить фразу" "Добавить слово")]
       [:div.home__add-form-row
        [:div.autocomplete
         [:div.home__add-label-row
-         [:label.home__add-form-label.visually-hidden {:for "new-word-value"} value-label]]
+         [:label.home__add-form-label.visually-hidden {:for "new-word-value"}
+          (if phrase? "Фраза (немецкий)" "Слово (немецкий)")]]
         [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-value"
           :name         "value"
@@ -54,7 +55,7 @@
           :maxlength    200
           :lang         "de"
           :value        word
-          :placeholder  placeholder
+          :placeholder  (if phrase? "Новая фраза" "Новое слово")
           :on           {:blur    [[:action/dismiss-suggestions]]
                          :focus   [[:effect/autogrow-target]]
                          :input   [[:action/update-word [:event.target/value]]
@@ -88,15 +89,21 @@
           :on           {:focus   [[:effect/autogrow-target]]
                          :input   [[:action/update-translation [:event.target/value]]
                                    [:effect/autogrow-target]]
-                         ;; A translation may span several lines, so a bare
-                         ;; Enter belongs to the text. Submitting takes a
-                         ;; modifier — or the button, the only path on a phone.
+                         ;; A translation may span several lines, so a bare Enter belongs to the text; submitting takes a
+                         ;; modifier, or the button, the only path on a phone.
                          :keydown [[:action/submit-if-ctrl-enter
                                     {:key   [:event.keyboard/key]
                                      :ctrl? [:event.keyboard/ctrl?]
                                      :meta? [:event.keyboard/meta?]}]]}}]]]
-      (when error-text
-        [:p.home__add-error {:role "alert"} error-text])
+      ;; Every add error is said in words; a border alone looked like nothing happened. A failed save
+      ;; is the app's fault and nothing the user does fixes it, so the text says only that.
+      (when error
+        [:p.home__add-error {:role "alert"}
+         (case error
+           :error/empty-translations "Добавьте перевод."
+           :error/save-failed        (if phrase?
+                                       "Фраза не сохранилась: в приложении сбой, и это не ваша ошибка."
+                                       "Слово не сохранилось: в приложении сбой, и это не ваша ошибка."))])
       [:button.home__add-form-submit.big-button.big-button--request-stable
        {:type "submit"} "ДОБАВИТЬ"]]]))
 
@@ -133,7 +140,7 @@
       [:section#home-add-panel.home__add
        {:replicant/on-mount [[:action/focus-word-input "new-word-value"]]}
        [:header.home__add-header
-        [:h2.home__panel-title (:legend form)]
+        [:h2.home__panel-title (if (:phrase? form) "Добавить фразу" "Добавить слово")]
         [:button#home-words-button.home__words-button
          {:type        "button"
           :class       (when empty-vocab? "home__words-button--hidden")

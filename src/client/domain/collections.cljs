@@ -1,8 +1,6 @@
 (ns domain.collections
-  "What a collection's name says: which names are the same collection, and
-   which folder a name belongs to. A `/` splits a name into the folder —
-   the text before the first `/` — and the rest, both trimmed; deeper `/`
-   stay in the rest (ADR-0013)."
+  "What a collection's name says: which names are one collection, and which folder a name belongs to. The
+   text before the first `/` is the folder, the rest (trimmed) is the name (ADR-0013)."
   (:require
    [clojure.string :as str]))
 
@@ -58,10 +56,8 @@
 
 
 (defn family-word-ids
-  "Takes every collection and
-   the id of one of them; returns the distinct word ids in that one's
-   scope — its own and every child's by name (ADR-0013). nil when no
-   collection carries that id."
+  "The distinct word ids in the scope of the collection `id`, its own and every child's by name (ADR-0013);
+   nil when no collection carries that id."
   [all-collections coll-id]
   (some->> (family all-collections coll-id)
            (mapcat :word-ids)
@@ -69,13 +65,65 @@
            vec))
 
 
-(defn reconcile
-  "The one of two versions of a collection that was renamed last, with the
-   word ids of both sorted. The order of the arguments, and how several
-   reconciliations are grouped, change nothing."
-  [a b]
+(def max-name-length 80)
+
+
+(defn entered-name
+  "`raw-name` trimmed and cut to `max-name-length` characters."
+  [raw-name]
+  (let [trimmed (str/trim (or raw-name ""))]
+    (subs trimmed 0 (min (count trimmed) max-name-length))))
+
+
+(defn name-taken?
+  "Whether a collection of `all-collections` other than `own-id` is called
+   `name`, by the equality that the folder lookup uses."
+  [all-collections own-id name]
+  (boolean (some #(and (not= own-id (:id %)) (same-name? (:name %) name))
+                 all-collections)))
+
+
+(defn new-collection
+  "A collection called `name`, with no words, made at `now`."
+  [name now]
+  {:created-at now
+   :name       name
+   :renamed-at now
+   :word-ids   []})
+
+
+(defn renamed-collection
+  "`collection` called `name` since `now`; the very same collection when it
+   is called that already."
+  [collection name now]
+  (if (= name (:name collection))
+    collection
+    (assoc collection :name name :renamed-at now)))
+
+
+(defn with-word
+  "`collection` listing `word-id`; the very same collection when it lists it
+   already."
+  [collection word-id]
+  (if (some #{word-id} (:word-ids collection))
+    collection
+    (update collection :word-ids conj word-id)))
+
+
+(defn without-word
+  "`collection` not listing `word-id`; the very same collection when it does
+   not list it."
+  [collection word-id]
+  (if (some #{word-id} (:word-ids collection))
+    (update collection :word-ids (partial filterv #(not= word-id %)))
+    collection))
+
+
+(defn merged-collection
+  "The one of two versions of a collection renamed last, with both versions' word ids sorted; `tie-break`
+   decides between two renamed together. The order of versions changes nothing."
+  [tie-break a b]
   (let [renamed-at (fn [version]
-                     (let [[generation hash] (str/split (:_rev version) #"-" 2)]
-                       [(or (:renamed-at version) (:created-at version)) (js/parseInt generation 10) hash]))
+                     [(or (:renamed-at version) (:created-at version)) (tie-break version)])
         winner     (if (neg? (compare (renamed-at a) (renamed-at b))) b a)]
     (assoc winner :word-ids (->> (concat (:word-ids a) (:word-ids b)) distinct sort vec))))

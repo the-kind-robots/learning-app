@@ -4,33 +4,24 @@
    [utils :as utils]))
 
 
-(def ^:private first-run-state
-  {:cta  "Добавить слово"
-   :hint "Добавьте первое слово на главной странице"
-   :text "Слов пока нет"})
-
-
-(def ^:private no-matches-state
-  {:cta  nil
-   :hint "Попробуйте другой запрос"
-   :text "Ничего не найдено"})
-
-
-(defn- retention-text
+(defn- retention-band
+  "How well the word is remembered, as the list says it: from `level`, a
+   percentage."
   [level]
   (cond
-    (>= level 80) "Отлично запомнено"
-    (>= level 50) "Хорошо изучено"
-    (>= level 20) "Нужно повторить"
-    :else         "Новое слово"))
+    (>= level 80) :retention/excellent
+    (>= level 50) :retention/good
+    (>= level 20) :retention/due
+    :else         :retention/new))
 
 
 (defn word-item-props
   [{:keys [id kind value translation retention-level]}]
   {:id          id
    :phrase?     (= "phrase" kind)
-   :retention-color (utils/prozent->color retention-level)
-   :retention-title (str (retention-text retention-level) " (" (int retention-level) "%)")
+   :retention-band    (retention-band retention-level)
+   :retention-color   (utils/prozent->color retention-level)
+   :retention-percent (int retention-level)
    :value       value
    :translation (->> translation
                      (filter #(= "ru" (:lang %)))
@@ -44,25 +35,22 @@
 
 
 (defn empty-state
-  "Props for the placeholder shown instead of the word list, or nil when there
-   are rows to render. `total` counts the words in the active scope before the
-   search filter, so an empty vocabulary and a filter that matched nothing tell
-   apart here rather than in the view."
+  "Which placeholder replaces the word list, `:empty/no-matches` or `:empty/first-run`, or nil when there are
+   rows. `total` counts the words in scope before the filter, which tells an empty vocabulary from no match."
   [words total]
   (when (and (some? total) (empty? words))
     (if (pos? total)
-      no-matches-state
-      first-run-state)))
+      :empty/no-matches
+      :empty/first-run)))
 
 
 (defn page-props
-  "What the word list renders: the rows, the placeholder that replaces them,
-   and whether the page chrome — header, search box, lesson button — applies.
-   An empty vocabulary drops the chrome; an empty filter keeps it so the query
-   stays editable. Until the learner's data is in memory `total` is nil and
-   the list shows nothing — neither placeholder."
-  [{:words/keys [editing more? rows search total]}]
+  "What the word list renders: the rows, the placeholder that replaces them, and whether the page chrome
+   applies. An empty vocabulary drops the chrome, an empty filter keeps it; while `total` is nil the list
+   shows nothing."
+  [{:words/keys [editing in-collection? more? rows search total]}]
   {:editing     editing
+   :in-collection? (boolean in-collection?)
    :empty-state (empty-state rows total)
    :items       (word-list-props rows)
    :known?      (some? total)

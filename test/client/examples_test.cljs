@@ -2,7 +2,7 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.example-fetch :as sut]
+   [adapters.examples-generator :as sut]
    [adapters.learner.documents :as documents]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]

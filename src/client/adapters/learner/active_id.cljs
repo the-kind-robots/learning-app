@@ -1,4 +1,4 @@
-(ns adapters.active-collection)
+(ns adapters.learner.active-id)
 
 
 (def ^:private id-key "active-collection-id")

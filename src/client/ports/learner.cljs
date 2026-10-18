@@ -1,97 +1,85 @@
 (ns ports.learner
-  "The learner's data, as the use cases reach it: memory to read, every
-   write, and the active collection. `adapters.learner` does the work."
+  "The learner's data, as the app reaches it: memory to read, every write, and
+   the active collection; opening its databases; replicating it with the
+   account. `adapters.learner` does the work."
   (:require
    [adapters.learner :as learner]
    [adapters.learner.memory :as memory]))
 
 
-(def reads
-  "The reads of memory, each a function of a memory value: what the use
-   cases and pages ask of the learner's data. The port hands them out, so
-   nothing above the adapters requires the memory namespace."
-  {:learner/collection     memory/collection
-   :learner/collection-cards memory/collection-cards
-   :learner/collection-words memory/collection-words
-   :learner/collections    memory/collections
-   :learner/collections-of memory/collections-of
-   :learner/examples-of    memory/examples-of
-   :learner/review-history memory/review-history
-   :learner/word           memory/word
-   :learner/word-count     memory/word-count
-   :learner/words          memory/words})
+(defn ^:async start!
+  "Starts the learner's data (`adapters.learner/start!`) and resolves with its capabilities, given `world`
+   and `browser`. What it waits for sits in them (`:learner/initialized`)."
+  [deps]
+  (await (learner/start! deps)))
 
 
-(defn start!
-  [{:keys [clock db store]}]
-  (let [learner {:clock clock
-                 :dbs   db
-                 :store store}
-        started (atom false)
-        resolve (atom nil)
-        reject  (atom nil)
-        moved   (js/Promise. (fn [res rej]
-                               (reset! resolve res)
-                               (reset! reject rej)))]
-    (merge
-     reads
-     {:learner/memory (fn memory
-                        []
-                        (learner/current-memory learner))
-      :learner/active-collection (fn active-collection
-                                   []
-                                   (learner/active-collection learner))
-      :learner/set-active-collection! (fn set-active-collection!
-                                        [collection-id]
-                                        (learner/set-active-collection! learner collection-id))
-      :learner/loaded (fn loaded
-                        []
-                        (learner/loaded learner))
-      :learner/catch-up! (fn catch-up!
-                           []
-                           (learner/catch-up! learner))
-      :learner/add-word! (fn add-word!
-                           [entry]
-                           (learner/add-word! learner entry))
-      :learner/update-word! (fn update-word!
-                              [word-id change]
-                              (learner/update-word! learner word-id change))
-      :learner/delete-word! (fn delete-word!
-                              [word-id]
-                              (learner/delete-word! learner word-id))
-      :learner/add-review! (fn add-review!
-                             [word-id retained translation]
-                             (learner/add-review! learner word-id retained translation))
-      :learner/create-collection! (fn create-collection!
-                                    [name]
-                                    (learner/create-collection! learner name))
-      :learner/rename-collection! (fn rename-collection!
-                                    [collection-id new-name]
-                                    (learner/rename-collection! learner collection-id new-name))
-      :learner/delete-collection! (fn delete-collection!
-                                    [collection-id]
-                                    (learner/delete-collection! learner collection-id))
-      :learner/add-to-collection! (fn add-to-collection!
-                                    [word-id collection-id]
-                                    (learner/add-to-collection! learner word-id collection-id))
-      :learner/remove-from-collection! (fn remove-from-collection!
-                                         [word-id collection-id]
-                                         (learner/remove-from-collection! learner word-id collection-id))
-      ;; Starts the move of the examples, once per port.
-      :learner/move-examples! (fn move-examples!
-                                []
-                                (when-not @started
-                                  (reset! started true)
-                                  (-> (learner/examples-moved! learner)
-                                      (.then @resolve @reject)))
-                                nil)
-      ;; Waits for the move to finish, and never starts it.
-      :learner/examples-moved (fn examples-moved
-                                []
-                                moved)
-      :learner/changed-since (fn changed-since
-                               [seen signal]
-                               (learner/changed-since learner seen signal))
-      :learner/save-example! (fn save-example!
-                               [example]
-                               (learner/save-example! learner example))})))
+;;
+;; Reads of memory. Each takes the memory value `:learner/memory` hands out.
+;;
+
+
+(defn collection
+  "The collection `id` in `memory`, or nil."
+  [mem id]
+  (memory/collection mem id))
+
+
+(defn collection-cards
+  "A card for every word in scope of `coll`, nil for all: the word with its reviews."
+  [mem coll]
+  (memory/collection-cards mem coll))
+
+
+(defn collection-words
+  "The words in scope of `coll`, nil for all."
+  [mem coll]
+  (memory/collection-words mem coll))
+
+
+(defn collections
+  "Every collection in `memory`."
+  [mem]
+  (memory/collections mem))
+
+
+(defn collections-of
+  "The collections that list the word `word-id`."
+  [mem word-id]
+  (memory/collections-of mem word-id))
+
+
+(defn examples-of
+  "The examples of the words `word-ids`."
+  [mem word-ids]
+  (memory/examples-of mem word-ids))
+
+
+(defn matching-words
+  "The words in scope of `coll` that match `query`."
+  [mem coll query]
+  (memory/matching-words mem coll query))
+
+
+(defn review-history
+  "The reviews of the word `word-id`."
+  [mem word-id]
+  (memory/review-history mem word-id))
+
+
+(defn word
+  "The word or phrase `id` in `memory`, or nil."
+  [mem id]
+  (memory/word mem id))
+
+
+(defn word-count
+  "How many words and phrases `memory` holds."
+  [mem]
+  (memory/word-count mem))
+
+
+(defn words
+  "Every word and phrase in `memory`."
+  [mem]
+  (memory/words mem))

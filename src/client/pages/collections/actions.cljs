@@ -6,8 +6,8 @@
 
 (defn content
   "What the themes screen shows of the learner's data in `state`."
-  [state {:keys [active-collection learner]}]
-  (let [{:keys [items total-words]} (collections/summary learner (:learner/memory state))]
+  [state {:keys [active-collection]}]
+  (let [{:keys [items total-words]} (collections/summary (:learner/memory state))]
     {:collections/active-id   (:id active-collection)
      :collections/items       items
      :collections/total-words total-words}))
@@ -28,22 +28,21 @@
     [[:effect/save (content state context)]]))
 
 
-(defn deleted-message
-  "What the status line says once a collection is deleted, by the name its
-   target showed."
-  [name]
-  (str "Набор «" name "» удалён"))
-
-
 (nxr/register-action! :action/show-deleted
-  ;; The tiles without the deleted collection, computed from memory once it
-  ;; took the deletion and with the stored pointer as it is now — deleting the
-  ;; active collection clears it; focus on the neighbour picked before, and
-  ;; the status line naming it, the one whose id the delete control passed.
-  (fn show-deleted [state context {:keys [name focus-id status-region]}]
+  ;; The tiles without the deleted collection, from memory once it took the deletion, with the stored
+  ;; pointer as it is now (deleting the active collection clears it); focus and the status line go to
+  ;; the neighbour picked before the delete.
+  (fn show-deleted [state context {:keys [deleted-message focus-id status-region]}]
     [[:effect/save (assoc (content state context) :collections/editing-id nil)]
      [:effect/focus-collection focus-id]
-     [:effect/announce status-region (deleted-message name)]]))
+     [:effect/announce status-region deleted-message]]))
+
+
+(nxr/register-action! :action/exit-editing-on-background
+  ;; A click on the background itself, not on a tile in it, ends the editing.
+  (fn exit-editing-on-background [state self-click?]
+    (when (and self-click? (:collections/editing-id state))
+      [[:effect/save {:collections/editing-id nil}]])))
 
 
 (nxr/register-action! :action/handle-tab-click

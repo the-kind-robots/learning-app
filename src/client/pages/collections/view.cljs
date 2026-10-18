@@ -16,30 +16,25 @@
 
 
 (defn- close-button
-  "The delete control. It follows its target in the DOM, so the keyboard
-   reaches it right after that target, and it is always in the Tab order;
-   the CSS shows it in the editing state or while keyboard focus is on the
-   target or on itself. Its action names the status line the delete is
-   announced in."
-  [{:keys [id name delete-label]}]
+  "The delete control. It follows its target in the DOM, so the keyboard reaches it right after that target,
+   and is always in the Tab order; the CSS shows it while editing or when focus is on the target or itself."
+  [{:keys [id name]}]
   [:button.tile__close
    {:type       "button"
-    :aria-label delete-label
+    :aria-label (str "Удалить набор «" name "»")
     :on         {:pointerdown [[:effect/stop-propagation]]
                  :click       [[:effect/stop-propagation]
                                [:effect/delete-collection
-                                {:id            id
-                                 :name          name
-                                 :status-region shell/status-region-id}]]}}
+                                {:deleted-message (str "Набор «" name "» удалён")
+                                 :id              id
+                                 :status-region   shell/status-region-id}]]}}
    (close-icon)])
 
 
 (defn- target-attrs
-  "What every tappable thing carries: its id for the gesture tracking, its
-   tap, a long press where there is something to delete, and `aria-current`
-   on the active collection's target. It goes on a
-   `<button>` every time, so nothing claims a role it cannot carry and a
-   keyboard reaches every target."
+  "What every tappable thing carries: its id for gesture tracking, its tap, a long press where there is
+   something to delete, `aria-current` on the active one. Always a `<button>`, so a keyboard reaches every
+   target and nothing claims a role it cannot carry."
   [{:keys [id tap deletable? active?]}]
   {:aria-current (when active? "true")
    :data-collection-id id
@@ -51,9 +46,9 @@
 
 
 (defn- name-and-count
-  [{:keys [name lang count]}]
+  [{:keys [name lang count main?]}]
   (list
-   [:span.tile__name {:lang lang} name]
+   [:span.tile__name {:lang lang} (if main? "Всё подряд" name)]
    [:span.tile__count count]))
 
 
@@ -118,7 +113,7 @@
     :aria-label "Новый набор"
     :on         {:click [[:effect/stop-propagation]
                          [:effect/save {:collections/editing-id nil}]
-                         [:effect/prompt-create-collection]]}}
+                         [:effect/prompt-create-collection "Название нового набора:"]]}}
    [:svg {:viewBox "0 0 40 40" :width 28 :height 28 :aria-hidden "true"}
     [:path
      {:d "M20 8 V32 M8 20 H32"
@@ -131,10 +126,10 @@
   [state]
   (let [{:keys [tiles]} (presenter/page-props state)]
     [:div.switcher
-     {:on {:click [[:effect/exit-editing-on-background]]}}
+     {:on {:click [[:action/exit-editing-on-background [:event/self-click?]]]}}
      [:h1.switcher__title.visually-hidden "Наборы"]
      [:div.masonry
-      {:on {:click [[:effect/exit-editing-on-background]]}}
+      {:on {:click [[:action/exit-editing-on-background [:event/self-click?]]]}}
       (for [tile tiles]
         (if (:folder? tile)
           (folder-tile tile)

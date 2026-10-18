@@ -23,8 +23,7 @@
 
 
 (nxr/register-effect! :effect/look-up-answer-annotations
-  ;; The revealed answer carries hints for its annotated words; their
-  ;; vocabulary states are looked up once here, not on every click.
+  ;; Hints of the revealed answer's annotated words: their vocabulary states are looked up once, not on every click.
   (fn look-up-answer-annotations
     [{:keys [capabilities dispatch]} _ lesson-state]
     (try
@@ -52,10 +51,9 @@
     [{:keys [capabilities dispatch]} _ {:keys [dictionary-form hints lesson-state translation word-index]}]
     (try
       (await (vocabulary/add! capabilities dictionary-form translation :word nil))
-      ;; The saved hint map re-renders the open card to its added state;
-      ;; the popover's on-update then repositions the shell.
+      ;; The saved hint map re-renders the open card; the popover's on-update then repositions the shell.
       (dispatch [[:action/annotate-answer
                   lesson-state
-                  (assoc hints word-index :known-with-translation)]])
+                  (assoc hints word-index :word-state/known-with-translation)]])
       (catch js/Error err
         (log/error :effect/add-token {:error (str err)})))))

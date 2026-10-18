@@ -12,7 +12,7 @@
    [adapters.learner.snapshot :as snapshot]
    [client.support.memory-projection :as projection]
    [domain.collections :as collections]
-   [ports.learner :as ports]
+   [domain.retention :as retention]
    [use-cases.vocabulary :as vocabulary]
    [utils :as utils]
    [cljs.test :refer-macros [deftest is]]
@@ -153,13 +153,13 @@
                                  (let [word (:word (nth (:cards incremental) slot))]
                                    (or (nil? word) (= id (:id word)))))
                                (:slot-of incremental))
-                       (= (vocabulary/rows ports/reads rebuilt {} now) (vocabulary/rows ports/reads incremental {} now))
+                       (= (vocabulary/rows rebuilt {} now) (vocabulary/rows incremental {} now))
                        ;; Every word's urgency is the formula over its review documents.
                        (= (into {}
                                 (map (fn [w] [(:id w) (expected-urgency (reviews (:id w)) now)]))
                                 (vals (:words incremental)))
                           (into {}
-                                (map (fn [e] [(:id (:word e)) (vocabulary/urgency-of e now)]))
+                                (map (fn [e] [(:id (:word e)) (retention/urgency (:reviews e) now)]))
                                 (sut/collection-cards incremental nil)))
                        ;; A collection's lesson draws from its words and its children's that exist.
                        (every? (fn [collection]

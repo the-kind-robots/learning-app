@@ -11,7 +11,6 @@
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
    [domain.retention :as retention]
-   [ports.learner :as ports]
    [use-cases.vocabulary :as sut]
    [utils :as utils]))
 
@@ -48,7 +47,7 @@
                 (fn [{learner-port :learner}]
                   (f (assoc dbs
                             ::capabilities
-                            {:clock   clock
+                            {:world   {:world/clock clock}
                              :learner (assoc learner-port :learner/active-collection (fn [] nil))}))))))))))
 
 
@@ -67,8 +66,7 @@
                                               :type     "collection"
                                               :name     "listed"
                                               :word-ids (vec word-ids)}]))]
-    (sut/rows ports/reads
-              memory
+    (sut/rows memory
               (cond-> (dissoc opts :word-ids)
                 word-ids (assoc :collection (get-in memory [:collections "collection:listed"])))
               (time/now-ms))))

@@ -5,10 +5,8 @@
    [use-cases.lesson :as lesson]))
 
 
-;; The lesson shown after a trial's answer is looked at by effects that finish
-;; later, and the reader may have left the lesson, or started another, in the
-;; meantime. What they bring back is shown only over the lesson it was computed
-;; from.
+;; Effects that finish later bring back a lesson shown only over the lesson it was computed from:
+;; the reader may have left, or started another.
 
 
 (defn- shown
@@ -23,14 +21,12 @@
 
 
 (nxr/register-action! :action/open-lesson
-  ;; The lesson is drawn from memory and on screen in the task of the tap. It
-  ;; lives in app state only: leaving the screen drops it. Entered while
-  ;; memory loads, behind the splash, it is drawn once memory is in place
-  ;; (`:action/refresh-page`).
-  (fn open-lesson [state {:keys [active-collection learner now-ms]}]
+  ;; The lesson is drawn from memory in the task of the tap and lives in app state only. Entered while
+  ;; memory loads, behind the splash, it is drawn once memory is in place (`:action/refresh-page`).
+  (fn open-lesson [state {:keys [active-collection now-ms random]}]
     [[:effect/save
-      (shown (when (:learner/loaded? state)
-               (lesson/start learner (:learner/memory state) active-collection {} now-ms)))]]))
+      (shown (when (= :status/loaded (:learner/status state))
+               (lesson/start (:learner/memory state) active-collection {:random random} now-ms)))]]))
 
 
 (nxr/register-action! :action/update-lesson
@@ -47,8 +43,7 @@
 
 
 (nxr/register-action! :action/check-answer
-  ;; The answer is graded here and shown at once; the review is written, and
-  ;; the answer's word hints are looked up, after it.
+  ;; The answer is graded and shown at once; the review is written, and the word hints looked up, after.
   (fn check-answer [state answer]
     (let [from (:lesson/state state)]
       (cond

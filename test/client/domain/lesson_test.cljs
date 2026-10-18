@@ -90,7 +90,7 @@
     (let [state (sut/initial-state
                  [{:_id "w1" :value "der Hund" :translation [{:lang "en" :value "dog"}]}]
                  []
-                 :first)
+                 first)
           state (sut/check-answer state "der Hund")]
       (is (true? (sut/finished? state)))
       (is (empty? (:remaining-trials state))))))
@@ -106,7 +106,7 @@
     (let [state      (sut/initial-state
                       fixtures/lesson-words
                       fixtures/lesson-examples
-                      :first)
+                      first)
           next-state (sut/advance state)]
       (is (sut/word-trial? (:current-trial next-state)))
       (is (not (:locked? (:current-trial next-state)))))))
@@ -140,7 +140,7 @@
   (doseq [[kind words examples right]
           [["word" fixtures/lesson-words fixtures/lesson-examples "der Hund"]
            ["phrase" [phrase-word] [phrase-example] "wie gehts"]]]
-    (let [state (sut/initial-state words examples :first)
+    (let [state (sut/initial-state words examples first)
           total (count (:remaining-trials state))]
       (are [answer correct? cleared? locked?]
            (let [after   (sut/check-answer state answer)
@@ -156,7 +156,7 @@
 
 (deftest an-answer-forgives-typography-only
   (testing "apostrophes and case are forgiven, words are not"
-    (let [state (sut/initial-state [phrase-word] [] :first)]
+    (let [state (sut/initial-state [phrase-word] [] first)]
       (is (true? (-> state (sut/check-answer "wie gehts") sut/last-result :correct?)))
       (is (true? (-> state (sut/check-answer "Wie geht's") sut/last-result :correct?)))
       (is (false? (-> state (sut/check-answer "wie stehts") sut/last-result :correct?))))))
@@ -164,7 +164,7 @@
 
 (deftest a-failed-trial-comes-back-in-the-same-lesson
   (testing "a wrong answer keeps the trial in the pool, so it can be graded again"
-    (let [state (sut/initial-state [phrase-word] [] :first)
+    (let [state (sut/initial-state [phrase-word] [] first)
           wrong (sut/check-answer state "wie stehts")
           right (sut/check-answer wrong "wie gehts")]
       (is (= 1 (count (:remaining-trials wrong))))
@@ -186,12 +186,22 @@
                     urgencies)))
 
 
+(defn- random-sequence
+  "A `random` that walks [0, 1) in golden-ratio steps: the same numbers
+   every time, spread like a draw."
+  []
+  (let [at (atom 0.0)]
+    (fn []
+      (swap! at #(mod (+ % 0.6180339887) 1)))))
+
+
 (defn- draws
   "`times` runs of `pick-vocab` taking `n` from `rows`, as a set of id sets."
   [rows n times]
-  (into #{}
-        (map (fn [_] (set (map :id (sut/pick-vocab rows :urgency n)))))
-        (range times)))
+  (let [random (random-sequence)]
+    (into #{}
+          (map (fn [_] (set (map :id (sut/pick-vocab rows :urgency n random)))))
+          (range times))))
 
 
 (deftest a-lesson-takes-the-most-due-words
@@ -202,9 +212,9 @@
              (draws (conj forgotten fresh) 3 50)))))
   (testing "the asked-for count, most due first, nothing twice"
     (is (= ["vocab:wort-a" "vocab:wort-b" "vocab:wort-c"]
-           (map :id (sut/pick-vocab (rows [9 8 7 6 5]) :urgency 3)))))
+           (map :id (sut/pick-vocab (rows [9 8 7 6 5]) :urgency 3 (random-sequence))))))
   (testing "a vocabulary smaller than the lesson is taken whole"
-    (is (= 2 (count (sut/pick-vocab (rows [2 1]) :urgency 3))))))
+    (is (= 2 (count (sut/pick-vocab (rows [2 1]) :urgency 3 (random-sequence)))))))
 
 
 (deftest equally-due-words-are-taken-at-random
@@ -236,7 +246,7 @@
 
 
 (deftest a-failed-example-is-remembered
-  (let [state   (sut/initial-state fixtures/lesson-words fixtures/lesson-examples :first)
+  (let [state   (sut/initial-state fixtures/lesson-words fixtures/lesson-examples first)
         example (first (filter sut/example-trial? (:trials state)))
         showing (assoc state :current-trial example)]
     (testing "before a miss, the example has not been failed"
@@ -248,6 +258,6 @@
 
 
 (deftest an-answer-longer-than-the-limit-is-cut-to-it
-  (let [state (sut/initial-state fixtures/lesson-words fixtures/lesson-examples :first)
+  (let [state (sut/initial-state fixtures/lesson-words fixtures/lesson-examples first)
         after (sut/check-answer state (apply str (repeat 1500 "a")))]
     (is (= sut/max-answer-length (count (:answer (sut/last-result after)))))))

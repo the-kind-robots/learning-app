@@ -4,73 +4,30 @@
    [domain.vocabulary :as vocabulary]))
 
 
-(defn collapsed
-  [s]
-  (-> (str s)
-      (str/replace #"\s+" " ")
-      (str/trim)))
-
-
-(defn phrase-doc?
-  "A phrase is a vocabulary document that says so. Documents without `:kind`
-   are words — that is what every document written before phrases existed
-   looks like."
-  [doc]
-  (= "phrase" (:kind doc)))
-
-
-(defn translation-entry
-  [translation]
-  {:lang "ru" :value (collapsed translation)})
-
-
-(defn new-phrase
-  "A phrase shares the vocabulary namespace: the id is the value, so the same
-   text is one entry whichever kind it is, and the kind can be corrected later
-   without rebuilding the document."
-  [value translation]
-  {:id          (vocabulary/vocab-id value)
-   :kind        "phrase"
-   :translation [(translation-entry translation)]
-   :value       (collapsed value)})
-
-
-(def ^:private word-pair-prefixes
-  "First tokens after which a two-token value still reads as a single word:
-   articles (der Tisch) and the reflexive marker (sich freuen)."
-  #{"das" "der" "die" "ein" "eine" "sich"})
-
-
-(defn- lemma-match?
-  [value {:keys [lemma]}]
-  (= (vocabulary/normalize-value lemma)
-     (vocabulary/normalize-value value)))
-
-
-(defn- lemma-pos
-  "The part of speech the dictionary gives this exact value, when one of the
-   completions already on screen is the value itself."
-  [value completions]
-  (some #(when (lemma-match? value %) (:pos %)) completions))
-
-
-(defn- word-pair?
-  [tokens]
-  (and (= 2 (count tokens))
-       (word-pair-prefixes (str/lower-case (first tokens)))))
+(defn phrase?
+  "A phrase is a vocabulary entry that says so. Entries without `:kind` are
+   words — that is what every entry written before phrases existed looks
+   like."
+  [word]
+  (= "phrase" (:kind word)))
 
 
 (defn phrase-value?
-  "True when the entered value reads as a phrase. A dictionary lemma equal to
-   the value settles it either way — otherwise a space makes it a phrase,
-   except for an article/`sich` pair. Typing `das heißt` in full and picking it
-   from the suggestions have to agree, and the dictionary is the one that knows."
+  "True when the entered value reads as a phrase. A dictionary lemma equal to the value settles it; otherwise a
+   space makes it a phrase, except for an article/`sich` pair. Typing `das heißt` and picking it must agree."
   [value completions]
-  (let [tokens (str/split (collapsed value) #" ")]
+  (let [tokens (str/split (vocabulary/collapsed value) #" ")
+        ;; The part of speech the dictionary gives this exact value, when a completion on screen is the value itself.
+        pos    (some #(when (= (vocabulary/normalize-value (:lemma %))
+                               (vocabulary/normalize-value value))
+                        (:pos %))
+                     completions)]
     (and (> (count tokens) 1)
-         (case (lemma-pos value completions)
+         (case pos
            "phrase" true
-           nil      (not (word-pair? tokens))
+           ;; An article or the reflexive marker with one more word reads as a single word: der Tisch, sich freuen.
+           nil      (not (and (= 2 (count tokens))
+                              (#{"das" "der" "die" "ein" "eine" "sich"} (str/lower-case (first tokens)))))
            false))))
 
 
@@ -83,10 +40,8 @@
 
 
 (defn current-pick
-  "The picked suggestion `{:mode :pos :value}` while `value` still is the lemma
-   it was picked for, else nil. Typing on makes it something nobody picked.
-   Same lemma means the same normalized value: that is what makes one
-   vocabulary document."
+  "The picked suggestion `{:mode :pos :value}` while `value` still is the lemma it was picked for, else nil:
+   typing on makes it something nobody picked. The same lemma is the same normalized value, one document."
   [value pick]
   (when (and pick
              (= (vocabulary/normalize-value value)
@@ -95,10 +50,9 @@
 
 
 (defn add-mode
-  "The add form's mode. A picked suggestion settles it for the lemma picked —
-   `das heißt` is a phrase the article exception would call a word, and the
-   suggestions it came from are gone by then (`current-pick`). Otherwise the
-   value decides against the completions on screen (GH-358)."
+  "The add form's mode. A picked suggestion settles it for the lemma picked (`das heißt` is a phrase the
+   article exception would call a word, and its suggestions are gone by then: `current-pick`); otherwise
+   the value decides against the completions on screen."
   [value completions mode-override]
   (or (:mode (current-pick value mode-override))
       (if (phrase-value? value completions) :phrase :word)))
@@ -106,5 +60,5 @@
 
 (defn update-phrase
   "Replaces the phrase translation with one whole entry — never split."
-  [doc translation]
-  (assoc doc :translation [(translation-entry translation)]))
+  [word translation]
+  (assoc word :translation [(vocabulary/translation-entry translation)]))
