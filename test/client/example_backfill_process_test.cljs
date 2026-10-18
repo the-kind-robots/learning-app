@@ -166,20 +166,20 @@
      ticking
      {:capabilities
       {:world    world
-       :examples-generator {:examples-generator/fetch     (fn [subject ^js signal]
-                                        (js/Promise.
-                                         (fn [resolve reject]
-                                           (.addEventListener signal "abort" #(resolve {:failure :failure/aborted}))
-                                           (let [n (count @requests)]
-                                             (swap! requests
-                                               conj
-                                               {:at      (world/clock world :now-ms)
-                                                :subject subject
-                                                :reject  reject
-                                                :resolve resolve
-                                                :signal  signal})
-                                             (when-let [answered (some-> answer (apply [subject n]))]
-                                               (resolve answered))))))}
+       :examples-generator (fn [subject ^js signal]
+                             (js/Promise.
+                              (fn [resolve reject]
+                                (.addEventListener signal "abort" #(resolve {:failure :failure/aborted}))
+                                (let [n (count @requests)]
+                                  (swap! requests
+                                         conj
+                                         {:at      (world/clock world :now-ms)
+                                          :subject subject
+                                          :reject  reject
+                                          :resolve resolve
+                                          :signal  signal})
+                                  (when-let [answered (some-> answer (apply [subject n]))]
+                                    (resolve answered))))))
        :browser  {:browser/active?      active?
                   :browser/yield        browser/yield
                   :browser/until-active (fn []

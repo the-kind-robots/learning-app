@@ -111,8 +111,7 @@
   "The response to the request about `subject`. A request unanswered for
    110 s counts as a timeout."
   [{:keys [controller examples-generator world]} subject]
-  (let [{:examples-generator/keys [fetch]} examples-generator
-        request    (js/AbortController.)
+  (let [request    (js/AbortController.)
         timed-out? (volatile! false)
         cancel     (world/clock world :after
                                 (:timeout-ms limits)
@@ -121,7 +120,7 @@
                                   (.abort request)))]
     (reset! controller request)
     (try
-      (let [response (await (fetch subject (.-signal request)))]
+      (let [response (await (examples-generator subject (.-signal request)))]
         (cond-> response
           (and @timed-out? (= :failure/aborted (:failure response))) (assoc :failure :failure/timeout)))
       (finally

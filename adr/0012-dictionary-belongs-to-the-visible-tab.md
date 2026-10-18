@@ -92,7 +92,7 @@ database, and nothing here overturns a decision it did not make.
   ~14 ms.
 - A tab that has not had a turn yet has no dictionary and says so by answering with no
   completions, which is indistinguishable from a prefix that has none. Telling the two
-  apart is what `:dictionary/ready?` is on the port for, and describing it to the user is
+  apart is what `ready?` is on the dictionary port for, and describing it to the user is
   #312.
 - Turns change hands more often than they would on visibility alone: a click in the address
   bar or in devtools is a `blur`, so it costs a round trip. ~14 ms per switch once a tab has
