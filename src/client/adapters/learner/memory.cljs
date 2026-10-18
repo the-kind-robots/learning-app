@@ -1,33 +1,7 @@
 (ns adapters.learner.memory
-  "The learner's data in memory: a value built from PouchDB documents
-   (ADR-0016), which `adapters.learner.loader` hands over.
-
-     {:cards            [{:word word :reviews domain.retention/Reviews}]
-      :collections      {id collection}
-      :collections-by-word {word-id #{collection-id}}
-      :examples         {id example}
-      :examples-by-word {word-id #{example-id}}
-      :slot-of          {word-id slot}
-      :words            (sorted-map sort-key word)}
-
-   Each word id has a card: the word, until it is removed, and its review
-   history. A card's slot is its place in `:cards`. Memory gives a word id
-   its slot when the word or one of its reviews first arrives, because a
-   review may arrive before its word, and never reuses a slot. `:words`
-   keeps the same words in the word list's order; each word carries
-   `:search`, its text normalised for the filter.
-
-   Memory adds and removes each document type with a pair of functions.
-   When a new revision of a document arrives, memory finds the version it
-   holds by the document's id, removes it and adds the new one. A deletion
-   carries only an id, and that is enough. Memory without `:words` and
-   `::position` is what a snapshot stores (`adapters.learner.snapshot`);
-   `restored` gives memory back from it.
-
-   Under `::position` memory keeps the feed position of user-db's last
-   change that changed it (`db.pouch/change-position`). A batch and its
-   position arrive together (`with-changes`), so a memory value and its
-   position never part."
+  "The learner's data in memory (ADR-0016): cards (word and reviews, in a slot never reused), collections,
+   examples, and `:words` in the word list's order. `::position` is the feed position of the last change
+   taken, arriving with its batch (`with-changes`); a snapshot stores memory without `:words` and it."
   (:require
    [adapters.learner.documents :as documents]
    [domain.collections :as domain-collections]
@@ -95,8 +69,8 @@
       (update-in memory [:cards slot :reviews] retention/with-review review))))
 
 
-;; `:collections-by-word` changes with `:collections` alone, so a review or
-;; an example leaves both of them as they were (`adapters.learner/changed-since`).
+;; `:collections-by-word` changes with `:collections` alone, so a review or an example leaves
+;; `:words` and `:collections` as they were: the example backfill is not woken by them.
 (defn- index-add
   "The key -> set `index` with `v` in the set of `k`."
   [index k v]
@@ -128,10 +102,8 @@
 
 
 (defn- add-collection
-  "Memory with `collection`. A collection memory holds already is replaced:
-   only the words that differ between the two versions are touched, because
-   a collection can hold thousands. One memory does not hold yet, as at the
-   load, only names its words."
+  "Memory with `collection`. A held collection is replaced by touching only the words that differ,
+   because a collection can hold thousands."
   [memory {:keys [id word-ids] :as collection}]
   (if-let [previous (get-in memory [:collections id])]
     (let [[before after] (differing (:word-ids previous) word-ids)
@@ -244,12 +216,9 @@
 
 
 (defn- with-taken-doc
-  "Memory after `doc` arrives. When memory cannot take `doc` — a document
-   whose shape it does not expect — it logs it and removes the version of
-   it that it held, so that memory holds what a full read of user-db
-   gives. One odd document does not stop the rest. A build that starts to
-   take such a document must change `adapters.learner.snapshot/format-version`:
-   an older snapshot lacks it."
+  "Memory after `doc` arrives. A document of an unexpected shape is logged and its held version
+   removed, so memory holds what a full read would; it does not stop the rest. A build that starts
+   to take such a document must change `adapters.learner.snapshot/format-version`."
   [memory doc]
   (try
     (with-doc memory doc)
@@ -259,27 +228,16 @@
 
 
 (defn with-docs
-  "Memory after `docs` arrive, one after another. A document replaces the
-   version memory holds, and a deletion removes it; a revision memory holds
-   already gives an equal memory. Memory ignores documents of a type it does
-   not keep, and leaves out, logged, one it cannot take. A batch that changes
-   nothing memory holds returns the same memory.
-
-   Every document reaches memory through this function: the load, and the
-   change feed's batches and catch-ups, which also bring this app's own
-   writes. The feed brings changes in the order the database stored them,
-   so the last document memory takes for an id is the one the database
-   holds as the winner."
+  "Memory after `docs` arrive in order; a batch that changes nothing returns the same memory. Every document
+   reaches memory here, in the order the database stored it, so the last taken for an id is the winner."
   [memory docs]
   (reduce with-taken-doc memory docs))
 
 
 (defn with-changes
-  "Memory after the batch `docs` of user-db arrives (`with-docs`), with
-   `position`, the position of the batch's last change, as its position.
-   When the batch changes nothing memory keeps, such as a pairing receipt,
-   this returns the same memory: its position stays, and still marks a
-   change memory took with nothing it keeps stored after it."
+  "Memory after the batch `docs` arrives (`with-docs`), with `position` of the batch's last change.
+   A batch that changes nothing memory keeps, such as a pairing receipt, returns the same memory
+   and keeps its position."
   [memory docs position]
   (let [taken (with-docs memory docs)]
     (if (identical? taken memory)
@@ -319,9 +277,8 @@
 
 
 ;;
-;; Reads. Everything outside the learner's adapter reads memory through these
-;; functions only, handed out by the learner port (`ports.learner/reads`);
-;; the keys above belong to this namespace.
+;; Reads. Outside the learner's adapter memory is read through these functions only,
+;; which `ports.learner` passes on; the keys above belong to this namespace.
 ;;
 
 
@@ -376,12 +333,9 @@
 
 
 (defonce ^:private slots-cache
-  ;; The last answer of `collection-slots`, with what it was computed from.
-  ;; A lesson in a collection asks for the collection's cards after every
-  ;; answer. Finding which words a collection and its children hold walks
-  ;; every collection; an answer changes only reviews, so the collections
-  ;; and slots stay the same objects and the answer is reused. A changed
-  ;; collection or a new word gives new objects and a new answer.
+  ;; The last answer of `collection-slots`, with what it was computed from. A lesson asks for a
+  ;; collection's cards after every answer; an answer changes only reviews, so the same
+  ;; objects give the same answer.
   (volatile! nil))
 
 
@@ -413,18 +367,14 @@
 
 
 (defonce ^:private collection-cache
-  ;; The last answer of `collection-words`, with what it was computed from.
-  ;; Every keystroke in the words filter asks for the same collection's
-  ;; words; while the words and collections stay the same objects, the
-  ;; answer is reused.
+  ;; The last answer of `collection-words`, with what it was computed from: every keystroke of
+  ;; the words filter asks for the same collection.
   (volatile! nil))
 
 
 (defn collection-words
-  "The words of `collection` and of its children, in the word list's order,
-   or every word when `collection` is nil. The result is kept for the last
-   words, collections and collection asked about, because every keystroke
-   asks again about the same collection."
+  "The words of `collection` and of its children, in the word list's order; every word when it
+   is nil. Kept for the last words, collections and collection asked about."
   [memory collection]
   (let [words (:words memory)
         all   (:collections memory)
@@ -436,3 +386,25 @@
             found (into [] (if ids (filter #(ids (:id %))) identity) (vals words))]
         (vreset! collection-cache [words all id found])
         found))))
+
+
+(defonce ^:private matches-cache
+  ;; The last answer of `matching-words`, with what it was computed from.
+  (volatile! nil))
+
+
+(defn matching-words
+  "The words of `collection` (`collection-words`) whose search text holds
+   `query`, or all of them when `query` is nil. The result is kept for the
+   last scope and query, because the next page cuts the same matches."
+  [memory collection query]
+  (let [scope (collection-words memory collection)]
+    (if-not query
+      scope
+      (let [[cached-scope cached-query cached] @matches-cache]
+        (if (and (identical? cached-scope scope) (= cached-query query))
+          cached
+          (let [matched (into [] (filter #(vocabulary/matches? (:search %) query)) scope)]
+            (vreset! matches-cache [scope query matched])
+            matched))))))
+
