@@ -42,27 +42,26 @@
 
 
 (defn- port
-  "What the use cases are handed: memory holding `items`, already caught
-   up with the databases."
+  "The Learner the use cases are handed: memory holding `items`, already
+   caught up with the databases."
   ([active-id]
    (port active-id (atom [])))
   ([active-id renames]
    (let [by-id  (into {} (map (juxt :id identity)) items)
          memory (atom {:collections by-id})]
-     {:world   time/world
-      :learner (reify learner/Learner
-                 (active-collection [_] (by-id active-id))
-                 (memory [_] @memory)
-                 (fresh-memory [_] (js/Promise.resolve @memory))
-                 (insert! [_ _ {:keys [name]}] (js/Promise.resolve {:id (str "c:" name)}))
-                 (change! [_ [[_ id change]]]
-                   (let [collection (get-in @memory [:collections id])
-                         changed    (change collection)]
-                     (if (or (nil? changed) (identical? changed collection))
-                       (js/Promise.resolve nil)
-                       (do (swap! renames conj [id (:name changed)])
-                           (swap! memory assoc-in [:collections id] changed)
-                           (js/Promise.resolve true))))))})))
+     (reify learner/Learner
+       (active-collection [_] (by-id active-id))
+       (memory [_] @memory)
+       (fresh-memory [_] (js/Promise.resolve @memory))
+       (insert! [_ _ {:keys [name]}] (js/Promise.resolve {:id (str "c:" name)}))
+       (change! [_ [[_ id change]]]
+         (let [collection (get-in @memory [:collections id])
+               changed    (change collection)]
+           (if (or (nil? changed) (identical? changed collection))
+             (js/Promise.resolve nil)
+             (do (swap! renames conj [id (:name changed)])
+                 (swap! memory assoc-in [:collections id] changed)
+                 (js/Promise.resolve true)))))))))
 
 
 (deftest rename-refuses-a-name-another-collection-carries
@@ -70,32 +69,32 @@
     (let [renames (atom [])]
       (testing "a taken name by case and whitespace"
         (is (= {:name "Kurs" :noop :duplicate}
-               (await (sut/rename-active! (port "c:kurs" renames) " grammatik "))))
+               (await (sut/rename-active! (port "c:kurs" renames) time/world " grammatik "))))
         (is (= [] @renames)))
       (testing "a blank name keeps the current one"
-        (is (= {:name "Kurs"} (await (sut/rename-active! (port "c:kurs" renames) "  "))))
+        (is (= {:name "Kurs"} (await (sut/rename-active! (port "c:kurs" renames) time/world "  "))))
         (is (= [] @renames)))
       (testing "the current name again writes nothing"
-        (is (= {:name "Kurs"} (await (sut/rename-active! (port "c:kurs" renames) " Kurs "))))
+        (is (= {:name "Kurs"} (await (sut/rename-active! (port "c:kurs" renames) time/world " Kurs "))))
         (is (= [] @renames)))
       (testing "the collection's own name in another case is a rename, not a duplicate"
-        (is (= {:name "KURS" :renamed? true} (await (sut/rename-active! (port "c:kurs" renames) "KURS"))))
+        (is (= {:name "KURS" :renamed? true} (await (sut/rename-active! (port "c:kurs" renames) time/world "KURS"))))
         (is (= [["c:kurs" "KURS"]] @renames)))
       (testing "a free name is written"
-        (is (= {:name "Neu" :renamed? true} (await (sut/rename-active! (port "c:kurs" renames) " Neu "))))
+        (is (= {:name "Neu" :renamed? true} (await (sut/rename-active! (port "c:kurs" renames) time/world " Neu "))))
         (is (= [["c:kurs" "KURS"] ["c:kurs" "Neu"]] @renames)))
       (testing "no active collection"
-        (is (nil? (await (sut/rename-active! (port nil renames) "Neu"))))))))
+        (is (nil? (await (sut/rename-active! (port nil renames) time/world "Neu"))))))))
 
 
 (deftest create-refuses-a-name-equal-after-trim-and-case
   (async-testing "the duplicate check is the parent lookup's equality"
     (testing "a duplicate by case and whitespace"
-      (is (= {:noop :duplicate} (await (sut/create! (port nil) "  kurs ")))))
+      (is (= {:noop :duplicate} (await (sut/create! (port nil) time/world "  kurs ")))))
     (testing "a new name returns its id"
-      (is (= {:ok :created :id "c:Neu"} (await (sut/create! (port nil) " Neu ")))))
+      (is (= {:ok :created :id "c:Neu"} (await (sut/create! (port nil) time/world " Neu ")))))
     (testing "a blank name"
-      (is (= {:error :invalid-name} (await (sut/create! (port nil) "   ")))))))
+      (is (= {:error :invalid-name} (await (sut/create! (port nil) time/world "   ")))))))
 
 
 (defn- reconciled

@@ -44,7 +44,7 @@
 
 (nxr/register-effect! :effect/rename-active-collection
   (fn ^:async rename-active-collection
-    [{:keys [capabilities dispatch]} _ new-name]
+    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ new-name]
     (try
       ;; A blank or a taken name keeps the current one, and a store that did
       ;; not change renders nothing (#213) — the heading would keep what was
@@ -55,7 +55,7 @@
       ;; blurred the heading may have opened another screen by then (#460):
       ;; whichever screen is on display is computed again once memory has
       ;; taken the renamed collection.
-      (when-let [{:keys [name]} (await (collections/rename-active! capabilities new-name))]
+      (when-let [{:keys [name]} (await (collections/rename-active! learner world new-name))]
         (dispatch [[:effect/set-target-text name]
                    [:effect/enter :action/refresh-page]]))
       (catch js/Error err
@@ -64,9 +64,9 @@
 
 (nxr/register-effect! :effect/add-word
   (fn ^:async add-word
-    [{:keys [dispatch capabilities]} _ {:keys [value translation focus-id mode pos]}]
+    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ {:keys [value translation focus-id mode pos]}]
     (try
-      (let [result (await (vocabulary/add! capabilities value translation (or mode :word) pos))]
+      (let [result (await (vocabulary/add! learner world value translation (or mode :word) pos))]
         (if (:error result)
           (dispatch [[:action/show-word-error (:error result)]])
           (dispatch (cond-> [[:action/word-added]]

@@ -56,9 +56,9 @@
 
 (nxr/register-effect! :effect/update-word
   (fn ^:async update-word
-    [{:keys [capabilities dispatch]} _ {:keys [id translation value]}]
+    [{{:keys [learner]} :capabilities :keys [dispatch]} _ {:keys [id translation value]}]
     (try
-      (await (vocabulary/update! capabilities id value translation))
+      (await (vocabulary/update! learner id value translation))
       (dispatch [[:effect/enter :action/refresh-page]])
       (catch js/Error err
         (log/error :effect/update-word {:error (str err)})))))
@@ -66,9 +66,9 @@
 
 (nxr/register-effect! :effect/rename-word
   (fn ^:async rename-word
-    [{:keys [capabilities dispatch]} _ {:keys [id translation value]}]
+    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ {:keys [id translation value]}]
     (try
-      (await (vocabulary/rename! capabilities id value translation))
+      (await (vocabulary/rename! learner world id value translation))
       (dispatch [[:effect/enter :action/refresh-page]])
       (catch js/Error err
         (log/error :effect/rename-word {:error (str err)})))))
@@ -76,13 +76,13 @@
 
 (nxr/register-effect! :effect/delete-word
   (fn ^:async delete-word
-    [{:keys [capabilities dispatch]} _ {:keys [confirm-message id]}]
+    [{{:keys [learner]} :capabilities :keys [dispatch]} _ {:keys [confirm-message id]}]
     (when (js/confirm confirm-message)
       ;; The dialog closes here, not on the rows that follow: rows change for their own reasons, and
       ;; declining the prompt leaves the reader where they were.
       (dispatch [[:action/close-word-edit]])
       (try
-        (await (vocabulary/remove-from-active! capabilities id))
+        (await (vocabulary/remove-from-active! learner id))
         (dispatch [[:effect/enter :action/refresh-page]])
         (catch js/Error err
           (log/error :effect/delete-word {:error (str err)}))))))

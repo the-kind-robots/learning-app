@@ -89,7 +89,7 @@
 
 
 ;;
-;; Reads of memory. Each takes the memory value `:learner/memory` hands out.
+;; Reads of memory. Each takes the memory value `memory` hands out.
 ;;
 
 

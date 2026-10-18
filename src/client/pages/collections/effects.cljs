@@ -141,10 +141,10 @@
 
 (nxr/register-effect! :effect/prompt-create-collection
   (fn ^:async prompt-create-collection
-    [{:keys [capabilities dispatch]} _ message]
+    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ message]
     (try
       (when-let [raw-name (js/prompt message)]
-        (await (collections/create! capabilities raw-name))
+        (await (collections/create! learner world raw-name))
         (dispatch [[:effect/enter :action/refresh-page]]))
       (catch js/Error err
         (log/error :effect/prompt-create-collection {:error (str err)})))))
@@ -161,13 +161,13 @@
 
 (nxr/register-effect! :effect/delete-collection
   (fn ^:async delete-collection!
-    [{:keys [capabilities dispatch]} _ {:keys [deleted-message id status-region]}]
+    [{{:keys [learner]} :capabilities :keys [dispatch]} _ {:keys [deleted-message id status-region]}]
     ;; Picked before the delete: afterwards the deleted target is gone.
     (let [focus-id (neighbour (->> (js/Array.from (js/document.querySelectorAll ".masonry [data-collection-id]"))
                                    (map #(.getAttribute ^js % "data-collection-id")))
                               id)]
       (try
-        (await (collections/delete! capabilities id))
+        (await (collections/delete! learner id))
         (dispatch [[:effect/enter :action/show-deleted
                     {:deleted-message deleted-message
                      :focus-id        focus-id
@@ -186,6 +186,6 @@
 
 (nxr/register-effect! :effect/switch-active-collection
   (fn switch-active-collection
-    [{:keys [capabilities dispatch]} _ collection-id]
-    (collections/switch-active! capabilities collection-id)
+    [{{:keys [learner]} :capabilities :keys [dispatch]} _ collection-id]
+    (collections/switch-active! learner collection-id)
     (dispatch [[:action/go-to-home]])))

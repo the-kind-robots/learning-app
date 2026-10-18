@@ -10,8 +10,7 @@
    [db :as db]
    [domain.vocabulary :as vocabulary]
    [ports.learner :as learner]
-   [use-cases.vocabulary :as sut]
-   [utils :as utils]))
+   [use-cases.vocabulary :as sut]))
 
 
 (def user-db-name (db-fixtures/db-name "client.phrase-test.user"))
@@ -31,10 +30,8 @@
    [user-db-name device-db-name]
    (^:async fn
     [[user-db device-db]]
-    (with-redefs [utils/now-iso time/now-iso
-                  utils/now-ms  time/now-ms]
-      (let [dbs {:device/db device-db :user/db user-db}]
-        (await (test-learner/with-learner dbs time/world #(f (assoc dbs ::learner (:learner %) ::store (:store %))))))))))
+    (let [dbs {:device/db device-db :user/db user-db}]
+      (await (test-learner/with-learner dbs time/world #(f (assoc dbs ::learner (:learner %) ::store (:store %)))))))))
 
 
 (def ^:private phrase-id
@@ -43,13 +40,13 @@
 
 (defn- missing
   "The pairs memory is missing an example for, as the example backfill reads
-   them, over the learner port in `capabilities`."
-  [{:keys [learner]}]
+   them, over the Learner `learner`."
+  [learner]
   (test-learner/missing-in (learner/memory learner)))
 
 
-(defn- ^:async test-capabilities
-  "What `add!` is handed: the learner port over `dbs`. With `:active-id`, a
+(defn- ^:async learner-of
+  "The Learner over `dbs`, for `add!`. With `:active-id`, a
    collection «Поездка» under that id is stored and active; with
    `:existing-example`, an example of «auf jeden Fall» made in that
    collection is stored. It resolves once memory has what it stored."
@@ -65,10 +62,9 @@
                        :value         "Satz"
                        :translation   "фраза"})))
   (await (test-learner/caught-up dbs (::store dbs)))
-  {:world   time/world
-   :learner (test-learner/with-active-collection
-             (::learner dbs)
-             (fn [] (get-in (learner/memory (::learner dbs)) [:collections active-id])))})
+  (test-learner/with-active-collection
+   (::learner dbs)
+   (fn [] (get-in (learner/memory (::learner dbs)) [:collections active-id]))))
 
 
 (deftest a-new-phrase-is-stored-with-a-first-review-and-is-missing-an-example
@@ -76,8 +72,8 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [capabilities   (await (test-capabilities dbs {}))
-            {:keys [word-id created?]} (await (sut/add! capabilities
+      (let [learner (await (learner-of dbs {}))
+            {:keys [word-id created?]} (await (sut/add! learner time/world
                                                         "Entschuldigung, dass ich zu spät komme"
                                                         "Извини, что я опоздал."
                                                         :phrase
@@ -89,7 +85,7 @@
         (is (= {:_id word-id :kind "phrase" :value "Entschuldigung, dass ich zu spät komme"}
                (select-keys entry [:_id :kind :value])))
         (is (= [word-id] (map :word-id reviews)))
-        (is (= ["phrase"] (map (comp :kind :word) (missing capabilities)))))))))
+        (is (= ["phrase"] (map (comp :kind :word) (missing learner)))))))))
 
 
 (deftest re-adding-a-phrase-whose-collection-has-an-example-misses-nothing
@@ -97,12 +93,12 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [capabilities (await (test-capabilities dbs
+      (let [learner (await (learner-of dbs
                                                    {:active-id        "collection-1"
                                                     :existing-example {:id "example-1"}}))]
-        (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase nil))
-        (await (sut/add! capabilities "auf jeden Fall" "обязательно" :phrase nil))
-        (is (empty? (missing capabilities)) "the collection has its example already"))))))
+        (await (sut/add! learner time/world "auf jeden Fall" "во всяком случае" :phrase nil))
+        (await (sut/add! learner time/world "auf jeden Fall" "обязательно" :phrase nil))
+        (is (empty? (missing learner)) "the collection has its example already"))))))
 
 
 (deftest add-duplicate-merges-translation-whole
@@ -110,9 +106,9 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [capabilities (await (test-capabilities dbs {}))]
-        (await (sut/add! capabilities "auf jeden Fall" "во всяком случае" :phrase nil))
-        (let [{:keys [created?]} (await (sut/add! capabilities "Auf jeden Fall" "обязательно, точно" :phrase nil))
+      (let [learner (await (learner-of dbs {}))]
+        (await (sut/add! learner time/world "auf jeden Fall" "во всяком случае" :phrase nil))
+        (let [{:keys [created?]} (await (sut/add! learner time/world "Auf jeden Fall" "обязательно, точно" :phrase nil))
               entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
           (is (false? created?))
           (is (= 1 (count entries)))
@@ -127,9 +123,9 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [capabilities (await (test-capabilities dbs {}))]
-        (await (sut/add! capabilities "Guten Morgen" "доброе утро" :word nil))
-        (let [{:keys [created?]} (await (sut/add! capabilities "guten Morgen" "доброго утра" :phrase nil))
+      (let [learner (await (learner-of dbs {}))]
+        (await (sut/add! learner time/world "Guten Morgen" "доброе утро" :word nil))
+        (let [{:keys [created?]} (await (sut/add! learner time/world "guten Morgen" "доброго утра" :phrase nil))
               entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
           (is (false? created?))
           (is (= 1 (count entries)))
@@ -144,10 +140,10 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [capabilities (await (test-capabilities dbs {}))
-            result       (await (sut/add! capabilities "auf jeden Fall" "   " :phrase nil))]
+      (let [learner (await (learner-of dbs {}))
+            result  (await (sut/add! learner time/world "auf jeden Fall" "   " :phrase nil))]
         (is (= {:error :failure/empty-translations} result))
-        (is (empty? (missing capabilities))))))))
+        (is (empty? (missing learner))))))))
 
 
 (deftest add-collapses-line-breaks-in-a-phrase
@@ -155,7 +151,8 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (await (sut/add! (await (test-capabilities dbs {}))
+      (await (sut/add! (await (learner-of dbs {}))
+                       time/world
                        "auf jeden Fall"
                        "во всяком\n   случае"
                        :phrase

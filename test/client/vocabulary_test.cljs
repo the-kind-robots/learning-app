@@ -25,30 +25,19 @@
 
 
 (defn- with-test-dbs
-  "Calls `f` with the test databases, under which `::capabilities` is
-   what the use cases are handed: the learner port over those databases,
-   and the main card active."
+  "Calls `f` with the test databases, under which `::learner` is the Learner
+   over those databases, with the main card active."
   [f]
   (db-fixtures/with-test-dbs
    [user-db-name device-db-name]
    (^:async fn
     [[user-db device-db]]
-    (with-redefs [utils/now-iso time/now-iso
-                  utils/now-ms  time/now-ms]
-      (let [dbs {:device/db device-db :user/db user-db}]
-        (await (test-learner/with-learner
-                dbs
-                time/world
-                (fn [{started :learner}]
-                  (f (assoc dbs
-                            ::capabilities
-                            {:world   time/world
-                             :learner (test-learner/with-active-collection started (fn [] nil))}))))))))))
-
-
-(defn- test-capabilities
-  [dbs]
-  (::capabilities dbs))
+    (let [dbs {:device/db device-db :user/db user-db}]
+      (await (test-learner/with-learner
+              dbs
+              time/world
+              (fn [{started :learner}]
+                (f (assoc dbs ::learner (test-learner/with-active-collection started (fn [] nil)))))))))))
 
 
 (defn- ^:async list-of
@@ -77,7 +66,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id created?]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word nil))
+      (let [{:keys [word-id created?]} (await (sut/add! (::learner dbs) time/world "der Hund" "пёс" :word nil))
             vocabs  (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
             reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (is (string? word-id))
@@ -95,7 +84,7 @@
      (^:async fn
       [dbs]
       (await (js/Promise.all
-              (into-array (map (fn [i] (sut/add! (test-capabilities dbs) (str "word-" i) (str "перевод-" i) :word nil))
+              (into-array (map (fn [i] (sut/add! (::learner dbs) time/world (str "word-" i) (str "перевод-" i) :word nil))
                                (range 30)))))
       (let [cnt (await (count-of dbs))
             {:keys [words total]} (await (list-of dbs {}))]
@@ -109,11 +98,11 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word nil))]
-        (await (sut/add-review (test-capabilities dbs) word-id true "пёс"))
+      (let [{:keys [word-id]} (await (sut/add! (::learner dbs) time/world "der Hund" "пёс" :word nil))]
+        (await (sut/add-review (::learner dbs) time/world word-id true "пёс"))
         (await (db/insert (:user/db dbs) {:type "example" :word-id word-id :value "Der Hund läuft"}))
         (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
-          (await (sut/delete! (test-capabilities dbs) word-id))
+          (await (sut/delete! (::learner dbs) word-id))
           (is (empty? (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))))
           (is (= (map :_id reviews) (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review")))))
           (is (= 1 (count (await (db-queries/fetch-by-type (:user/db dbs) "example")))))))))))

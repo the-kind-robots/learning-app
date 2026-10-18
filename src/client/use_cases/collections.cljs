@@ -49,7 +49,7 @@
   "Creates a collection from a raw name, trimmed and clamped to `collections/max-name-length`. Returns
    `{:ok :created :id}`, `{:error :invalid-name}` for a blank name, or `{:noop :duplicate}` when one with the
    same name (trimmed, case-insensitive) exists, so a re-create does not fragment the data."
-  [{:keys [learner world]} raw-name]
+  [learner world raw-name]
   (let [name (sendable-name raw-name)]
     (cond
       (str/blank? name) {:error :invalid-name}
@@ -64,13 +64,13 @@
   "Deletes a collection; its words and the examples made for it stay.
    Deleted while active, it is simply gone from memory, and «Всё подряд» is
    active."
-  [{:keys [learner]} coll-id]
+  [learner coll-id]
   (learner/change! learner [[:entity/collection coll-id (constantly :entity/deleted)]]))
 
 
 (defn switch-active!
   "Marks `coll-id` (or nil for the implicit main) as the active collection."
-  [{:keys [learner]} coll-id]
+  [learner coll-id]
   (learner/set-active-collection! learner coll-id))
 
 
@@ -78,7 +78,7 @@
   "Renames the active collection to the trimmed, clamped name. A blank name, or one another collection
    carries, keeps the current name and writes nothing. Returns `{:name}` with `:renamed? true` or `:noop
    :duplicate`, or nil when none is active."
-  [{:keys [learner world]} new-name]
+  [learner world new-name]
   (when-let [{active-id :id current :name} (learner/active-collection learner)]
     (let [trimmed (sendable-name new-name)
           taken?  (await (name-taken? learner active-id trimmed))

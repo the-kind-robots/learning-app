@@ -12,13 +12,13 @@
 
 (defn find-duplicate
   "The word or phrase memory has under the same value, or nil."
-  [{:keys [learner]} value]
+  [learner value]
   (learner/word (learner/memory learner) (domain/vocab-id value)))
 
 
 (defn add-review
   "Writes a review of a word. Resolves once memory has it."
-  [{:keys [learner world]} word-id retained translation]
+  [learner world word-id retained translation]
   (learner/insert! learner
                    :entity/review
                    (assoc (domain/new-review word-id retained translation)
@@ -31,7 +31,7 @@
    gets an initial review unless memory holds its history, and a duplicate value merges translations.
    Resolves with `{:word-id :created?}` or `{:error :failure/empty-translations}`."
   ;; `kind` has no default: optional, `:static-fns` compiles call sites to an arity property a plain test stub lacks.
-  [{:keys [learner] :as capabilities} value translation kind pos]
+  [learner world value translation kind pos]
   (let [translation (domain/entered-translation kind translation)
         entry       (domain/entered-entry kind value translation pos)]
     (if-not entry
@@ -49,7 +49,7 @@
             created?   @created?
             history    (learner/review-history (learner/memory learner) (:id entry))]
         (when (and created? (zero? (count (:ids history))))
-          (await (add-review capabilities (:id entry) true translation)))
+          (await (add-review learner world (:id entry) true translation)))
         (when collection
           (await (learner/change! learner
                                   [[:entity/collection
@@ -88,7 +88,7 @@
 (defn ^:async update!
   "Edits the word `word-id` in place: its `value` (the same vocab id, spelled differently) and `translation`.
    Resolves with whether memory took the change."
-  [{:keys [learner]} word-id value translation]
+  [learner word-id value translation]
   (await (learner/change! learner
                           [[:entity/word word-id #(some-> % (phrase/edited-word value translation))]])))
 
@@ -97,7 +97,7 @@
   "Makes a new word of `value` and `translation` in the place of the word `word-id`: the same collections, the
    old word gone. A new word gets an initial review unless memory holds its history. Resolves with whether
    memory took the change."
-  [{:keys [learner] :as capabilities} word-id value translation]
+  [learner world word-id value translation]
   (let [kind        (if (phrase/phrase-value? value []) :phrase :word)
         translation (domain/entered-translation kind translation)
         entry       (domain/entered-entry kind (str/trim value) translation nil)
@@ -113,14 +113,14 @@
                                                               #(some-> % (collections/replace-word word-id (:id entry)))]))
                                                       (learner/collections-of memory word-id)))))]
         (when (and written (zero? (count (:ids (learner/review-history memory (:id entry))))))
-          (await (add-review capabilities (:id entry) true translation)))
+          (await (add-review learner world (:id entry) true translation)))
         written))))
 
 
 (defn ^:async delete!
   "Deletes a word and its place in every collection in one write; its reviews and examples stay. Resolves
    true when it wrote, nil when there was nothing to write, false when the write was taken back."
-  [{:keys [learner]} word-id]
+  [learner word-id]
   (let [memory  (await (learner/fresh-memory learner))
         listing (learner/collections-of memory word-id)]
     (await (learner/change! learner
@@ -133,7 +133,7 @@
 (defn ^:async remove-from-active!
   "Removes a word within the active scope: from a named collection and its children only the membership
    goes; from the implicit main the word and its place in every collection."
-  [{:keys [learner] :as capabilities} word-id]
+  [learner word-id]
   (if-let [collection (learner/active-collection learner)]
     (let [scope (collections/family (learner/collections (learner/memory learner))
                                     (:id collection))]
@@ -141,4 +141,4 @@
                               (mapv (fn [id]
                                       [:entity/collection id #(some-> % (collections/without-word word-id))])
                                     (or (seq (map :id scope)) [(:id collection)])))))
-    (await (delete! capabilities word-id))))
+    (await (delete! learner word-id))))
