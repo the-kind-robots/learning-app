@@ -61,7 +61,7 @@
      [dbs]
      (doseq [doc docs]
        (await (db/insert (:user/db dbs) doc)))
-     (await (test-learner/with-learner dbs time/world #(f (assoc % :dbs dbs))))))))
+     (await (test-learner/with-learner dbs #(f (assoc % :dbs dbs))))))))
 
 
 (def ^:private hund
@@ -134,7 +134,6 @@
        (is (= "der Pudel" (:value (await (db/get (:user/db dbs) "vocab:der hund")))))
        (await
         (test-learner/with-learner dbs
-                              time/world
                               (^:async fn
                                [{:keys [learner]}]
                                (await (learner/change! learner [[:entity/word "vocab:der hund" #(update % :value str "!")]]))
@@ -297,13 +296,13 @@
        (await (db/insert (:user/db dbs) hund))
        (await (db/insert (:user/db dbs) review))
        (await
-        (test-learner/with-learner dbs time/world (fn [{:keys [learner]}] (vocabulary/delete! (active learner nil) "vocab:der hund"))))
+        (test-learner/with-learner dbs (fn [{:keys [learner]}] (vocabulary/delete! (active learner nil) "vocab:der hund"))))
        ;; Another device made the word again, with a review, and a pull
        ;; brought both.
        (await (db/insert (:user/db dbs) (dissoc hund :_rev)))
        (await (db/insert (:user/db dbs) (assoc review :_id "review-2")))
        (dotimes [_ 2]
-         (await (test-learner/with-learner dbs time/world (fn [_] (js/Promise.resolve nil)))))
+         (await (test-learner/with-learner dbs (fn [_] (js/Promise.resolve nil)))))
        (is (= #{"review-1" "review-2"} (set (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review"))))))
        (is (= 1 (count (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))))))))))
 
@@ -500,62 +499,3 @@
           (stop)
           (await (collections/create! (active learner nil) time/world "Tiere"))
           (is (= seen @calls) "nothing after the stop")))))))
-
-
-;;
-;; The learner is initialized once memory is loaded and the first pass is done
-;;
-
-
-(defn- sleeping
-  "A world whose clock sleeps until `wake!`, with the milliseconds it was asked
-   to sleep and whether its signal aborted."
-  []
-  (let [wake    (atom nil)
-        slept   (atom nil)
-        aborted (atom false)]
-    {:aborted? aborted
-     :slept    slept
-     :wake!    #(@wake nil)
-     :world    {:sleep (fn [ms ^js signal]
-                         (reset! slept ms)
-                         (js/Promise.
-                          (fn [resolve]
-                            (reset! wake resolve)
-                            (.addEventListener signal "abort" #(reset! aborted true)))))}}))
-
-
-(defn- ^:async settled
-  "Whether `promise` has resolved by the time the event loop has turned."
-  [promise]
-  (let [done (atom false)]
-    (.then promise #(reset! done true))
-    (await (wait/settled))
-    @done))
-
-
-(deftest initialized-waits-for-memory-and-the-first-pass-and-drops-the-timer
-  (async-testing "memory loaded, first pass pending: not yet; the pass completes: initialized, the minute's sleep cancelled"
-    (let [store                   (atom {:learner/memory memory/empty-memory})
-          {:keys [aborted? slept world]} (sleeping)
-          [first-pass pass-done!] (let [resolve (atom nil)
-                                        promise (js/Promise. #(reset! resolve %))]
-                                    [promise @resolve])
-          initialized             (adapter/initialize {:store store :world world} first-pass (js/AbortController.))]
-      (is (false? (await (settled initialized))) "memory is not loaded")
-      (swap! store assoc :learner/loaded? true)
-      (is (false? (await (settled initialized))) "the first pass is pending")
-      (is (= 60000 @slept) "a minute is the longest it waits")
-      (pass-done! nil)
-      (is (true? (await (settled initialized))))
-      (is (true? @aborted?) "the sleep is cancelled when the pass won"))))
-
-
-(deftest initialized-stops-waiting-for-a-first-pass-after-a-minute
-  (async-testing "a first pass that never comes: initialized when the minute is up"
-    (let [store                          (atom {:learner/memory memory/empty-memory :learner/loaded? true})
-          {:keys [wake! world]}          (sleeping)
-          initialized                    (adapter/initialize {:store store :world world} (js/Promise. (fn [_])) (js/AbortController.))]
-      (is (false? (await (settled initialized))))
-      (wake!)
-      (is (true? (await (settled initialized)))))))

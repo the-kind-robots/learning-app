@@ -21,6 +21,7 @@
    [client.support.wait :as wait]
    [cljs.test :refer-macros [are deftest is use-fixtures]]
    [domain.vocabulary :as vocabulary]
+   [ports.account :as account]
    [ports.learner :as learner]
    [ports.page :as page]
    [ports.world :as world]
@@ -195,14 +196,14 @@
                    (on-inactive [_ f ^js signal]
                      (reset! on-inactive f)
                      (.addEventListener signal "abort" #(reset! on-inactive nil))))
-       :account  (reify learner/Account
-                   (exists? [_] (not (false? account-exists?))))
+       :account  (reify account/Account
+                   (exists? [_] (not (false? account-exists?)))
+                   (initialized [_] (or initialized (js/Promise.resolve nil))))
        :learner  (reify learner/Learner
                    (fresh-memory [_]
                      (if catch-up
                        (catch-up store)
                        (js/Promise.resolve (:learner/memory @store))))
-                   (initialized [_] (or initialized (js/Promise.resolve nil)))
                    (memory [_] (:learner/memory @store))
                    (on-change [_ f] (learner-adapter/on-change {:store store} f))
                    (insert! [_ _ example]
@@ -993,7 +994,6 @@
          (await
           (test-learner/with-learner
            dbs
-           time/world
            (^:async fn
             [{:keys [store] :as started}]
             (let [{:keys [advance!] :as w} (world []

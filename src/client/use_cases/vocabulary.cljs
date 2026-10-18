@@ -39,8 +39,9 @@
    Resolves with `{:word-id :created?}` or `{:error :failure/empty-translations}`."
   ;; `kind` has no default: optional, `:static-fns` compiles call sites to an arity property a plain test stub lacks.
   [learner world value translation kind pos]
-  (let [translation (domain/entered-translation kind translation)
-        entry       (domain/entered-entry kind value translation pos)]
+  (let [now         (world/clock world :now-iso)
+        translation (domain/entered-translation kind translation)
+        entry       (domain/entered-entry kind value translation pos now)]
     (if-not entry
       {:error :failure/empty-translations}
       (let [collection (learner/active-collection learner)
@@ -51,7 +52,7 @@
                                                  (fn [stored]
                                                    (vreset! created? (nil? stored))
                                                    (if stored
-                                                     (domain/merged-entry stored entry)
+                                                     (domain/merged-entry stored entry now)
                                                      entry))]]))
             created?   @created?
             history    (learner/review-history learner (:id entry))]
@@ -95,9 +96,11 @@
 (defn ^:async update!
   "Edits the word `word-id` in place: its `value` (the same vocab id, spelled differently) and `translation`.
    Resolves with whether memory took the change."
-  [learner word-id value translation]
+  [learner world word-id value translation]
   (await (learner/change! learner
-                          [[:entity/word word-id #(some-> % (phrase/edited-word value translation))]])))
+                          [[:entity/word
+                            word-id
+                            #(some-> % (domain/edited-word value translation (world/clock world :now-iso)))]])))
 
 
 (defn ^:async rename!
@@ -107,7 +110,7 @@
   [learner world word-id value translation]
   (let [kind        (if (phrase/phrase-value? value []) :phrase :word)
         translation (domain/entered-translation kind translation)
-        entry       (domain/entered-entry kind (str/trim value) translation nil)
+        entry       (domain/entered-entry kind (str/trim value) translation nil (world/clock world :now-iso))
         _           (await (learner/fresh-memory learner))]
     (if (or (nil? entry) (nil? (learner/word learner word-id)))
       false

@@ -5,6 +5,7 @@
   (:require
    [abort]
    [lambdaisland.glogi :as log]
+   [ports.account :as account]
    [ports.learner :as learner]
    [ports.page :as page]
    [ports.world :as world]
@@ -169,9 +170,9 @@
 (defn- ^:async ready
   "Resolves once the learner is initialized: memory loaded, and the session's
    first sync pass completed or waited for long enough
-   (`initialized` of the Learner). Stopping the backfill ends the wait."
-  [{:keys [learner] :as backfill}]
-  (await (unless-closed backfill (learner/initialized learner)))
+   (`initialized` of the Account). Stopping the backfill ends the wait."
+  [{:keys [account learner] :as backfill}]
+  (await (unless-closed backfill (account/initialized account)))
   (await (learner/fresh-memory learner)))
 
 
@@ -232,12 +233,13 @@
   "Starts fetching and returns the function that stops it. A device without an
    account fetches nothing."
   [{:keys [account examples-generator learner page world]}]
-  (if-not (learner/exists? account)
+  (if-not (account/exists? account)
     (do (log/info :examples/no-account {})
         (fn stop []))
     (let [controller (atom nil)
           closing    (js/AbortController.)
-          backfill   {:controller         controller
+          backfill   {:account            account
+                      :controller         controller
                       :examples-generator examples-generator
                       :learner            learner
                       :page               page

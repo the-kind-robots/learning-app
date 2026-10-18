@@ -5,6 +5,8 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
+   [adapters.account :as account]
+   [adapters.learner :as learner-adapter]
    [adapters.learner.documents :as documents]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.learner :as test-learner]
@@ -14,7 +16,7 @@
    [db :as db]
    [db.pouch :as pouch]
    [ports.learner :as learner]
-   [adapters.learner.sync :as sut]))
+   [adapters.learner.conflicts :as sut]))
 
 
 (def phone-name (db-fixtures/db-name "client.collection-conflicts-test.phone"))
@@ -168,7 +170,6 @@
       (await (replication/replicated! (:user/db laptop) (:user/db phone)))
       (await (test-learner/with-learner
               phone
-              time/world
               (^:async fn
                [{:keys [learner]}]
                (await (learner/change! learner [[:entity/collection "c1" (constantly :entity/deleted)]])))))
@@ -187,7 +188,6 @@
       (await (add-word! laptop "vocab:katze"))
       (await (test-learner/with-learner
               phone
-              time/world
               (^:async fn
                [{:keys [learner]}]
                (await (learner/change! learner [[:entity/collection "c1" (constantly :entity/deleted)]])))))
@@ -205,7 +205,8 @@
         versions pouch/doc-versions]
     (with-redefs [pouch/sync-once! (fn [_ _ _] (js/Promise.resolve {:pulled 1 :pulled-ids pulled-ids :pulled-revs #{} :pushed 0}))
                   pouch/doc-versions     (fn [& args] (swap! reads inc) (apply versions args))]
-      (await (sut/sync-once! dbs "account")))
+      (await (account/sync-once! dbs "account" (fn [{:keys [pulled-ids]}]
+                                 (learner-adapter/resolve-conflicts! {:databases dbs} pulled-ids)))))
     @reads))
 
 

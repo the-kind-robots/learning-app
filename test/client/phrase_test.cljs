@@ -31,7 +31,7 @@
    (^:async fn
     [[user-db device-db]]
     (let [dbs {:device/db device-db :user/db user-db}]
-      (await (test-learner/with-learner dbs time/world #(f (assoc dbs ::learner (:learner %) ::store (:store %)))))))))
+      (await (test-learner/with-learner dbs #(f (assoc dbs ::learner (:learner %) ::store (:store %)))))))))
 
 
 (def ^:private phrase-id

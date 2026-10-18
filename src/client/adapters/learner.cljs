@@ -1,15 +1,14 @@
 (ns adapters.learner
   "The learner's data: memory to read, every write, the active collection, and what they rest on (`start!`).
    The learner owns its memory in `store`; a write goes to PouchDB, then memory catches up (ADR-0019).
-   `learner` is `{:databases :store :world}`, with `world` the `:now-iso` and `:sleep` functions it needs."
+   `learner` is `{:checked :databases :store}`."
   (:require
-   [abort]
    [adapters.learner.active-id :as active-id]
+   [adapters.learner.conflicts :as conflicts]
    [adapters.learner.databases :as databases]
    [adapters.learner.documents :as documents]
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
-   [adapters.learner.sync :as sync]
    [db.pouch :as pouch]
    [lambdaisland.glogi :as log]))
 
@@ -35,33 +34,12 @@
 
 
 (defn new-learner
-  "The learner over the world (time), the `databases` and the `store`, the
-   atom that keeps memory."
-  [{:keys [databases store world]}]
-  {:databases databases
-   :store     store
-   :world     world})
-
-
-(defn- until-store
-  "A promise that resolves once `(pred state)` holds for the store's state, at once if it holds now. When
-   `signal` aborts first it stays pending and the watch is gone."
-  [store pred signal]
-  (js/Promise.
-   (fn [resolve]
-     (if (pred @store)
-       (resolve nil)
-       (let [watch-key (gensym "until-store-")
-             unlisten  (volatile! (fn []))]
-         ;; The watch goes in before the abort listener: an already aborted signal calls back at once and must find it.
-         (add-watch store
-                    watch-key
-                    (fn [_ _ _ state]
-                      (when (pred state)
-                        (remove-watch store watch-key)
-                        (@unlisten)
-                        (resolve nil))))
-         (vreset! unlisten (abort/on-abort signal #(remove-watch store watch-key))))))))
+  "The learner over the `databases`, the `store`, the atom that keeps memory, and `checked`, the promise of
+   the snapshot check."
+  [{:keys [checked databases store]}]
+  {:checked   checked
+   :databases databases
+   :store     store})
 
 
 (defn ^:async fresh-memory
@@ -90,19 +68,10 @@
                        :schema   documents/vocab-schema}})
 
 
-(defn- stamped
-  "`word` stamped modified now; a word with no creation time is also
-   stamped created now."
-  [learner word]
-  (let [now ((:now-iso (:world learner)))]
-    (cond-> (assoc word :modified-at now)
-      (nil? (:created-at word)) (assoc :created-at now))))
-
-
 (defn- next-document
   "What `change` makes of the `stored` document of `entity`: nil to write nothing, `:entity/deleted`, or the
    document to write. Fields the stored document has and the entity lacks are kept."
-  [learner entity stored change]
+  [entity stored change]
   (let [{:keys [from-doc]} (kinds entity)
         before (some-> stored from-doc)
         after  (change before)]
@@ -110,8 +79,7 @@
       (or (nil? after) (identical? after before)) nil
       (= :entity/deleted after) :entity/deleted
       :else (merge (apply dissoc stored (keys (documents/doc before)))
-                   (documents/doc (cond->> after
-                                    (= :entity/word entity) (stamped learner)))))))
+                   (documents/doc after)))))
 
 
 (defn- ^:async live-versions
@@ -126,10 +94,10 @@
   "What the operation `[entity id change]` writes, as PouchDB holds the
    document now: a vector of `{:doc :previous}`, the document to write and
    the one it replaces."
-  [{:keys [databases] :as learner} [entity id change]]
+  [{:keys [databases]} [entity id change]]
   (let [{:keys [schema]} (kinds entity)
         stored (await (pouch/get databases schema id))
-        doc    (next-document learner entity stored change)]
+        doc    (next-document entity stored change)]
     (cond
       (nil? doc)
       []
@@ -242,46 +210,29 @@
       :else       :status/loading)))
 
 
-(def ^:private initialized-wait-ms
-  "How long a first sync pass is waited for once memory is loaded."
-  60000)
+(defn storage
+  "What the account replicates: the learner's databases, and a promise that holds every replication pass until
+   memory's snapshot has been checked (ADR-0018). Opaque to all but `adapters.account`."
+  [{:keys [checked databases]}]
+  {:databases       databases
+   :passes-wait-for checked})
 
 
-;; Plain, not async: an async function would await the promise `sleep` returns (docs/dev/cljs-async-pitfalls.md).
-(defn initialize
-  "Resolves nil once memory is loaded and the first sync pass has completed (`first-pass`), or once
-   `initialized-wait-ms` have passed without it; `waited` cancels the timer however the wait ends."
-  [{:keys [store world]} first-pass ^js waited]
-  (let [{:keys [sleep]} world]
-    (-> (until-store store :learner/loaded? nil)
-        (.then (fn []
-                 (js/Promise.race #js [first-pass
-                                       (.then (sleep initialized-wait-ms (.-signal waited))
-                                              (constantly ::timed-out))])))
-        (.then (fn [won]
-                 (when (= ::timed-out won)
-                   (log/info :learner/gave-up-waiting-for-sync {:waited-ms initialized-wait-ms}))
-                 (.abort waited)
-                 nil)))))
+(defn ^:async resolve-conflicts!
+  "Resolves the conflicts a replication pass left in the learner's documents: `pulled-ids` is what the pass
+   pulled, by document type."
+  [{:keys [databases]} pulled-ids]
+  (await (conflicts/resolve-vocab-conflicts! (:user/db databases)))
+  (await (conflicts/resolve-collection-conflicts! databases (pulled-ids (:type documents/collection-schema)))))
 
 
 (defn ^:async start!
-  "Starts the learner's data. The incoming credential is handled before the databases open; memory is read
-   and followed without awaiting, and sync passes wait for the snapshot check (ADR-0018). Resolves with
-   `{:initialized :learner :sync}`: `initialized` is a promise (memory loaded and the first sync pass done, or a minute
-   passed), `sync` what `adapters.learner.sync/start!` returned."
-  [{:keys [browser world]}]
+  "Starts the learner's data. Memory is read and followed without awaiting; the snapshot check (ADR-0018) is
+   what replication waits for. Resolves with the learner."
+  []
   (let [store (atom {:learner/memory memory/empty-memory})
         _ (databases/persist!)
-        _ (await (sync/check-incoming-auth! nil))
         databases (await (databases/open-pouch!))
         checked (loader/start-reading! databases store)
-        _ (loader/start! databases store)
-        replication (await (sync/start! {:browser         browser
-                                         :databases       databases
-                                         :passes-wait-for checked}))
-        learner (new-learner {:databases databases :store store :world world})
-        initialized (initialize learner (:first-pass replication) (js/AbortController.))]
-    {:initialized initialized
-     :learner     learner
-     :sync        replication}))
+        _ (loader/start! databases store)]
+    (new-learner {:checked checked :databases databases :store store})))

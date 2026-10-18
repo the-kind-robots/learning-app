@@ -35,7 +35,6 @@
     (let [dbs {:device/db device-db :user/db user-db}]
       (await (test-learner/with-learner
               dbs
-              time/world
               (fn [{started :learner}]
                 (f (assoc dbs ::learner (test-learner/with-active-collection started (fn [] nil)))))))))))
 

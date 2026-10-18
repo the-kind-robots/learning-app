@@ -98,7 +98,7 @@
    that was handed over and what the start read (`reads-during`)."
   [dbs puts]
   (let [before @puts
-        [{:keys [stop store]} reads] (await (reads-during #(test-learner/started dbs {})))]
+        [{:keys [stop store]} reads] (await (reads-during #(test-learner/started dbs)))]
     (await (wait/until #(> @puts before)))
     (stop)
     {:memory (:learner/memory @store) :reads reads}))
@@ -277,7 +277,7 @@
            (await (db/remove (:user/db dbs) (await (db/get (:user/db dbs) "vocab:die katze"))))
            (let [tiere (await (db/get (:user/db dbs) "coll-tiere"))]
              (await (db/insert (:user/db dbs) (assoc tiere :name "Tiere!"))))
-           (let [[{:keys [stop store]} reads] (await (reads-during #(test-learner/started dbs {})))
+           (let [[{:keys [stop store]} reads] (await (reads-during #(test-learner/started dbs)))
                  restored (:learner/memory @store)]
              (stop)
              (is (zero? (:full reads)) "no document is read in full")
@@ -369,7 +369,7 @@
         (await (session! dbs puts))
         (await (written! (:other/db dbs) (await (lost-tail! dbs n))))
         (let [lost (assoc dbs :user/db (:other/db dbs))
-              [{:keys [stop store]} reads] (await (reads-during #(test-learner/started lost {})))]
+              [{:keys [stop store]} reads] (await (reads-during #(test-learner/started lost)))]
           (stop)
           {:full-read (await (full-read (:other/db dbs)))
            :memory    (:learner/memory @store)
@@ -408,7 +408,7 @@
            (^:async fn
             [dbs]
             (await (seeded! dbs))
-            (let [{:keys [stop store]} (await (test-learner/started dbs {}))]
+            (let [{:keys [stop store]} (await (test-learner/started dbs))]
               (await (wait/until #(= 1 @puts)))
               (await (db/insert (:user/db dbs) haus))
               (await (wait/until #(memory/word (:learner/memory @store) "vocab:das haus")))

@@ -175,7 +175,7 @@
                                        :word        "der Hund"
                                        :value       "Der Hund bellt."
                                        :translation "Пёс лает"}]))
-      (let [{:keys [stop store]} (await (test-learner/started dbs {}))
+      (let [{:keys [stop store]} (await (test-learner/started dbs))
             memory #(:learner/memory @store)]
         (is (= ["vocab:der hund"] (map :id (sut/words (memory)))))
         (is (= 1 (count (review-ids (memory) "vocab:der hund"))))

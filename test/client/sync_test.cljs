@@ -2,8 +2,9 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.learner.identity :as identity]
-   [adapters.learner.sync :as sut]
+   [adapters.account :as account]
+   [adapters.account.identity :as identity]
+   [adapters.learner.conflicts :as sut]
    [client.support.db-fixtures :as db-fixtures]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]))
@@ -254,7 +255,7 @@
                   identity/load-identity! (fn [] (js/Promise.resolve {:id 1 :token "old"}))
                   identity/account-id! (fn [_] (js/Promise.resolve account-id))
                   identity/save-identity! (fn [_] (js/Promise.resolve nil))]
-      (await (sut/check-incoming-auth! nil)))
+      (await (account/check-incoming-auth! nil)))
     (finally
      (js/Reflect.deleteProperty js/globalThis "window"))))
 

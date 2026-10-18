@@ -56,9 +56,9 @@
 
 (nxr/register-effect! :effect/update-word
   (fn ^:async update-word
-    [{{:keys [learner]} :capabilities :keys [dispatch]} _ {:keys [id translation value]}]
+    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ {:keys [id translation value]}]
     (try
-      (await (vocabulary/update! learner id value translation))
+      (await (vocabulary/update! learner world id value translation))
       (dispatch [[:effect/enter :action/refresh-page]])
       (catch js/Error err
         (log/error :effect/update-word {:error (str err)})))))

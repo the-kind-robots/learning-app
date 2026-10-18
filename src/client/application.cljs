@@ -8,6 +8,7 @@
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
+   [ports.account :as account]
    [ports.learner :as learner]
    [ports.navigation :as navigation]
    [ports.world :as world]
@@ -48,7 +49,7 @@
 (nxr/register-effect! :effect/sync
   ;; The result reaches the screen through memory's change feed; nothing is reloaded here.
   (fn sync [{:keys [capabilities]} _ & [reason]]
-    (learner/sync! (:account capabilities) reason)
+    (account/sync! (:account capabilities) reason)
     nil))
 
 

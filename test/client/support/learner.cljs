@@ -6,24 +6,19 @@
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
    [domain.examples :as examples]
-   [ports.learner :as learner]
-   [ports.world :as world]))
+   [ports.learner :as learner]))
 
 
 (defn ^:async started
   "Starts memory over `dbs` into a new store, and the Learner over
    both. Resolves once memory is fully loaded, with `{:learner :stop :store}`:
    the Learner, a function that stops following the feeds, and
-   the store. `world` is the World the learner reads the time from."
-  [dbs world]
+   the store."
+  [dbs]
   (let [store (atom {:learner/memory memory/empty-memory})
         stop  (await (loader/start! dbs store))]
     {:learner (learner/as-learner
-               (adapter/new-learner {:databases dbs
-                                     :store     store
-                                     :world     {:now-iso #(world/clock world :now-iso)
-                                                 :sleep   #(world/clock world :sleep %1 %2)}})
-               (js/Promise.resolve nil))
+               (adapter/new-learner {:databases dbs :store store}))
      :stop    stop
      :store   store}))
 
@@ -47,14 +42,15 @@
     (set-active-collection! [_ id] (learner/set-active-collection! learner id))
     (on-change [_ f] (learner/on-change learner f))
     (status [_] (learner/status learner))
-    (initialized [_] (learner/initialized learner))))
+    (storage [_] (learner/storage learner))
+    (resolve-conflicts! [_ pulled-ids] (learner/resolve-conflicts! learner pulled-ids))))
 
 
 (defn ^:async with-learner
   "Calls `f` with what `started` resolves with, and stops following the
    feeds once the promise `f` returns settles."
-  [dbs clock f]
-  (let [{:keys [stop] :as started} (await (started dbs clock))]
+  [dbs f]
+  (let [{:keys [stop] :as started} (await (started dbs))]
     (try
       (await (f started))
       (finally

@@ -1,13 +1,9 @@
 (ns ports.learner
-  "The learner's data, as the app reaches it: memory to read, every write, and
-   the active collection; opening its databases; replicating it with the
-   account. `adapters.learner` does the work."
-  (:refer-clojure :exclude [exists?])
+  "The learner's data, as the app reaches it: memory to read, every write, and the active collection.
+   `adapters.learner` does the work."
   (:require
    [adapters.learner :as adapter]
-   [adapters.learner.memory :as memory]
-   [ports.page :as page]
-   [ports.world :as world]))
+   [adapters.learner.memory :as memory]))
 
 
 (defprotocol Learner
@@ -30,25 +26,17 @@
     "Calls `f`, with no arguments, whenever memory or its status changes. Returns a function that stops it.")
   (status [l]
     "`:status/unreadable`, `:status/loaded` or `:status/loading`.")
-  (initialized [l]
-    "A promise that resolves once memory is loaded and the first sync pass is done, or a minute has passed."))
-
-
-(defprotocol Account
-  (exists? [a]
-    "Whether this device has an account.")
-  (sync! [a reason]
-    "Asks for a replication pass with the account, if there is one.")
-  (sync-link [a] [a nonce]
-    "A promise of the link another device opens to join this account, nil without one. With a `nonce` the
-     opener echoes it back, so whoever showed the link can tell it joined.")
-  (on-device-joined [a nonce f]
-    "Calls `f` once the device that opened the link carrying `nonce` has joined."))
+  (storage [l]
+    "What the account replicates, opaque to the caller: the learner's databases and the wait for memory's snapshot
+     check. `ports.account` hands it to its adapter.")
+  (resolve-conflicts! [l pulled-ids]
+    "A promise that resolves once the conflicts a replication pass left in the learner's documents are merged.
+     `pulled-ids` is what the pass pulled, by document type."))
 
 
 (defn as-learner
-  "The Learner over the adapter's `learner` whose first sync pass is the promise `initialized`."
-  [learner initialized]
+  "The Learner over the adapter's `learner`."
+  [learner]
   (reify Learner
     (memory [_] (adapter/current-memory learner))
     (fresh-memory [_] (adapter/fresh-memory learner))
@@ -58,35 +46,14 @@
     (set-active-collection! [_ id] (adapter/set-active-collection! learner id))
     (on-change [_ f] (adapter/on-change learner f))
     (status [_] (adapter/status learner))
-    (initialized [_] initialized)))
-
-
-(defn as-account
-  "The Account over what the adapter's sync started with."
-  [sync]
-  (reify Account
-    (exists? [_] (:exists? sync))
-    (sync! [_ reason] ((:sync! sync) reason))
-    (sync-link [_] ((:sync-link sync)))
-    (sync-link [_ nonce] ((:sync-link sync) nonce))
-    (on-device-joined [_ nonce f] ((:on-device-joined sync) nonce f))))
+    (storage [_] (adapter/storage learner))
+    (resolve-conflicts! [_ pulled-ids] (adapter/resolve-conflicts! learner pulled-ids))))
 
 
 (defn ^:async start!
-  "Starts the learner's data (`adapters.learner/start!`), given `world` and `page`, and resolves with
-   `{:learner :account}`, a Learner and an Account."
-  [{:keys [page world]}]
-  (let [{:keys [initialized learner sync]}
-        (await (adapter/start! {:browser {:active?              #(page/active? page)
-                                          :on-offline           #(page/on-offline page %)
-                                          :on-online            #(page/on-online page %)
-                                          :on-visibility-change #(page/on-visibility-change page %)
-                                          :online?              #(page/online? page)
-                                          :visible?             #(page/visible? page)}
-                                  :world   {:now-iso #(world/clock world :now-iso)
-                                            :sleep   #(world/clock world :sleep %1 %2)}}))]
-    {:account (as-account sync)
-     :learner (as-learner learner initialized)}))
+  "Starts the learner's data (`adapters.learner/start!`) and resolves with its Learner."
+  []
+  (as-learner (await (adapter/start!))))
 
 
 ;;

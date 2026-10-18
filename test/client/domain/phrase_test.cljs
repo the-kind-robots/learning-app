@@ -46,19 +46,3 @@
     (is (false? (sut/phrase-suggestion? {:lemma "hallo" :pos "phrase"}))))
   (testing "multi-word non-phrase lemmas stay words"
     (is (false? (sut/phrase-suggestion? {:lemma "sich freuen" :pos "verb"})))))
-
-
-(deftest the-edit-dialog-text-is-read-as-the-kind-of-the-word
-  (is (= {:id "vocab:der hundd" :translation [{:lang "ru" :value "пёс, собака"}] :value "der Hundd"}
-         (sut/edited-word {:id "vocab:der hundd" :translation [{:lang "ru" :value "пёс"}] :value "der Hund"}
-                          " der Hundd "
-                          "пёс, собака"))
-      "a word keeps its translation whole and its value trimmed")
-  (is (= {:id          "vocab:auf jeden fall"
-          :kind        "phrase"
-          :translation [{:lang "ru" :value "в любом случае"}]
-          :value       "auf jeden Fall"}
-         (sut/edited-word {:id "vocab:auf jeden fall" :kind "phrase" :translation [] :value "auf jeden fall"}
-                          "auf  jeden\nFall"
-                          "в любом\nслучае"))
-      "a phrase collapses both texts to single spaces"))

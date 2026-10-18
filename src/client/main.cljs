@@ -17,6 +17,7 @@
    [pages.lesson.effects]
    [pages.words.actions]
    [pages.words.effects]
+   [ports.account :as account]
    [ports.dictionary :as dictionary]
    [ports.examples-generator :as examples-generator]
    [ports.install :as install]
@@ -43,10 +44,11 @@
         install            (install/start!)
         examples-generator (examples-generator/start!)
         ;; The dictionary opens SQLite while the learner opens PouchDB; neither waits for the other.
-        ;; The learner's sync writes the session cookie. The learner's `initialized` is a promise: memory loaded,
+        ;; The account's sync writes the session cookie. Its `initialized` is a promise: memory loaded,
         ;; first sync pass done.
-        [dictionary {:keys [account learner]}] (await (js/Promise.all #js [(dictionary/start!)
-                                                                           (learner/start! {:page page :world world})]))
+        [dictionary learner] (await (js/Promise.all #js [(dictionary/start!)
+                                                         (.then (account/check-incoming-auth!) #(learner/start!))]))
+        account            (await (account/start! {:learner learner :page page :world world}))
         capabilities       {:account            account
                             :dictionary         dictionary
                             :examples-generator examples-generator
@@ -59,7 +61,7 @@
                             :capabilities capabilities}
         dispatch           (fn [dispatch-data actions]
                              (nxr/dispatch system dispatch-data actions))]
-    ;; Starts after the learner, whose sync wrote the session cookie: a request without it is answered 401.
+    ;; Starts after the account, whose sync wrote the session cookie: a request without it is answered 401.
     (example-backfill/start! capabilities)
     (nxr/register-system->state! application/state)
     (r/set-dispatch! dispatch)
@@ -68,9 +70,9 @@
      install
      #(swap! app-state assoc :pwa/install-available? true)
      #(swap! app-state assoc :pwa/install-available? false))
-    (swap! app-state assoc :app/has-account? (learner/exists? account))
+    (swap! app-state assoc :app/has-account? (account/exists? account))
     ;; After render, so the first route has a screen to compute. Starting the router reads the address,
-    ;; which `ports.learner/start!` has already handled.
+    ;; which `ports.account/check-incoming-auth!` has already handled.
     (navigation/follow! navigation
                         (fn [entered]
                           (let [current-page (pages/table entered)]
