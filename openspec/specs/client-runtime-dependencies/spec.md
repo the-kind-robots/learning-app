@@ -75,34 +75,34 @@ The client runtime MUST start dependencies in declared order and stop them in re
 - **AND** cleanup is best-effort so one cleanup failure does not prevent later cleanup attempts
 
 ### Requirement: Dictionary handle is ready before dictionary data
-The dictionary port MUST expose a stable handle before the dictionary data is fully ready,
-and that handle MUST be callable at any point after it exists. A completion request made
+The dictionary port MUST expose a stable instance before the dictionary data is fully ready,
+and that instance MUST be callable at any point after it exists. A completion request made
 before the data is there resolves with no completions, so no caller SHALL gate the request
-on readiness. The port SHALL expose `:dictionary/ready?` as a reading rather than a gate,
+on readiness. The port SHALL expose `ready?` as a reading rather than a gate,
 because an empty answer alone cannot say whether the prefix has no completions or this
 context has no dictionary.
 
 #### Scenario: Autocomplete before dictionary data is ready
 - **WHEN** the router has started and the dictionary worker is still fetching, importing, or opening dictionary data
-- **THEN** the dictionary capability exists in capabilities
-- **AND** `:dictionary/completions` accepts the call rather than refusing it
+- **THEN** the dictionary instance exists in capabilities
+- **AND** `completions` accepts the call rather than refusing it
 - **AND** it resolves with no completions, or rejects if this context failed to open the dictionary
-- **AND** `:dictionary/ready?` reports false meanwhile
+- **AND** `ready?` reports false meanwhile
 - **AND** page startup is not blocked by dictionary data readiness
 
 #### Scenario: Autocomplete after dictionary data is ready
 - **WHEN** the dictionary worker has opened the current SQLite dictionary
-- **THEN** `:dictionary/completions` queries the dictionary worker normally
-- **AND** `:dictionary/ready?` reports true
+- **THEN** `completions` queries the dictionary worker normally
+- **AND** `ready?` reports true
 
 ### Requirement: Public dependencies are small capabilities
-The capabilities map MUST expose small app capabilities instead of implementation-specific globals.
+The `:capabilities` map MUST hold port instances, each implementing the protocols of its port, instead of implementation-specific globals. It exists for the Nexus system and runtime startup only.
 
 #### Scenario: Use case receives capabilities
 - **WHEN** a public use-case function is called from an effect handler
-- **THEN** it may receive the full capabilities map
-- **AND** it destructures required capabilities immediately
-- **AND** private helpers receive narrow data or exact port handles, not the whole capabilities map
+- **THEN** the effect takes the port instances the use case uses out of the capabilities map
+- **AND** the use case receives them as explicit arguments, never the capabilities map
+- **AND** private helpers receive narrow data or exact port instances
 
 #### Scenario: Domain functions stay pure
 - **WHEN** domain functions are called
