@@ -26,12 +26,12 @@
         error (:home/add-error state)]
     {:error                (case error
                              nil                 nil
-                             :empty-translations :error/empty-translations
+                             :failure/empty-translations :error/empty-translations
                              :error/save-failed)
      :phrase?              (= :phrase mode)
      :suggestions          (suggestions-props state)
      :translation          (:home/translation state)
-     :translation-invalid? (= :empty-translations error)
+     :translation-invalid? (= :failure/empty-translations error)
      :word                 (:home/word state)}))
 
 

@@ -150,7 +150,7 @@
       [dbs]
       (let [capabilities (await (test-capabilities dbs {}))
             result       (await (sut/add! capabilities "auf jeden Fall" "   " :phrase nil))]
-        (is (= {:error :empty-translations} result))
+        (is (= {:error :failure/empty-translations} result))
         (is (empty? (missing capabilities))))))))
 
 

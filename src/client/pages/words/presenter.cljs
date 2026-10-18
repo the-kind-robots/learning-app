@@ -49,7 +49,10 @@
    applies. An empty vocabulary drops the chrome, an empty filter keeps it; while `total` is nil the list
    shows nothing."
   [{:words/keys [editing in-collection? more? rows search total]}]
-  {:editing     editing
+  {:editing     (some-> editing
+                        (select-keys [:id :phrase? :renamed? :spelling-taken? :translation :value])
+                        (assoc :save-disabled? (boolean (or (str/blank? (or (:draft-value editing) (:value editing)))
+                                                            (:spelling-taken? editing)))))
    :in-collection? (boolean in-collection?)
    :empty-state (empty-state rows total)
    :items       (word-list-props rows)

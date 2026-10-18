@@ -161,3 +161,10 @@
                     reconciling-a-version-with-itself-changes-nothing]]
     (let [result (tc/quick-check 200 property)]
       (is (:pass? result) (pr-str (select-keys result [:seed :num-tests :shrunk]))))))
+
+
+(deftest a-replaced-word-keeps-its-place-in-the-collection
+  (are [word-ids expected] (= expected (:word-ids (collections/replace-word {:word-ids word-ids} "a" "z")))
+    ["x" "a" "y"] ["x" "z" "y"]
+    ["x" "a" "z"] ["x" "z"]
+    ["x" "y"]     ["x" "y"]))

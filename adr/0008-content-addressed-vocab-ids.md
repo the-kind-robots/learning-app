@@ -9,7 +9,7 @@ Vocab docs get a random UUID `_id` — `new-word` sets no `_id`, PouchDB generat
 
 Cross-device merge (ADR-0006) unions two local datasets via replication. Two devices each added the same word → two UUID-keyed docs, same value → replication keeps both → duplicate-by-value. Add-time dedup never fires (runs on add, not on sync).
 
-Word value is immutable — editing is restricted to translation (GH-96). So a value-derived id never needs to change.
+A document's id never changes, so a changed spelling is a different document: the dialog's correction of a word's text replaces the document instead of editing it (GH-575; the requirement is `openspec/specs/learner-data-memory/spec.md`). Only the translation, and the spelling's case and spacing, change in place.
 
 ## Decision
 

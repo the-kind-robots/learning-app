@@ -1,5 +1,7 @@
 (ns pages.words.actions
   (:require
+   [clojure.string :as str]
+   [domain.vocabulary :as domain]
    [nexus.registry :as nxr]
    [use-cases.vocabulary :as vocabulary]))
 
@@ -68,6 +70,18 @@
     [[:effect/save {:words/editing word}]]))
 
 
+(nxr/register-action! :action/edit-spelling
+  ;; The text typed into the dialog's word field, kept with what it means for saving: whether it is another
+  ;; word's spelling, and whether it is a new word instead of this one.
+  (fn edit-spelling [state text]
+    (let [{:keys [id] :as editing} (:words/editing state)]
+      [[:effect/save
+        {:words/editing (assoc editing
+                               :draft-value text
+                               :renamed? (and (not (str/blank? text)) (not= id (domain/vocab-id text)))
+                               :spelling-taken? (vocabulary/spelling-taken? (:learner/memory state) id text))}]])))
+
+
 (nxr/register-action! :action/close-word-edit
   (fn close-word-edit [_]
     [[:effect/save {:words/editing nil}]]))
@@ -109,10 +123,16 @@
 ;; An edit or a removal goes to PouchDB, which memory follows; the list is computed again at the row
 ;; count on screen, so neither throws the reader back to the first page.
 (nxr/register-action! :action/save-word
-  (fn save-word [_ {:keys [id translation]}]
-    ;; Saving closes the dialog; rows arriving for any other reason do not.
-    [[:effect/save {:words/editing nil}]
-     [:effect/update-word {:id id :translation translation}]]))
+  (fn save-word [state {:keys [id translation value]}]
+    ;; Saving closes the dialog; rows arriving for any other reason do not. A blank or taken spelling
+    ;; saves nothing: the button is off, and so is a submit by the keyboard.
+    (let [{:keys [renamed? spelling-taken?]} (:words/editing state)
+          word {:id id :translation translation :value value}]
+      (when-not (or (str/blank? value) spelling-taken?)
+        [[:effect/save {:words/editing nil}]
+         (if renamed?
+           [:effect/rename-word word]
+           [:effect/update-word word])]))))
 
 
 (nxr/register-action! :action/remove-word

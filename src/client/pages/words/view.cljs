@@ -37,7 +37,7 @@
 
 
 (defn- edit-dialog
-  [{:keys [id phrase? value translation]} in-collection?]
+  [{:keys [id phrase? renamed? save-disabled? spelling-taken? translation value]} in-collection?]
   [:dialog.word-edit-dialog.modal
    {:replicant/key id
     :replicant/on-mount [[:action/open-dialog]]
@@ -46,17 +46,43 @@
     {:autocapitalize "none"
      :autocorrect "off"
      :on {:submit [[:effect/prevent-default]
-                   [:action/save-word {:id id :translation [:event.form.field/value "translation"]}]]}}
-    [:div.word-edit-dialog__inputs
-     {:class (when phrase? "word-edit-dialog__inputs--phrase")}
-     [:span.word-edit-dialog__value {:lang "de"} value]
-     [:span.word-edit-dialog__arrow {:aria-hidden "true"} "→"]
+                   [:action/save-word {:id          id
+                                       :translation [:event.form.field/value "translation"]
+                                       :value       [:event.form.field/value "value"]}]]}}
+    [:div.word-edit-dialog__field
+     [:label.word-edit-dialog__label {:for "word-edit-value"} "Слово"]
+     ;; A textarea for a phrase, whose text may run over several lines.
+     [(if phrase?
+        :textarea.word-edit-dialog__input.word-edit-dialog__input--multiline
+        :input.word-edit-dialog__input)
+      {:id            "word-edit-value"
+       :name          "value"
+       :rows          (when phrase? 2)
+       :class         ["word-edit-dialog__input--word"
+                       (when renamed? "word-edit-dialog__input--renamed")
+                       (when spelling-taken? "word-edit-dialog__input--invalid")]
+       :autocapitalize "none"
+       :autocomplete  "off"
+       :autocorrect   "off"
+       :lang          "de"
+       :spellcheck    "false"
+       :aria-invalid  (when spelling-taken? "true")
+       :default-value value
+       :on            {:input [[:action/edit-spelling [:event.target/value]]]}}
+      (when phrase? value)]
+     (when (and renamed? (not spelling-taken?))
+       [:p.word-edit-dialog__notice {:role "status"}
+        (str "Сохранится как новое слово в тех же темах. «" value "» удалится вместе с прогрессом и примерами.")])
+     (when spelling-taken?
+       [:p.word-edit-dialog__error {:role "alert"} "Такое слово уже есть"])]
+    [:div.word-edit-dialog__field
+     [:label.word-edit-dialog__label {:for "word-edit-translation"} "Перевод"]
      ;; A textarea for both kinds: a translation may span several lines, and an `input` swallows line breaks.
      ;; Enter belongs to the text; Ctrl/Cmd+Enter and the save button submit, as on the add form.
      [:textarea.word-edit-dialog__input.word-edit-dialog__input--multiline
-      {:name         "translation"
+      {:id           "word-edit-translation"
+       :name         "translation"
        :rows         (if phrase? 2 1)
-       :class        (when phrase? "word-edit-dialog__input--phrase")
        :autocapitalize "none"
        :autocomplete "off"
        :autocorrect  "off"
@@ -74,7 +100,7 @@
       ;; A textarea ignores a value attribute: the default rides as child text.
       translation]]
     [:div.word-edit-dialog__actions
-     [:button.word-edit-dialog__save {:type "submit"} "Сохранить"]
+     [:button.word-edit-dialog__save {:type "submit" :disabled save-disabled?} "Сохранить"]
      [:button.word-edit-dialog__cancel
       {:type "button"
        :on   {:click [[:action/close-word-edit]]}}
@@ -87,7 +113,7 @@
                                            (str "Удалить «" value "» окончательно?"))
                         :id              id
                         :value           value}]]}}
-      "Удалить"]]]])
+      "Удалить слово"]]]])
 
 
 (defn- empty-state
