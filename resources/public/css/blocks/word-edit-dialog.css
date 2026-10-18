@@ -1,144 +1,389 @@
-.word-edit-dialog__form {
-  padding: 12px 16px;
+/*
+ * The word dialog: the word and its translations written straight on the sheet, a strip of cards with the
+ * word's examples, one for each collection, and a footer that stays at the bottom while the rest scrolls.
+ */
+.word-edit-dialog.modal {
+  background: rgb(var(--color-snow));
+  border: none;
+  border-radius: 20px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.12);
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  width: calc(100% - 24px);
 }
 
-.word-edit-dialog__field {
+.word-edit-dialog.modal[open] {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 14px;
 }
 
-.word-edit-dialog__label {
-  color: rgb(var(--color-wolf));
-  font-size: 14px;
-  font-weight: 700;
+@media (max-width: 600px) {
+  .word-edit-dialog.modal {
+    margin-top: 96px;
+    max-height: calc(100dvh - 108px);
+  }
 }
 
-.word-edit-dialog__input {
-  background: rgb(var(--color-snow));
-  border: 2px solid rgb(var(--color-swan));
-  border-radius: 10px;
-  box-sizing: border-box;
-  font-family: inherit;
-  font-size: 16px;
-  height: 48px;
-  width: 100%;
-  padding: 12px 14px;
-  transition: border-color 0.15s;
+.word-edit-dialog__form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.word-edit-dialog__input:focus {
-  border-color: rgb(var(--color-macaw));
+.word-edit-dialog__form:focus {
   outline: none;
 }
 
-.word-edit-dialog__input::placeholder {
-  color: rgb(var(--color-hare));
+.word-edit-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
-.word-edit-dialog__input--word {
-  font-size: 18px;
+.word-edit-dialog__head {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 20px 0;
+}
+
+/* Fields are written on the sheet; a field that has the focus gets a fill. */
+.word-edit-dialog__word,
+.word-edit-dialog__translations {
+  background: none;
+  border: none;
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-family: inherit;
+  margin: 0 -6px;
+  outline: none;
+  padding-left: 6px;
+  padding-right: 6px;
+  resize: none;
+  width: calc(100% + 12px);
+}
+
+.word-edit-dialog__word:focus,
+.word-edit-dialog__translations:focus {
+  background: rgb(var(--color-iguana));
+}
+
+.word-edit-dialog__word {
+  color: rgb(var(--color-black-text));
+  font-size: 26px;
   font-weight: 800;
+  height: 40px;
 }
 
-.word-edit-dialog__input--renamed,
-.word-edit-dialog__input--renamed:focus {
-  border-color: rgb(var(--color-bee));
+.word-edit-dialog__word--phrase {
+  field-sizing: content;
+  height: auto;
+  line-height: 1.25;
+  min-height: 40px;
+  padding-bottom: 4px;
+  padding-top: 4px;
 }
 
-.word-edit-dialog__input--invalid,
-.word-edit-dialog__input--invalid:focus {
-  border-color: rgb(var(--color-cardinal));
-}
-
-.word-edit-dialog__notice,
 .word-edit-dialog__error {
-  border-radius: 10px;
+  color: #b42318;
   font-size: 14px;
-  line-height: 1.45;
-  margin: 2px 0 0;
-  padding: 10px 12px;
-}
-
-.word-edit-dialog__notice {
-  background: rgba(var(--color-bee), 0.2);
-}
-
-.word-edit-dialog__error {
-  background: rgba(var(--color-cardinal), 0.14);
-  color: rgb(var(--color-cardinal));
   font-weight: 700;
 }
 
-.word-edit-dialog__input--multiline {
-  box-sizing: border-box;
+.word-edit-dialog__translations {
+  color: rgb(var(--color-eel));
   field-sizing: content;
+  font-size: 17px;
+  line-height: 26px;
+  min-height: 56px;
+  padding-bottom: 2px;
+  padding-top: 2px;
+}
+
+.word-edit-dialog__notice {
+  background: rgb(var(--color-canary));
+  border-radius: 12px;
+  color: #6b4e00;
+  font-size: 14px;
+  line-height: 1.4;
+  margin-top: 10px;
+  padding: 10px 12px;
+}
+
+/* One card for every collection of the word, side by side, as tall as the tallest. */
+.word-examples {
+  align-items: stretch;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 18px 16px 2px;
+  scroll-padding-left: 16px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.word-examples::-webkit-scrollbar {
+  display: none;
+}
+
+.word-examples__end {
+  flex: none;
+  width: 6px;
+}
+
+.word-example {
+  --accent: rgb(var(--color-hare));
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  padding: 0 14px 14px;
+  scroll-snap-align: start;
+  width: 290px;
+}
+
+.word-example--owl { --accent: rgb(var(--color-owl)); }
+.word-example--macaw { --accent: rgb(var(--color-macaw)); }
+.word-example--fox { --accent: rgb(var(--color-fox)); }
+.word-example--starfish { --accent: rgb(var(--color-starfish)); }
+.word-example--beetle { --accent: rgb(var(--color-beetle)); }
+.word-example--bee { --accent: rgb(var(--color-bee)); }
+.word-example--cardinal { --accent: rgb(var(--color-cardinal)); }
+.word-example--peacock { --accent: rgb(var(--color-peacock)); }
+
+.word-example__title {
+  color: rgb(var(--color-eel));
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+  margin: 0;
+  overflow: hidden;
+  padding-top: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * A sentence and a translation are written in place: the text area lies over the same text set as plain
+ * paragraph (where the bold word is) in one grid cell. The area is clear until it has the focus, then the
+ * paragraph steps aside; the cell is as tall as the taller, so nothing moves.
+ */
+.word-example__sentence,
+.word-example__translation {
+  display: grid;
+  margin: 4px -6px 0;
+}
+
+.word-example__sentence--pending {
+  opacity: 0.35;
+}
+
+.word-example__text,
+.word-example__field,
+.word-example__status {
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-family: inherit;
+  grid-area: 1 / 1;
+  line-height: 1.4;
+  margin: 0;
+  min-height: 1.4em;
+  overflow-wrap: anywhere;
+  padding: 0 6px;
+  white-space: pre-wrap;
+}
+
+.word-example__text {
+  color: rgb(var(--color-black-text));
+  font-size: 18px;
+}
+
+.word-example__text strong {
+  font-weight: 800;
+}
+
+.word-example__field {
+  align-self: stretch;
+  background: none;
+  border: none;
+  caret-color: rgb(var(--color-black-text));
+  color: transparent;
+  field-sizing: content;
+  font-size: 18px;
   height: auto;
-  max-height: 144px;
-  min-height: 48px;
-  overflow-y: auto;
+  outline: none;
+  overflow: hidden;
   resize: none;
 }
 
-.word-edit-dialog__input--phrase {
-  width: 100%;
+.word-example__field:focus {
+  background: rgb(var(--color-iguana));
+  color: rgb(var(--color-black-text));
 }
 
-.word-edit-dialog__actions {
+.word-example__sentence:focus-within .word-example__text,
+.word-example__translation:focus-within .word-example__text {
+  visibility: hidden;
+}
+
+.word-example__translation {
+  margin-top: 4px;
+}
+
+.word-example__text--translation,
+.word-example__field--translation,
+.word-example__status {
+  font-size: 15px;
+}
+
+.word-example__text--translation,
+.word-example__status {
+  color: rgb(var(--color-wolf));
+}
+
+.word-example__field--translation:focus {
+  color: rgb(var(--color-wolf));
+}
+
+.word-example__text--hidden,
+.word-example__field--hidden {
+  visibility: hidden;
+}
+
+.word-example__status {
+  font-weight: 700;
+}
+
+.word-example__status--failed {
+  color: #b42318;
+}
+
+.word-example__spacer {
+  flex: 1;
+  min-height: 12px;
+}
+
+.word-example__regenerate {
+  align-items: center;
+  align-self: flex-start;
+  background: rgb(var(--color-snow));
+  border: 2px solid rgb(var(--color-swan));
+  border-radius: 12px;
+  box-shadow: 0 3px 0 rgb(var(--color-swan));
+  box-sizing: border-box;
+  color: rgb(var(--color-macaw));
+  cursor: pointer;
   display: flex;
-  gap: 10px;
-  min-height: 44px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
 }
 
-.word-edit-dialog__save:disabled {
-  background: rgb(var(--color-swan));
-  color: rgb(var(--color-hare));
+.word-example__regenerate:disabled {
+  cursor: default;
+}
+
+.word-example__icon {
+  height: 18px;
+  width: 18px;
+}
+
+.word-example__icon--spin {
+  animation: word-example-spin 0.9s linear infinite;
+}
+
+@keyframes word-example-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .word-example__icon--spin {
+    animation-duration: 3s;
+  }
+}
+
+/* Footer: delete on the left, reset and save on the right, all pressed like the app's other big buttons. */
+.word-edit-dialog__footer {
+  align-items: center;
+  border-top: 1px solid #ececec;
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px 16px 16px;
+}
+
+.word-edit-dialog__spacer {
+  flex: 1;
+}
+
+.word-edit-dialog__delete,
+.word-edit-dialog__reset,
+.word-edit-dialog__save {
+  cursor: pointer;
+  font-family: inherit;
+  height: 48px;
+}
+
+.word-edit-dialog__delete {
+  align-items: center;
+  background: rgb(var(--color-cardinal));
+  border: none;
+  border-radius: 14px;
+  box-shadow: 0 4px 0 #ea2b2b;
+  color: rgb(var(--color-snow));
+  display: flex;
+  flex: none;
+  justify-content: center;
+  width: 48px;
+}
+
+.word-edit-dialog__reset {
+  background: rgb(var(--color-snow));
+  border: 2px solid rgb(var(--color-swan));
+  border-radius: 14px;
+  box-shadow: 0 3px 0 rgb(var(--color-swan));
+  box-sizing: border-box;
+  color: rgb(var(--color-eel));
+  font-size: 16px;
+  font-weight: 700;
+  padding: 0 16px;
 }
 
 .word-edit-dialog__save {
   background: rgb(var(--color-macaw));
   border: none;
-  border-radius: 10px;
-  color: white;
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  height: 44px;
-  padding: 0 20px;
+  border-radius: 14px;
+  box-shadow: 0 4px 0 rgb(var(--color-whale));
+  color: rgb(var(--color-snow));
+  font-size: 16px;
+  font-weight: 800;
+  padding: 0 22px;
 }
 
-.word-edit-dialog__cancel {
+.word-edit-dialog__reset:disabled,
+.word-edit-dialog__save:disabled {
   background: rgb(var(--color-swan));
-  border: none;
-  border-radius: 10px;
-  color: rgb(var(--color-wolf));
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  height: 44px;
-  padding: 0 20px;
+  box-shadow: none;
+  color: #8a8a8a;
+  cursor: default;
 }
 
-.word-edit-dialog__delete {
-  background: none;
-  border: none;
-  color: rgb(var(--color-cardinal));
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  height: 44px;
-  margin-left: auto;
-  padding: 0 12px;
+.word-edit-dialog__reset:disabled {
+  background: rgb(var(--color-snow));
 }
 
-@media (max-width: 600px) {
-  .word-edit-dialog__actions {
-    flex-wrap: wrap;
-  }
-
-  .word-edit-dialog__save,
-  .word-edit-dialog__cancel {
-    flex: 1;
-  }
+.word-edit-dialog__delete:not(:disabled):active,
+.word-edit-dialog__reset:not(:disabled):active,
+.word-edit-dialog__save:not(:disabled):active,
+.word-example__regenerate:not(:disabled):active {
+  box-shadow: none;
+  transform: translateY(3px);
 }

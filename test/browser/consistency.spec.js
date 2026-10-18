@@ -235,7 +235,7 @@ test.describe('Согласованность списка слов', () => {
       await page.locator('.word-item__display').first().click();
       await page.locator('.word-edit-dialog__delete').click();
       await expect.poll(() => prompt).toBe('Удалить «Haus» окончательно?');
-      await page.locator('.word-edit-dialog__cancel').click();
+      await page.keyboard.press('Escape');
     });
 
     await test.step('Тогда урок начинается со словом из словаря', async () => {

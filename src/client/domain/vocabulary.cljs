@@ -10,13 +10,22 @@
 
 
 (defn parse-translations
-  "The entered text is one translation: splitting on punctuation would put the separator into the data
-   (`без того, чтобы`), and nothing reads the pieces. Still a vector, as stored documents are."
+  "The entered text is one translation a line: the lines are trimmed and the blank ones dropped. Splitting
+   on punctuation would put the separator into the data (`без того, чтобы`). A vector of entries, as stored
+   documents hold them."
   [s]
-  (let [value (str/trim (str s))]
-    (if (str/blank? value)
-      []
-      [{:lang "ru" :value value}])))
+  (->> (str/split-lines (str s))
+       (map str/trim)
+       (remove str/blank?)
+       (mapv (fn [value] {:lang "ru" :value value}))))
+
+
+(defn russian-translations
+  "The texts of the Russian translations of `word`, in order."
+  [word]
+  (->> (:translation word)
+       (filter #(= "ru" (:lang %)))
+       (mapv :value)))
 
 
 (defn merge-translations
@@ -80,6 +89,14 @@
 (defn vocab-id
   [value]
   (str id-prefix (normalize-value value)))
+
+
+(defn renamed?
+  "Whether `spelling` is another word than the one with the id `id`: it is not blank and its id differs. Saved
+   so, it is a new word in the place of the old."
+  [id spelling]
+  (boolean (and (not (str/blank? spelling))
+                (not= id (vocab-id spelling)))))
 
 
 (def ^:private article

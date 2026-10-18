@@ -55,6 +55,37 @@
       ::not-json)))
 
 
+(defn- ^:async answer
+  "What the backend's `response` says, in the shape `fetch-one` resolves with; `signal` tells an abort from a
+   failure."
+  [^js response signal]
+  (let [status  (.-status response)
+        content (await (body response))]
+    (cond
+      (.-aborted signal)
+      {:failure :failure/aborted}
+
+      (not (.-ok response))
+      (let [wait-ms (retry-after-ms response)]
+        (cond-> {:failure (failure-kind status) :status status}
+          (:error content) (assoc :message (:error content))
+          wait-ms (assoc :retry-after-ms wait-ms)))
+
+      (and (map? content) (:value content) (:translation content))
+      {:example content}
+
+      :else
+      {:failure :failure/invalid-response :status status})))
+
+
+(defn- failure
+  "The failure an error `err` of a request is, aborted by `signal` or not."
+  [err ^js signal]
+  (if (.-aborted signal)
+    {:failure :failure/aborted}
+    {:failure :failure/network :message (ex-message err)}))
+
+
 (defn ^:async fetch-one
   "Asks the backend for an example of `subject`; `signal` aborts the request. Never rejects: resolves with
    `{:example example}`, or `{:failure kind}` with `:status`, `:message` and `:retry-after-ms` when the
@@ -64,26 +95,28 @@
     (try
       ;; The endpoint authenticates by the session cookie. "include" keeps it attached if the URL ever gains an
       ;; origin, where the default would stop sending it and every example would come back 401.
-      (let [^js response (await (js/fetch address #js {:credentials "include" :signal signal}))
-            status       (.-status response)
-            content      (await (body response))]
-        (cond
-          (.-aborted signal)
-          {:failure :failure/aborted}
-
-          (not (.-ok response))
-          (let [wait-ms (retry-after-ms response)]
-            (cond-> {:failure (failure-kind status) :status status}
-              (:error content) (assoc :message (:error content))
-              wait-ms (assoc :retry-after-ms wait-ms)))
-
-          (and (map? content) (:value content) (:translation content))
-          {:example content}
-
-          :else
-          {:failure :failure/invalid-response :status status}))
+      (await (answer (await (js/fetch address #js {:credentials "include" :signal signal})) signal))
       (catch :default err
-        (if (.-aborted signal)
-          {:failure :failure/aborted}
-          {:failure :failure/network :message (ex-message err)})))
+        (failure err signal)))
     {:failure :failure/invalid-subject}))
+
+
+(defn ^:async request-another
+  "Asks the backend for an example of `subject` that is none of the sentences in `avoid`, the answer for this
+   learner alone. Never rejects: resolves as `fetch-one` does."
+  [{:keys [collection-name pos translations word]} avoid signal]
+  (try
+    (await (answer (await (js/fetch "/api/examples"
+                                    #js {:body        (js/JSON.stringify
+                                                       #js {:avoid        (clj->js avoid)
+                                                            :context      (utils/non-blank collection-name)
+                                                            :pos          (utils/non-blank pos)
+                                                            :translations (clj->js translations)
+                                                            :word         word})
+                                         :credentials "include"
+                                         :headers     #js {"Content-Type" "application/json"}
+                                         :method      "POST"
+                                         :signal      signal}))
+                   signal))
+    (catch :default err
+      (failure err signal))))
