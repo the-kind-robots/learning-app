@@ -1,6 +1,7 @@
 (ns install-guide.core
   (:require
-   [nexus.registry :as nxr]))
+   [nexus.registry :as nxr]
+   [ports.install :as install]))
 
 
 (nxr/register-action! :action/pwa-install-requested
@@ -11,9 +12,9 @@
 (nxr/register-effect! :effect/request-install
   ;; On iOS the guide is the way to install; elsewhere the browser's prompt.
   (fn request-install [{:keys [capabilities dispatch]} _]
-    (if ((get-in capabilities [:browser :browser/ios?]))
+    (if (install/ios? (:install capabilities))
       (dispatch [[:effect/save {:pwa/show-guide? true}]])
-      ((get-in capabilities [:browser :browser/prompt-install!])))))
+      (install/prompt-install! (:install capabilities)))))
 
 
 (nxr/register-action! :action/dismiss-install-guide

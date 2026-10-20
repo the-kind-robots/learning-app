@@ -125,7 +125,6 @@
   [state]
   (let [{:keys [active-collection empty-vocab? form]} (presenter/page-props state)]
     [:div.home
-     {:data-vk-overlay true}
      [:header.home__intro
       [:h1.home__title.visually-hidden "Главная"]
       [:p.home__subtitle

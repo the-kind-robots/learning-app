@@ -1,4 +1,4 @@
-(ns adapters.learner.identity
+(ns adapters.account.identity
   (:require
    [auth :as auth]
    [db :as db]))

@@ -5,7 +5,10 @@
   (:require
    [abort]
    [lambdaisland.glogi :as log]
-   [ports.learner :as learner-port]
+   [ports.account :as account]
+   [ports.learner :as learner]
+   [ports.page :as page]
+   [ports.world :as world]
    [use-cases.examples :as examples]))
 
 
@@ -97,12 +100,12 @@
 
 
 (defn- ^:async missing-pair
-  "The next pair to ask for in `memory`, or nil. It reads 200 entries per task."
-  [{:keys [browser state]} memory]
-  (loop [chunks (partition-all (:chunk-size limits) (learner-port/words memory))]
+  "The next pair to ask for among the learner's words, or nil. It reads 200 entries per task."
+  [{:keys [learner page state]}]
+  (loop [chunks (partition-all (:chunk-size limits) (learner/words learner))]
     (when-let [[chunk & more] (seq chunks)]
-      (or (examples/next-pair memory (:failed-subjects @state) chunk)
-          (do (await ((:browser/yield browser)))
+      (or (examples/next-pair learner (:failed-subjects @state) chunk)
+          (do (await (page/yield page))
               (recur more))))))
 
 
@@ -110,18 +113,17 @@
   "The response to the request about `subject`. A request unanswered for
    110 s counts as a timeout."
   [{:keys [controller examples-generator world]} subject]
-  (let [{:clock/keys [after]} (:world/clock world)
-        {:examples-generator/keys [fetch]} examples-generator
-        request    (js/AbortController.)
+  (let [request    (js/AbortController.)
         timed-out? (volatile! false)
-        cancel     (after
-                    (:timeout-ms limits)
-                    (fn []
-                      (vreset! timed-out? true)
-                      (.abort request)))]
+        cancel     (world/clock world
+                                :after
+                                (:timeout-ms limits)
+                                (fn []
+                                  (vreset! timed-out? true)
+                                  (.abort request)))]
     (reset! controller request)
     (try
-      (let [response (await (fetch subject (.-signal request)))]
+      (let [response (await (examples-generator subject (.-signal request)))]
         (cond-> response
           (and @timed-out? (= :failure/aborted (:failure response))) (assoc :failure :failure/timeout)))
       (finally
@@ -145,36 +147,33 @@
   "Asks for one missing example and saves it. Resolves with what the loop waits for next: `[:wait/pause ms]`,
    `[:wait/active]`, `[:wait/memory-change memory]` (nothing is missing; `memory` holds its words and
    collections), or nil when the session was refused and the backfill halts."
-  [{:keys [browser learner state] :as backfill}]
-  (let [{read-memory :learner/memory} learner
-        {:browser/keys [active?]}     browser]
-    (if-not (active?)
-      [:wait/active]
-      (let [memory (read-memory)]
-        (if-let [pair (await (missing-pair backfill memory))]
-          (let [subject  (examples/subject pair)
-                response (await (ask backfill subject))
-                before   (:outages @state)
-                after    (swap! state #(after-response % subject response (active?)))]
-            (when (and (:failure response) (not= :failure/aborted (:failure response)))
-              (log/warn :examples/fetch-failed
-                        (assoc (select-keys response [:failure :message :status]) :word (:word subject))))
-            (when-let [example (:example response)]
-              (await (save! backfill pair subject example)))
-            (when (= :status/running (:status after))
-              ;; Only an outage waits longer than the spacing.
-              [:wait/pause (pause-after before (:outages after) (:retry-after-ms response))]))
-          [:wait/memory-change (select-keys memory [:words :collections])])))))
+  [{:keys [learner page state] :as backfill}]
+  (if-not (page/active? page)
+    [:wait/active]
+    (let [memory (learner/memory learner)]
+      (if-let [pair (await (missing-pair backfill))]
+        (let [subject  (examples/subject pair)
+              response (await (ask backfill subject))
+              before   (:outages @state)
+              after    (swap! state #(after-response % subject response (page/active? page)))]
+          (when (and (:failure response) (not= :failure/aborted (:failure response)))
+            (log/warn :examples/fetch-failed
+                      (assoc (select-keys response [:failure :message :status]) :word (:word subject))))
+          (when-let [example (:example response)]
+            (await (save! backfill pair subject example)))
+          (when (= :status/running (:status after))
+            ;; Only an outage waits longer than the spacing.
+            [:wait/pause (pause-after before (:outages after) (:retry-after-ms response))]))
+        [:wait/memory-change (select-keys memory [:words :collections])]))))
 
 
 (defn- ^:async ready
   "Resolves once the learner is initialized: memory loaded, and the session's
    first sync pass completed or waited for long enough
-   (`:learner/initialized`). Stopping the backfill ends the wait."
-  [{:keys [learner] :as backfill}]
-  (let [{:learner/keys [fresh-memory initialized]} learner]
-    (await (unless-closed backfill initialized))
-    (await (fresh-memory))))
+   (`initialized` of the Account). Stopping the backfill ends the wait."
+  [{:keys [account learner] :as backfill}]
+  (await (unless-closed backfill (account/initialized account)))
+  (await (learner/fresh-memory learner)))
 
 
 (defn- memory-changed
@@ -182,22 +181,22 @@
    once when they already do. Reviews and examples don't count. When `signal` aborts first it stays pending
    and the watch is gone."
   [{:keys [learner]} seen signal]
-  (let [{:learner/keys [memory on-change]} learner
-        {:keys [collections words]}        seen
-        differs?                           (fn []
-                                             (let [now (memory)]
-                                               (not (and (identical? words (:words now))
-                                                         (identical? collections (:collections now))))))]
+  (let [{:keys [collections words]} seen
+        differs?                    (fn []
+                                      (let [now (learner/memory learner)]
+                                        (not (and (identical? words (:words now))
+                                                  (identical? collections (:collections now))))))]
     (js/Promise.
      (fn [resolve]
        (if (differs?)
          (resolve nil)
          (let [unsubscribe (volatile! (fn []))]
            (vreset! unsubscribe
-                    (on-change (fn []
-                                 (when (differs?)
-                                   (@unsubscribe)
-                                   (resolve nil)))))
+                    (learner/on-change learner
+                                       (fn []
+                                         (when (differs?)
+                                           (@unsubscribe)
+                                           (resolve nil)))))
            (abort/on-abort signal #(@unsubscribe))))))))
 
 
@@ -205,13 +204,11 @@
 ;; See docs/dev/cljs-async-pitfalls.md.
 (defn- waiting
   "The promise for the `wait` a step asked for, with its `arg`."
-  [{:keys [browser signal world] :as backfill} wait arg]
-  (let [{:clock/keys [sleep]}          (:world/clock world)
-        {:browser/keys [until-active]} browser]
-    (case wait
-      :wait/pause         (sleep arg signal)
-      :wait/active        (until-active signal)
-      :wait/memory-change (memory-changed backfill arg signal))))
+  [{:keys [page signal world] :as backfill} wait arg]
+  (case wait
+    :wait/pause         (world/clock world :sleep arg signal)
+    :wait/active        (page/until-active page signal)
+    :wait/memory-change (memory-changed backfill arg signal)))
 
 
 (defn- ^:async fetch-loop
@@ -235,18 +232,21 @@
 (defn start!
   "Starts fetching and returns the function that stops it. A device without an
    account fetches nothing."
-  [{:keys [browser learner] :as capabilities}]
-  (if-not (get-in learner [:learner/account :account/exists?])
+  [{:keys [account examples-generator learner page world]}]
+  (if-not (account/exists? account)
     (do (log/info :examples/no-account {})
         (fn stop []))
-    (let [{:browser/keys [on-inactive]} browser
-          controller (atom nil)
+    (let [controller (atom nil)
           closing    (js/AbortController.)
-          backfill    (assoc (select-keys capabilities [:browser :examples-generator :learner :world])
-                            :controller controller
-                            :signal     (.-signal closing)
-                            :state      (atom initial-state))]
-      (on-inactive #(some-> @controller .abort) (.-signal closing))
+          backfill   {:account            account
+                      :controller         controller
+                      :examples-generator examples-generator
+                      :learner            learner
+                      :page               page
+                      :signal             (.-signal closing)
+                      :state              (atom initial-state)
+                      :world              world}]
+      (page/on-inactive page #(some-> @controller .abort) (.-signal closing))
       (-> (fetch-loop backfill)
           (.catch (fn [err]
                     (log/error :examples/backfill-failed {:error (ex-message err)}))))

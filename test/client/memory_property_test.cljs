@@ -10,6 +10,7 @@
   (:require
    [adapters.learner.memory :as sut]
    [adapters.learner.snapshot :as snapshot]
+   [client.support.learner :as test-learner]
    [client.support.memory-projection :as projection]
    [domain.collections :as collections]
    [domain.retention :as retention]
@@ -153,7 +154,8 @@
                                  (let [word (:word (nth (:cards incremental) slot))]
                                    (or (nil? word) (= id (:id word)))))
                                (:slot-of incremental))
-                       (= (vocabulary/rows rebuilt {} now) (vocabulary/rows incremental {} now))
+                       (= (vocabulary/rows (test-learner/of-memory rebuilt) {} now)
+                          (vocabulary/rows (test-learner/of-memory incremental) {} now))
                        ;; Every word's urgency is the formula over its review documents.
                        (= (into {}
                                 (map (fn [w] [(:id w) (expected-urgency (reviews (:id w)) now)]))

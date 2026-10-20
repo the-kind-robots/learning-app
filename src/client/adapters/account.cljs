@@ -1,12 +1,10 @@
-(ns adapters.learner.sync
+(ns adapters.account
+  "The learner's account: the identity this device holds, and the replication of the learner's databases with the
+   account's, pass by pass, with a push socket that pokes when another device wrote."
   (:require
-   [adapters.learner.documents :as documents]
-   [adapters.learner.identity :as identity]
-   [clojure.string :as str]
+   [adapters.account.identity :as identity]
    [db :as db]
    [db.pouch :as pouch]
-   [domain.collections :as collections]
-   [domain.vocabulary :as domain]
    [goog.functions :as gfn]
    [lambdaisland.glogi :as log]))
 
@@ -17,85 +15,14 @@
   (js/Promise.all (into-array promises)))
 
 
-(defn- ^:async resolve-conflict!
-  "Writes the merged word (`domain.vocabulary/merged-word`) of a document's conflicting
-   revisions and deletes the losers, so the conflict is gone everywhere."
-  [user-db doc]
-  ;; One revision at a time on purpose: `bulkGet` is built to save HTTP round trips and, against a
-  ;; local database, measures slower than the plain reads (IndexedDB, 200 revisions).
-  (let [conflicting (await (all! (map #(db/get user-db (:_id doc) {:rev %})
-                                      (:_conflicts doc))))
-        revisions   (cons doc conflicting)
-        merged      (domain/merged-word revisions)
-        losers      (remove #(= (:_rev %) (:_rev merged)) revisions)]
-    (await (db/insert user-db merged))
-    (await (all! (map #(db/remove user-db %) losers)))))
-
-
-(defn ^:async resolve-vocab-conflicts!
-  "Resolves every conflicted vocabulary doc a replication pass left behind."
-  [user-db]
-  (try
-    (let [{rows :rows} (await (db/all-docs user-db
-                                       ;; Vocabulary ids share a prefix (ADR-0008), so the entries are a key range, not a scan of the
-                                       ;; database; phrases live in it too. `:conflicts` is the point of the query, and only `all-docs`,
-                                       ;; `get` and `changes` honour it: `find` silently answers without conflicts.
-                                       {:conflicts    true
-                                        :endkey       (str domain/id-prefix "￰")
-                                        :include-docs true
-                                        :startkey     domain/id-prefix}))
-          conflicted   (->> rows
-                            (map :doc)
-                            (filter #(-> % :_conflicts seq)))]
-      (when (seq conflicted)
-        (log/info :sync/resolving-conflicts {:count (count conflicted)}))
-      (await (all! (map #(resolve-conflict! user-db %) conflicted))))
-    (catch js/Error err
-      (log/warn :sync/conflict-resolution-failed {:error (ex-message err)}))))
-
-
-(defn- revision-order
-  "The revision of a stored `version` as a comparable: its generation, then
-   its hash."
-  [version]
-  (let [[generation hash] (str/split (:_rev version) #"-" 2)]
-    [(js/parseInt generation 10) hash]))
-
-
-(defn- ^:async resolve-collection!
-  "When a pull left a collection with several live versions, writes one that
-   holds them all and removes the others."
-  [databases id]
-  (let [live (->> (await (pouch/doc-versions databases documents/collection-schema id))
-                  (remove :_deleted))]
-    (when (next live)
-      (let [collection (reduce (partial collections/merged-collection revision-order) live)
-            losers     (remove #(= (:_rev collection) (:_rev %)) live)
-            docs       (conj (mapv documents/tombstone losers) collection)
-            written    (await (pouch/bulk-docs databases documents/collection-schema docs))]
-        (when (< (count written) (count docs))
-          (log/warn :sync/conflict-resolution-failed
-                    {:id id :refused (- (count docs) (count written))}))))))
-
-
-(defn ^:async resolve-collection-conflicts!
-  "Resolves the collections `ids` that have more than one live version."
-  [databases ids]
-  (try
-    (await (all! (map #(resolve-collection! databases %) ids)))
-    (catch js/Error err
-      (log/warn :sync/conflict-resolution-failed {:error (ex-message err)}))))
-
-
 (defn ^:async sync-once!
-  "Runs one replication pass and resolves the conflicts it brought home. Resolves with
-   `{:pulled :pushed :pulled-ids :pulled-revs}`, or nil when it failed; it never rejects,
-   so triggers can fire it freely."
-  [databases account-id]
-  (when-let [{:keys [pulled pulled-ids] :as result} (await (pouch/sync-once! databases :user/db account-id))]
+  "Runs one replication pass and, when it pulled anything, hands its result to `after-pull`, which resolves
+   with the conflicts it brought home resolved. Resolves with `{:pulled :pushed :pulled-ids :pulled-revs}`, or
+   nil when it failed; it never rejects, so triggers can fire it freely."
+  [databases account-id after-pull]
+  (when-let [{:keys [pulled] :as result} (await (pouch/sync-once! databases :user/db account-id))]
     (when (pos? pulled)
-      (await (resolve-vocab-conflicts! (:user/db databases)))
-      (await (resolve-collection-conflicts! databases (pulled-ids (:type documents/collection-schema)))))
+      (await (after-pull result)))
     result))
 
 
@@ -110,14 +37,18 @@
   "What `start!` returns for a device without an account. Such a device runs
    no pass, so its sync is inert, there is no first pass to wait for, and no
    device can join."
-  {:account/exists?          false
-   :account/join-link        (fn [& _] (js/Promise.resolve nil))
-   :account/on-device-joined (fn [_ _] nil)
-   :account/sync!            (constantly nil)
-   :first-pass               (js/Promise.resolve nil)})
+  {:connect-push!    (constantly nil)
+   :disconnect-push! (constantly nil)
+   :exists?          false
+   :first-pass       (js/Promise.resolve nil)
+   :on-device-joined (fn [_ _] nil)
+   :pause!           (constantly nil)
+   :resume!          (constantly nil)
+   :sync!            (constantly nil)
+   :sync-link        (fn [& _] (js/Promise.resolve nil))})
 
 
-(defn- ^:async join-link
+(defn- ^:async sync-link
   "The link another device opens to join this device's account, or to recover it
    (ADR-0006). With a `nonce` the opener echoes it back, so whoever showed the link can
    tell it joined. Resolves nil without a stored identity."
@@ -163,57 +94,58 @@
 (defonce ^:private push-socket (atom nil))
 
 
+(defonce ^:private push-retry (atom nil))
+
+
 (defn connect-push!
-  "Holds a poke WebSocket while the page is visible and online (ADR-0009). `on-poke` runs on
-   a poke and on every (re)connect, which covers what was missed. Hidden pages close it, so the
-   radio sleeps; offline pages resume on `online`."
-  [browser on-poke]
-  (letfn
-    [(url []
-       (str (if (= "https:" (.. js/location -protocol)) "wss://" "ws://")
-            (.. js/location -host)
-            "/api/sync/updates"))
-     (connect! []
-       (when (and (nil? @push-socket)
-                  ((:browser/active? browser)))
-         (let [socket (js/WebSocket. (url))]
-           (reset! push-socket socket)
-           (set! (.-onopen socket) (fn [_] (on-poke)))
-           (set! (.-onmessage socket) (fn [_] (on-poke)))
-           (set! (.-onclose socket)
-                 (fn [_]
-                   (when (identical? socket @push-socket)
-                     (reset! push-socket nil)
-                     ;; Not a deliberate close: retry while visible. The backoff is flat; a poke socket is cheap.
-                     (js/setTimeout connect! 5000)))))))
-     (disconnect! []
-       (when-some [socket @push-socket]
-         (reset! push-socket nil)
-         (.close socket)))]
-    ((:browser/on-visibility-change browser)
-     (fn []
-       (if ((:browser/visible? browser))
-         (connect!)
-         (disconnect!))))
-    ;; A socket that survived a network change may be a zombie; recycling is free, the reconnect pulls anyway.
-    ((:browser/on-online browser)
-     (fn []
-       (disconnect!)
-       (connect!)))
-    ((:browser/on-offline browser) disconnect!)
+  "Opens the poke WebSocket (ADR-0009) unless it is open. `on-poke` runs on a poke and on every (re)connect,
+   which covers what was missed. A socket the server closed is opened again after a flat 5 s, a poke socket
+   being cheap, until `disconnect-push!`."
+  [on-poke]
+  (letfn [(url []
+            (str (if (= "https:" (.. js/location -protocol)) "wss://" "ws://")
+                 (.. js/location -host)
+                 "/api/sync/updates"))
+          (connect! []
+            (when (nil? @push-socket)
+              (let [socket (js/WebSocket. (url))]
+                (reset! push-socket socket)
+                (set! (.-onopen socket) (fn [_] (on-poke)))
+                (set! (.-onmessage socket) (fn [_] (on-poke)))
+                (set! (.-onclose socket)
+                      (fn [_]
+                        (when (identical? socket @push-socket)
+                          (reset! push-socket nil)
+                          (reset! push-retry (js/setTimeout connect! 5000))))))))]
     (connect!)))
+
+
+(defn disconnect-push!
+  "Closes the poke WebSocket, and calls off a retry waiting to open it again."
+  []
+  (js/clearTimeout @push-retry)
+  (reset! push-retry nil)
+  (when-some [socket @push-socket]
+    (reset! push-socket nil)
+    (.close socket)))
 
 
 (defn ^:async start!
   "Drives replication when the device has an account: requests during a pass share one more pass, and what
-   a pass pulled is not a local write (ADR-0006). `passes-wait-for` holds every pass until the snapshot
-   check is done (ADR-0018); `:first-pass` resolves when the first pass of this start has completed."
-  [{:keys [browser databases passes-wait-for]}]
+   a pass pulled is not a local write (ADR-0006). `storage` is the learner's, opaque but for the
+   `:databases` to replicate and `:passes-wait-for`, a promise that holds every pass until the snapshot check is
+   done (ADR-0018); `after-pull` takes the result of a pass that pulled and resolves once the conflicts it brought
+   are resolved. Resolves with the verbs of the account: `:sync!`, `:pause!` and `:resume!` (no pass while the
+   device is offline), `:connect-push!` and `:disconnect-push!`, `:sync-link`, `:on-device-joined`, `:exists?`,
+   and `:first-pass`, which resolves when the first pass of this start has completed."
+  [{:keys [after-pull storage]}]
   (try
     (if-let [{:keys [id] :as device-identity} (await (identity/load-identity!))]
       (do
         (identity/use-identity! device-identity)
-        (let [wanted (atom false)
+        (let [{:keys [databases passes-wait-for]} storage
+              online (atom true)
+              wanted (atom false)
               running (atom nil)
               pulled-hooks (atom [])
               on-pulled
@@ -244,7 +176,7 @@
                   (-> (js/Promise.resolve passes-wait-for)
                       (.then (fn []
                                (reset! wanted false)
-                               (sync-once! databases id)))
+                               (sync-once! databases id after-pull)))
                       (.catch (fn [err]
                                 (log/warn :sync/pass-failed {:error (ex-message err)})
                                 nil))
@@ -257,7 +189,7 @@
                                (run! (merged-passes done result)))))))
               request!
               (fn [& _]
-                (when ((:browser/online? browser))
+                (when @online
                   (reset! wanted true)
                   (or @running
                       (reset! running
@@ -278,13 +210,10 @@
                                          (swap! written conj (pouch/change-revision change))
                                          (push!)))]
           (log/info :sync/ready {:user-id id})
-          ((:browser/on-online browser) request!)
-          ;; Push channel (ADR-0009): a poke pulls through the normal path.
-          (connect-push! browser request!)
-          {:account/exists?          true
+          {:exists?          true
            ;; `f` is called once the device that opened the link carrying `nonce` has joined; the proof
            ;; it echoes arrives with a pull. The hook forgets itself then.
-           :account/on-device-joined (fn on-device-joined
+           :on-device-joined (fn on-device-joined
                                        [nonce f]
                                        (let [done        (volatile! false)
                                              unsubscribe (volatile! nil)]
@@ -297,10 +226,15 @@
                                                                               (@unsubscribe)
                                                                               (f))))))))
                                          nil))
-           :account/join-link        join-link
-           :account/sync!            request!
-           :first-pass               first-pass
-           :unwatch                  unwatch}))
+           :sync-link        sync-link
+           :sync!            request!
+           ;; Push channel (ADR-0009): a poke pulls through the normal path.
+           :connect-push!    #(connect-push! request!)
+           :disconnect-push! disconnect-push!
+           :pause!           #(reset! online false)
+           :resume!          #(reset! online true)
+           :first-pass       first-pass
+           :unwatch          unwatch}))
       (do
         (log/info :sync/local-only {})
         no-account))

@@ -6,5 +6,6 @@
 
 
 (defn start!
+  "The function that asks for an example: `(f subject signal)` resolves with `{:example example}` or `{:failure kind}`."
   []
-  {:examples-generator/fetch examples-generator/fetch-one})
+  examples-generator/fetch-one)

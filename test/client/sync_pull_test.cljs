@@ -5,8 +5,8 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.learner.identity :as identity]
-   [adapters.learner.sync :as sut]
+   [adapters.account :as sut]
+   [adapters.account.identity :as identity]
    [cljs.test :refer-macros [deftest is]]
    [db :as db]
    [db.pouch :as pouch]
@@ -20,18 +20,15 @@
 
 
 (defn- ^:async with-sync!
-  "Starts sync for a stored account, online, with replication answered by
+  "Starts sync for a stored account, with replication answered by
    `sync-once!`, and hands `f` the request, what the start returned, a way
    to start sync again, and a way to play a change-feed event. The write
    throttle passes every call straight through, so an event is judged when
-   it is played. The page is the test's own: online."
+   it is played."
   [sync-once! f]
-  (let [feed (atom nil)
-        browser {:browser/active?              (constantly false)
-                 :browser/on-offline           (constantly nil)
-                 :browser/on-online            (constantly nil)
-                 :browser/on-visibility-change (constantly nil)
-                 :browser/online?              (constantly true)}]
+  (let [feed  (atom nil)
+        start {:after-pull (fn [_] (js/Promise.resolve nil))
+               :storage    {:databases {}}}]
     (with-redefs [gfn/throttle           (fn [g _] g)
                   identity/load-identity! (fn [] (js/Promise.resolve {:id "account" :token "t"}))
                   identity/use-identity! (fn [_] nil)
@@ -39,10 +36,10 @@
                                            (reset! feed handler)
                                            (fn [] nil))
                   pouch/sync-once!       sync-once!]
-      (let [{:account/keys [sync!] :as started} (await (sut/start! {:browser browser :databases {}}))]
+      (let [{:keys [sync!] :as started} (await (sut/start! start))]
         (await (f {:feed!        #(@feed (change %1 %2))
                    :request!     sync!
-                   :start-again! #(sut/start! {:browser browser :databases {}})
+                   :start-again! #(sut/start! start)
                    :started      started}))))))
 
 
@@ -120,7 +117,7 @@
           (^:async fn
            [{:keys [request! started]}]
            (let [calls       (atom 0)
-                 _           ((:account/on-device-joined started) "n1" #(swap! calls inc))
+                 _           ((:on-device-joined started) "n1" #(swap! calls inc))
                  pull!       (^:async fn
                               []
                               (let [pulling (request!)]
@@ -264,6 +261,6 @@
 (deftest a-device-without-an-account-has-no-pass-to-wait-for
   (async-testing "its first pass is resolved at once"
     (with-redefs [identity/load-identity! (fn [] (js/Promise.resolve nil))]
-      (let [started (await (sut/start! {:databases {}}))]
-        (is (false? (:account/exists? started)))
+      (let [started (await (sut/start! {:storage {:databases {}}}))]
+        (is (false? (:exists? started)))
         (is (nil? (await (answered (:first-pass started)))))))))

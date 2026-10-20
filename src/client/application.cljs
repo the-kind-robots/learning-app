@@ -8,6 +8,10 @@
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
+   [ports.account :as account]
+   [ports.learner :as learner]
+   [ports.navigation :as navigation]
+   [ports.world :as world]
    [replicant.dom :as r]))
 
 
@@ -38,17 +42,15 @@
 
 
 (nxr/register-effect! :effect/navigate
-  (fn navigate-effect [{:keys [capabilities dispatch]} _ page]
-    (when-let [navigate! (get-in capabilities [:browser :browser/navigate])]
-      (navigate! page #(dispatch [[:effect/enter :action/open-home]])))))
+  (fn navigate-effect [{:keys [capabilities]} _ page]
+    (navigation/navigate (:navigation capabilities) page)))
 
 
 (nxr/register-effect! :effect/sync
   ;; The result reaches the screen through memory's change feed; nothing is reloaded here.
   (fn sync [{:keys [capabilities]} _ & [reason]]
-    (when-let [sync! (get-in capabilities [:learner :learner/account :account/sync!])]
-      (sync! reason)
-      nil)))
+    (account/sync! (:account capabilities) reason)
+    nil))
 
 
 (nxr/register-effect! :effect/enter
@@ -57,9 +59,10 @@
     (dispatch [(into [action
                       ;; Marked skip-interpolation: Nexus would otherwise walk every word id of a theme
                       ;; for placeholders on each keystroke.
-                      (with-meta {:active-collection ((get-in capabilities [:learner :learner/active-collection]))
-                                  :now-ms            ((get-in capabilities [:world :world/clock :clock/now-ms]))
-                                  :random            (get-in capabilities [:world :world/random])}
+                      (with-meta {:active-collection (learner/active-collection (:learner capabilities))
+                                  :learner           (:learner capabilities)
+                                  :now-ms            (world/clock (:world capabilities) :now-ms)
+                                  :random            #(world/random (:world capabilities))}
                                  {:nexus/skip-interpolation true})]
                      args)])))
 
@@ -288,23 +291,19 @@
 
 
 (defn render!
-  "Renders the shell of `state`, then lets the browser's virtual keyboard
-   follow what the screen asks of it (`sync-virtual-keyboard!`, the browser
-   capability's)."
-  [state sync-virtual-keyboard!]
-  (r/render js/document.body (view/shell state))
-  (sync-virtual-keyboard!))
+  "Renders the shell of `state`."
+  [state]
+  (r/render js/document.body (view/shell state)))
 
 
 (defn state
   "The state the screens are computed from: the interface's own, in
-   `:app-state` of `system`, with the learner's data in memory and whether it
-   is loading, loaded or unreadable (`:learner/status`)."
+   `:app-state` of `system`, with whether the learner's data is loading, loaded or unreadable (`:learner/status`).
+   The data itself is read from the learner, which `:effect/enter` hands to the actions."
   [{:keys [app-state capabilities]}]
-  (let [{:learner/keys [memory status]} (:learner capabilities)]
+  (let [{:keys [learner]} capabilities]
     (assoc @app-state
-           :learner/memory (memory)
-           :learner/status (status))))
+           :learner/status (learner/status learner))))
 
 
 (defn start-render!
@@ -317,7 +316,7 @@
                (fn [_ _ old new]
                  (when-not (identical? old new)
                    (render!))))
-    ((get-in capabilities [:learner :learner/on-change]) render!)
+    (learner/on-change (:learner capabilities) render!)
     (render!)))
 
 
@@ -378,14 +377,15 @@
   ;; renders from memory in the same task, so only the second paints over the splash.
   ;; The refresh is a microtask: a watch that saved would show the render watch the load's
   ;; state after the refresh's.
-  (let [{:learner/keys [on-change status]} (:learner capabilities)
-        refresh!                           #(dispatch {} [[:effect/enter :action/refresh-page]])
-        was-loaded?                        (volatile! (= :status/loaded (status)))]
-    (on-change (fn []
-                 (let [now-loaded? (= :status/loaded (status))]
-                   (when (and now-loaded? (not @was-loaded?))
-                     (js/queueMicrotask refresh!))
-                   (vreset! was-loaded? now-loaded?))))
+  (let [{:keys [learner]} capabilities
+        refresh!          #(dispatch {} [[:effect/enter :action/refresh-page]])
+        was-loaded?       (volatile! (= :status/loaded (learner/status learner)))]
+    (learner/on-change learner
+                       (fn []
+                         (let [now-loaded? (= :status/loaded (learner/status learner))]
+                           (when (and now-loaded? (not @was-loaded?))
+                             (js/queueMicrotask refresh!))
+                           (vreset! was-loaded? now-loaded?))))
     (when @was-loaded?
       (refresh!)))
   ;; Nothing renders before memory is loaded, so the server's splash stays; a failed read renders
@@ -396,9 +396,8 @@
             system
             (fn [state]
               (when (not= :status/loading (:learner/status state))
-                (let [render-state! #(render! % (get-in capabilities [:browser :browser/sync-virtual-keyboard!]))]
-                  (if ^boolean goog/DEBUG
-                    (instrumentation/render! render-state! state)
-                    (render-state! state))))))))
+                (if ^boolean goog/DEBUG
+                  (instrumentation/render! render! state)
+                  (render! state)))))))
   (when ^boolean goog/DEBUG
     (instrumentation/install!)))

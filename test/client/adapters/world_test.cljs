@@ -1,5 +1,5 @@
 (ns client.adapters.world-test
-  "`:clock/sleep`: a timer a signal can cancel, with nothing left behind."
+  "`sleep`: a timer a signal can cancel, with nothing left behind."
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require

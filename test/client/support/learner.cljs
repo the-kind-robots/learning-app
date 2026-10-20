@@ -5,28 +5,52 @@
    [adapters.learner :as adapter]
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
-   [domain.examples :as examples]))
+   [domain.examples :as examples]
+   [ports.learner :as learner]))
 
 
 (defn ^:async started
-  "Starts memory over `dbs` into a new store, and the learner capability over
+  "Starts memory over `dbs` into a new store, and the Learner over
    both. Resolves once memory is fully loaded, with `{:learner :stop :store}`:
-   the capability's functions, a function that stops following the feeds, and
-   the store. `world` is the clock, the map of `:clock/*` functions."
-  [dbs world]
+   the Learner, a function that stops following the feeds, and
+   the store."
+  [dbs]
   (let [store (atom {:learner/memory memory/empty-memory})
         stop  (await (loader/start! dbs store))]
-    {:learner (adapter/capabilities
-               {:learner (adapter/new-learner {:databases dbs :store store :world {:world/clock world}})})
+    {:learner (learner/as-learner
+               (adapter/new-learner {:databases dbs :store store}))
      :stop    stop
      :store   store}))
+
+
+(defn of-memory
+  "A Learner that holds `memory`, a memory value, and offers nothing else."
+  [memory]
+  (reify learner/Learner
+    (memory [_] memory)))
+
+
+(defn with-active-collection
+  "`learner`, but the collection active is the one `active-collection` returns, a function of no arguments."
+  [learner active-collection]
+  (reify learner/Learner
+    (memory [_] (learner/memory learner))
+    (fresh-memory [_] (learner/fresh-memory learner))
+    (change! [_ ops] (learner/change! learner ops))
+    (insert! [_ entity value] (learner/insert! learner entity value))
+    (active-collection [_] (active-collection))
+    (set-active-collection! [_ id] (learner/set-active-collection! learner id))
+    (on-change [_ f] (learner/on-change learner f))
+    (status [_] (learner/status learner))
+    (storage [_] (learner/storage learner))
+    (resolve-conflicts! [_ pulled-ids] (learner/resolve-conflicts! learner pulled-ids))))
 
 
 (defn ^:async with-learner
   "Calls `f` with what `started` resolves with, and stops following the
    feeds once the promise `f` returns settles."
-  [dbs clock f]
-  (let [{:keys [stop] :as started} (await (started dbs clock))]
+  [dbs f]
+  (let [{:keys [stop] :as started} (await (started dbs))]
     (try
       (await (f started))
       (finally

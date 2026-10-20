@@ -6,7 +6,7 @@
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.db-seed :as db-seed]
-   [client.support.learner :as learner]
+   [client.support.learner :as test-learner]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
@@ -24,36 +24,19 @@
 (use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name device-db-name]))
 
 
-(def ^:private clock
-  {:clock/now-iso time/now-iso
-   :clock/now-ms  time/now-ms})
-
-
 (defn- with-test-dbs
-  "Calls `f` with the test databases, under which `::capabilities` is
-   what the use cases are handed: the learner port over those databases,
-   and the main card active."
+  "Calls `f` with the test databases, under which `::learner` is the Learner
+   over those databases, with the main card active."
   [f]
   (db-fixtures/with-test-dbs
    [user-db-name device-db-name]
    (^:async fn
     [[user-db device-db]]
-    (with-redefs [utils/now-iso time/now-iso
-                  utils/now-ms  time/now-ms]
-      (let [dbs {:device/db device-db :user/db user-db}]
-        (await (learner/with-learner
-                dbs
-                clock
-                (fn [{learner-port :learner}]
-                  (f (assoc dbs
-                            ::capabilities
-                            {:world   {:world/clock clock}
-                             :learner (assoc learner-port :learner/active-collection (fn [] nil))}))))))))))
-
-
-(defn- test-capabilities
-  [dbs]
-  (::capabilities dbs))
+    (let [dbs {:device/db device-db :user/db user-db}]
+      (await (test-learner/with-learner
+              dbs
+              (fn [{started :learner}]
+                (f (assoc dbs ::learner (test-learner/with-active-collection started (fn [] nil)))))))))))
 
 
 (defn- ^:async list-of
@@ -66,7 +49,7 @@
                                               :type     "collection"
                                               :name     "listed"
                                               :word-ids (vec word-ids)}]))]
-    (sut/rows memory
+    (sut/rows (test-learner/of-memory memory)
               (cond-> (dissoc opts :word-ids)
                 word-ids (assoc :collection (get-in memory [:collections "collection:listed"])))
               (time/now-ms))))
@@ -82,7 +65,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id created?]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word nil))
+      (let [{:keys [word-id created?]} (await (sut/add! (::learner dbs) time/world "der Hund" "пёс" :word nil))
             vocabs  (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
             reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (is (string? word-id))
@@ -100,7 +83,7 @@
      (^:async fn
       [dbs]
       (await (js/Promise.all
-              (into-array (map (fn [i] (sut/add! (test-capabilities dbs) (str "word-" i) (str "перевод-" i) :word nil))
+              (into-array (map (fn [i] (sut/add! (::learner dbs) time/world (str "word-" i) (str "перевод-" i) :word nil))
                                (range 30)))))
       (let [cnt (await (count-of dbs))
             {:keys [words total]} (await (list-of dbs {}))]
@@ -114,11 +97,11 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (test-capabilities dbs) "der Hund" "пёс" :word nil))]
-        (await (sut/add-review (test-capabilities dbs) word-id true "пёс"))
+      (let [{:keys [word-id]} (await (sut/add! (::learner dbs) time/world "der Hund" "пёс" :word nil))]
+        (await (sut/add-review (::learner dbs) time/world word-id true "пёс"))
         (await (db/insert (:user/db dbs) {:type "example" :word-id word-id :value "Der Hund läuft"}))
         (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
-          (await (sut/delete! (test-capabilities dbs) word-id))
+          (await (sut/delete! (::learner dbs) word-id))
           (is (empty? (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))))
           (is (= (map :_id reviews) (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review")))))
           (is (= 1 (count (await (db-queries/fetch-by-type (:user/db dbs) "example")))))))))))

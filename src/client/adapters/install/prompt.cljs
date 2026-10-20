@@ -1,4 +1,4 @@
-(ns adapters.browser.install-prompt
+(ns adapters.install.prompt
   "The browser's side of installing the app: whether it runs installed, whether it is on iOS (no install
    prompt of its own), and the `beforeinstallprompt` event held back until the learner asks.")
 

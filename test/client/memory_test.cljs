@@ -8,7 +8,7 @@
    [adapters.learner.memory :as sut]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-seed :as db-seed]
-   [client.support.learner :as learner]
+   [client.support.learner :as test-learner]
    [client.support.memory-projection :as projection]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is testing use-fixtures]]
@@ -175,7 +175,7 @@
                                        :word        "der Hund"
                                        :value       "Der Hund bellt."
                                        :translation "Пёс лает"}]))
-      (let [{:keys [stop store]} (await (learner/started dbs {}))
+      (let [{:keys [stop store]} (await (test-learner/started dbs))
             memory #(:learner/memory @store)]
         (is (= ["vocab:der hund"] (map :id (sut/words (memory)))))
         (is (= 1 (count (review-ids (memory) "vocab:der hund"))))

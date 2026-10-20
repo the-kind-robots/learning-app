@@ -41,11 +41,21 @@
     :word-state/known-missing-translation))
 
 
+(defn- stamped
+  "`word` modified at `now`, and created at `now` when it has no creation time. Every word that is written is
+   stamped by the function that builds it."
+  [word now]
+  (cond-> (assoc word :modified-at now)
+    (nil? (:created-at word)) (assoc :created-at now)))
+
+
 (defn merged-entry
   "`stored`, a word or phrase, with the translations of `entry` added to
-   its own. It keeps its kind and the rest of what it has."
-  [stored entry]
-  (update stored :translation merge-translations (:translation entry)))
+   its own, modified at `now`. It keeps its kind and the rest of what it has."
+  [stored entry now]
+  (-> stored
+      (update :translation merge-translations (:translation entry))
+      (stamped now)))
 
 
 (defn merged-word
@@ -168,16 +178,17 @@
 
 
 (defn entered-entry
-  "The word, or the phrase when `kind` is `:phrase`, that `value` and `translation` make; nil when the
-   translation gives no entry. `pos` is the picked suggestion's part of speech; a phrase keeps none."
-  [kind value translation pos]
+  "The word, or the phrase when `kind` is `:phrase`, that `value` and `translation` make, created at `now`; nil
+   when the translation gives no entry. `pos` is the picked suggestion's part of speech; a phrase keeps none."
+  [kind value translation pos now]
   (let [translation (entered-translation kind translation)]
-    (if (= :phrase kind)
-      (when-not (str/blank? translation)
-        (new-phrase value translation))
-      (when-let [entries (seq (parse-translations translation))]
-        (cond-> (new-word value (vec entries))
-          pos (assoc :pos pos))))))
+    (some-> (if (= :phrase kind)
+              (when-not (str/blank? translation)
+                (new-phrase value translation))
+              (when-let [entries (seq (parse-translations translation))]
+                (cond-> (new-word value (vec entries))
+                  pos (assoc :pos pos))))
+            (stamped now))))
 
 
 (defn new-review
@@ -187,6 +198,12 @@
    :translation [{:lang "ru" :value translation}]})
 
 
-(defn update-word
-  [word translation]
-  (assoc word :translation (parse-translations translation)))
+(defn edited-word
+  "`word`, a word or a phrase, with the `value` and `translation` typed into the edit dialog, read as its kind
+   reads them, modified at `now`."
+  [word value translation now]
+  (stamped
+   (if (= "phrase" (:kind word))
+     (assoc word :translation [(translation-entry translation)] :value (collapsed value))
+     (assoc word :translation (parse-translations translation) :value (str/trim value)))
+   now))

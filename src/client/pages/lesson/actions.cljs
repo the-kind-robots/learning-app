@@ -23,10 +23,10 @@
 (nxr/register-action! :action/open-lesson
   ;; The lesson is drawn from memory in the task of the tap and lives in app state only. Entered while
   ;; memory loads, behind the splash, it is drawn once memory is in place (`:action/refresh-page`).
-  (fn open-lesson [state {:keys [active-collection now-ms random]}]
+  (fn open-lesson [state {:keys [active-collection learner now-ms random]}]
     [[:effect/save
       (shown (when (= :status/loaded (:learner/status state))
-               (lesson/start (:learner/memory state) active-collection {:random random} now-ms)))]]))
+               (lesson/start learner active-collection {:random random} now-ms)))]]))
 
 
 (nxr/register-action! :action/update-lesson

@@ -4,20 +4,20 @@
    [domain.lesson :as domain]
    [domain.retention :as retention]
    [domain.vocabulary :as vocabulary-domain]
-   [ports.learner :as learner-port]
+   [ports.learner :as learner]
    [use-cases.vocabulary :as vocabulary]))
 
 
 (defn start
-  "A new lesson out of `memory`: `{:lesson-state ..}` or `{:error :no-words-available}`, over the most due
+  "A new lesson out of the learner's words: `{:lesson-state ..}` or `{:error :no-words-available}`, over the most due
    words, ties in random order. opts: `:random`, `:vocab-per-lesson` (default 3), `:trial-selector`
    (`:first`, otherwise random)."
-  [memory collection
+  [learner collection
    {:keys [random vocab-per-lesson trial-selector]
     :or   {vocab-per-lesson domain/default-vocab-per-lesson}}
    now-ms]
   ;; Every word in scope, unranked: `pick-vocab` owns the whole selection policy, ties included.
-  (let [cards    (learner-port/collection-cards memory collection)
+  (let [cards    (learner/collection-cards learner collection)
         selected (map :word
                       (domain/pick-vocab cards
                                          #(retention/urgency (:reviews %) now-ms)
@@ -30,7 +30,7 @@
         ;; Which examples a read in this collection sees is one rule, in `domain.examples`.
         {:lesson-state (domain/initial-state
                         vocab
-                        (->> (learner-port/examples-of memory word-ids)
+                        (->> (learner/examples-of learner word-ids)
                              (examples/visible-in (:id collection)))
                         (if (= :first trial-selector)
                           first
@@ -39,10 +39,11 @@
 
 (defn ^:async record-review!
   "Writes the review of the answer just checked in `lesson-state`."
-  [capabilities lesson-state]
+  [learner world lesson-state]
   (let [trial (domain/current-trial lesson-state)]
     (await (vocabulary/add-review
-            capabilities
+            learner
+            world
             (:word-id trial)
             (-> lesson-state domain/last-result :correct?)
             (:prompt trial)))))
@@ -50,8 +51,8 @@
 
 (defn token-info
   "Return token info for lesson answer annotation card."
-  [capabilities dictionary-form translation]
-  (let [existing (vocabulary/find-duplicate capabilities dictionary-form)]
+  [learner dictionary-form translation]
+  (let [existing (vocabulary/find-duplicate learner dictionary-form)]
     {:dictionary-form dictionary-form
      :translation translation
      :state       (vocabulary-domain/translation-state existing translation)}))
@@ -60,10 +61,10 @@
 (defn answer-annotations
   "Vocabulary state per annotated word of the trial's answer:
    {word-index :word-state/unknown-word | :word-state/known-missing-translation | :word-state/known-with-translation}."
-  [capabilities trial]
+  [learner trial]
   (let [segments (filterv #(= :annotated-word (:type %))
                           (domain/answer-segments trial))
-        infos    (map #(token-info capabilities (:dictionary-form %) (:translation %))
+        infos    (map #(token-info learner (:dictionary-form %) (:translation %))
                       segments)]
     (zipmap (map :word-index segments)
             (map :state infos))))

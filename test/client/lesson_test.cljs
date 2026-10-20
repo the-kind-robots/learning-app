@@ -6,7 +6,7 @@
    [client.support.db-fixtures :as db-fixtures]
    [client.support.db-queries :as db-queries]
    [client.support.db-seed :as db-seed]
-   [client.support.learner :as learner]
+   [client.support.learner :as test-learner]
    [client.support.time :as time]
    [cljs.test :refer-macros [deftest is use-fixtures]]
    [db :as db]
@@ -26,11 +26,6 @@
 (use-fixtures :each (db-fixtures/db-fixture-multi [user-db-name device-db-name]))
 
 
-(def ^:private clock
-  {:clock/now-iso time/now-iso
-   :clock/now-ms  time/now-ms})
-
-
 (defn- with-test-dbs
   "Calls `f` with the test databases, under which `::learner` is the
    learner port over them."
@@ -39,47 +34,36 @@
    [user-db-name device-db-name]
    (^:async fn
     [[user-db device-db]]
-    (with-redefs [utils/now-iso time/now-iso
-                  utils/now-ms  time/now-ms]
-      (let [dbs {:device/db device-db :user/db user-db}]
-        (await (learner/with-learner dbs clock #(f (assoc dbs ::learner (:learner %) ::store (:store %))))))))))
-
-
-(defn- test-capabilities
-  [dbs]
-  {::dbs    dbs
-   :world   {:world/clock clock}
-   :learner (assoc (::learner dbs) :learner/active-collection (fn [] nil))})
+    (let [dbs {:device/db device-db :user/db user-db}]
+      (await (test-learner/with-learner dbs #(f (assoc dbs ::learner (:learner %) ::store (:store %)))))))))
 
 
 (defn- ^:async caught-up!
   "Resolves once memory has what the test seeded."
   [dbs]
-  (await (learner/caught-up dbs (::store dbs))))
+  (await (test-learner/caught-up dbs (::store dbs))))
 
 
 (defn- ^:async start!
-  "What entering the lesson does: draw it from memory loaded off `dbs`."
-  [capabilities opts]
-  (let [dbs    (::dbs capabilities)
-        memory (await (db-seed/memory-of (:user/db dbs)))]
-    (sut/start memory ((get-in capabilities [:learner :learner/active-collection])) (merge {:random (constantly 0.5)} opts) (time/now-ms))))
+  "What entering the lesson does: draw it, from the main card, from memory loaded off `dbs`."
+  [dbs opts]
+  (let [memory (await (db-seed/memory-of (:user/db dbs)))]
+    (sut/start (test-learner/of-memory memory) nil (merge {:random (constantly 0.5)} opts) (time/now-ms))))
 
 
 (defn- ^:async started
   "The lesson state `start!` draws."
-  [capabilities opts]
-  (:lesson-state (await (start! capabilities opts))))
+  [dbs opts]
+  (:lesson-state (await (start! dbs opts))))
 
 
 (defn- ^:async cached-words
   "Every word as memory would have `dbs` now, with its retention level and
    the urgency a lesson ranks it by."
-  [capabilities]
-  (let [dbs    (::dbs capabilities)
-        memory (await (db-seed/memory-of (:user/db dbs)))
+  [dbs]
+  (let [memory (await (db-seed/memory-of (:user/db dbs)))
         now    (time/now-ms)
-        levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows memory {} now)))]
+        levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows (test-learner/of-memory memory) {} now)))]
     {:words (mapv (fn [{:keys [word] :as card}]
                     {:id      (:id word)
                      :retention-level (levels (:id word))
@@ -98,9 +82,9 @@
         (^:async fn
          [dbs]
          (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-         (let [lesson  (await (started (test-capabilities dbs) {:trial-selector :first}))
+         (let [lesson  (await (started dbs {:trial-selector :first}))
                before  (set (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review"))))
-               _       (await (sut/record-review! (test-capabilities dbs) (domain/check-answer lesson answer)))
+               _       (await (sut/record-review! (::learner dbs) time/world (domain/check-answer lesson answer)))
                written (remove (comp before :_id) (await (db-queries/fetch-by-type (:user/db dbs) "review")))]
            (is (= [["word-1" retained?]] (map (juxt :word-id :retained) written)) answer))))))))
 
@@ -111,11 +95,11 @@
      (^:async fn
       [dbs]
       (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
-      (let [lesson  (await (started (test-capabilities dbs) {:trial-selector :first}))
+      (let [lesson  (await (started dbs {:trial-selector :first}))
             checked (domain/check-answer lesson "der Hund")]
         (with-redefs [db/insert (fn [_ _] (js/Promise.reject (ex-info "DB error" {})))]
           (let [error (try
-                        (await (sut/record-review! (test-capabilities dbs) checked))
+                        (await (sut/record-review! (::learner dbs) time/world checked))
                         nil
                         (catch js/Error err err))]
             (is (some? error))
@@ -165,10 +149,9 @@
                {:id "vocab:zeit" :value "die Zeit" :days-ago 300}
                {:id "vocab:zug" :value "der Zug" :days-ago 300}
                {:id "vocab:zurueck" :value "zurück" :days-ago 300}]))
-      (let [capabilities    (test-capabilities dbs)
-            {:keys [words]} (await (cached-words capabilities))
+      (let [{:keys [words]} (await (cached-words dbs))
             {:keys [lesson-state]}
-            (await (start! capabilities
+            (await (start! dbs
                            {:vocab-per-lesson 3
                             :trial-selector   :first}))]
         (is (every? zero? (map :retention-level words))
