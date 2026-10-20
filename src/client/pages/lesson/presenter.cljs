@@ -15,11 +15,11 @@
 
 
 (defn input-props
-  "Props for the answer field: the answer to build from tiles when the example
-   was failed before, and the longest answer taken."
+  "Props for the answer field: the answer to build from tiles on an example,
+   and the longest answer taken."
   [state]
   (let [lesson-state (:lesson/state state)]
-    {:correct-answer (when (domain/failed-before? lesson-state)
+    {:correct-answer (when (domain/example-trial? (domain/current-trial lesson-state))
                        (domain/expected-answer lesson-state))
      :max-length     domain/max-answer-length}))
 

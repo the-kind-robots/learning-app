@@ -2,7 +2,7 @@ const { test, expect } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
 const { seedExample } = require('./lesson-answer.shared');
 
-// The tile hint on an example shown again (GH-573). The lesson holds one word
+// The tile hint on an example (GH-573, GH-605).
 // and its example, so after a wrong answer the example is the only trial left
 // and comes straight back.
 
@@ -11,13 +11,16 @@ const SENTENCE = ['Der', 'Hund', 'schläft', 'im', 'Garten'];
 const hint = (page) => page.getByRole('checkbox', { name: 'Подсказка: собрать из плиток' });
 const tray = (page) => page.getByRole('group', { name: 'Ваш ответ' });
 const bank = (page) => page.getByRole('group', { name: 'Плитки' });
+const marked = (page) => bank(page).locator('b');
+// The bank is shuffled, so the marked letters are compared sorted.
+const markedTexts = async (page) => (await marked(page).allTextContents()).sort();
 const check = (page) => page.getByRole('button', { name: 'ПРОВЕРИТЬ' });
 
 // Answers the word, and leaves the example on screen for the first time.
-async function showExampleFirstTime(page) {
+async function showExampleFirstTime(page, sentence) {
   await page.goto('/home');
   await addWord(page, 'der Hund', 'пёс');
-  await seedExample(page);
+  await seedExample(page, undefined, sentence);
   await page.goto('/lesson');
   await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('der Hund');
   await check(page).click();
@@ -25,8 +28,8 @@ async function showExampleFirstTime(page) {
   await expect(page.locator('.lesson__instruction')).toContainText('предложение');
 }
 
-async function showExampleAgain(page) {
-  await showExampleFirstTime(page);
+async function showExampleAgain(page, sentence) {
+  await showExampleFirstTime(page, sentence);
   await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('Die Katze schläft.');
   await check(page).click();
   await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
@@ -45,14 +48,23 @@ async function place(page, words) {
 }
 
 test.describe('Подсказка плитками у повторного примера', () => {
-  test('ученик видит пример впервые → лампочки нет', async ({ page }) => {
+  test('ученик видит пример впервые → есть обычное поле и лампочка', async ({ page }) => {
     await test.step('Когда пример показан впервые', async () => {
       await showExampleFirstTime(page);
     });
 
-    await test.step('Тогда есть обычное поле и нет лампочки', async () => {
+    await test.step('Тогда есть обычное поле, лампочка и нет плиток', async () => {
       await expect(page.locator('#lesson-answer')).toBeVisible();
-      await expect(hint(page)).toHaveCount(0);
+      await expect(hint(page)).toBeVisible();
+      await expect(bank(page).getByRole('button')).toHaveCount(0);
+    });
+
+    await test.step('Когда он нажимает лампочку', async () => {
+      await openTiles(page);
+    });
+
+    await test.step('Тогда плитки на месте поля', async () => {
+      await expect(bank(page).getByRole('button')).toHaveCount(5);
     });
   });
 
@@ -198,6 +210,236 @@ test.describe('Подсказка плитками у повторного пр�
 
     await test.step('Тогда он видит «Правильно!»', async () => {
       await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
+    });
+  });
+
+  async function dragTo(page, tile, x, y) {
+    const from = await tile.boundingBox();
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x, y, { steps: 10 });
+  }
+
+  test('ученик перетащил плитку из банка в лоток → она встала в место каретки', async ({ page }) => {
+    await test.step('Дано в лотке «Der» и «Hund»', async () => {
+      await showExampleAgain(page);
+      await openTiles(page);
+      await place(page, ['Der', 'Hund']);
+    });
+
+    await test.step('Когда он перетаскивает «im» между ними и отпускает', async () => {
+      const first = await tray(page).getByRole('button', { name: 'Der', exact: true }).boundingBox();
+      await dragTo(page, bank(page).getByRole('button', { name: 'im', exact: true }),
+        first.x + first.width - 2, first.y + first.height / 2);
+      await page.mouse.up();
+    });
+
+    await test.step('Тогда «im» в лотке между «Der» и «Hund», в банке три плитки', async () => {
+      await expect(tray(page).getByRole('button')).toHaveText(['Der', 'im', 'Hund']);
+      await expect(bank(page).getByRole('button')).toHaveCount(2);
+    });
+  });
+
+  test('ученик отпустил плитку из банка вне лотка → она осталась в банке', async ({ page }) => {
+    await test.step('Дано плитки в банке', async () => {
+      await showExampleAgain(page);
+      await openTiles(page);
+    });
+
+    await test.step('Когда он тянет плитку на банк и отпускает вне лотка', async () => {
+      const other = await bank(page).getByRole('button', { name: 'Garten', exact: true }).boundingBox();
+      await dragTo(page, bank(page).getByRole('button', { name: 'im', exact: true }),
+        other.x + other.width / 2, other.y - 20);
+      await page.mouse.up();
+    });
+
+    await test.step('Тогда лоток пуст, в банке пять плиток', async () => {
+      await expect(tray(page).getByRole('button')).toHaveCount(0);
+      await expect(bank(page).getByRole('button')).toHaveCount(5);
+    });
+  });
+
+  test('ученик перетащил плитку из банка в пустой лоток → она в лотке', async ({ page }) => {
+    await test.step('Дано пустой лоток', async () => {
+      await showExampleAgain(page);
+      await openTiles(page);
+    });
+
+    await test.step('Когда он тянет «Hund» в лоток и отпускает', async () => {
+      const box = await page.locator('#lesson-answer #field').boundingBox();
+      await dragTo(page, bank(page).getByRole('button', { name: 'Hund', exact: true }),
+        box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.up();
+    });
+
+    await test.step('Тогда «Hund» в лотке', async () => {
+      await expect(tray(page).getByRole('button')).toHaveText(['Hund']);
+    });
+  });
+
+  test('ученик набирает начало слова на клавиатуре → плитка встаёт в конец лотка', async ({ page }) => {
+    await test.step('Дано плитки в банке', async () => {
+      await showExampleAgain(page);
+      await openTiles(page);
+    });
+
+    await test.step('Когда он набирает «h», затем «DER» заглавными', async () => {
+      await page.keyboard.type('h');
+      await page.keyboard.type('DER');
+    });
+
+    await test.step('Тогда «Hund» и «Der» в лотке в этом порядке и ничего не выделено', async () => {
+      await expect(tray(page).getByRole('button')).toHaveText(['Hund', 'Der']);
+      await expect(marked(page)).toHaveCount(0);
+    });
+  });
+
+  test('ученик набирает букву, с которой не начинается ни одно слово → буква не принята', async ({ page }) => {
+    await test.step('Дано набрано «d» в банке с «Die» и «dieser»', async () => {
+      await showExampleAgain(page, 'Die Katze liebt dieser Garten.');
+      await openTiles(page);
+      await page.keyboard.type('d');
+      await expect.poll(() => markedTexts(page)).toEqual(['D', 'd']);
+    });
+
+    await test.step('Когда он набирает «u»', async () => {
+      await page.keyboard.type('u');
+    });
+
+    await test.step('Тогда ничего не поставлено, выделена по-прежнему только «d»', async () => {
+      await expect(tray(page).getByRole('button')).toHaveCount(0);
+      await expect.poll(() => markedTexts(page)).toEqual(['D', 'd']);
+    });
+  });
+
+  test('ученик набирает начало слов → буквы жирнее, плитки не меняют ширину', async ({ page }) => {
+    const widths = () => bank(page).getByRole('button').evaluateAll((tiles) => tiles.map((tile) => tile.getBoundingClientRect().width));
+
+    await test.step('Дано плитки в банке', async () => {
+      await showExampleAgain(page, 'Die Katze liebt dieser Garten.');
+      await openTiles(page);
+    });
+    const before = await widths();
+
+    await test.step('Когда он набирает «di»', async () => {
+      await page.keyboard.type('di');
+    });
+
+    await test.step('Тогда «Di» и «di» жирнее остального текста плитки, ширины те же', async () => {
+      await expect.poll(() => markedTexts(page)).toEqual(['Di', 'di']);
+      const [tileWeight, markedWeight] = await marked(page).first().evaluate((el) => [
+        getComputedStyle(el.closest('button')).fontWeight,
+        getComputedStyle(el).fontWeight,
+      ]);
+      expect(Number(markedWeight)).toBeGreaterThan(Number(tileWeight));
+      const during = await widths();
+      during.forEach((width, i) => expect(Math.abs(width - before[i]), `плитка ${i}`).toBeLessThanOrEqual(0.5));
+    });
+
+    await test.step('Когда он стирает префикс', async () => {
+      await page.keyboard.press('Backspace');
+      await page.keyboard.press('Backspace');
+    });
+
+    await test.step('Тогда выделения нет, ширины те же', async () => {
+      await expect(marked(page)).toHaveCount(0);
+      const after = await widths();
+      after.forEach((width, i) => expect(Math.abs(width - before[i]), `плитка ${i}`).toBeLessThanOrEqual(0.5));
+    });
+  });
+
+  for (const key of ['Space', 'Enter']) {
+    test(`ученик набирает слово, являющееся началом другого, и жмёт ${key} → ставится точное слово`, async ({ page }) => {
+      await test.step('Дано плитки «Die» и «dieser» в банке', async () => {
+        await showExampleAgain(page, 'Die Katze liebt dieser Garten.');
+        await openTiles(page);
+      });
+
+      await test.step('Когда он набирает «die»', async () => {
+        await page.keyboard.type('die');
+      });
+
+      await test.step('Тогда «Die» и «die» выделены, плитка не поставлена', async () => {
+        await expect.poll(() => markedTexts(page)).toEqual(['Die', 'die']);
+        await expect(tray(page).getByRole('button')).toHaveCount(0);
+      });
+
+      await test.step(`Когда он жмёт ${key}`, async () => {
+        await page.keyboard.press(key);
+      });
+
+      await test.step('Тогда «Die» в лотке, выделения нет', async () => {
+        await expect(tray(page).getByRole('button')).toHaveText(['Die']);
+        await expect(marked(page)).toHaveCount(0);
+      });
+    });
+  }
+
+  test('ученик набирает начало, не являющееся целым словом, и жмёт Пробел и Enter → ничего не ставится', async ({ page }) => {
+    await test.step('Дано набрано «di» в банке с «Die» и «dieser»', async () => {
+      await showExampleAgain(page, 'Die Katze liebt dieser Garten.');
+      await openTiles(page);
+      await page.keyboard.type('di');
+      await expect.poll(() => markedTexts(page)).toEqual(['Di', 'di']);
+    });
+
+    await test.step('Когда он жмёт Пробел и Enter', async () => {
+      await page.keyboard.press('Space');
+      await page.keyboard.press('Enter');
+    });
+
+    await test.step('Тогда лоток пуст, «di» всё ещё выделено', async () => {
+      await expect(tray(page).getByRole('button')).toHaveCount(0);
+      await expect.poll(() => markedTexts(page)).toEqual(['Di', 'di']);
+    });
+  });
+
+  test('ученик набирает слово, которое есть в банке дважды → уходит первая по порядку в банке плитка', async ({ page }) => {
+    let order;
+
+    await test.step('Дано плитки «Der» и «der» в банке', async () => {
+      await showExampleAgain(page, 'Der Hund sieht der Katze.');
+      await openTiles(page);
+      order = await bank(page).getByRole('button').allTextContents();
+    });
+
+    await test.step('Когда он набирает «der»', async () => {
+      await page.keyboard.type('der');
+    });
+
+    await test.step('Тогда в лотке первая из двух по порядку в банке, другая осталась на месте', async () => {
+      const first = order.findIndex((word) => word.toLowerCase() === 'der');
+      await expect(tray(page).getByRole('button')).toHaveText([order[first]]);
+      await expect(bank(page).getByRole('button')).toHaveText(order.filter((word, i) => i !== first));
+    });
+  });
+
+  test('ученик жмёт Backspace → стирается буква, а без префикса плитка возвращается в банк', async ({ page }) => {
+    await test.step('Дано поставлена «Katze» и набрано «die»', async () => {
+      await showExampleAgain(page, 'Die Katze liebt dieser Garten.');
+      await openTiles(page);
+      await page.keyboard.type('ka');
+      await page.keyboard.type('die');
+      await expect.poll(() => markedTexts(page)).toEqual(['Die', 'die']);
+    });
+
+    await test.step('Когда он жмёт Backspace', async () => {
+      await page.keyboard.press('Backspace');
+    });
+
+    await test.step('Тогда выделено «Di» и «di»', async () => {
+      await expect.poll(() => markedTexts(page)).toEqual(['Di', 'di']);
+    });
+
+    await test.step('Когда он стирает префикс и жмёт Backspace ещё раз', async () => {
+      await page.keyboard.press('Backspace');
+      await page.keyboard.press('Backspace');
+      await page.keyboard.press('Backspace');
+    });
+
+    await test.step('Тогда «Katze» вернулась в банк', async () => {
+      await expect(tray(page).getByRole('button')).toHaveCount(0);
+      await expect(bank(page).getByRole('button')).toHaveCount(5);
     });
   });
 });

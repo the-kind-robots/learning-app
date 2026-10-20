@@ -83,16 +83,36 @@ textarea {
   display: none;
 }
 
-button {
-  cursor: pointer;
-  position: relative;
-  touch-action: manipulation;
-  user-select: none;
+/* A tile's word sits in a span that always has the width of its heaviest
+   rendering: a hidden copy, zero high, props it open, so the letters a typed
+   prefix makes heavier do not move the tiles. */
+button > span {
+  display: inline-block;
+  text-align: center;
 }
 
-#tray button {
+button > span::after {
+  content: attr(data-word) / '';
+  display: block;
+  font-weight: var(--answer-field-match-weight, 900);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+b {
+  font-weight: var(--answer-field-match-weight, 900);
+}
+
+#tray:focus {
+  outline: none;
+}
+
+button {
   cursor: grab;
+  position: relative;
   touch-action: none;
+  user-select: none;
 }
 
 button[data-lifted] {

@@ -49,18 +49,34 @@ Activating a bank tile SHALL append it to the tray; activating a placed tile SHA
 
 ### Requirement: Tiles are placed by typing
 
-While tiles are shown, letters typed on a physical keyboard SHALL accumulate as a prefix, compared without regard to case, and the pending prefix SHALL be visible near the tray. As soon as the prefix fits exactly one distinct word among the bank's tiles, one tile of that word SHALL move to the end of the tray and the prefix SHALL clear; tiles of the same text count as one word. When the prefix equals a whole bank word that is also the start of another bank word, Space or Enter SHALL move a tile of the exact word the same way. A letter that would make the prefix fit no bank word SHALL be ignored. Backspace SHALL erase the prefix's last letter, or with no prefix return the last placed tile to the bank. Typing SHALL NOT open an on-screen keyboard, and Enter with no prefix SHALL NOT place or check anything.
+While tiles are shown, letters typed on a physical keyboard SHALL accumulate as a prefix, compared without regard to case. While a prefix is pending, every bank tile whose word starts with it SHALL show those leading letters in a heavier weight, and no tile SHALL change its size; the highlight SHALL clear with the prefix. As soon as the prefix fits exactly one distinct word among the bank's tiles, the first tile of that word in bank order SHALL move to the end of the tray and the prefix SHALL clear; tiles of the same text count as one word. Space and Enter SHALL act alike: when the pending prefix identifies a bank word, either as the only distinct word it fits or as a whole bank word it spells (such as «die» beside «dieser»), the first tile of that word in bank order SHALL move to the end of the tray; when it identifies none, they SHALL do nothing and the prefix SHALL stay. A letter that would make the prefix fit no bank word SHALL be ignored. Backspace SHALL erase the prefix's last letter, or with no prefix return the last placed tile to the bank. Typing SHALL NOT open an on-screen keyboard, and Enter with no prefix SHALL NOT place or check anything.
 
 #### Scenario: A unique prefix places its tile
 
 - **WHEN** the bank holds «Der», «Hund», «schläft» and the learner types «h»
 - **THEN** «Hund» moves to the end of the tray and no prefix is pending
 
-#### Scenario: An ambiguous prefix waits
+#### Scenario: A pending prefix is highlighted on the tiles
+
+- **WHEN** the bank holds «die» and «dieser» and the learner types «d», «i»
+- **THEN** the letters «di» are heavier on both tiles and the tiles keep their widths
+- **AND** the highlight is gone once the prefix is cleared or the tile is placed
+
+#### Scenario: A whole word that starts another waits for Space or Enter
 
 - **WHEN** the bank holds «die» and «dieser» and the learner types «d», «i», «e»
-- **THEN** the prefix «die» is shown as pending and nothing is placed
-- **AND** pressing Space moves «die» to the end of the tray
+- **THEN** nothing is placed and «die» stays highlighted
+- **AND** pressing Space or Enter moves «die» to the end of the tray
+
+#### Scenario: An ambiguous prefix that is no whole word
+
+- **WHEN** the bank holds «die» and «dieser», the prefix «di» is pending and the learner presses Space or Enter
+- **THEN** nothing is placed and the prefix stays
+
+#### Scenario: Duplicate words
+
+- **WHEN** the bank holds two tiles «der» and the learner types «d», «e», «r»
+- **THEN** the first «der» in bank order moves to the tray and the other stays in the bank
 
 #### Scenario: A prefix fitting no word is ignored
 
