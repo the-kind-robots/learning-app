@@ -668,7 +668,7 @@ stop_monitor() {
 
 
 doctor() {
-  local failures=0
+  local interop_failed=0 endpoint_failed=0
 
   echo "learning-app-cdp doctor"
 
@@ -682,7 +682,7 @@ doctor() {
     echo "ok  WSL_INTEROP socket exists: ${WSL_INTEROP}"
   else
     echo "fail WSL_INTEROP socket missing"
-    failures=1
+    interop_failed=1
   fi
 
   if [[ -e /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
@@ -690,18 +690,18 @@ doctor() {
       echo "ok  WSLInterop binfmt handler is enabled"
     else
       echo "fail WSLInterop binfmt handler exists but is disabled"
-      failures=1
+      interop_failed=1
     fi
   else
     echo "fail WSLInterop binfmt handler is missing"
-    failures=1
+    interop_failed=1
   fi
 
   if [[ -f /mnt/c/WINDOWS/system32/cmd.exe ]]; then
     echo "ok  Windows cmd.exe is visible"
   else
     echo "fail Windows cmd.exe is not visible at /mnt/c/WINDOWS/system32/cmd.exe"
-    failures=1
+    interop_failed=1
   fi
 
   local tmp_out tmp_err
@@ -713,7 +713,7 @@ doctor() {
   else
     echo "fail Windows cmd.exe launch failed"
     sed -n '1,4p' "$tmp_err"
-    failures=1
+    interop_failed=1
   fi
   rm -f "$tmp_out" "$tmp_err"
 
@@ -725,7 +725,7 @@ doctor() {
   else
     echo "fail Windows powershell.exe launch failed"
     sed -n '1,4p' "$tmp_err"
-    failures=1
+    interop_failed=1
   fi
   rm -f "$tmp_out" "$tmp_err"
 
@@ -740,7 +740,7 @@ doctor() {
     else
       echo "fail Windows curl.exe launch failed"
       sed -n '1,4p' "$tmp_err"
-      failures=1
+      interop_failed=1
     fi
   fi
   rm -f "$tmp_out" "$tmp_err"
@@ -749,7 +749,7 @@ doctor() {
     echo "ok  Windows Chrome is visible: $CHROME_PATH"
   else
     echo "fail Windows Chrome not found at $CHROME_PATH"
-    failures=1
+    interop_failed=1
   fi
 
   # The plumbing being healthy says nothing about the endpoint: Chrome may
@@ -760,10 +760,12 @@ doctor() {
     echo "fail CDP endpoint :$DEFAULT_PORT is not answering"
     echo "     -> run: bash ${BASH_SOURCE[0]} start-local"
     echo "        (never launch chrome.exe by hand: the debug port needs the separate profile start-local provides)"
-    failures=1
+    endpoint_failed=1
   fi
 
-  if [[ "$failures" -ne 0 ]]; then
+  # Only a broken interop check points at `wsl --shutdown`; a silent endpoint
+  # alone is fixed by start-local.
+  if [[ "$interop_failed" -ne 0 ]]; then
     cat <<'EOF'
 
 Diagnosis:
@@ -780,7 +782,7 @@ Fallback:
 EOF
   fi
 
-  return "$failures"
+  return $(( interop_failed || endpoint_failed ))
 }
 
 usage() {
