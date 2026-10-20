@@ -12,20 +12,20 @@ const { addWord } = require('./add-form.shared');
 // pure `example-doc`, so it has the id and body the app writes; the app's
 // stateful layers need the `dbs` map that only `init!` in `main` builds, so a
 // spec does not reach for them — see test/browser/README.md.
-async function seedExample(page, translation = 'Пёс спит в саду.') {
+async function seedExample(page, translation = 'Пёс спит в саду.', sentence = 'Der Hund schläft im Garten.') {
   const [{ _id: wordId }] = await docsOfType(page, 'user-db', 'vocab');
-  await page.evaluate(async ([wordId, translation]) => {
+  await page.evaluate(async ([wordId, translation, sentence]) => {
     const kw = cljs.core.keyword;
     const toClj = (o) => cljs.core.js__GT_clj(o, kw('keywordize-keys'), true);
     await db.insert(db.use('user-db'), adapters.learner.documents.example_doc(wordId, 'der Hund', null, toClj({
-      'value': 'Der Hund schläft im Garten.',
+      'value': sentence,
       'translation': translation,
       'structure': [
         { usedForm: 'Hund', dictionaryForm: 'der Hund', translation: 'пёс', wordIndex: 1 },
         { usedForm: 'Garten', dictionaryForm: 'der Garten', translation: 'сад', wordIndex: 4 },
       ],
     })));
-  }, [wordId, translation]);
+  }, [wordId, translation, sentence]);
 }
 
 // Answers the word trial, advances, and answers the example trial with

@@ -29,9 +29,15 @@
 ;; `-radius`, `-padding`, `-min-height`, `-gap`, `-hint-color`,
 ;; `-caret-color`), and the one part, `tile`, for the tile's appearance.
 ;;
+;; Tiles are placed by tap, by drag (a bank tile too) and by typing: letters
+;; typed on a keyboard make a prefix, shown as heavier leading letters on the
+;; bank tiles it fits (`--answer-field-match-weight`), and a bank tile moves to
+;; the tray once the prefix fits one distinct bank word.
+;;
 ;; Properties the element keeps: `internals` (its form side), `drag` (the
-;; AbortController of the drag in progress) and `dragged` (set when a drag
-;; ends, for the click that follows it: that is no tap).
+;; AbortController of the drag in progress), `dragged` (set when a drag
+;; ends, for the click that follows it: that is no tap) and `pending` (the
+;; letters typed and not yet placed).
 
 
 (def ^:private skeleton
@@ -45,7 +51,7 @@
      [:textarea
       {:autofocus true}]
      [:div#tray
-      {:role "group"}]])))
+      {:role "group" :tabindex "-1"}]])))
 
 
 (def ^:private stylesheet
@@ -127,9 +133,33 @@
   (.setFormValue (.-internals el) (value-of el)))
 
 
+(defn- typed!
+  "Sets the pending prefix to `prefix` and shows it: the leading letters it
+   spells go heavier on each bank tile whose word starts with it."
+  [^js el prefix]
+  (set! (.-pending el) prefix)
+  (let [bank (inside el "#bank")]
+    (doseq [^js tile (tiles-of el)
+            :let     [^js span (.-firstElementChild tile)
+                      word     (.getAttribute span "data-word")
+                      matched  (if (and (seq prefix)
+                                        (identical? bank (.-parentNode tile))
+                                        (str/starts-with? (str/lower-case word) prefix))
+                                 (count prefix)
+                                 0)]]
+      (.replaceChildren span)
+      (when (pos? matched)
+        (.append span
+                 (doto (js/document.createElement "b")
+                   (.append (subs word 0 matched)))))
+      (.append span (subs word matched)))))
+
+
 (defn- placed!
-  "The placed tiles changed: the value did, and the field says so."
+  "The placed tiles changed: the value did, and the field says so. Whatever was
+   typed is stale."
   [^js el]
+  (typed! el "")
   (publish! el)
   (.dispatchEvent el (js/Event. "input" #js {:bubbles true :composed true})))
 
@@ -222,12 +252,23 @@
     (.setAttribute ^js (first to) "data-caret" (name (second to)))))
 
 
+(defn- over?
+  "Whether (`x`, `y`) is inside `rect`."
+  [^js rect x y]
+  (and (<= (.-left rect) x (.-right rect))
+       (<= (.-top rect) y (.-bottom rect))))
+
+
 (defn- drag!
-  "Follows the primary pointer that went down on a placed tile, which the tile
+  "Follows the primary pointer that went down on a tile, which the tile
    captures: past the threshold the tile is lifted and follows it, with a caret
-   where it would land; on release the tray is reordered."
+   where it would land; on release a placed tile is reordered, and a bank tile
+   dropped on the field goes into the tray."
   [^js el ^js tile ^js event]
   (let [tray       (inside el "#tray")
+        banked?    (not (identical? tray (.-parentNode tile)))
+        field-rect (.getBoundingClientRect (inside el "#field"))
+        landing?   (fn [x y] (or (not banked?) (over? field-rect x y)))
         start-x    (.-clientX event)
         start-y    (.-clientY event)
         state      (volatile! nil)
@@ -251,22 +292,70 @@
                   (.setAttribute tile "data-lifted" ""))
                 (when @state
                   (set! (.. tile -style -transform) (str "translate(" dx "px, " dy "px)"))
-                  (let [target (caret-target (:others @state) (.-clientX move) (.-clientY move))]
+                  (let [target (when (landing? (.-clientX move) (.-clientY move))
+                                 (caret-target (:others @state) (.-clientX move) (.-clientY move)))]
                     (when (not= target (:target @state))
                       (show-caret! (:target @state) target))
                     (vswap! state assoc :target target))))))
     (listen "pointerup"
-            (fn [_]
+            (fn [^js up]
               (if @state
-                (do
+                (let [dropped? (landing? (.-clientX up) (.-clientY up))]
                   (set! (.-dragged el) true)
                   (moving el
                           #(let [[^js other side] (:target @state)]
                              (settle!)
-                             (when other
-                               (.insertBefore tray tile (if (= :after side) (.-nextElementSibling other) other))))))
+                             (cond
+                               other (.insertBefore tray tile (if (= :after side) (.-nextElementSibling other) other))
+                               (and banked? dropped?) (.append tray tile)))))
                 (settle!))))
     (listen "lostpointercapture" (fn [_] (settle!)))))
+
+
+;; Typing places tiles. The prefix is compared in lower case.
+
+
+(defn- typed-key!
+  "A key went down while tiles are shown. A letter joins the prefix, or places
+   the one bank word it leaves; Space or Enter places the word the prefix
+   identifies, the only one it fits or the one it spells whole, and else does
+   nothing; Backspace erases the prefix's last letter or returns the last placed
+   tile. Of tiles with the same word the first in the bank is placed. Returns
+   whether the key was taken."
+  [^js el key]
+  (let [prefix  (or (.-pending el) "")
+        tray    (inside el "#tray")
+        bank    (array-seq (.-children (inside el "#bank")))
+        word-of (fn [^js tile] (str/lower-case (.-textContent tile)))
+        place!  (fn [^js tile]
+                  (tapped! el tile)
+                  (.focus tray))
+        tile-of (fn [word] (first (filter #(= word (word-of %)) bank)))
+        fitting (fn [typed] (distinct (filter #(str/starts-with? % typed) (map word-of bank))))]
+    (cond
+      (= "Backspace" key)
+      (do (if (seq prefix)
+            (typed! el (subs prefix 0 (dec (count prefix))))
+            (when-let [last-placed (.-lastElementChild tray)]
+              (place! last-placed)))
+          true)
+
+      (and (contains? #{" " "Enter"} key) (seq prefix))
+      (let [words (fitting prefix)]
+        (when-let [word (if (= 1 (count words))
+                          (first words)
+                          (some #{prefix} words))]
+          (place! (tile-of word)))
+        true)
+
+      (and (= 1 (count key)) (not (str/blank? key)))
+      (let [candidate (str prefix (str/lower-case key))
+            words     (fitting candidate)]
+        (case (count words)
+          0 nil
+          1 (place! (tile-of (first words)))
+          (typed! el candidate))
+        true))))
 
 
 ;; The element.
@@ -288,13 +377,25 @@
                        (fn [^js event]
                          (set! (.-dragged el) false)
                          (when-let [^js tile (tile event)]
-                           (when (and (identical? (inside el "#tray") (.-parentNode tile))
-                                      (.-isPrimary event)
+                           (when (and (.-isPrimary event)
                                       (zero? (.-button event))
                                       (nil? (.-drag el)))
                              (drag! el tile event)))))
+    (.addEventListener root
+                       "keydown"
+                       (fn [^js event]
+                         (when (and (.-checked (inside el "#hint"))
+                                    (not (.-isComposing event))
+                                    (not (or (.-ctrlKey event) (.-metaKey event) (.-altKey event))))
+                           (when (typed-key! el (.-key event))
+                             (.preventDefault event)))))
     (.addEventListener root "input" (fn [_] (publish! el)))
-    (.addEventListener root "change" (fn [_] (publish! el)))))
+    (.addEventListener root
+                       "change"
+                       (fn [_]
+                         (publish! el)
+                         (when (.-checked (inside el "#hint"))
+                           (.focus (inside el "#tray")))))))
 
 
 (defn- tiles-for!
@@ -309,7 +410,9 @@
                (.setAttribute "type" "button")
                (.setAttribute "part" "tile")
                (aset "rank" rank)
-               (.append word)))))
+               (.append (doto (js/document.createElement "span")
+                          (.setAttribute "data-word" word)
+                          (.append word)))))))
 
 
 ;; Registered when this namespace loads, once even if it loads again.
@@ -329,7 +432,8 @@
     Object
     (attributeChangedCallback [this attribute _ value]
                               (if (= "correct-answer" attribute)
-                                (tiles-for! this value)
+                                (do (tiles-for! this value)
+                                    (typed! this ""))
                                 (let [[selector name] (if-let [part (labelled attribute)]
                                                         [part "aria-label"]
                                                         ["textarea" attribute])
