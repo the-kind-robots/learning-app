@@ -11,18 +11,18 @@
 ;; `maxlength`, `aria-label`, ...), has a `value`, takes part in its form and
 ;; fires `input` when the value changes, so the page treats it as it treated a
 ;; textarea. The twist is a light bulb, shown when it has a `correct-answer`: a
-;; one-way checkbox that, once on, swaps the textarea for tiles of the answer's
-;; words, a bank above the field and the placed tiles in it. The value is then
-;; the placed words, otherwise the typed text. It knows nothing of the app state,
-;; Nexus or the page's CSS, and no UI text: `bank-label`, `tray-label` and
-;; `hint-label` name its parts. It uses Replicant's string renderer for one
-;; thing, writing its own skeleton as HTML once; the tiles are made and moved by
-;; hand.
+;; button, pressed once by tap or Alt+Enter, that swaps the textarea for tiles
+;; of the answer's words, a bank above the field and the placed tiles in it. The
+;; value is then the placed words, otherwise the typed text. It knows nothing of
+;; the app state, Nexus or the page's CSS, and no UI text: `bank-label`,
+;; `tray-label` and `hint-label` name its parts. It uses Replicant's string
+;; renderer for one thing, writing its own skeleton as HTML once; the tiles are
+;; made and moved by hand.
 ;;
-;; What the markup and CSS (`answer_field.css`) can do they do: the bulb is the
-;; checkbox itself, and which of textarea, tray and bank is shown is the
-;; checkbox's state, read by sibling selectors. The script only builds the
-;; tiles, moves them (tap, drag, slide) and keeps the value.
+;; What the markup and CSS (`answer_field.css`) can do they do: which of
+;; textarea, tray and bank is shown is the element's custom state, `tiles`,
+;; read by `:state(tiles)`. The script only sets that state, builds the tiles,
+;; moves them (tap, drag, slide) and keeps the value.
 ;;
 ;; Looks come from outside: font and colour by inheritance, the field's box and
 ;; the tiles' gaps by custom properties (`--answer-field-background`, `-border`,
@@ -43,8 +43,18 @@
 (def ^:private skeleton
   (rs/render
    (list
-    [:input#hint
-     {:type "checkbox"}]
+    [:button#hint
+     {:type "button"}
+     [:svg
+      {:aria-hidden    "true"
+       :fill           "none"
+       :stroke         "currentColor"
+       :stroke-linecap "round"
+       :stroke-linejoin "round"
+       :stroke-width   "2.2"
+       :viewBox        "0 0 24 24"}
+      [:path {:d "M9 15.5a5.5 5.5 0 1 1 6 0V18H9z"}]
+      [:path {:d "M10 21h4"}]]]
     [:div#bank
      {:role "group"}]
     [:div#field
@@ -116,13 +126,18 @@
 
 (defn- tiles-of
   [^js el]
-  (array-seq (.querySelectorAll (.-shadowRoot el) "button")))
+  (array-seq (.querySelectorAll (.-shadowRoot el) "[part=tile]")))
+
+
+(defn- tiles?
+  [^js el]
+  (.has (.. el -internals -states) "tiles"))
 
 
 (defn- value-of
-  "The placed words once the bulb is on, the typed text before."
+  "The placed words once the bulb is pressed, the typed text before."
   [^js el]
-  (if (.-checked (inside el "#hint"))
+  (if (tiles? el)
     (str/join " " (map #(.-textContent ^js %) (array-seq (.-children (inside el "#tray")))))
     (.-value (inside el "textarea"))))
 
@@ -364,14 +379,20 @@
 (defn- listen!
   [^js el]
   (let [root (.-shadowRoot el)
-        tile (fn [^js event] (.closest (.-target event) "button"))]
+        tile (fn [^js event] (.closest (.-target event) "[part=tile]"))
+        hint (fn []
+               (.add (.. el -internals -states) "tiles")
+               (publish! el)
+               (.focus (inside el "#tray")))]
     (.addEventListener root
                        "click"
                        (fn [^js event]
-                         (when-let [^js tile (tile event)]
+                         (if-let [^js tile (tile event)]
                            (if (.-dragged el)
                              (set! (.-dragged el) false)
-                             (tapped! el tile)))))
+                             (tapped! el tile))
+                           (when (.closest (.-target event) "#hint")
+                             (hint)))))
     (.addEventListener root
                        "pointerdown"
                        (fn [^js event]
@@ -384,18 +405,20 @@
     (.addEventListener root
                        "keydown"
                        (fn [^js event]
-                         (when (and (.-checked (inside el "#hint"))
-                                    (not (.-isComposing event))
-                                    (not (or (.-ctrlKey event) (.-metaKey event) (.-altKey event))))
+                         (cond
+                           (and (not (tiles? el))
+                                (.hasAttribute el "correct-answer")
+                                (.-altKey event)
+                                (= "Enter" (.-key event)))
+                           (do (.preventDefault event)
+                               (hint))
+
+                           (and (tiles? el)
+                                (not (.-isComposing event))
+                                (not (or (.-ctrlKey event) (.-metaKey event) (.-altKey event))))
                            (when (typed-key! el (.-key event))
                              (.preventDefault event)))))
-    (.addEventListener root "input" (fn [_] (publish! el)))
-    (.addEventListener root
-                       "change"
-                       (fn [_]
-                         (publish! el)
-                         (when (.-checked (inside el "#hint"))
-                           (.focus (inside el "#tray")))))))
+    (.addEventListener root "input" (fn [_] (publish! el)))))
 
 
 (defn- tiles-for!

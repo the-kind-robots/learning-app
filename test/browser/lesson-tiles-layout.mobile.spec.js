@@ -36,7 +36,7 @@ async function openTilesOfFailedExample(page) {
   await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('falsch');
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
   await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await page.getByRole('checkbox', { name: 'Подсказка: собрать из плиток' }).click();
+  await page.getByRole('button', { name: 'Подсказка: собрать из плиток' }).click();
 }
 
 for (const height of [844, 667]) {

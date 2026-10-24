@@ -52,46 +52,50 @@ textarea {
   resize: none;
 }
 
-/* The light bulb: a checkbox drawn as a mask, in a 44px hit zone in the
-   field's top-right corner. */
+/* The light bulb: a button, a 44px hit zone in the field's top-right corner.
+   Without an answer there is none; once pressed, it is gone and the tiles
+   show. */
 #hint {
-  appearance: none;
-  background: var(--answer-field-hint-color, currentcolor);
+  background: none;
   border: 0;
+  color: var(--answer-field-hint-color, currentcolor);
   cursor: pointer;
+  display: grid;
   height: 44px;
   margin: 0;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 15.5a5.5 5.5 0 1 1 6 0V18H9z'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E") center / 24px no-repeat;
+  padding: 0;
+  place-items: center;
   position: absolute;
   right: 2px;
   top: 2px;
   width: 44px;
 }
 
-/* Without an answer there is no bulb; once on, it is gone and the tiles show. */
+#hint svg {
+  height: 24px;
+  width: 24px;
+}
+
 :host(:not([correct-answer])) #hint,
-#hint:checked {
+:host(:state(tiles)) #hint,
+:host(:state(tiles)) textarea {
   display: none;
 }
 
-#hint:checked ~ #bank,
-#hint:checked ~ #field #tray {
+:host(:state(tiles)) #bank,
+:host(:state(tiles)) #tray {
   display: flex;
-}
-
-#hint:checked ~ #field textarea {
-  display: none;
 }
 
 /* A tile's word sits in a span that always has the width of its heaviest
    rendering: a hidden copy, zero high, props it open, so the letters a typed
    prefix makes heavier do not move the tiles. */
-button > span {
+[part='tile'] > span {
   display: inline-block;
   text-align: center;
 }
 
-button > span::after {
+[part='tile'] > span::after {
   content: attr(data-word) / '';
   display: block;
   font-weight: var(--answer-field-match-weight, 900);
@@ -108,14 +112,14 @@ b {
   outline: none;
 }
 
-button {
+[part='tile'] {
   cursor: grab;
   position: relative;
   touch-action: none;
   user-select: none;
 }
 
-button[data-lifted] {
+[part='tile'][data-lifted] {
   cursor: grabbing;
   filter: drop-shadow(0 6px 7px rgb(0 0 0 / 22%));
   z-index: 1;
