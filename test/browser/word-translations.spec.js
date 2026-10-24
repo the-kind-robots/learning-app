@@ -22,8 +22,8 @@ test.describe('Переводы слова', () => {
       await expect(page.getByRole('dialog')).toHaveCount(0);
     });
 
-    await test.step('Тогда в списке оба перевода', async () => {
-      await expect(page.locator('.word-item')).toContainText('ужин, вечерняя еда');
+    await test.step('Тогда в списке оба перевода, через « · »', async () => {
+      await expect(page.locator('.word-item')).toContainText('ужин · вечерняя еда');
     });
 
     await test.step('Когда он открывает слово снова', async () => {
@@ -63,8 +63,8 @@ test.describe('Переводы слова', () => {
       await expect(page.getByRole('dialog')).toHaveCount(0);
     });
 
-    await test.step('Тогда в списке оба перевода', async () => {
-      await expect(page.locator('.word-item')).toContainText('ужин, ужинать');
+    await test.step('Тогда в списке оба перевода, через « · »', async () => {
+      await expect(page.locator('.word-item')).toContainText('ужин · ужинать');
     });
   });
 

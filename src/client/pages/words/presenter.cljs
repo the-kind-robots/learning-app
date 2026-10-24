@@ -2,7 +2,6 @@
   (:require
    [clojure.string :as str]
    [collection-accents :as colours]
-   [domain.phrase :as phrase]
    [domain.vocabulary :as domain]
    [pages.words.edit :as edit]
    [utils :as utils]))
@@ -22,12 +21,11 @@
 (defn word-item-props
   [{:keys [id value retention-level] :as row}]
   {:id          id
-   :phrase?     (phrase/phrase? row)
    :retention-band    (retention-band retention-level)
    :retention-color   (utils/prozent->color retention-level)
    :retention-percent (int retention-level)
    :value       value
-   :translation (str/join ", " (domain/russian-translations row))})
+   :translation (str/join " · " (domain/russian-translations row))})
 
 
 (defn word-list-props
