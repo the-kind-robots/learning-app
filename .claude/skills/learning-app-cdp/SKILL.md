@@ -78,14 +78,11 @@ purpose-built verifier owned by the repo. Do not rely on ad-hoc browser snippets
 ## Files
 
 - `scripts/learning_app_cdp.sh` - repo-specific wrapper for local and production app targets
-- `scripts/layout_probe.js` - reusable HTMX/layout geometry probe for swap transitions
 - `scripts/setup_single_word.js` - reset vocab and create one-word scenario for delete-layout checks
 - `scripts/run_lesson_next_enter_check.js` - prove `Enter` advances from `ДАЛЕЕ` without mouse
 - `scripts/run_lesson_finish_enter_check.js` - prove `Enter` activates `ЗАКОНЧИТЬ` without mouse
 - `scripts/run_lesson_finish_space_check.js` - prove `Space` activates `ЗАКОНЧИТЬ` without mouse
-- `scripts/run_delete_last_word.js` - open edit mode and delete the only visible word
 - `scripts/setup_filter_delete_scenario.js` - reset vocab and create two-word scenario for filter/delete bugs
-- `scripts/run_filtered_delete_check.js` - apply a filter, delete the remaining visible word, and report the resulting empty state
 - `scripts/chrome_cdp.sh` - low-level CDP entrypoint used by the wrapper, with its PowerShell helpers `cdp_send.ps1`, `cdp_monitor.ps1`, `cdp_capture_console.ps1`
 
 ## Quick workflow
@@ -185,17 +182,7 @@ Use the reusable probes saved with this skill:
 
 ```bash
 bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .claude/skills/learning-app-cdp/scripts/layout_probe.js
-```
-
-```bash
-bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --file .claude/skills/learning-app-cdp/scripts/setup_single_word.js
-```
-
-```bash
-bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .claude/skills/learning-app-cdp/scripts/run_delete_last_word.js
 ```
 
 ```bash
@@ -216,11 +203,6 @@ bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
 ```bash
 bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --file .claude/skills/learning-app-cdp/scripts/setup_filter_delete_scenario.js
-```
-
-```bash
-bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .claude/skills/learning-app-cdp/scripts/run_filtered_delete_check.js
 ```
 
 Monitor local:

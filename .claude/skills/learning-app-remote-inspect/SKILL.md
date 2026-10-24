@@ -117,59 +117,7 @@ For event-flow bugs, favor:
 }))()
 ```
 
-### 2. Geometry Snapshot
-
-```js
-(() => {
-  const rect = (node) => {
-    if (!node) return null;
-    const r = node.getBoundingClientRect();
-    return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height };
-  };
-
-  return {
-    list: rect(document.querySelector(".vocabulary__list")),
-    footer: rect(document.querySelector(".vocabulary__footer")),
-    editing: rect(document.querySelector(".word-item--editing")),
-    input: rect(document.querySelector(".word-item--editing input"))
-  };
-})()
-```
-
-### 3. One-Shot Interaction Probe
-
-```js
-(async () => {
-  const list = document.querySelector(".vocabulary__list");
-  const row = document.querySelector(".word-item");
-  const display = row?.querySelector(".word-item__display");
-  if (!list || !display) return { error: "missing-list-or-row" };
-
-  const before = {
-    scrollTop: list.scrollTop,
-    activeTag: document.activeElement?.tagName ?? null,
-    rowTop: row.getBoundingClientRect().top
-  };
-
-  display.click();
-  await new Promise((resolve) => setTimeout(resolve, 1200));
-
-  const editing = document.querySelector(".word-item--editing");
-  const input = editing?.querySelector("input");
-
-  return {
-    before,
-    after: {
-      scrollTop: list.scrollTop,
-      activeTag: document.activeElement?.tagName ?? null,
-      editingTop: editing?.getBoundingClientRect().top ?? null,
-      inputTop: input?.getBoundingClientRect().top ?? null
-    }
-  };
-})()
-```
-
-### 4. Temporary Event Timeline
+### 2. Temporary Event Timeline
 
 ```js
 (() => {
