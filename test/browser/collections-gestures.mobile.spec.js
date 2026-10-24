@@ -208,8 +208,8 @@ test.describe('Темы на телефоне: касания', () => {
     });
   });
 
-  for (const { kind, name, count } of [
-    { kind: 'строку папки', name: 'Meetings und Besprechungen mit Kollegen', count: '3' },
+  for (const { kind, name, count, centred } of [
+    { kind: 'строку папки', name: 'Meetings und Besprechungen mit Kollegen', count: '3', centred: true },
     { kind: 'заголовок папки', name: 'Reise', count: '3' },
     { kind: 'плитку без папки', name: 'Zusammenarbeitsvereinbarungen', count: '2' },
   ]) {
@@ -245,8 +245,14 @@ test.describe('Темы на телефоне: касания', () => {
         const mid = { x: digits.x + digits.width / 2, y: digits.y + digits.height / 2 };
         expect(mid.x).toBeGreaterThan(closeBox.x);
         expect(mid.x).toBeLessThan(closeBox.x + closeBox.width);
-        expect(mid.y).toBeGreaterThan(closeBox.y);
-        expect(mid.y).toBeLessThan(closeBox.y + closeBox.height);
+        if (centred) {
+          // A folder row's ✕ stands on the row's middle, not on the count's line.
+          const row = await button.locator('xpath=..').boundingBox();
+          expect(Math.abs(closeBox.y + closeBox.height / 2 - (row.y + row.height / 2))).toBeLessThan(1);
+        } else {
+          expect(mid.y).toBeGreaterThan(closeBox.y);
+          expect(mid.y).toBeLessThan(closeBox.y + closeBox.height);
+        }
       });
     });
   }

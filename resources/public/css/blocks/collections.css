@@ -272,14 +272,23 @@ body:has(.switcher) {
 
 .tile__row--editing {
   background: color-mix(in oklab, var(--accent) 10%, rgb(var(--color-snow)));
+}
+
+/* An editing or focused row reaches 12 px past its tile's padding on each
+   side and pads its target by as much, so nothing inside moves; the focus
+   ring then has room inside the row. */
+.tile__row--editing,
+.tile__row:has(:focus-visible) {
   margin-inline: -12px;
 }
 
-.tile__row--editing .tile__row-target {
+.tile__row--editing .tile__row-target,
+.tile__row:has(:focus-visible) .tile__row-target {
   padding-inline: 22px 12px;
 }
 
-.tile__row--editing::before {
+.tile__row--editing::before,
+.tile__row:has(:focus-visible)::before {
   left: 12px;
 }
 
@@ -297,7 +306,7 @@ body:has(.switcher) {
   color: rgb(var(--color-cardinal));
   cursor: pointer;
   display: grid;
-  height: 24px;
+  height: 28px;
   opacity: 0;
   padding: 0;
   place-items: center;
@@ -306,7 +315,7 @@ body:has(.switcher) {
   right: 4px;
   top: 4px;
   transition: opacity 0.14s ease, color 0.12s ease;
-  width: 24px;
+  width: 28px;
   z-index: 4;
 }
 
@@ -314,9 +323,9 @@ body:has(.switcher) {
  * In editing mode the ✕ stands where the count stood and the count is
  * hidden, keeping its box, so the name neither narrows nor moves. Where the
  * count shares the name's line it reserves the ✕'s width all the time, so
- * the ✕ never reaches the name; the ✕'s glyph lines up with the count's
- * digits. Offsets are the targets' paddings, less half the difference
- * between the ✕ box and a line of the count.
+ * the ✕ never reaches the name; the ✕'s glyph, centred in its box, lines up
+ * with the count's digits. Offsets are the targets' paddings, less the 7 px
+ * between the glyph and the box's edge.
  */
 .tile__head .tile__count,
 .tile__row .tile__count {
@@ -325,30 +334,28 @@ body:has(.switcher) {
 }
 
 .tile__head .tile__close {
-  justify-items: end;
-  right: 12px;
-  top: 8px;
+  right: 5px;
+  top: 6px;
 }
 
+/* Centred on the row's height, however many lines its name takes. */
 .tile__row .tile__close {
-  justify-items: end;
-  right: 0;
-  top: 5px;
+  right: -7px;
+  top: 50%;
+  translate: 0 -50%;
 }
 
-/* An editing row reaches 12 px past its tile's padding on each side and
-   pads its target by as much, so the count stays put; the ✕ follows the
-   count, not the row's edge. Without this a row that leaves editing moves
-   its ✕ 12 px while it fades out. */
-.tile__row--editing .tile__close {
-  right: 12px;
+/* A widened row keeps the ✕ on the count, not on the row's edge. Without
+   this a row that leaves editing moves its ✕ 12 px while it fades out. */
+.tile__row--editing .tile__close,
+.tile__row:has(:focus-visible) .tile__close {
+  right: 5px;
 }
 
 /* A plain tile's count sits under the name, at the bottom left. */
 .tile > .tile__close {
-  bottom: 6px;
-  justify-items: start;
-  left: 12px;
+  bottom: 4px;
+  left: 5px;
   right: auto;
   top: auto;
 }
@@ -404,14 +411,19 @@ body:has(.switcher) {
   outline-width: 3px;
 }
 
-.tile__head-target:focus-visible,
-.tile__row-target:focus-visible {
+.tile__head-target:focus-visible {
   border-radius: 8px;
   outline-offset: 1px;
 }
 
+/* Inside the widened row, clear of the name, the count and the ✕. */
+.tile__row-target:focus-visible {
+  border-radius: 10px;
+  outline-offset: -3px;
+}
+
 .tile__close:focus-visible {
-  border-radius: 6px;
+  border-radius: 8px;
   outline-offset: 0;
 }
 
