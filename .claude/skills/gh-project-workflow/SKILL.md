@@ -44,7 +44,7 @@ gh auth refresh -s project
 Run this when the user wants to create a new item and begin implementation.
 
 ```bash
-.skills/gh-project-workflow/scripts/start_issue_flow.sh \
+.claude/skills/gh-project-workflow/scripts/start_issue_flow.sh \
   --title "Add offline start screen" \
   --body "Allow basic lesson entry without network" \
   --area "Backend" \
@@ -82,7 +82,7 @@ Important behavior:
 Run this when coding is complete and user asks to wrap up.
 
 ```bash
-.skills/gh-project-workflow/scripts/finish_issue_flow.sh \
+.claude/skills/gh-project-workflow/scripts/finish_issue_flow.sh \
   --issue 142 \
   --base master \
   --merge-method squash
@@ -102,18 +102,7 @@ Important behavior:
 Run only on explicit user request.
 
 ```bash
-.skills/gh-project-workflow/scripts/deploy.sh --cmd "<deploy command>"
+.claude/skills/gh-project-workflow/scripts/deploy.sh --cmd "<deploy command>"
 ```
 
 No deploy command is configured; pass it with `--cmd`.
-
-## Command-Approval Strategy
-
-To avoid repetitive approvals in Codex sessions, request persistent approval for narrow command prefixes such as:
-- `gh project`
-- `gh issue`
-- `gh pr`
-- `git push`
-- Your deploy command prefix
-
-Keep prefixes scoped; do not request broad approvals.

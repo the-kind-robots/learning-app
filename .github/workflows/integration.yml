@@ -7,8 +7,6 @@ on:
     paths:
       - 'src/**'
       - 'resources/**'
-      - '.codex/**'
-      - 'codex/**'
       - '.gitignore'
       - 'shadow-cljs.edn'
       - 'deps.edn'
@@ -44,7 +42,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.clj-kondo/|\.codex/|codex/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$)'; then
+          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.clj-kondo/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"

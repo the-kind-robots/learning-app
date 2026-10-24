@@ -13,7 +13,7 @@
 - The flow: issue on the board -> branch from that issue -> implement -> verify -> PR -> merge -> Done -> cleanup.
 - `repo-task-delivery` is the entrypoint. It delegates GitHub to `gh-project-workflow` and specs to the OpenSpec skills. Do not start at a sub-skill; they assume the flow is already underway.
 - Issues come from the workflow, never by hand:
-  `bash .skills/gh-project-workflow/scripts/start_issue_flow.sh --title "..." --priority High --status "In progress" --base master --no-checkout`
+  `bash .claude/skills/gh-project-workflow/scripts/start_issue_flow.sh --title "..." --priority High --status "In progress" --base master --no-checkout`
   One call creates the issue, reuses an existing item of the same title, puts it on the org project `Learning app` (`the-kind-robots`, number 11), sets Status and Priority, and links a branch with `gh issue develop` without checking it out.
 - Priority is **Urgent/High/Medium/Low** and lives on the organization's native issue field, not on the board. The project refuses to write a column backed by an issue field, so the script sets it with `setIssueFieldValue`; reading it back needs the `ProjectV2ItemIssueFieldValue` fragment, or the value looks unset when it is not. The retired `Blocker/Critical/Major/Minor/Trivial` are rejected by name.
 - A raw `gh issue create` makes an issue that is on no board, with no Status and no Priority — work nobody can see. #288, #289, #290 and #292 were made that way and had to be added by hand afterwards. A `PreToolUse` hook now refuses the raw form and names the script instead.
@@ -102,17 +102,14 @@ PRs merge by squash, so this governs the branch history the reviewer reads, not 
 # Browser / PWA Verification
 
 - For browser-runtime behavior, use real browser proof, not only code inspection.
-- Before Windows Chrome CDP, run `bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh doctor`.
+- Before Windows Chrome CDP, run `bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh doctor`.
 - Chrome down (CDP endpoint silent, evals dying)? `learning_app_cdp.sh start-local`. Never launch chrome.exe by hand: the debug port needs the separate profile start-local provides.
 - If Windows interop is broken (`cmd.exe` gives `exec format error` or `WSLInterop` is missing), ask for `wsl --shutdown`, then retry.
 - For Service Worker offline reload checks, wait until `navigator.serviceWorker.controller` is true before switching offline.
 
 # Project Skills
 
-- Shared project skills source lives in `.skills/`.
-- Install/relink tool locations with `.skills/install.sh --force`.
-- Expected links: `.codex/skills -> ../.skills` and `.claude/skills -> ../.skills`.
-- Invoke skill scripts by their real path, `.skills/...`. `.codex/` is gitignored and absent in worktrees, so a `.codex/skills/...` command works in the main checkout and fails everywhere else; `.claude/skills/...` is a tracked symlink to the same place.
+- Project skills live in `.claude/skills/`; invoke their scripts by that path.
 
 # Token hygiene
 

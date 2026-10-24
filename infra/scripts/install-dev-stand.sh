@@ -200,27 +200,6 @@ else
     fi
 fi
 
-skills_linked=1
-for link in "${repo_root}/.claude/skills" "${repo_root}/.codex/skills"; do
-    if [ -L "${link}" ] && [ "$(readlink "${link}")" = "../.skills" ]; then
-        continue
-    fi
-    skills_linked=0
-done
-
-if [ "${skills_linked}" -eq 1 ]; then
-    ok "skills links (.claude/skills, .codex/skills)"
-else
-    todo "skills links are missing or point elsewhere"
-    note "would run: .skills/install.sh --force"
-    if confirm "run it?"; then
-        "${repo_root}/.skills/install.sh" --force
-        done_ "skills links"
-    else
-        skip "skills links"
-    fi
-fi
-
 
 section "nginx"
 

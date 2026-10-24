@@ -2,8 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-LOW_LEVEL_SCRIPT="${HOME}/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh"
-LOW_LEVEL_SCRIPT_DIR="${HOME}/.codex/skills/windows-chrome-cdp/scripts"
+LOW_LEVEL_SCRIPT="${SCRIPT_DIR}/chrome_cdp.sh"
+LOW_LEVEL_SCRIPT_DIR="${SCRIPT_DIR}"
 CHROME_PATH="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
 POWERSHELL_MONITOR_SCRIPT_WIN="$(wslpath -w "${LOW_LEVEL_SCRIPT_DIR}/cdp_monitor.ps1")"
 POWERSHELL_CAPTURE_SCRIPT_WIN="$(wslpath -w "${LOW_LEVEL_SCRIPT_DIR}/cdp_capture_console.ps1")"

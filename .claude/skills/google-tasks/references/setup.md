@@ -78,7 +78,7 @@ chmod 600 ~/.config/learning-app/google-tasks-client.json
 Optional settings file, if the default list is not the one you capture into:
 
 ```bash
-cp .skills/google-tasks/references/google-tasks.env.example \
+cp .claude/skills/google-tasks/references/google-tasks.env.example \
    ~/.config/learning-app/google-tasks.env
 chmod 600 ~/.config/learning-app/google-tasks.env
 ```
@@ -92,7 +92,7 @@ Nothing here belongs in the repository. The repository is public.
 ## 5. Consent
 
 ```bash
-bash .skills/google-tasks/scripts/google_tasks.sh auth
+bash .claude/skills/google-tasks/scripts/google_tasks.sh auth
 ```
 
 It prints a URL instead of opening a browser — auto-open is unreliable under WSL2. Paste it
@@ -112,9 +112,9 @@ tells you which happened.
 ## 6. Check
 
 ```bash
-bash .skills/google-tasks/scripts/google_tasks.sh doctor
-bash .skills/google-tasks/scripts/google_tasks.sh lists
-bash .skills/google-tasks/scripts/google_tasks.sh pull
+bash .claude/skills/google-tasks/scripts/google_tasks.sh doctor
+bash .claude/skills/google-tasks/scripts/google_tasks.sh lists
+bash .claude/skills/google-tasks/scripts/google_tasks.sh pull
 ```
 
 `doctor` should print all-ok. `lists` gives the ids and titles of your task lists, which is

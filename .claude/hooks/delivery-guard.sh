@@ -54,8 +54,8 @@ head_branch() { # head_branch <words...> -> branch named by --head/-H, empty whe
 cmd=$(jq -r '.tool_input.command // empty' 2>/dev/null || true)
 [ -n "$cmd" ] || exit 0
 
-START='bash .skills/gh-project-workflow/scripts/start_issue_flow.sh'
-FINISH='bash .skills/gh-project-workflow/scripts/finish_issue_flow.sh'
+START='bash .claude/skills/gh-project-workflow/scripts/start_issue_flow.sh'
+FINISH='bash .claude/skills/gh-project-workflow/scripts/finish_issue_flow.sh'
 
 # Drop heredoc bodies. The opener line is kept — it carries the real command — and
 # everything up to the terminator is skipped, so prose inside an issue or PR body can

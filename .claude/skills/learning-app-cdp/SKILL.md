@@ -7,7 +7,7 @@ description: "Inspect or debug the learning app in a real browser through the pr
 
 Use this skill as the preferred browser-debugging workflow for this repository whenever the task involves the learning app in a real browser, especially while a human interacts with the page.
 
-This is the project-specific layer on top of `windows-chrome-cdp`.
+This is the project-specific layer on top of the low-level `scripts/chrome_cdp.sh`.
 
 This skill is Windows-specific:
 
@@ -64,20 +64,13 @@ Do not use this skill for:
 
 ## Approval and execution
 
-In this environment, Windows executables invoked from WSL are most reliable when the shell command is run with escalated permissions.
-
 Before any Windows Chrome/CDP operation, run the wrapper doctor once per session:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh doctor
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh doctor
 ```
 
 If doctor reports missing `WSLInterop`, missing binfmt handler, or `cmd.exe` fails with `exec format error`, the whole WSL VM cannot launch Windows `.exe` files. Do not debug the app or the CDP wrapper first. Ask the user to run `wsl --shutdown` from Windows, reopen WSL, and rerun doctor. This is the known repair for stale WSL interop state.
-
-When running scripts from this skill, prefer `exec_command` with:
-
-- `sandbox_permissions: "require_escalated"`
-- a short justification mentioning Windows Chrome or CDP
 
 For scripted/non-interactive Service Worker or offline checks, prefer a committed test or
 purpose-built verifier owned by the repo. Do not rely on ad-hoc browser snippets for invariants.
@@ -93,20 +86,20 @@ purpose-built verifier owned by the repo. Do not rely on ad-hoc browser snippets
 - `scripts/run_delete_last_word.js` - open edit mode and delete the only visible word
 - `scripts/setup_filter_delete_scenario.js` - reset vocab and create two-word scenario for filter/delete bugs
 - `scripts/run_filtered_delete_check.js` - apply a filter, delete the remaining visible word, and report the resulting empty state
-- `/home/u473t8/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh` - shared global low-level CDP entrypoint used by the wrapper
+- `scripts/chrome_cdp.sh` - low-level CDP entrypoint used by the wrapper, with its PowerShell helpers `cdp_send.ps1`, `cdp_monitor.ps1`, `cdp_capture_console.ps1`
 
 ## Quick workflow
 
 1. Start or reuse local app in Windows Chrome:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local
 ```
 
 2. Start a buffered monitor on the current local app tab:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh monitor-local --session app-local
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh monitor-local --session app-local
 ```
 
 3. Let the user interact manually in Chrome.
@@ -114,13 +107,13 @@ bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh monitor-local --sessio
 4. Read buffered events:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh read --session app-local --tail 80
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh read --session app-local --tail 80
 ```
 
 5. Stop the monitor when done:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh stop --session app-local
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh stop --session app-local
 ```
 
 ## Common patterns
@@ -128,37 +121,37 @@ bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh stop --session app-loc
 Open the local app:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local
 ```
 
 Open the local lesson page directly:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local --path /lesson
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local --path /lesson
 ```
 
 Switch the existing single local app tab to the words page:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local --path /words
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh start-local --path /words
 ```
 
 Open production:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh start-prod
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh start-prod
 ```
 
 Refresh local with service-worker update-on-reload:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh refresh-local
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh refresh-local
 ```
 
 Wait until the local page reaches a known route or selector after navigation/setup:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh wait-local \
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh wait-local \
   --path /lesson \
   --selector '#lesson-answer'
 ```
@@ -166,13 +159,13 @@ bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh wait-local \
 Refresh production the way a user does (a new build runs only after every window of the app is closed):
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh refresh-prod
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh refresh-prod
 ```
 
 Evaluate JavaScript in the local app page context:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --expression '({url: location.href, title: document.title})'
 ```
 
@@ -184,94 +177,94 @@ If this workflow fails, repair the workflow first rather than hopping to a diffe
 Evaluate a multiline script from a file:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --file /tmp/inspect-idb.js
 ```
 
 Use the reusable probes saved with this skill:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .skills/learning-app-cdp/scripts/layout_probe.js
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .claude/skills/learning-app-cdp/scripts/layout_probe.js
 ```
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .skills/learning-app-cdp/scripts/setup_single_word.js
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .claude/skills/learning-app-cdp/scripts/setup_single_word.js
 ```
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .skills/learning-app-cdp/scripts/run_delete_last_word.js
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .claude/skills/learning-app-cdp/scripts/run_delete_last_word.js
 ```
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .skills/learning-app-cdp/scripts/run_lesson_next_enter_check.js
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .claude/skills/learning-app-cdp/scripts/run_lesson_next_enter_check.js
 ```
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .skills/learning-app-cdp/scripts/run_lesson_finish_enter_check.js
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .claude/skills/learning-app-cdp/scripts/run_lesson_finish_enter_check.js
 ```
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .skills/learning-app-cdp/scripts/run_lesson_finish_space_check.js
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .claude/skills/learning-app-cdp/scripts/run_lesson_finish_space_check.js
 ```
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .skills/learning-app-cdp/scripts/setup_filter_delete_scenario.js
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .claude/skills/learning-app-cdp/scripts/setup_filter_delete_scenario.js
 ```
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
-  --file .skills/learning-app-cdp/scripts/run_filtered_delete_check.js
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+  --file .claude/skills/learning-app-cdp/scripts/run_filtered_delete_check.js
 ```
 
 Monitor local:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh monitor-local --session home-local
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh monitor-local --session home-local
 ```
 
 Monitor production:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh monitor-prod --session home-prod
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh monitor-prod --session home-prod
 ```
 
 Read recent monitor events:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh read --session home-local --tail 30
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh read --session home-local --tail 30
 ```
 
 Capture warnings and errors after reload on production:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh console-prod --seconds 5
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh console-prod --seconds 5
 ```
 
 Read DOM state from the current local page:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --expression 'document.documentElement.outerHTML'
 ```
 
 Read app state from the current page:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --expression '({url:location.href,title:document.title,app:document.querySelector(`#app`)?.innerText})'
 ```
 
 List IndexedDB databases from the real app page:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --expression '(async () => indexedDB.databases())()'
 ```
 
@@ -293,14 +286,14 @@ cat >/tmp/inspect-device-db.js <<'"'"'EOF'"'"'
 })()
 EOF
 
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --file /tmp/inspect-device-db.js
 ```
 
 Call whatever JS-visible function the DevTools console can see:
 
 ```bash
-bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
+bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
   --expression 'Object.keys(window).filter(k => /app|cljs|shadow/i.test(k)).slice(0, 50)'
 ```
 
@@ -318,4 +311,4 @@ bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh eval-local \
 - If DevTools is open, there may be multiple `page` targets; the wrapper filters by `sprecha.localhost` or `sprecha.de` so it attaches to the real app tab.
 - Prefer `eval-local` / `eval-prod` for anything you would normally type into DevTools Console, including IndexedDB inspection and JS-visible app hooks.
 - ClojureScript functions can be called only if they are visible in the page runtime. The wrapper does not invent exports; it gives you the same execution surface as DevTools Console.
-- For deep inspection or custom CDP methods beyond the project wrapper, drop down to `/home/u473t8/.codex/skills/windows-chrome-cdp/scripts/chrome_cdp.sh`.
+- For deep inspection or custom CDP methods beyond the project wrapper, drop down to `scripts/chrome_cdp.sh`.

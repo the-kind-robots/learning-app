@@ -32,7 +32,7 @@ nothing secret is ever printed: `doctor` reports that a token works, never what 
 Run this once per session before anything else:
 
 ```bash
-bash .skills/google-tasks/scripts/google_tasks.sh doctor
+bash .claude/skills/google-tasks/scripts/google_tasks.sh doctor
 ```
 
 It prints one line per check and exits non-zero when something is missing, naming what and
@@ -42,13 +42,13 @@ browser — auto-opening one does not work under WSL2.
 ## Commands
 
 ```bash
-bash .skills/google-tasks/scripts/google_tasks.sh doctor
-bash .skills/google-tasks/scripts/google_tasks.sh auth
-bash .skills/google-tasks/scripts/google_tasks.sh lists
-bash .skills/google-tasks/scripts/google_tasks.sh pull
-bash .skills/google-tasks/scripts/google_tasks.sh pull --list "App notes" --max 20
-bash .skills/google-tasks/scripts/google_tasks.sh pull --json
-bash .skills/google-tasks/scripts/google_tasks.sh done <task-id>
+bash .claude/skills/google-tasks/scripts/google_tasks.sh doctor
+bash .claude/skills/google-tasks/scripts/google_tasks.sh auth
+bash .claude/skills/google-tasks/scripts/google_tasks.sh lists
+bash .claude/skills/google-tasks/scripts/google_tasks.sh pull
+bash .claude/skills/google-tasks/scripts/google_tasks.sh pull --list "App notes" --max 20
+bash .claude/skills/google-tasks/scripts/google_tasks.sh pull --json
+bash .claude/skills/google-tasks/scripts/google_tasks.sh done <task-id>
 ```
 
 `--help` works on the script and on every subcommand.
@@ -91,7 +91,7 @@ this skill is meant to reduce, not cause.
 New work, a bug, or a decision:
 
 ```bash
-bash .skills/gh-project-workflow/scripts/start_issue_flow.sh \
+bash .claude/skills/gh-project-workflow/scripts/start_issue_flow.sh \
   --title "..." --priority High --status "In progress" --base master --no-checkout
 ```
 
@@ -110,7 +110,7 @@ commits.
 **4. Close it at the source.**
 
 ```bash
-bash .skills/google-tasks/scripts/google_tasks.sh done <task-id>
+bash .claude/skills/google-tasks/scripts/google_tasks.sh done <task-id>
 ```
 
 Only after the note has actually become tracked work, or after deciding it needs none. The id
