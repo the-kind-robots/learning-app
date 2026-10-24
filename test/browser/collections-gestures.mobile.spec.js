@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { test, expect, chromium, nothingHappensFor } = require('./fixtures');
+const { screenSettled } = require('./screen-transitions.shared');
 
 // The issue's phone (#456): 384 × 800.
 test.use({ viewport: { width: 384, height: 800 } });
@@ -35,6 +36,7 @@ async function openCollections(page, base = '') {
   await seedCollections(page);
   await page.getByRole('button', { name: 'Открыть наборы' }).click();
   await expect(page.getByRole('button', { name: 'Alltag 0', exact: true })).toBeVisible();
+  await screenSettled(page);
 }
 
 // Touch through the protocol, so Chrome runs its own gesture recognition and
@@ -186,6 +188,7 @@ test.describe('Темы на телефоне: касания', () => {
     await test.step('Дано экран тем снова, браузер отменяет неподвижное касание', async () => {
       await page.getByRole('button', { name: 'Открыть наборы' }).click();
       await expect(tile).toBeVisible();
+      await screenSettled(page);
       // After a cancel Chrome sends no pointerup and no click; the real ones
       // this uncancelled touch produces are stopped at the window.
       await recordPointer(page, ['pointerup', 'click']);

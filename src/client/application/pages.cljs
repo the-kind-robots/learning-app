@@ -3,6 +3,7 @@
    opens it when it is entered, how the screen on display is computed again
    from memory, its hotkeys, and its view. Adding a page is one entry here."
   (:require
+   [domain.lesson :as lesson]
    [pages.collections.view]
    [pages.home.view]
    [pages.lesson.view]
@@ -15,7 +16,10 @@
    each keystroke (`Alt+KeyW`: the modifiers, then the key's place, so any layout works), `:view` a function of
    state, and `:keyboard-overlays?` whether the virtual keyboard overlays the screen (absent: it resizes it).
    Home and the words list overlay it: the keyboard covers the lesson button fixed at the bottom, and the search bar
-   closes the column on the keyboard's inset."
+   closes the column on the keyboard's inset.
+   `:transitions` is how the screen moves on a phone (ADR-0024): `:in` coming on, `:out` going off, `:within` a
+   function of the states before and after a render that stays on it, giving the transition or nil. Absent, the
+   screen slides deeper and back."
   {:page/collections {:hotkeys (constantly {"Escape" [[:action/close-screen]]})
                       :open    :action/open-collections
                       :path    "/collections"
@@ -34,13 +38,20 @@
                       :refresh            (fn [_ context]
                                             [[:action/show-home context]])
                       :view               pages.home.view/page}
-   :page/lesson      {:open    :action/open-lesson
-                      :path    "/lesson"
-                      :refresh (fn [state _]
-                                 (when (and (nil? (:lesson/state state))
-                                            (not (:lesson/empty? state)))
-                                   [[:effect/enter :action/open-lesson]]))
-                      :view    pages.lesson.view/page}
+   ;; A lesson is a mode, not a step deeper: it fades in and out. Within it, «ДАЛЕЕ» moves the trial.
+   :page/lesson      {:open        :action/open-lesson
+                      :path        "/lesson"
+                      :refresh     (fn [state _]
+                                     (when (and (nil? (:lesson/state state))
+                                                (not (:lesson/empty? state)))
+                                       [[:effect/enter :action/open-lesson]]))
+                      :transitions {:in     :transition/fade-in
+                                    :out    :transition/fade-out
+                                    :within (fn [before after]
+                                              (when (and (lesson/last-result (:lesson/state before))
+                                                         (nil? (lesson/last-result (:lesson/state after))))
+                                                :transition/next-trial))}
+                      :view        pages.lesson.view/page}
    ;; An open word dialog takes `Escape` itself.
    :page/words       {:hotkeys            (fn [state]
                                             (when-not (:words/editing state)

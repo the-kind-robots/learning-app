@@ -1,0 +1,146 @@
+/* Screen changes on a phone (ADR-0024). `view-transition` starts each with its kind as the transition's
+   type, which `:active-view-transition-type` matches while it runs, and only then: an element carries a
+   transition name only under the change that moves it, so
+   every other change keeps it in the screen's snapshot. The screen is the root's snapshot; the bar
+   across the top is a group of its own and stays still. */
+
+:root {
+  --screen-easing: cubic-bezier(.2, .8, .2, 1);
+}
+html:active-view-transition .app-shell__bar {
+  view-transition-name: app-bar;
+}
+
+html:active-view-transition::view-transition-group(app-bar),
+html:active-view-transition::view-transition-new(app-bar) {
+  animation: none;
+}
+
+html:active-view-transition::view-transition-old(app-bar) {
+  display: none;
+}
+
+html:active-view-transition::view-transition-old(root),
+html:active-view-transition::view-transition-new(root) {
+  mix-blend-mode: normal;
+}
+
+/* Deeper: the new screen comes in from the right over the old one, which falls back to the left. */
+
+html:active-view-transition-type(deeper)::view-transition-old(root) {
+  animation: screen-recede-left 240ms var(--screen-easing) both;
+}
+
+html:active-view-transition-type(deeper)::view-transition-new(root) {
+  animation: screen-enter-from-right 240ms var(--screen-easing) both;
+  box-shadow: -16px 0 40px rgb(20 40 10 / .14);
+}
+
+/* Back: the screen leaves to the right, above home coming back from the left. */
+
+html:active-view-transition-type(back)::view-transition-old(root) {
+  z-index: 1;
+  animation: screen-leave-right 200ms var(--screen-easing) both;
+  box-shadow: -16px 0 40px rgb(20 40 10 / .14);
+}
+
+html:active-view-transition-type(back)::view-transition-new(root) {
+  animation: screen-return-from-left 200ms var(--screen-easing) both;
+}
+
+/* A `:motion/fade` screen (the lesson): a fade through, no direction. It comes in from slightly larger and goes out growing. */
+
+html:active-view-transition-type(fade-in)::view-transition-old(root) {
+  animation: screen-fade-out-smaller 200ms var(--screen-easing) both;
+}
+
+html:active-view-transition-type(fade-in)::view-transition-new(root) {
+  animation: screen-fade-in-from-larger 200ms var(--screen-easing) both;
+}
+
+html:active-view-transition-type(fade-out)::view-transition-old(root) {
+  animation: screen-fade-out-larger 200ms var(--screen-easing) both;
+}
+
+html:active-view-transition-type(fade-out)::view-transition-new(root) {
+  animation: screen-fade-in-from-smaller 200ms var(--screen-easing) both;
+}
+
+/* The next trial: only the task moves; the rest of the screen is the new one at once. */
+
+html:active-view-transition-type(next-trial) #lesson-challenge {
+  view-transition-name: lesson-trial;
+}
+
+html:active-view-transition-type(next-trial)::view-transition-old(lesson-trial) {
+  animation: trial-leave-left 180ms var(--screen-easing) both;
+}
+
+html:active-view-transition-type(next-trial)::view-transition-new(lesson-trial) {
+  animation: trial-enter-from-right 180ms var(--screen-easing) both;
+}
+
+/* A deleted collection: its tile shrinks away, the tiles after it glide into the gap. */
+
+html:active-view-transition-type(close-gap) :is(.tile, .tile__row) {
+  view-transition-name: match-element;
+  view-transition-class: tile;
+}
+
+html:active-view-transition-type(close-gap)::view-transition-old(.tile):only-child {
+  animation: tile-shrink 200ms var(--screen-easing) both;
+}
+
+html:active-view-transition-type(next-trial)::view-transition-old(root),
+html:active-view-transition-type(close-gap)::view-transition-old(root) {
+  display: none;
+}
+
+html:active-view-transition-type(next-trial)::view-transition-new(root),
+html:active-view-transition-type(close-gap)::view-transition-new(root) {
+  animation: none;
+}
+
+@keyframes screen-enter-from-right {
+  from { transform: translateX(100%); }
+}
+
+@keyframes screen-recede-left {
+  to { transform: translateX(-28%); filter: brightness(.9); }
+}
+
+@keyframes screen-leave-right {
+  to { transform: translateX(100%); }
+}
+
+@keyframes screen-return-from-left {
+  from { transform: translateX(-28%); filter: brightness(.9); }
+}
+
+@keyframes screen-fade-out-smaller {
+  40%, to { opacity: 0; transform: scale(.97); }
+}
+
+@keyframes screen-fade-in-from-larger {
+  from, 35% { opacity: 0; transform: scale(1.04); }
+}
+
+@keyframes screen-fade-out-larger {
+  40%, to { opacity: 0; transform: scale(1.04); }
+}
+
+@keyframes screen-fade-in-from-smaller {
+  from, 35% { opacity: 0; transform: scale(.97); }
+}
+
+@keyframes trial-leave-left {
+  to { opacity: 0; transform: translateX(-72px); }
+}
+
+@keyframes trial-enter-from-right {
+  from { opacity: 0; transform: translateX(72px); }
+}
+
+@keyframes tile-shrink {
+  to { opacity: 0; transform: scale(.85); }
+}

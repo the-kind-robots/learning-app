@@ -1,6 +1,7 @@
 (ns application
   (:require
    [application.pages :as pages]
+   [application.presenter :as presenter]
    [application.sync.actions]
    [application.sync.effects]
    [application.view :as view]
@@ -12,7 +13,8 @@
    [ports.learner :as learner]
    [ports.navigation :as navigation]
    [ports.world :as world]
-   [replicant.dom :as r]))
+   [replicant.dom :as r]
+   [view-transition]))
 
 
 ;;
@@ -303,9 +305,10 @@
 
 
 (defn render!
-  "Renders the shell of `state`."
-  [state]
-  (r/render js/document.body (view/shell state)))
+  "Renders the shell of `after`, moving the way the screen change from `before` (nil: none) calls for."
+  [before after]
+  (view-transition/change! (presenter/screen-change before after)
+                           #(r/render js/document.body (view/shell after))))
 
 
 (defn state
@@ -320,16 +323,18 @@
 
 (defn start-render!
   "Renders now and on every change of the interface's state or the learner's data,
-   only when it differs (`identical?`): a dispatch that saves nothing costs no render."
+   only when it differs (`identical?`): a dispatch that saves nothing costs no render.
+   `render-fn` gets the state before the change, nil for the learner's data, and the state now."
   [{:keys [app-state capabilities] :as system} render-fn]
-  (let [render! #(render-fn (state system))]
+  (let [{:keys [learner]} capabilities
+        render! (fn [before] (render-fn before (state system)))]
     (add-watch app-state
                ::render
                (fn [_ _ old new]
                  (when-not (identical? old new)
-                   (render!))))
-    (learner/on-change (:learner capabilities) render!)
-    (render!)))
+                   (render! (assoc old :learner/status (learner/status learner))))))
+    (learner/on-change learner #(render! nil))
+    (render! nil)))
 
 
 (def ^:private fonts-cap-ms
@@ -404,10 +409,10 @@
          (fn [_]
            (start-render!
             system
-            (fn [state]
-              (when (not= :status/loading (:learner/status state))
+            (fn [before after]
+              (when (not= :status/loading (:learner/status after))
                 (if ^boolean goog/DEBUG
-                  (instrumentation/render! render! state)
-                  (render! state)))))))
+                  (instrumentation/render! #(render! before %) after)
+                  (render! before after)))))))
   (when ^boolean goog/DEBUG
     (instrumentation/install!)))
