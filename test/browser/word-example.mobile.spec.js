@@ -44,6 +44,23 @@ test.describe('Окно слова на телефоне', () => {
     });
   });
 
+  test('пользователь открывает слово в одной теме → карточка во всю ширину окна, поля по бокам равны', async ({ page }) => {
+    await test.step('Дано слово в одной теме', async () => {
+      await seedWord(page, { collections: [THEMES[0]], examples: [EXAMPLES[0]] });
+    });
+
+    await test.step('Когда он открывает слово', async () => {
+      await openWord(page);
+    });
+
+    await test.step('Тогда карточка тянется по окну, слева и справа поля по 16 px', async () => {
+      const dialog = await page.getByRole('dialog').boundingBox();
+      const one = await card(page, 'Reisen / Bahn').boundingBox();
+      expect(Math.round(one.x - dialog.x)).toBe(16);
+      expect(Math.round(dialog.x + dialog.width - (one.x + one.width))).toBe(16);
+    });
+  });
+
   test('пользователь листает карточки → следующая карточка встаёт к левому краю', async ({ page }) => {
     await test.step('Дано открытое слово в двух темах', async () => {
       await seedWord(page, { collections: THEMES, examples: EXAMPLES });
