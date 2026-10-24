@@ -25,19 +25,6 @@
     [[:effect/navigate :page/home]]))
 
 
-;; `Alt`+`Enter` starts the lesson without leaving the keyboard. The handler is on the document,
-;; so it works wherever the focus sits; an empty vocabulary hides the footer button, and the keystroke
-;; offers no more than the screen does.
-(nxr/register-action! :action/start-lesson-if-alt-enter
-  (fn start-lesson-if-alt-enter [state {:keys [alt? key]}]
-    (when (and alt?
-               (= "Enter" key)
-               (= :page/home (:page/current state))
-               (not (:home/empty-vocab? state)))
-      [[:effect/prevent-default]
-       [:action/go-to-lesson]])))
-
-
 (defn content
   "What home shows of the learner's data: the active collection's heading and whether there is anything to study."
   [_ {collection :active-collection :keys [learner]}]

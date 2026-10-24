@@ -241,8 +241,9 @@
          [:div.page-footer__action
           [:div.input
            [:span.input__search-icon]
-           [:input.input__input-area.input__input-area--icon
-            {:autocapitalize "none"
+           [:input#words-search.input__input-area.input__input-area--icon
+            {:replicant/on-mount [[:effect/mobile-autofocus "words-search"]]
+             :autocapitalize "none"
              :autocomplete   "off"
              :autocorrect    "off"
              :enterkeyhint   "search"
