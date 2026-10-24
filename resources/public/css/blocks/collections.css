@@ -446,34 +446,3 @@ body:has(.switcher) {
   box-shadow: 0 10px 20px -6px color-mix(in oklab, rgb(var(--color-owl)) 60%, transparent);
   transform: translateY(-2px);
 }
-
-
-/*
- * Home screen active collection heading (used on home, not switcher).
- * Always-editable h2 — contenteditable inline. No element-type toggle, just
- * an emerald caret on focus and a placeholder when empty.
- */
-.home__collection-heading {
-  align-self: center;
-  caret-color: rgb(var(--color-peacock));
-  color: rgb(var(--color-black-text));
-  cursor: text;
-  font-family: inherit;
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: -0.8px;
-  line-height: 1.27;
-  margin: 8px 0 0;
-  max-width: 100%;
-  min-width: 1ch;
-  outline: none;
-  padding: 0;
-  text-align: center;
-  word-break: break-word;
-}
-
-.home__collection-heading:empty:not(:focus)::before {
-  color: rgb(var(--color-hare));
-  content: "Без названия";
-  pointer-events: none;
-}
