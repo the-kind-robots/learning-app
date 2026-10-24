@@ -145,6 +145,17 @@
   width: 290px;
 }
 
+/* A lone card spans the strip; the end spacer is for scrolling, which it has none of. */
+.word-example:only-of-type {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.word-example:only-of-type + .word-examples__end {
+  display: none;
+}
+
 .word-example--owl { --accent: rgb(var(--color-owl)); }
 .word-example--macaw { --accent: rgb(var(--color-macaw)); }
 .word-example--fox { --accent: rgb(var(--color-fox)); }
@@ -440,12 +451,6 @@
     border-radius: 18px;
     padding: 0 18px 18px;
     width: 320px;
-  }
-
-  .word-example:only-of-type {
-    flex: 1 1 auto;
-    min-width: 0;
-    width: auto;
   }
 
   .word-example__title {
