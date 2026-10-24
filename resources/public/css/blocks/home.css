@@ -248,7 +248,7 @@
 }
 
 .home__add-form-submit.big-button {
-  height: 52px;
+  --web-ui_button-height: 52px;
   margin-top: 4px;
   width: 100%;
 }
