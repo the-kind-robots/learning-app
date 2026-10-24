@@ -174,9 +174,13 @@
                                            (str "Удалить «" stored-word "» окончательно?"))
                         :id              id
                         :value           stored-word}]]}}
-      [:svg {:aria-hidden "true" :fill "currentColor" :height "20" :viewBox "0 0 24 24" :width "20"}
-       [:path {:d "M9 2.5h6l1 2h4a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2h4z"}]
-       [:path {:d "M5.5 8.5h13l-.9 11.6a2 2 0 0 1-2 1.9H8.4a2 2 0 0 1-2-1.9z"}]]]
+      [:svg {:aria-hidden "true" :fill "none" :height "22" :stroke "currentColor" :stroke-linecap "round"
+             :stroke-linejoin "round" :stroke-width "2" :viewBox "0 0 24 24" :width "22"}
+       [:path {:d "M4 7h16"}]
+       [:path {:d "M10 11v6"}]
+       [:path {:d "M14 11v6"}]
+       [:path {:d "M6 7l1 13h10l1-13"}]
+       [:path {:d "M9 7V4h6v3"}]]]
      [:div.word-edit-dialog__spacer]
      [:button.word-edit-dialog__reset
       {:disabled reset-disabled?

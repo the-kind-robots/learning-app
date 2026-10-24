@@ -53,11 +53,11 @@ test.describe('Окно слова на телефоне', () => {
       await openWord(page);
     });
 
-    await test.step('Тогда карточка тянется по окну, слева и справа поля по 16 px', async () => {
+    await test.step('Тогда карточка тянется по окну, слева и справа поля по 28 px', async () => {
       const dialog = await page.getByRole('dialog').boundingBox();
       const one = await card(page, 'Reisen / Bahn').boundingBox();
-      expect(Math.round(one.x - dialog.x)).toBe(16);
-      expect(Math.round(dialog.x + dialog.width - (one.x + one.width))).toBe(16);
+      expect(Math.round(one.x - dialog.x)).toBe(28);
+      expect(Math.round(dialog.x + dialog.width - (one.x + one.width))).toBe(28);
     });
   });
 
@@ -76,7 +76,7 @@ test.describe('Окно слова на телефоне', () => {
         const strip = await page.locator('.word-examples').boundingBox();
         const box = await card(page, 'Alltag').boundingBox();
         return Math.round(box.x - strip.x);
-      }).toBe(16);
+      }).toBe(28);
     });
   });
 });
