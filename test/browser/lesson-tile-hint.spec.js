@@ -8,7 +8,7 @@ const { seedExample } = require('./lesson-answer.shared');
 
 const SENTENCE = ['Der', 'Hund', 'schläft', 'im', 'Garten'];
 
-const hint = (page) => page.getByRole('checkbox', { name: 'Подсказка: собрать из плиток' });
+const hint = (page) => page.getByRole('button', { name: 'Подсказка: собрать из плиток' });
 const tray = (page) => page.getByRole('group', { name: 'Ваш ответ' });
 const bank = (page) => page.getByRole('group', { name: 'Плитки' });
 const marked = (page) => bank(page).locator('b');
@@ -107,6 +107,43 @@ test.describe('Подсказка плитками у повторного пр�
       await expect(tray(page).getByRole('button')).toHaveCount(0);
       const texts = await bank(page).getByRole('button').allTextContents();
       expect([...texts].sort()).toEqual([...SENTENCE.slice(0, 4), 'Garten'].sort());
+    });
+  });
+
+  test('ученик печатает ответ и жмёт Alt+Enter → поле заполняется плитками, лампочки нет', async ({ page }) => {
+    await test.step('Дано пример и набранное начало ответа', async () => {
+      await showExampleFirstTime(page);
+      await page.keyboard.type('Der');
+    });
+
+    await test.step('Когда он жмёт Alt+Enter', async () => {
+      await page.keyboard.press('Alt+Enter');
+    });
+
+    await test.step('Тогда вместо поля плитки всех слов, лампочки нет', async () => {
+      await expect(page.getByRole('textbox', { name: 'Ответ на немецком' })).toHaveCount(0);
+      await expect(hint(page)).toHaveCount(0);
+      await expect(bank(page).getByRole('button')).toHaveCount(5);
+    });
+  });
+
+  test('ученик переходит на лампочку с клавиатуры → вокруг неё рамка фокуса', async ({ page }) => {
+    // The ring is drawn inside the bulb's box, so the box alone shows it.
+    const bulb = async () => page.screenshot({ clip: await hint(page).boundingBox() });
+
+    await test.step('Дано пример, фокус в поле ответа', async () => {
+      await showExampleFirstTime(page);
+      await expect(page.getByRole('textbox', { name: 'Ответ на немецком' })).toBeFocused();
+    });
+    const unfocused = await bulb();
+
+    await test.step('Когда он жмёт Shift+Tab', async () => {
+      await page.keyboard.press('Shift+Tab');
+    });
+
+    await test.step('Тогда лампочка в фокусе и выглядит иначе — с рамкой', async () => {
+      await expect(hint(page)).toBeFocused();
+      expect((await bulb()).equals(unfocused)).toBe(false);
     });
   });
 
