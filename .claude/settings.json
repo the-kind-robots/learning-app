@@ -13,13 +13,7 @@
       "Bash(clj-kondo *)",
       "Bash(clojure-lsp *)",
       "Bash(zprint *)",
-      "Bash(bash .skills/install.sh *)",
-      "Bash(OPENSPEC_TELEMETRY=0 openspec *)",
-      "Bash(GHWF_OWNER=* bash *)",
-      "Bash(bash .skills/gh-project-workflow/scripts/*.sh *)",
       "Bash(bash .claude/skills/gh-project-workflow/scripts/*.sh *)",
-      "Bash(bash .codex/skills/gh-project-workflow/scripts/*.sh *)",
-      "Bash(bash .skills/learning-app-cdp/scripts/*.sh *)",
       "Bash(bash .claude/skills/learning-app-cdp/scripts/*.sh *)",
       "Bash(clj-nrepl-eval *)",
       "Bash(mkdir *)",
@@ -46,43 +40,14 @@
             "statusMessage": "Checking delivery flow..."
           }
         ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'g=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/coordinator-guard.sh\"; [ -r \"$g\" ] || g=.claude/hooks/coordinator-guard.sh; [ -r \"$g\" ] || exit 0; exec bash \"$g\"'",
-            "timeout": 10,
-            "statusMessage": "Checking who is writing..."
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'g=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/coordinator-guard.sh\"; [ -r \"$g\" ] || g=.claude/hooks/coordinator-guard.sh; [ -r \"$g\" ] || exit 0; exec bash \"$g\"'",
-            "timeout": 10,
-            "statusMessage": "Checking who is editing..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 -I -S \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/read-guard.py\"",
-            "timeout": 10,
-            "statusMessage": "Checking read size..."
-          }
-        ]
       }
     ]
   },
   "env": {
-    "BASH_MAX_OUTPUT_LENGTH": "15000"
-  }
+    "GHWF_OWNER": "the-kind-robots",
+    "GHWF_REPO": "the-kind-robots/learning-app",
+    "GHWF_PROJECT_NUMBER": "11",
+    "GHWF_DEFAULT_BASE": "master"
+  },
+  "bashOutputMaxChars": 15000
 }

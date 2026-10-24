@@ -70,7 +70,6 @@ test-app.db*
 # Worktree server artifacts (created by /goal skill)
 
 # Local agent/tool artifacts
-/.codex/skills
 /.claude/projects/
 /.claude/settings.local.json
 /.opencode/

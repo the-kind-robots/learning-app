@@ -24,8 +24,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 # `gh pr create` may name its source branch explicitly. Judge the branch the command
 # actually pushes from, not the one this hook's own working directory happens to be on:
-# the coordinating session and the agents it raises sit in the main checkout on `master`,
-# and under the coordinator rule that is the NORMAL configuration, so a HEAD-only test
+# the interactive session sits in the main checkout on `master`,
+# and that is the NORMAL configuration, so a HEAD-only test
 # refuses every correct invocation. Found while trying to open the pull request for #346.
 #
 # The invariant is unchanged — the branch must still look like `<number>-<slug>`. Only the
@@ -54,8 +54,8 @@ head_branch() { # head_branch <words...> -> branch named by --head/-H, empty whe
 cmd=$(jq -r '.tool_input.command // empty' 2>/dev/null || true)
 [ -n "$cmd" ] || exit 0
 
-START='bash .skills/gh-project-workflow/scripts/start_issue_flow.sh'
-FINISH='bash .skills/gh-project-workflow/scripts/finish_issue_flow.sh'
+START='bash .claude/skills/gh-project-workflow/scripts/start_issue_flow.sh'
+FINISH='bash .claude/skills/gh-project-workflow/scripts/finish_issue_flow.sh'
 
 # Drop heredoc bodies. The opener line is kept — it carries the real command — and
 # everything up to the terminator is skipped, so prose inside an issue or PR body can
@@ -113,7 +113,7 @@ while IFS= read -r st; do
       decide deny "Refused: a raw \`gh issue create\` produces an issue that is on no board, with no Status and no Priority. #288, #289, #290 and #292 were lost that way.
 
 Use the flow — invoke the \`repo-task-delivery\` skill, or run its GitHub step directly:
-  $START --title \"...\" --body-file <path> --priority <Urgent|High|Medium|Low> --status \"In progress\" --base master
+  $START --title \"...\" --body-file <path> --priority <Urgent|High|Medium|Low> --status \"In progress\" --base master --no-checkout
 
 That one call creates the issue, reuses an existing item of the same title, puts it on the org project 'Learning app' (the-kind-robots, 11), sets the fields, and runs \`gh issue develop --checkout\`.
 
@@ -133,13 +133,13 @@ If the owner asked for the raw command, re-run it prefixed with DELIVERY_GUARD=o
           decide deny "Refused: $where, which carries no issue number, so this pull request would have no issue and no board entry behind it.
 
 Get the issue and its branch first:
-  $START --title \"...\" --priority High --status \"In progress\" --base master
+  $START --title \"...\" --priority High --status \"In progress\" --base master --no-checkout
 or, when the issue already exists:
   gh issue develop <n> -R the-kind-robots/learning-app --checkout --base master
 
 From a <number>-<slug> branch \`gh pr create\` is allowed. To commit, push, open the PR and set Status in one step:
-  $FINISH --issue <n> --base master
-(with a dirty tree prefer manual git/gh steps — the finish script runs \`git add -A\`).
+  $FINISH --issue <n> --base master --add <path>
+(it stages only the paths named with --add).
 
 If the owner asked for the raw command, re-run it prefixed with DELIVERY_GUARD=off." ;;
       esac ;;

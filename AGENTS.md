@@ -1,94 +1,53 @@
 # AGENTS
 
-- Assume caveman is already active by default in this repo.
-- Do not wait for reminders to answer in caveman style.
-- Be brief, direct, and technically precise.
 - When reporting verification, say clearly what was actually proven and what was not.
-
 - For project structure, start at [readme.md](readme.md). It links to focused README files.
 
 # Delivery
 
-- Any task likely to end in a committed edit runs the full flow. Invoke the `repo-task-delivery` skill and let it drive — do not assemble the steps by hand.
-- The flow: issue on the board -> branch from that issue -> implement -> verify -> PR -> merge -> Done -> cleanup.
-- `repo-task-delivery` is the entrypoint. It delegates GitHub to `gh-project-workflow` and specs to the OpenSpec skills. Do not start at a sub-skill; they assume the flow is already underway.
+- Any task likely to end in a committed edit runs the full flow: invoke the `repo-task-delivery` skill and let it drive. It says when a narrower skill is enough.
+- The flow: issue on the board -> branch from that issue -> implement -> verify -> PR -> merge -> Done.
 - Issues come from the workflow, never by hand:
-  `bash .skills/gh-project-workflow/scripts/start_issue_flow.sh --title "..." --priority High --status "In progress" --base master`
-  One call creates the issue, reuses an existing item of the same title, puts it on the org project `Learning app` (`the-kind-robots`, number 11), sets Status and Priority, and runs `gh issue develop --checkout`.
-- Priority is **Urgent/High/Medium/Low** and lives on the organization's native issue field, not on the board. The project refuses to write a column backed by an issue field, so the script sets it with `setIssueFieldValue`; reading it back needs the `ProjectV2ItemIssueFieldValue` fragment, or the value looks unset when it is not. The retired `Blocker/Critical/Major/Minor/Trivial` are rejected by name.
-- A raw `gh issue create` makes an issue that is on no board, with no Status and no Priority — work nobody can see. #288, #289, #290 and #292 were made that way and had to be added by hand afterwards. A `PreToolUse` hook now refuses the raw form and names the script instead.
+  `bash .claude/skills/gh-project-workflow/scripts/start_issue_flow.sh --title "..." --priority High --status "In progress" --base master --no-checkout`
+  It creates or reuses the issue, puts it on the org project `Learning app` (`the-kind-robots`, number 11), sets Status and Priority, and links a branch without checking it out. `.claude/hooks/delivery-guard.sh` refuses a raw `gh issue create` and a PR from a branch with no issue number.
+- Priority is **Urgent/High/Medium/Low** — judge it, never leave it empty. It is the organization's native issue field, not a board column: the script sets it, and reading it back needs the `ProjectV2ItemIssueFieldValue` fragment, or it looks unset when it is not.
 - The board is the owner's only window into the work. An issue that is not on it does not exist.
-- A second `PreToolUse` hook, `.claude/hooks/coordinator-guard.sh`, enforces the delegation rule rather than leaving it to memory. It refuses `Edit`/`Write`/`NotebookEdit` from a session with no subagent id when the target is inside the repository, and asks instead of refusing when the target's worktree is on an issue branch, since that is also what legitimate full-stand work looks like. Subagents pass untouched. The same hook also watches `Bash`, where it only ever asks: an editor target is given in the payload, a shell target is guessed from a string, and its list of shell write shapes is short and knowingly incomplete. Its header comment records what it cannot tell apart — read it before trusting it, and do not read it as a lock. Since 2.1.143 the harness refuses a background coordinator's editor writes natively under `worktree.bgIsolation`, which this repository sets nowhere; the hook's own coverage is the interactive session and shell writes.
 
-Do not start the flow when the user asks a question, wants only reading or measuring, is continuing an issue that is already active, or says to skip GitHub/OpenSpec. Everything else goes through it — bug, refactor, docs, skills, config. "It" is the issue, the branch and the pull request. "It is small" is not an exception; it is the usual excuse.
+Do not start the flow when the user asks a question, wants only reading or measuring, is continuing an issue that is already active, or says to skip GitHub/OpenSpec. Everything else goes through it — bug, refactor, docs, skills, config. "It is small" is not an exception.
 
-Whether the work also needs an OpenSpec change is a verifiability test, not a topic match. Name the behaviour this change alters that someone could check afterwards without reading the diff — a word that now syncs, a document shape the migration must produce, a screen that now answers differently. Can you name one? Write the OpenSpec change before implementing, and archive it on the branch before the PR. Cannot name one? There is no requirement to state, so there is no OpenSpec change: the work alters how the repository is worked, not what the product does. Subsystems are examples, never the test.
-
-Repository process fails that test by construction — agent rules, hooks, skills, scripts, CI configuration, documentation about how work is delivered. Until #400 every tracked edit needed a change anyway, and since `openspec validate` refuses a change with no delta, process work had to invent a normative requirement about itself to get delivered. It no longer does. Process rules are written down here instead: this file is loaded every session, and the one other copy was deleted for saying the same things twice (#388).
-
-Nothing else moves. The issue on the board, the branch from that issue, the guards, the pull request: unchanged, whichever side of the test the work falls on. Those are what make work visible; a spec was never what made them visible.
+Whether the work also needs an OpenSpec change: `repo-task-delivery`, step 3. Process rules — how the repository is worked — live in this file.
 
 If the user asks for a blocked command outright, prefix it with `DELIVERY_GUARD=off`. That turns the refusal into a normal approval prompt, so the owner still confirms. Never reach for it on your own judgement.
 
-A refusal — from one of these hooks or from workspace isolation — stops the work and goes to the owner. Report three things: what you were doing, what was refused, and the refusal verbatim. The owner decides what happens next. Do not look for a way around it. Named, because each has happened:
+A refusal — from a hook or from workspace isolation — stops the work and goes to the owner. Report what you were doing, what was refused, and the refusal verbatim. Do not look for a way around it: no commit assembled in a side worktree and pushed to the branch ref, no rewording a command past a static check.
 
-- Do not assemble a commit in a side or detached worktree and push straight to the branch ref because ordinary writes were blocked. That was PR #347; the harness flagged it afterwards rather than preventing it, and absence of prevention is not permission.
-- Do not reword a command so it slips past a static check. Run it the permitted way or stop.
+**Behaviour is normative in exactly two files**: the change's delta spec and the synced main spec. The proposal, the design notes, the tasks, the ADR and the documentation link to it — they never restate it.
 
-The guards read command text and the working directory, so they stop accidents, not intent. Going around one does not break the protection — it breaks the assurance that delivered work went down a verified path.
+**Settle a decision before writing it down.** A decision about what a person does — which gesture is common, whether a control is a target or a label, what someone reads — cannot be settled by the codebase. Name those decisions before the first artifact. Take the measurement where one exists; otherwise ask the owner in one line with two named options. Until it is answered it is a line in the issue, not a spec.
 
-**Behaviour is normative in exactly two files**: the change's delta spec and the synced main spec. The proposal, the design notes, the tasks, the ADR and the documentation describe it and link to it — they never restate it. Stated once, a behaviour is reversed by editing one requirement; stated in six places, reversing one word of it costs ten files.
-
-**Settle a decision before writing it down.** A decision about what a person does — which gesture is common, whether a control is a target or a label, what someone reads — cannot be settled by the codebase. Name those decisions before the first artifact. Take the measurement where one exists; otherwise ask the owner in one line with two named options. Until it is answered it is a line in the issue, not a spec: a test written from an unsettled decision passes and proves nothing.
-
-**Design a screen before building it.** Does this work build a new screen, or change how an existing one looks or is laid out — a theme, a redesign, a new layout? Then invoke the `frontend-design:frontend-design` skill before the first artifact: spec, design notes or code. A point fix to a layout bug — an overflow, a misaligned control — does not. The executor has the Skill tool and the plugin skills, so whoever writes the first artifact invokes it; a coordinator that settles the design itself passes the skill's direction along in the hand-off.
+**Design a screen before building it.** Does this work build a new screen, or change how an existing one looks or is laid out — a theme, a redesign, a new layout? Then whoever writes the first artifact (spec, design notes or code) invokes the `frontend-design:frontend-design` skill first. A point fix to a layout bug — an overflow, a misaligned control — does not.
 
 **Verify the symptom where it appeared.** A fix proven on a fixture is not proven on the stand it was for. When the report came from a phone, the tunnel or the live nginx, the verification goes there before the work is called done.
 
-# Clojure REPL Evaluation
+# Sessions and Worktrees
 
-The command `clj-nrepl-eval` is installed on your path for evaluating Clojure code via nREPL.
-
-**Discover nREPL servers:**
-
-`clj-nrepl-eval --discover-ports`
-
-**Evaluate code:**
-
-`clj-nrepl-eval -p <port> "<clojure-code>"`
-
-With timeout (milliseconds)
-
-`clj-nrepl-eval -p <port> --timeout 5000 "<clojure-code>"`
-
-The REPL session persists between evaluations - namespaces and state are maintained.
-Always use `:reload` when requiring namespaces to pick up changes.
+- One issue, one background session. The interactive session files the issue (`start_issue_flow.sh --no-checkout`), launches `claude --bg -n "#N" "<task>"`, and watches sessions with `claude agents`.
+- The background session calls `EnterWorktree`, then `git switch <issue branch>`, and does the work itself: edit, verify, PR. The harness refuses its writes to the main checkout.
+- The interactive session works in the main checkout: reading, triage, measuring and full-stand work. Its edits pass through the owner's permission prompts.
+- Full-stand work is a dependency test, not a topic match. Name the shared thing the work needs — a live CouchDB, nginx routing, a migration over real data — and it runs in the main checkout. Cannot name one? It runs in a background session's worktree.
+- A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared. It still proves browser behaviour on fixture data — it serves on `localhost`, a secure context, so OPFS, Web Locks, service workers and workers run there.
+- Branches come from `gh issue develop` (the start script) only. Never `git checkout -b` or `git switch -c`; a permission rule asks on both.
+- Run git commands plain and single: no pipes, `;` or `&&`.
+- Worktrees are the harness's: it removes them with their sessions. A merge deletes the branch.
+- Subagents work inside the caller's worktree: `ops` (Haiku; issue/board scripts, commit of staged work, push, draft PR), `log-reader` (Haiku; digest of logs, CI and test output), `Explore`.
 
 # Issues
 
 - The repository is public. Never state production facts in issues, PRs, commits or specs — what its passwords are not, what is currently broken there. Run such checks, report the results privately, and keep the tracker wording neutral ("a packaged deployment cannot override the dev credentials").
-- Issues form a shallow DAG. Dependency is the native blocked-by relation, visible on the issue and the board:
-  `gh api graphql -f query='mutation($i: ID!, $b: ID!) { addBlockedBy(input: {issueId: $i, blockingIssueId: $b}) { issue { number } } }' -f i=$(gh api repos/the-kind-robots/learning-app/issues/<child> --jq .node_id) -f b=$(gh api repos/the-kind-robots/learning-app/issues/<blocker> --jq .node_id)`
-  A `Needs: #N` body line may mirror it for grep. No cycles.
+- Issues form a shallow DAG. Dependency is the native blocked-by relation: `gh issue edit <child> --add-blocked-by <blocker>`. A `Needs: #N` body line may mirror it for grep. No cycles.
 - An issue exists only for work a pull request can close, a bug, or a decision worth recording. Findings, measurements and design notes are comments on the existing issue — never a new issue.
 - Before filing, search open issues for an existing home; one issue may host several PRs.
 - If a chain goes deeper than Needs -> Needs, that is planning disguised as tracking — merge the nodes.
-
-# Branches and Worktrees
-
-**One rule: everything under your own worktree root is yours, nothing outside it is.** A worktree nested under your root is writable, editor tools included. A sibling is not: `EnterWorktree` onto one claims success and moves nothing — every later Bash call is refused, `pwd` included, until you re-enter your own path. `git -C <path outside your worktree>` is refused on the string; drop the redirect and the same command runs.
-
-- Branches come from `gh issue develop <number>` only, so the branch is linked to its issue. Never `git checkout -b` or `git switch -c` — a permission rule in `.claude/settings.json` asks on both — and never let the worktree mechanism make the branch: it branches from `master` and leaves the issue with no development link (#289).
-- The coordinating session stays in the main checkout and delegates every repository edit, including one it would rather make itself.
-- Hand work to the `executor` agent (`.claude/agents/executor.md`). Its definition carries the worktree isolation and the branch recipe.
-- Mechanical chores go to Haiku agents with an exact hand-off: `ops` (issue/board scripts, commit of staged work, push, draft PR, post-merge cleanup) and `log-reader` (digest of logs, CI and test output; runs a named test command and returns only failures). Decisions, review, debugging and conflicts stay with the coordinator or `executor`.
-- In the main checkout, `gh issue develop <number> --checkout` is enough.
-- A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared.
-- Where to work is a dependency test, not a topic match. Name the shared thing the work needs — a live CouchDB, nginx routing, a migration over real data — and it stays in the main checkout. Cannot name one? It goes to the executor. Subsystems are examples, never the test: #351 was sent to the main checkout for touching the dictionary and needed nothing shared.
-- A worktree still proves browser behaviour on fixture data. It serves on `localhost`, a secure context, so OPFS, Web Locks, service workers and workers all run there; the browser tests' fixture dictionary is enough for anything that needs only one origin. Only the real data and the shared services stay behind — cold-start timing on the full dictionary, replication against a live CouchDB, nginx routing.
-- After a merge, run `.skills/gh-project-workflow/scripts/prune_worktrees.sh` (`finish_issue_flow.sh` does it; `--dry-run` previews). It removes merged worktrees and their branches.
-
-Measured 2026-09-10 on Claude Code 2.1.267; the boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` is the owner's lever over it, not yours — and it appears in neither `.claude/settings.json` nor `.claude/settings.local.json`, so the harness default is what is in force. Re-measure after a CLI update.
 
 # Commits
 
@@ -102,21 +61,17 @@ PRs merge by squash, so this governs the branch history the reviewer reads, not 
 # Browser / PWA Verification
 
 - For browser-runtime behavior, use real browser proof, not only code inspection.
-- Before Windows Chrome CDP, run `bash .skills/learning-app-cdp/scripts/learning_app_cdp.sh doctor`.
+- Before Windows Chrome CDP, run `bash .claude/skills/learning-app-cdp/scripts/learning_app_cdp.sh doctor`.
 - Chrome down (CDP endpoint silent, evals dying)? `learning_app_cdp.sh start-local`. Never launch chrome.exe by hand: the debug port needs the separate profile start-local provides.
 - If Windows interop is broken (`cmd.exe` gives `exec format error` or `WSLInterop` is missing), ask for `wsl --shutdown`, then retry.
 - For Service Worker offline reload checks, wait until `navigator.serviceWorker.controller` is true before switching offline.
 
 # Project Skills
 
-- Shared project skills source lives in `.skills/`.
-- Install/relink tool locations with `.skills/install.sh --force`.
-- Expected links: `.codex/skills -> ../.skills` and `.claude/skills -> ../.skills`.
-- Invoke skill scripts by their real path, `.skills/...`. `.codex/` is gitignored and absent in worktrees, so a `.codex/skills/...` command works in the main checkout and fails everywhere else; `.claude/skills/...` is a tracked symlink to the same place.
+- Project skills live in `.claude/skills/`; invoke their scripts by that path.
 
 # Token hygiene
 
-- Never `cat` a whole file. Use Read with offset/limit, or `grep -n … | head -50`. `.claude/hooks/read-guard.py` refuses `cat`/`less`/`more`/`head`/`tail`/`sed` on a file over 300 lines unless piped or redirected (`head`/`tail -n N` with N ≤ 300 pass).
 - `git diff --stat` before a full diff; then diff only the files you need. History: `git log --oneline -20`.
 - Hand subagents file paths, not pasted contents (e.g. "review `openspec/changes/<x>/VERIFY.md`").
 - Run `openspec validate` once, right before archive — not after every edit.
