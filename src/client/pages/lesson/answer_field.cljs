@@ -278,7 +278,8 @@
   "Follows the primary pointer that went down on a tile, which the tile
    captures: past the threshold the tile is lifted and follows it, with a caret
    where it would land; on release a placed tile is reordered, and a bank tile
-   dropped on the field goes into the tray."
+   dropped on the field goes into the tray. The tile keeps the focus, so typing
+   goes on placing tiles."
   [^js el ^js tile ^js event]
   (let [tray       (inside el "#tray")
         banked?    (not (identical? tray (.-parentNode tile)))
@@ -322,7 +323,8 @@
                              (settle!)
                              (cond
                                other (.insertBefore tray tile (if (= :after side) (.-nextElementSibling other) other))
-                               (and banked? dropped?) (.append tray tile)))))
+                               (and banked? dropped?) (.append tray tile))))
+                  (.focus tile))
                 (settle!))))
     (listen "lostpointercapture" (fn [_] (settle!)))))
 

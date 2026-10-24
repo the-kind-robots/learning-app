@@ -314,6 +314,26 @@ test.describe('Подсказка плитками у повторного пр�
     });
   });
 
+  test('ученик перетащил плитку и набирает слово → плитка встаёт в лоток без щелчка по полю', async ({ page }) => {
+    await test.step('Дано «Hund» перетащена в лоток', async () => {
+      await showExampleAgain(page);
+      await openTiles(page);
+      const box = await page.locator('#lesson-answer #field').boundingBox();
+      await dragTo(page, bank(page).getByRole('button', { name: 'Hund', exact: true }),
+        box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.up();
+      await expect(tray(page).getByRole('button')).toHaveText(['Hund']);
+    });
+
+    await test.step('Когда он набирает «der»', async () => {
+      await page.keyboard.type('der');
+    });
+
+    await test.step('Тогда «Der» в лотке после «Hund»', async () => {
+      await expect(tray(page).getByRole('button')).toHaveText(['Hund', 'Der']);
+    });
+  });
+
   test('ученик набирает начало слова на клавиатуре → плитка встаёт в конец лотка', async ({ page }) => {
     await test.step('Дано плитки в банке', async () => {
       await showExampleAgain(page);
