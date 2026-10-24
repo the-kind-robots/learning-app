@@ -20,4 +20,4 @@ Project rules that follow from these:
 
 - **Wandering data.** A value is assembled and taken apart by field right away (`(let [m {:a a :b b}] (f (:a m) (:b m)))`). Before building it, ask whose knowledge it is; pass the parts or the owner.
 - **Fewer functions.** Express new code through what exists. A private helper or `def` with one call site, or a second name for an existing key, is inlined.
-- **An object handed its own field.** `(f m (:k m))` — pass `m`, read `:k` inside `f`.
+- **An object handed its own field.** `(f m (:k m))` — pass `m`, read `:k` inside `f`. `bb scripts/field_of_same_map.clj [path ...]` lists these.
