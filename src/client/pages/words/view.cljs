@@ -5,12 +5,15 @@
 
 
 (defn- word-list-item
-  [{:keys [id phrase? retention-band retention-color retention-percent translation value]}]
+  [{:keys [id retention-band retention-color retention-percent translation value]}]
   [:li.word-item
    {:id (str "word-" id)}
    [:button.word-item__display
     {:type "button"
      :on   {:click [[:effect/enter :action/open-word-edit id]]}}
+    [:span.word-item__text
+     [:span.word-item__value {:lang "de"} value]
+     [:span.word-item__translation {:lang "ru"} translation]]
     [:div.word-item__retention
      {:style {:background-color retention-color}
       :title (str (case retention-band
@@ -18,12 +21,7 @@
                     :retention/good      "Хорошо изучено"
                     :retention/due       "Нужно повторить"
                     :retention/new       "Новое слово")
-                  " (" retention-percent "%)")}]
-    [:span.word-item__value
-     {:lang "de" :class (when phrase? "word-item__value--phrase")}
-     value]
-    [:span.word-item__translation {:lang "ru"} translation]
-    [:span.word-item__arrow.word-item__chevron "→"]]])
+                  " (" retention-percent "%)")}]]])
 
 
 (defn- sentinel
