@@ -5,10 +5,10 @@ usage() {
   cat <<'USAGE'
 Usage: deploy.sh [options]
 
-Run deployment command configured for this repository.
+Run a deployment command.
 
 Options:
-  --cmd <command>      Override deploy command (default: GHWF_DEPLOY_CMD)
+  --cmd <command>      Deploy command (required)
   --env-file <path>    Source env file before running deploy command
   --dry-run            Print command without executing
   --help               Show this help
@@ -20,7 +20,7 @@ die() {
   exit 1
 }
 
-deploy_cmd="${GHWF_DEPLOY_CMD:-}"
+deploy_cmd=""
 env_file=""
 dry_run=0
 
@@ -54,7 +54,7 @@ if [[ -n "$env_file" ]]; then
   source "$env_file"
 fi
 
-[[ -n "$deploy_cmd" ]] || die "No deploy command configured. Set GHWF_DEPLOY_CMD or pass --cmd"
+[[ -n "$deploy_cmd" ]] || die "No deploy command configured. Pass --cmd"
 
 echo "Deploy command: $deploy_cmd"
 

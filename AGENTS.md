@@ -13,8 +13,8 @@
 - The flow: issue on the board -> branch from that issue -> implement -> verify -> PR -> merge -> Done -> cleanup.
 - `repo-task-delivery` is the entrypoint. It delegates GitHub to `gh-project-workflow` and specs to the OpenSpec skills. Do not start at a sub-skill; they assume the flow is already underway.
 - Issues come from the workflow, never by hand:
-  `bash .skills/gh-project-workflow/scripts/start_issue_flow.sh --title "..." --priority High --status "In progress" --base master`
-  One call creates the issue, reuses an existing item of the same title, puts it on the org project `Learning app` (`the-kind-robots`, number 11), sets Status and Priority, and runs `gh issue develop --checkout`.
+  `bash .skills/gh-project-workflow/scripts/start_issue_flow.sh --title "..." --priority High --status "In progress" --base master --no-checkout`
+  One call creates the issue, reuses an existing item of the same title, puts it on the org project `Learning app` (`the-kind-robots`, number 11), sets Status and Priority, and links a branch with `gh issue develop` without checking it out.
 - Priority is **Urgent/High/Medium/Low** and lives on the organization's native issue field, not on the board. The project refuses to write a column backed by an issue field, so the script sets it with `setIssueFieldValue`; reading it back needs the `ProjectV2ItemIssueFieldValue` fragment, or the value looks unset when it is not. The retired `Blocker/Critical/Major/Minor/Trivial` are rejected by name.
 - A raw `gh issue create` makes an issue that is on no board, with no Status and no Priority — work nobody can see. #288, #289, #290 and #292 were made that way and had to be added by hand afterwards. A `PreToolUse` hook now refuses the raw form and names the script instead.
 - The board is the owner's only window into the work. An issue that is not on it does not exist.

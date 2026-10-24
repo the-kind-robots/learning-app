@@ -17,15 +17,14 @@ In this repo it is often used as a sub-skill of the higher-level tracked-deliver
 ```bash
 gh auth refresh -s project
 ```
-2. Load repo-level defaults from `references/config.env.example` (or your own env file). Despite the
-   name it is the live config this repo sources, not a sample to copy — edit it when the board moves.
+2. The `GHWF_*` config comes from the `env` block of `.claude/settings.json`; every Claude Code session has it. Edit it there when the board moves.
 3. Run `scripts/start_issue_flow.sh` to create and classify work and start coding branch.
 4. Run `scripts/finish_issue_flow.sh` to commit, push, create PR, and merge.
 5. Run `scripts/deploy.sh` only when the user explicitly asks to deploy.
 
 ## One-Time Setup
 
-- Set these environment variables before running scripts:
+- `.claude/settings.json` sets these for every session:
   - `GHWF_OWNER` (project owner login; this repo uses the organization `the-kind-robots`)
   - `GHWF_REPO` (`owner/repo`; `the-kind-robots/learning-app`)
   - `GHWF_PROJECT_NUMBER` (Project V2 number; this repo uses `11` for the org `Learning app` project)
@@ -39,7 +38,6 @@ gh auth refresh -s project
   - `GHWF_REVIEW_STATUS` (default: `In review` in this repo)
   - `GHWF_DONE_STATUS` (default: `Done`)
   - `GHWF_DEFAULT_BASE` (default: `master`)
-  - `GHWF_DEPLOY_CMD` (deploy command used by `scripts/deploy.sh`)
 
 ## Start Work
 
@@ -54,19 +52,11 @@ Run this when the user wants to create a new item and begin implementation.
   --status "In progress" \
   --assignees "@me" \
   --labels "enhancement,offline" \
-  --base master
-```
-
-When the branch is for a delegated executor rather than for the calling session, add `--no-checkout`:
-
-```bash
-.skills/gh-project-workflow/scripts/start_issue_flow.sh \
-  --title "Add offline start screen" \
-  --priority "High" \
-  --status "In progress" \
   --base master \
   --no-checkout
 ```
+
+`--no-checkout` is the default use here: the branch is for the background session that will work the issue, not for the main checkout.
 
 Important behavior:
 - Before creating anything, the script searches the configured project for an exact-title item and reuses it when found.
@@ -115,14 +105,10 @@ If the worktree contains unrelated local changes, prefer manual Git/PR steps ins
 Run only on explicit user request.
 
 ```bash
-.skills/gh-project-workflow/scripts/deploy.sh
+.skills/gh-project-workflow/scripts/deploy.sh --cmd "<deploy command>"
 ```
 
-Or override command:
-
-```bash
-.skills/gh-project-workflow/scripts/deploy.sh --cmd "./infra/deploy.sh staging"
-```
+No deploy command is configured; pass it with `--cmd`.
 
 ## Command-Approval Strategy
 
