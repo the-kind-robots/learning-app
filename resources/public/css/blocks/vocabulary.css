@@ -58,18 +58,25 @@ body:has(.vocabulary) #app {
   width: 100%;
 }
 
+/* The scroller spans the window, so its scrollbar stands at the window's
+   edge, between the shell bar and the search bar. The scrollbar's room is
+   kept on both edges whether it shows or not: the rows stay centred under
+   the footer, and do not jump sideways when a search makes the list fit. */
 .vocabulary__list {
   border-top: 1px solid rgb(0 0 0 / 0.08);
   flex: 1;
-  margin-inline: auto;
-  max-width: 600px;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   padding-bottom: 16px;
-  width: 100%;
+  scrollbar-gutter: stable both-edges;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+}
+
+.vocabulary__list > .word-list {
+  margin-inline: auto;
+  max-width: 600px;
 }
 
 .vocabulary__empty-state {
