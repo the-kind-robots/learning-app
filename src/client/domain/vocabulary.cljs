@@ -166,44 +166,27 @@
       (str/trim)))
 
 
-(defn translation-entry
-  "The one translation entry that `translation` makes, never split."
-  [translation]
-  {:lang "ru" :value (collapsed translation)})
-
-
 (defn new-phrase
   "A phrase shares the vocabulary namespace: the id is the value, so the same
    text is one entry whichever kind it is, and the kind can be corrected later
    without rebuilding the document."
-  [value translation]
+  [value translations]
   {:id          (vocab-id value)
    :kind        "phrase"
-   :translation [(translation-entry translation)]
+   :translation translations
    :value       (collapsed value)})
-
-
-(defn entered-translation
-  "The translation text as it is kept for an entry of `kind`: a phrase's text
-   is collapsed to single spaces, because its field is multi-line and the
-   line breaks are visual only."
-  [kind translation]
-  (cond-> translation
-    (= :phrase kind) collapsed))
 
 
 (defn entered-entry
   "The word, or the phrase when `kind` is `:phrase`, that `value` and `translation` make, created at `now`; nil
    when the translation gives no entry. `pos` is the picked suggestion's part of speech; a phrase keeps none."
   [kind value translation pos now]
-  (let [translation (entered-translation kind translation)]
-    (some-> (if (= :phrase kind)
-              (when-not (str/blank? translation)
-                (new-phrase value translation))
-              (when-let [entries (seq (parse-translations translation))]
-                (cond-> (new-word value (vec entries))
-                  pos (assoc :pos pos))))
-            (stamped now))))
+  (when-let [entries (not-empty (parse-translations translation))]
+    (stamped (if (= :phrase kind)
+               (new-phrase value entries)
+               (cond-> (new-word value entries)
+                 pos (assoc :pos pos)))
+             now)))
 
 
 (defn new-review
@@ -218,7 +201,7 @@
    reads them, modified at `now`."
   [word value translation now]
   (stamped
-   (if (= "phrase" (:kind word))
-     (assoc word :translation [(translation-entry translation)] :value (collapsed value))
-     (assoc word :translation (parse-translations translation) :value (str/trim value)))
+   (assoc word
+          :translation (parse-translations translation)
+          :value       (if (= "phrase" (:kind word)) (collapsed value) (str/trim value)))
    now))

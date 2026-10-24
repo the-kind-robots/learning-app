@@ -146,17 +146,17 @@
         (is (empty? (missing learner))))))))
 
 
-(deftest add-collapses-line-breaks-in-a-phrase
-  (async-testing "the multi-line field's breaks are visual only"
+(deftest add-keeps-one-translation-a-line-in-a-phrase
+  (async-testing "each line of a phrase's translation is a translation of its own"
     (with-test-dbs
      (^:async fn
       [dbs]
       (await (sut/add! (await (learner-of dbs {}))
                        time/world
                        "auf jeden Fall"
-                       "во всяком\n   случае"
+                       "во всяком случае\n   обязательно\n"
                        :phrase
                        nil))
       (let [entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
-        (is (= [{:lang "ru" :value "во всяком случае"}]
+        (is (= [{:lang "ru" :value "во всяком случае"} {:lang "ru" :value "обязательно"}]
                (:translation (first entries)))))))))

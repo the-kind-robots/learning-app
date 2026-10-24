@@ -39,9 +39,8 @@
    Resolves with `{:word-id :created?}` or `{:error :failure/empty-translations}`."
   ;; `kind` has no default: optional, `:static-fns` compiles call sites to an arity property a plain test stub lacks.
   [learner world value translation kind pos]
-  (let [now         (world/clock world :now-iso)
-        translation (domain/entered-translation kind translation)
-        entry       (domain/entered-entry kind value translation pos now)]
+  (let [now   (world/clock world :now-iso)
+        entry (domain/entered-entry kind value translation pos now)]
     (if-not entry
       {:error :failure/empty-translations}
       (let [collection (learner/active-collection learner)
@@ -118,10 +117,9 @@
    old word gone. A new word gets an initial review unless memory holds its history. Resolves with whether
    memory took the change."
   [learner world word-id value translation]
-  (let [kind        (if (phrase/phrase-value? value []) :phrase :word)
-        translation (domain/entered-translation kind translation)
-        entry       (domain/entered-entry kind (str/trim value) translation nil (world/clock world :now-iso))
-        _           (await (learner/fresh-memory learner))]
+  (let [kind  (if (phrase/phrase-value? value []) :phrase :word)
+        entry (domain/entered-entry kind (str/trim value) translation nil (world/clock world :now-iso))
+        _     (await (learner/fresh-memory learner))]
     (if (or (nil? entry) (nil? (learner/word learner word-id)))
       false
       (let [written (await (learner/change! learner

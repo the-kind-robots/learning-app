@@ -157,13 +157,22 @@
           :id          "vocab:auf jeden fall"
           :kind        "phrase"
           :modified-at "2026-02-02T00:00:00.000Z"
-          :translation [{:lang "ru" :value "в любом случае"}]
+          :translation [{:lang "ru" :value "в любом случае"} {:lang "ru" :value "обязательно"}]
           :value       "auf jeden Fall"}
          (sut/edited-word {:id "vocab:auf jeden fall" :kind "phrase" :translation [] :value "auf jeden fall"}
                           "auf  jeden\nFall"
-                          "в любом\nслучае"
+                          " в любом случае \n\nобязательно"
                           "2026-02-02T00:00:00.000Z"))
-      "a phrase collapses both texts to single spaces"))
+      "a phrase collapses its value to single spaces and keeps one translation a line"))
+
+
+(deftest a-phrase-added-keeps-one-translation-a-line
+  (is (= [{:lang "ru" :value "в любом случае"} {:lang "ru" :value "обязательно, точно"}]
+         (:translation (sut/entered-entry :phrase
+                                          "auf jeden Fall"
+                                          "в любом случае\n обязательно, точно \n"
+                                          nil
+                                          "2026-02-02T00:00:00.000Z")))))
 
 
 (deftest a-word-that-is-written-is-stamped-by-the-function-that-builds-it
