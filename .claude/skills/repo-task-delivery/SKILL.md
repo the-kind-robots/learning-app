@@ -50,18 +50,16 @@ In those cases, use the narrower workflow skill directly.
 2. Start GitHub tracking.
    - Use `gh-project-workflow` to create the issue/project item and branch.
    - First let `gh-project-workflow` search the configured project for an existing exact-title item or issue; reuse it instead of creating duplicates.
-   - This repo's active GitHub Project is the organization project `Learning app`, owner `the-kind-robots`, number `11`. The old user project (`u473t8` number `2`) is no longer the board of record.
-   - In this repo, prefer base branch `master`.
    - For bug reports, default category/type to bug-oriented values when the project supports them.
-   - Branches come from `gh issue develop <number> --checkout` and nothing else, so every branch is linked to its issue. A branch made with `git checkout -b` leaves the issue with no development link and drops out of every cleanup.
-   - The project board is the owner's window into the work; a status that lies is a process bug. Starting work moves the issue to **In progress** (`gh-project-workflow`'s `start_issue_flow.sh --status "In progress" --no-checkout`, or `gh project item-add` + `item-edit`). An issue filed but not started stays **Backlog**.
-   - Filing an issue is not done until it is on the board with a **Priority** (Urgent/High/Medium/Low — judge it, do not leave it empty) and its dependencies declared as native blocked-by relations (see AGENTS.md, Issues). Priority is the organization's native issue field, not a project field, so the workflow script sets it on the issue; the board shows it as a column. The DAG on the board is only as true as the edges filed with the work.
-   - Decide where the work happens: full-stand work happens in the main checkout; everything else is handed to the `executor` agent (`.claude/agents/executor.md`), which is isolated in a worktree by definition. AGENTS.md gives the test.
-   - Work that builds or reshapes a screen invokes `frontend-design` before its first artifact; AGENTS.md, "Design a screen before building it", gives the test.
+   - The branch rule, the Priority scale and the dependency edges: AGENTS.md (# Delivery, # Sessions and Worktrees, # Issues).
+   - A status that lies is a process bug. Starting work moves the issue to **In progress** (`start_issue_flow.sh --status "In progress" --no-checkout`, or `gh project item-add` + `item-edit`). An issue filed but not started stays **Backlog**.
+   - Filing an issue is not done until it is on the board with a Priority and its dependencies declared as native blocked-by relations.
+   - Decide where the work happens: full-stand work in the main checkout; everything else in a background session of its own (AGENTS.md, # Sessions and Worktrees).
+   - Work that builds or reshapes a screen: AGENTS.md, "Design a screen before building it".
 
 3. Decide whether this work needs an OpenSpec change, then start it if it does.
    - The test is verifiability, not topic. Name the behaviour this work alters that someone could check afterwards without reading the diff — a word that now syncs, a document shape a migration must produce, a screen that now answers differently. Can you name one? It needs an OpenSpec change. Cannot name one? It does not, and there is nothing to write down as a requirement.
-   - Repository process fails that test by construction: agent rules, hooks, skills, scripts, CI configuration, documentation about how work is delivered. Such work skips the rest of this step and all of step 6, and goes straight to implementation. Where a process rule needs writing down, it goes in `AGENTS.md`.
+   - Repository process fails that test by construction: agent rules, hooks, skills, scripts, CI configuration, documentation about how work is delivered. Such work opens no OpenSpec change — it skips the rest of this step and all of step 6, and goes straight to implementation. Where a process rule needs writing down, it goes in `AGENTS.md`.
    - Skipping OpenSpec never skips the issue, the branch, the guards or the PR. Those are unchanged on both sides of the test.
    - When the work does need a change: use `openspec-new-change` to create it and the first artifact, or `openspec-propose` to generate all artifacts in one step.
    - The change should describe the user-visible bug or feature outcome, not just an implementation detail.
@@ -78,13 +76,13 @@ In those cases, use the narrower workflow skill directly.
    - Run the relevant automated checks.
    - For UX or browser bugs, prefer a real browser validation pass, not only unit tests.
    - If the expected verification path depends on repo-owned tooling and that tooling is broken or flaky, fix the tooling first and record that fix in the current tracked work before trusting fallback verification.
-   - For Windows CDP/browser proof, run `learning_app_cdp.sh doctor` before debugging. If WSL interop is broken (`cmd.exe` exec format error or missing `WSLInterop` binfmt handler), tell the user to run `wsl --shutdown` from Windows and retry before treating the app as broken.
+   - For Windows CDP/browser proof: AGENTS.md, # Browser / PWA Verification.
    - For scripted Service Worker/PWA checks, prefer committed tests or purpose-built repo verifiers over ad-hoc CDP snippets.
    - For visual or layout-quality bugs, do not treat DOM shape, HTMX events, or end-state screenshots as sufficient by themselves.
    - When the question is whether UI is visually stable, anchored, centered correctly, or free of jumps, verify the actual rendered layout with precise visual instrumentation: frame-by-frame geometry, performance/layout traces, animation tooling, or an equivalent browser-level measurement.
-   - Be explicit about what was and was not proven. If you only proved the DOM state or swap path, say that you did not yet prove visual stability.
+   - If you only proved the DOM state or swap path, say that you did not yet prove visual stability.
    - Use `openspec-verify-change` when there is an OpenSpec change and it is implementation-complete.
-   - Run OpenSpec CLI commands plainly — `openspec ...`. Telemetry is off by configuration, not by a per-command prefix; see **OpenSpec Telemetry** below for the one-time setup and how to check it.
+   - Run OpenSpec CLI commands plainly — `openspec ...`. Telemetry is off by one-time per-machine setup: `openspec config set telemetry.enabled false`.
 
 6. Close the OpenSpec loop, when step 3 opened one.
    - Work that carries no OpenSpec change has nothing to close here; go to step 7.
@@ -109,7 +107,7 @@ In those cases, use the narrower workflow skill directly.
      - ```suggestion blocks may be applied verbatim.
      - The round ends with every thread either resolved-with-commit or answered-and-open; report the split to the owner.
    - Delete branches only after confirming the PR state is MERGED — a failed merge followed by unconditional cleanup deletes the branch and closes the PR unmerged, which has already happened once.
-   - Clean up as part of the merge, not later: switch back to `master` and pull, and delete the branch locally and on the remote; the executor's worktree is the harness's to remove. Left alone these pile up — 43 local and 28 remote branches had to be deleted by hand once.
+   - Clean up as part of the merge, not later: delete the branch locally and on the remote; the worktree is the harness's to remove.
 
 8. Reset task boundary after delivery.
    - After the issue is closed or the PR is merged, stop assuming follow-up repo work belongs to the same task.
@@ -118,14 +116,7 @@ In those cases, use the narrower workflow skill directly.
 
 ## Dirty Worktree Guardrail
 
-This repo often has unrelated local files in the worktree.
-
-When finishing a task:
-
-- do not blindly use a script that stages everything if unrelated changes are present
-- stage only the files related to the current issue/change
-- prefer manual `git add` / `git commit` / `gh pr create` / `gh pr merge` over all-in-one wrappers when the tree is dirty
-- do not run finish scripts that stage everything until OpenSpec sync/archive is already present in the same branch
+Stage only the files related to the current issue/change: `finish_issue_flow.sh --add <path>`, or plain `git add <path>`. Run the finish script only once OpenSpec sync/archive is already on the branch.
 
 ## Decision Rules
 
@@ -152,26 +143,6 @@ When finishing a task:
 - Do not archive OpenSpec after the feature PR is merged. Archive before PR merge so one PR contains implementation, spec updates, and archive.
 - Do not push archive commits directly to protected `master`; if late archive is unavoidable, create a separate PR and note the workflow miss.
 - Do not manufacture a requirement to satisfy `openspec validate`. "No deltas found" on work that changes product behaviour means the delta is missing; on repository process it means step 3 should not have created a change at all. When a change exists and genuinely alters no specs, `skip_specs: true` in its `.openspec.yaml` is the supported answer — never an invented requirement. That flag does not license opening a change for repository process work: such work still opens none.
-- Do not open an OpenSpec change for a hook, skill, script, rules file or CI edit. That is the ceremony #400 removed.
-
-## OpenSpec Telemetry
-
-OpenSpec CLI currently includes PostHog telemetry. Local inspection of the installed CLI shows it sends an anonymous `command_executed` event with command name, OpenSpec version, `surface=cli`, and `$ip=null`; it stores a random anonymous ID in `~/.config/openspec/config.json`. It does not send arguments, paths, or file content by design, but this repo should still avoid unsolicited telemetry.
-
-The mechanism is configuration, not a prefix on every command:
-
-```bash
-openspec config set telemetry.enabled false
-openspec config get telemetry.enabled   # must print: false
-```
-
-Since CLI 1.8.0 that one setting disables both the telemetry event and the outbound update check. Run OpenSpec commands plainly afterwards.
-
-Two things to know about where it lands. `openspec config` is global-scope only (`--scope` accepts nothing else), so the setting is written to `~/.config/openspec/config.json` — **per machine, not per repo**. The project's `openspec/config.yaml` cannot carry it: its schema accepts only `schema`, `context`, `rules`, `operations`, `store` and `githubCopilot`, and strips anything else silently, so a `telemetry:` key added there would look set and do nothing. Treat the command above as one-time setup on each machine and verify it with `config get` rather than assuming a fresh checkout inherited it.
-
-Where a machine cannot be configured, `DO_NOT_TRACK=true` (honoured since 1.13.1) or `OPENSPEC_TELEMETRY=0` still suppress both requests for a single invocation. They are the fallback, not the default.
-
-Treat PostHog flush/network errors as telemetry noise only when the OpenSpec command itself already succeeded.
 
 ## Output Expectations
 

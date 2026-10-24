@@ -24,8 +24,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 # `gh pr create` may name its source branch explicitly. Judge the branch the command
 # actually pushes from, not the one this hook's own working directory happens to be on:
-# the coordinating session and the agents it raises sit in the main checkout on `master`,
-# and under the coordinator rule that is the NORMAL configuration, so a HEAD-only test
+# the interactive session sits in the main checkout on `master`,
+# and that is the NORMAL configuration, so a HEAD-only test
 # refuses every correct invocation. Found while trying to open the pull request for #346.
 #
 # The invariant is unchanged — the branch must still look like `<number>-<slug>`. Only the

@@ -43,7 +43,7 @@ Failures in repo-owned verification tooling SHALL be repaired as part of the tra
 - **THEN** the repo-owned tooling is repaired rather than bypassed with alternate browser tooling
 
 ### Requirement: A branch for tracked work is linked to its issue
-Branches for tracked work SHALL be created with `gh issue develop <number>`, including when work is isolated in a worktree, and SHALL NOT come from `git checkout -b`, `git switch -c` or `git worktree add -b`. The coordinating session SHALL stay in the main checkout and delegate repository edits to the `executor` agent (`.claude/agents/executor.md`), whose definition carries the worktree isolation and the branch recipe; `AGENTS.md` SHALL point at it rather than restate them. Delegated edits from a background coordinator SHALL be launched with worktree isolation.
+Branches for tracked work SHALL be created with `gh issue develop <number>`, including when work is isolated in a worktree, and SHALL NOT come from `git checkout -b`, `git switch -c` or `git worktree add -b`.
 
 #### Scenario: Work is isolated in a worktree
 - **WHEN** a task needs a worktree
@@ -52,10 +52,6 @@ Branches for tracked work SHALL be created with `gh issue develop <number>`, inc
 #### Scenario: A branch has no issue
 - **WHEN** a branch exists that no issue points to
 - **THEN** it is treated as untracked work: an issue is created for it or the branch is removed
-
-#### Scenario: The coordinating session needs an edit
-- **WHEN** a coordinating session needs a repository edit
-- **THEN** it delegates to the `executor` agent and stays in the main checkout
 
 ### Requirement: Delivery ends with cleanup
 Closeout SHALL delete the delivered branch locally and on the remote and remove its worktree.

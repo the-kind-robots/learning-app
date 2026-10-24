@@ -1,7 +1,7 @@
 # repo-agent-infrastructure Specification
 
 ## Purpose
-Define the repository-owned infrastructure that coding agents work through: worktree placement, skill paths, the coordinator guard, the inbox that feeds the board, and the GitHub-invoked agent.
+Define the repository-owned infrastructure that coding agents work through: worktree placement, the inbox that feeds the board, and the GitHub-invoked agent.
 ## Requirements
 ### Requirement: Backend port is overridable via environment variable
 The backend server SHALL read its listening port from `LEARNING_APP_PORT` when set, falling back to 8083.
@@ -43,40 +43,6 @@ Agent infrastructure the repository's rules depend on (enforcement hooks, rules,
 #### Scenario: Local preferences
 - **WHEN** developer-specific agent files are created
 - **THEN** git ignores them
-
-### Requirement: Skill invocations use a path that resolves in a worktree
-Documented invocations of repository skills SHALL use a path present in every checkout, including worktrees (`.skills/...`), not one existing only in the main checkout.
-
-#### Scenario: A skill is invoked from a worktree
-- **WHEN** an agent follows a documented skill command in a worktree
-- **THEN** the path resolves and the script runs
-
-### Requirement: The coordinator rule is enforced, not only written
-A `PreToolUse` hook SHALL refuse repository edits by the coordinating session through the editor tools, with a refusal naming what to do instead. The same hook SHALL observe shell commands but only prompt on a statement that looks like a repository write, since a shell target is a guess; on the shell event it SHALL emit a prompt or nothing, never an explicit allow, so it cannot undercut another guard. Its list of shell write shapes SHALL be short and declared incomplete in the hook's comment, along with which signals are measured versus documented. Subagents, writes outside the repository (scratch, device files, home paths) and the untracked local settings override SHALL pass untouched, and the delivery sequence SHALL run without a refusal from it. When it cannot decide, it SHALL fall through to the normal permission flow.
-
-#### Scenario: The coordinating session edits the repository
-- **WHEN** the coordinating session edits a repository file on a branch with no issue number
-- **THEN** the call is refused, naming the workflow script and the executor
-
-#### Scenario: The executor edits in its worktree
-- **WHEN** a delegated agent edits in its worktree
-- **THEN** this hook does not refuse
-
-#### Scenario: The coordinating session edits inside an issue-branch worktree
-- **WHEN** the target's worktree is on an issue branch
-- **THEN** the call is put to the human, since the hook cannot separate this from full-stand work
-
-#### Scenario: Shell write into the repository
-- **WHEN** the coordinating session runs an in-place edit, copy, move or redirection to a repository path
-- **THEN** the call is put to the human, naming both ways out
-
-#### Scenario: Shell write outside the repository or unlisted shape
-- **WHEN** a statement writes to scratch or home paths, or reaches a repository file by a route not on the list
-- **THEN** nothing is emitted
-
-#### Scenario: The hook cannot decide
-- **WHEN** a dependency is missing or the target cannot be placed
-- **THEN** the call proceeds through the normal permission flow
 
 ### Requirement: Agent infrastructure names the repository's current coordinate
 Agent infrastructure spelling out an `owner/repo` coordinate (read-only allowlist, `gh` recipes, skill config defaults, guard refusal text) SHALL name the current one, because the allowlist matches exact strings. The project board's owner and number SHALL be left alone on a repository transfer, and archived changes SHALL be left as written.

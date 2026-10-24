@@ -73,30 +73,16 @@ For each note, in order:
 **1. Pull.** `pull` the list. Read the whole note body, not just the title — the title is what
 fits on a phone screen, the body is usually the actual report.
 
-**2. Decide what it is.** From `AGENTS.md` **# Issues**:
-
-- An issue exists only for work a pull request can close, a bug, or a decision worth
-  recording.
-- Findings, measurements and design notes are **comments on the existing issue** — never a new
-  issue.
-- Before filing, search open issues for an existing home. One issue may host several PRs.
-- If the note is not any of these — a reminder, a duplicate, something already fixed — nothing
-  is filed. It is still closed in step 4.
+**2. Decide what it is**, by `AGENTS.md` **# Issues**: new work, a finding on an existing
+issue, or nothing. If the note is none of these — a reminder, a duplicate, something already
+fixed — nothing is filed. It is still closed in step 4.
 
 Ask the user when a note is ambiguous. Guessing produces board noise, which is the failure
 this skill is meant to reduce, not cause.
 
 **3. File it.**
 
-New work, a bug, or a decision:
-
-```bash
-bash .claude/skills/gh-project-workflow/scripts/start_issue_flow.sh \
-  --title "..." --priority High --status "In progress" --base master --no-checkout
-```
-
-Never a raw `gh issue create`: a `PreToolUse` hook refuses it, because it makes an issue that
-is on no board, with no Status and no Priority — work nobody can see.
+New work, a bug, or a decision: the start command in `AGENTS.md` **# Delivery**.
 
 A finding on tracked work:
 
@@ -104,8 +90,7 @@ A finding on tracked work:
 gh issue comment <number> --body "..."
 ```
 
-Keep the wording neutral. The repository is public: no production facts in issues, comments or
-commits.
+Wording follows `AGENTS.md` **# Issues** (public repository, no production facts).
 
 **4. Close it at the source.**
 
