@@ -2,6 +2,7 @@ const { test, expect, memoryReady } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
 
 // GH-598: the word dialog writes the translations one to a line.
+// GH-630: a phrase's translation splits by line, as a word's does.
 
 const translations = (page) => page.getByLabel('Переводы, по одному на строку');
 
@@ -95,6 +96,32 @@ test.describe('Переводы слова', () => {
       const two = (await translations(page).boundingBox()).height;
       expect(two).toBeGreaterThan(one + 20);
       expect(two).toBeLessThan(one * 2 + 10);
+    });
+  });
+});
+
+test.describe('Переводы фразы', () => {
+  test('пользователь добавляет фразу с переводами на двух строках → в списке оба перевода', async ({ page }) => {
+    await test.step('Дано открыта главная', async () => {
+      await page.goto('/home');
+      await memoryReady(page);
+    });
+
+    await test.step('Когда он добавляет «auf jeden Fall» с переводами «в любом случае» и «обязательно» на двух строках', async () => {
+      await addWord(page, 'auf jeden Fall', 'в любом случае\nобязательно');
+    });
+
+    await test.step('Тогда в списке оба перевода, через « · »', async () => {
+      await page.goto('/words');
+      await expect(page.locator('.word-item')).toContainText('в любом случае · обязательно', { timeout: 20000 });
+    });
+
+    await test.step('Когда он открывает фразу', async () => {
+      await page.locator('.word-item__display', { hasText: 'auf jeden Fall' }).click();
+    });
+
+    await test.step('Тогда каждый перевод на своей строке', async () => {
+      await expect(translations(page)).toHaveValue('в любом случае\nобязательно');
     });
   });
 });
