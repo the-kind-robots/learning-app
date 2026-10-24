@@ -225,6 +225,13 @@
     [[:action/go-to-home]]))
 
 
+;; The lesson has none: `Escape` would end it.
+(nxr/register-action! :action/press-hotkey
+  (fn press-hotkey [state keystroke]
+    (when-let [actions (some-> (pages/table (:page/current state)) :hotkeys (apply [state]) (get keystroke))]
+      (into [[:effect/prevent-default]] actions))))
+
+
 ;;
 ;; Placeholder
 ;;
@@ -250,6 +257,16 @@
     (some-> (:replicant/dom-event dispatch-data) .-key)))
 
 
+(nxr/register-placeholder! :event.keyboard/keystroke
+  (fn [dispatch-data]
+    (when-let [^js event (:replicant/dom-event dispatch-data)]
+      (str (when (.-ctrlKey event) "Ctrl+")
+           (when (.-altKey event) "Alt+")
+           (when (.-shiftKey event) "Shift+")
+           (when (.-metaKey event) "Meta+")
+           (.-code event)))))
+
+
 (nxr/register-placeholder! :event.keyboard/ctrl?
   (fn [dispatch-data]
     (some-> (:replicant/dom-event dispatch-data) .-ctrlKey)))
@@ -263,11 +280,6 @@
 (nxr/register-placeholder! :event.keyboard/shift?
   (fn [dispatch-data]
     (some-> (:replicant/dom-event dispatch-data) .-shiftKey)))
-
-
-(nxr/register-placeholder! :event.keyboard/alt?
-  (fn [dispatch-data]
-    (some-> (:replicant/dom-event dispatch-data) .-altKey)))
 
 
 (nxr/register-placeholder! :event/self-click?
@@ -353,26 +365,24 @@
    #js {:capture true}))
 
 
-;; The keystroke's target is `body` when nothing has focus; the action decides whether the screen is home.
-(defn listen-for-lesson-hotkey!
-  "Hands every keydown on the document to `:action/start-lesson-if-alt-enter`."
+;; The keystroke's target is `body` when nothing has focus; the page table says what it does on the screen shown.
+(defn listen-for-hotkeys!
+  "Hands every keydown on the document to `:action/press-hotkey`."
   [dispatch]
   (js/document.addEventListener
    "keydown"
    (fn [event]
      (dispatch {:replicant/dom-event event}
-               [[:action/start-lesson-if-alt-enter
-                 {:alt? [:event.keyboard/alt?]
-                  :key  [:event.keyboard/key]}]]))))
+               [[:action/press-hotkey [:event.keyboard/keystroke]]]))))
 
 
 (defn start-rendering!
-  "Makes the app show: guards double clicks, listens for the lesson hotkey,
+  "Makes the app show: guards double clicks, listens for the hotkeys,
    and renders the state of `system` (`state`), now and on every change to it,
    once memory is loaded."
   [{:keys [capabilities] :as system} dispatch]
   (guard-double-clicks!)
-  (listen-for-lesson-hotkey! dispatch)
+  (listen-for-hotkeys! dispatch)
   ;; The load renders the slice the route entry computed from empty memory, then the refresh
   ;; renders from memory in the same task, so only the second paints over the splash.
   ;; The refresh is a microtask: a watch that saved would show the render watch the load's
