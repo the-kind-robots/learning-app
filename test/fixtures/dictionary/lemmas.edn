@@ -9,11 +9,15 @@
 ;; Two properties the specs depend on — do not break them casually:
 ;;
 ;;   - every prefix of "Fenster" (f, fe, fen, fens, fenst, fenste, fenster)
-;;     matches at least one surface form, so the list opens once and never
-;;     collapses mid-word: one clean open to measure;
+;;     matches at least one surface form, so the answer for each is never
+;;     empty: one clean open to measure;
 ;;   - "fenster" matches exactly two lemmas, which is how a spec tells this
 ;;     fixture apart from the shipped dictionary. Forget the environment
 ;;     variable and the suite fails loudly instead of quietly crawling.
+;;
+;;   - twelve "Zimmer…" lemmas: a prefix answers with ten at most, so typing on
+;;     past "zimmer" cuts the answer to one row, which the list must absorb
+;;     without shrinking (#584);
 ;;
 ;;   - "ruecken" is one lemma exactly, der Rücken, and it is outranked by its
 ;;     compound das Rückenmark; that is what lets a spec see an exact match
@@ -107,4 +111,77 @@
   :pos          "adverb"
   :rank         450
   :forms        []
-  :translations [{:lang "ru" :value "уже"}]}]
+  :translations [{:lang "ru" :value "уже"}]}
+ ;; Twelve lemmas under one prefix, more than the ten a prefix answers with:
+ ;; typing `zimmer` on shows a full list that a longer prefix cuts to one row (#584).
+ {:value        "die Zimmerpflanze"
+  :pos          "noun"
+  :rank         600
+  :forms        []
+  :translations [{:lang "ru" :value "комнатное растение"}]}
+
+ {:value        "die Zimmerdecke"
+  :pos          "noun"
+  :rank         599
+  :forms        []
+  :translations [{:lang "ru" :value "потолок"}]}
+
+ {:value        "die Zimmertür"
+  :pos          "noun"
+  :rank         598
+  :forms        []
+  :translations [{:lang "ru" :value "дверь комнаты"}]}
+
+ {:value        "der Zimmermann"
+  :pos          "noun"
+  :rank         597
+  :forms        []
+  :translations [{:lang "ru" :value "плотник"}]}
+
+ {:value        "die Zimmernummer"
+  :pos          "noun"
+  :rank         596
+  :forms        []
+  :translations [{:lang "ru" :value "номер комнаты"}]}
+
+ {:value        "der Zimmerservice"
+  :pos          "noun"
+  :rank         595
+  :forms        []
+  :translations [{:lang "ru" :value "обслуживание в номерах"}]}
+
+ {:value        "die Zimmertemperatur"
+  :pos          "noun"
+  :rank         594
+  :forms        []
+  :translations [{:lang "ru" :value "комнатная температура"}]}
+
+ {:value        "die Zimmerwand"
+  :pos          "noun"
+  :rank         593
+  :forms        []
+  :translations [{:lang "ru" :value "стена комнаты"}]}
+
+ {:value        "die Zimmermiete"
+  :pos          "noun"
+  :rank         592
+  :forms        []
+  :translations [{:lang "ru" :value "аренда комнаты"}]}
+
+ {:value        "die Zimmersuche"
+  :pos          "noun"
+  :rank         591
+  :forms        []
+  :translations [{:lang "ru" :value "поиск комнаты"}]}
+
+ {:value        "der Zimmerschlüssel"
+  :pos          "noun"
+  :rank         590
+  :forms        []
+  :translations [{:lang "ru" :value "ключ от комнаты"}]}
+
+ {:value        "der Zimmerbrand"
+  :pos          "noun"
+  :rank         589
+  :forms        []
+  :translations [{:lang "ru" :value "пожар в комнате"}]}]
