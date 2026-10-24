@@ -215,10 +215,10 @@
        nil
 
        (not vocabulary?)
-       [:div.vocabulary__list
+       [:div.vocabulary__list.vocabulary__list--empty
         [:ul.word-list
          {:id "word-list"}
-         [:li.word-list__empty.word-list__empty--no-words
+         [:li.word-list__empty
           (empty-state placeholder)]]]
 
        :else

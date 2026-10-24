@@ -122,21 +122,17 @@ body:has(.vocabulary) #app {
   display: block;
 }
 
-.vocabulary:has(.word-list__empty--no-words) .vocabulary__search-bar,
-.vocabulary:has(.word-list__empty--no-words) .vocabulary__footer {
-  display: none;
-}
-
-.vocabulary:has(.word-list__empty--no-words) {
+/* No words yet: no search bar or footer to reserve room for. */
+.vocabulary:has(> .vocabulary__list--empty) {
   padding-bottom: 0;
 }
 
-.vocabulary:has(.word-list__empty--no-words) .vocabulary__list {
+.vocabulary__list--empty {
   align-items: center;
   display: flex;
   justify-content: center;
 }
 
-.vocabulary:has(.word-list__empty--no-words) .vocabulary__list > * {
+.vocabulary__list--empty > * {
   width: 100%;
 }
