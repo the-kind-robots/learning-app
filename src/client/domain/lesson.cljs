@@ -1,6 +1,7 @@
 (ns domain.lesson
   (:require
    [clojure.string :as str]
+   [domain.examples :as domain-examples]
    [utils :as utils]))
 
 
@@ -70,7 +71,7 @@
    per word or phrase, and one example trial per word that has examples. A word with several examples takes
    the one with the smallest id, the same every time."
   [vocab examples]
-  (let [example-of (update-vals (group-by :word-id examples) #(first (sort-by :id %)))]
+  (let [example-of (update-vals (group-by :word-id examples) domain-examples/lesson-example)]
     (into
      ;; A word or a phrase becomes the trial its kind calls for. `:word-id` keeps its name: reviews and examples are stored under it.
      (mapv (fn [entry]

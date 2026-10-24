@@ -2,6 +2,8 @@
   (:require
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
+   [ports.examples-generator :as examples-generator]
+   [use-cases.examples :as examples]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -54,24 +56,51 @@
     (disconnect-sentinel! (:replicant/node dispatch-data))))
 
 
-(nxr/register-effect! :effect/update-word
-  (fn ^:async update-word
-    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ {:keys [id translation value]}]
+(nxr/register-effect! :effect/write-word
+  (fn ^:async write-word
+    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ {:keys [id renamed? translation value]}]
     (try
-      (await (vocabulary/update! learner world id value translation))
+      (await ((if renamed? vocabulary/rename! vocabulary/update!) learner world id value translation))
       (dispatch [[:effect/enter :action/refresh-page]])
       (catch js/Error err
-        (log/error :effect/update-word {:error (str err)})))))
+        (log/error :effect/write-word {:error (str err)})))))
 
 
-(nxr/register-effect! :effect/rename-word
-  (fn ^:async rename-word
-    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ {:keys [id translation value]}]
+(nxr/register-effect! :effect/replace-example
+  ;; One after another, then the dialog that waits for them closes, however they went.
+  (fn ^:async replace-example
+    [{{:keys [learner]} :capabilities :keys [dispatch]} _ replacements]
     (try
-      (await (vocabulary/rename! learner world id value translation))
-      (dispatch [[:effect/enter :action/refresh-page]])
+      (doseq [replacement replacements]
+        (when-not (await (examples/replace! learner replacement))
+          (log/error :effect/replace-example {:collection-id (:collection-id replacement)
+                                              :word-id       (:word-id replacement)})))
       (catch js/Error err
-        (log/error :effect/rename-word {:error (str err)})))))
+        (log/error :effect/replace-example {:error (str err)}))
+      (finally
+        (dispatch [[:action/close-word-edit]])))))
+
+
+;; The request that is out, to be aborted when the dialog closes.
+(defonce ^:private request (atom nil))
+
+
+(nxr/register-effect! :effect/abort-example-request
+  (fn abort-example-request [_ _]
+    (some-> ^js @request .abort)))
+
+
+(nxr/register-effect! :effect/request-another-example
+  ;; Asks for another example and hands the answer, or the failure, to the dialog.
+  (fn ^:async request-another-example
+    [{{:keys [examples-generator]} :capabilities :keys [dispatch]} _ {:keys [avoid subject word-id]}]
+    (let [controller (js/AbortController.)
+          _          (reset! request controller)
+          answer     (try
+                       (await (examples-generator/regenerate examples-generator subject avoid (.-signal controller)))
+                       (finally
+                         (reset! request nil)))]
+      (dispatch [[:action/example-arrived word-id answer]]))))
 
 
 (nxr/register-effect! :effect/delete-word

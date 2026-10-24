@@ -109,7 +109,7 @@ test.describe('Порядок слов в списке', () => {
 
     await test.step('Когда он правит перевод', async () => {
       await rows(page).first().getByRole('button').click();
-      await page.getByRole('textbox', { name: 'Перевод' }).fill('поезд, состав');
+      await page.getByRole('textbox', { name: 'Переводы, по одному на строку' }).fill('поезд, состав');
       await page.getByRole('button', { name: 'Сохранить' }).click();
     });
 

@@ -77,6 +77,30 @@ test.describe('Плитки тем', () => {
     });
   });
 
+  test('пользователь открывает темы → плитки раскрашены по порядку палитры, а вложенные берут цвет папки', async ({ page }) => {
+    await test.step('Дано темы «Kurs», «Kurs / Kapitel 1», «Kurs / Kapitel 2», «Grammatik / Konnektoren» и «Solo»', async () => {
+      await page.goto('/');
+      await seedCollections(page, course.concat([['solo', 'Solo', ['vocab:a']]]));
+    });
+
+    await test.step('Когда он открывает экран тем', async () => {
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    });
+
+    await test.step('Тогда плитки по порядку берут зелёный, голубой, оранжевый, розовый цвета палитры', async () => {
+      const accents = await page.locator('.masonry > .tile').evaluateAll((tiles) =>
+        tiles.map((tile) => getComputedStyle(tile).getPropertyValue('--accent').replace(/\s/g, '')));
+      // «Всё подряд», «Grammatik», «Kurs», «Solo»: owl, macaw, fox, starfish.
+      expect(accents).toEqual(['rgb(88,204,2)', 'rgb(28,176,246)', 'rgb(255,150,0)', 'rgb(255,134,208)']);
+    });
+
+    await test.step('Тогда строки папки «Kurs» читают её цвет', async () => {
+      const row = await page.getByRole('button', { name: 'Kapitel 1 2', exact: true })
+        .evaluate((el) => getComputedStyle(el).getPropertyValue('--accent').replace(/\s/g, ''));
+      expect(row).toBe('rgb(255,150,0)');
+    });
+  });
+
   test('пользователь ходит по темам с клавиатуры → доходит до каждой плитки, видит ✕ при фокусе и удаляет тему Enter', async ({ page }) => {
     const tile = page.getByRole('button', { name: 'Solo 1', exact: true });
     const close = page.getByRole('button', { name: 'Удалить набор «Solo»' });

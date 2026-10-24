@@ -1,6 +1,9 @@
 (ns domain.examples
-  "Which examples a read sees, and which pairs of entry and collection have
-   none. A lesson and the example backfill read the same rule.")
+  "Which examples a read sees, which of them a word shows, and which pairs of
+   entry and collection have none. A lesson, the word dialog and the example
+   backfill read the same rules."
+  (:require
+   [clojure.string :as str]))
 
 
 (defn visible-in
@@ -22,3 +25,16 @@
           collections)
     (when (empty? examples)
       [{:word entry}])))
+
+
+(defn lesson-example
+  "The one of `examples`, those of one word that a read sees, that a lesson asks and the word dialog shows:
+   the smallest id, the same every time. nil without examples."
+  [examples]
+  (first (sort-by :id examples)))
+
+
+(defn complete?
+  "Whether `example` has both its sentence and its translation, more than blanks."
+  [{:keys [translation value]}]
+  (not (or (str/blank? value) (str/blank? translation))))

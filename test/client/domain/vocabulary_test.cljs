@@ -4,7 +4,7 @@
    [domain.vocabulary :as sut]))
 
 
-(deftest a-translation-is-kept-as-it-was-typed
+(deftest a-line-is-a-translation-kept-as-it-was-typed
   (testing "punctuation belongs to the translation, not to a separator (GH-365)"
     (is (= [{:lang "ru" :value "без того, чтобы"}]
            (sut/parse-translations "без того, чтобы")))
@@ -14,12 +14,14 @@
            (sut/parse-translations "решать; решить")))
     (is (= [{:lang "ru" :value "и/или"}]
            (sut/parse-translations "и/или"))))
-  (testing "several lines are one translation"
-    (is (= [{:lang "ru" :value "пёс\nсобака"}]
+  (testing "every line is a translation"
+    (is (= [{:lang "ru" :value "пёс"} {:lang "ru" :value "собака"}]
            (sut/parse-translations "пёс\nсобака"))))
-  (testing "surrounding whitespace is dropped"
+  (testing "surrounding whitespace and blank lines are dropped"
     (is (= [{:lang "ru" :value "пёс"}]
-           (sut/parse-translations "  пёс  "))))
+           (sut/parse-translations "  пёс  ")))
+    (is (= [{:lang "ru" :value "пёс"} {:lang "ru" :value "собака"}]
+           (sut/parse-translations "\n пёс \r\n\n  \nсобака\n"))))
   (testing "nothing typed is no translation, so the add form can refuse it"
     (is (= [] (sut/parse-translations "")))
     (is (= [] (sut/parse-translations "   ")))

@@ -80,4 +80,25 @@ test.describe('Исправление написания слова', () => {
       await expect(page.getByRole('button', { name: 'Сохранить' })).toBeDisabled();
     });
   });
+
+  test('пользователь стирает слово → «Сохранить» недоступна', async ({ page }) => {
+    await test.step('Дано слово «Bahnhoff» в списке', async () => {
+      await page.goto('/home');
+      await memoryReady(page);
+      await addWord(page, 'Bahnhoff', 'вокзал');
+      await page.goto('/words');
+      await expect(rows(page)).toHaveCount(1, { timeout: 20000 });
+    });
+
+    await test.step('Когда он открывает слово и стирает его написание', async () => {
+      await openWord(page, 'Bahnhoff');
+      await page.getByLabel('Слово', { exact: true }).fill('');
+    });
+
+    await test.step('Тогда «Сохранить» неактивна, а после ввода слова снова активна', async () => {
+      await expect(page.getByRole('button', { name: 'Сохранить' })).toBeDisabled();
+      await page.getByLabel('Слово', { exact: true }).fill('Bahnhof');
+      await expect(page.getByRole('button', { name: 'Сохранить' })).toBeEnabled();
+    });
+  });
 });

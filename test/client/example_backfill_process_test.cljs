@@ -22,6 +22,7 @@
    [cljs.test :refer-macros [are deftest is use-fixtures]]
    [domain.vocabulary :as vocabulary]
    [ports.account :as account]
+   [ports.examples-generator :as examples-generator]
    [ports.learner :as learner]
    [ports.page :as page]
    [ports.world :as world]
@@ -170,20 +171,23 @@
      ticking
      {:capabilities
       {:world    world
-       :examples-generator (fn [subject ^js signal]
-                             (js/Promise.
-                              (fn [resolve reject]
-                                (.addEventListener signal "abort" #(resolve {:failure :failure/aborted}))
-                                (let [n (count @requests)]
-                                  (swap! requests
-                                         conj
-                                         {:at      (world/clock world :now-ms)
-                                          :subject subject
-                                          :reject  reject
-                                          :resolve resolve
-                                          :signal  signal})
-                                  (when-let [answered (some-> answer (apply [subject n]))]
-                                    (resolve answered))))))
+       :examples-generator (reify examples-generator/ExamplesGenerator
+                             (fetch [_ subject ^js signal]
+                               (js/Promise.
+                                (fn [resolve reject]
+                                  (.addEventListener signal "abort" #(resolve {:failure :failure/aborted}))
+                                  (let [n (count @requests)]
+                                    (swap! requests
+                                           conj
+                                           {:at      (world/clock world :now-ms)
+                                            :subject subject
+                                            :reject  reject
+                                            :resolve resolve
+                                            :signal  signal})
+                                    (when-let [answered (some-> answer (apply [subject n]))]
+                                      (resolve answered))))))
+                             (regenerate [_ _ _ _]
+                               (js/Promise.resolve {:failure :failure/network})))
        :page     (reify page/Page
                    (active? [_] (active?))
                    (yield [_] (browser/yield))
@@ -218,7 +222,7 @@
                                                            (:example example))
                                     :_rev
                                     "1-a")])
-                     (js/Promise.resolve true)))}
+                     (js/Promise.resolve {:id "example:stub"})))}
       :change! #(swap! store update :learner/memory memory/with-docs %)
       :hide! (fn [] (reset! visible false) (change-page!))
       :reads reads

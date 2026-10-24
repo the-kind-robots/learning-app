@@ -64,6 +64,8 @@
    document becomes the entity."
   {:entity/collection {:from-doc documents/doc->collection
                        :schema   documents/collection-schema}
+   :entity/example    {:from-doc documents/doc->example
+                       :schema   documents/example-schema}
    :entity/word       {:from-doc documents/doc->word
                        :schema   documents/vocab-schema}})
 
@@ -170,9 +172,9 @@
 
 
 (defn ^:async insert!
-  "Writes a new `entity` of `value`, and catches memory up. A review or a collection resolves with the entity
-   written. An example, `{:word-id :word :collection-id :example}`, is written under the id its content gives
-   it (`documents/example-doc`), one already held is kept, and it resolves whether user-db holds it afterwards."
+  "Writes a new `entity` of `value` and catches memory up; resolves with the entity written, its id included,
+   or for an example nil when user-db does not hold it afterwards. An example, `{:word-id :word :collection-id
+   :example}`, is written under the id its content gives it, and one already held is kept."
   [{:keys [databases] :as learner} entity value]
   (case entity
     :entity/collection (await (persist! learner documents/collection-schema value))
@@ -181,7 +183,8 @@
                              doc  (documents/example-doc word-id word collection-id example)
                              held (await (pouch/insert-all-if-absent databases documents/example-schema [doc]))]
                          (await (fresh-memory learner))
-                         (boolean (held (:_id doc))))))
+                         (when (held (:_id doc))
+                           (documents/entity doc)))))
 
 
 (defn on-change
