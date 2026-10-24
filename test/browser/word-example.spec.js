@@ -1,4 +1,5 @@
-const { test, expect, docsOfType } = require('./fixtures');
+const { test, expect, docsOfType, memoryReady } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
 const { BARE, EXAMPLES, SEEDED, THEMES, TRIP, card, openWord, seedWord } = require('./word-example.shared');
 
 // GH-598: the word dialog shows the example of every collection of the word on cards, each written in
@@ -390,6 +391,27 @@ test.describe('Примеры в окне слова', () => {
 
     await test.step('Тогда заголовок «Netflix / … / Folge 7»', async () => {
       await expect(page.getByRole('heading', { level: 3 })).toHaveText('Netflix / … / Folge 7');
+    });
+  });
+  test('пользователь открывает на компьютере фразу → поле фразы без полосы прокрутки и вмещает её целиком', async ({ page }) => {
+    await test.step('Дано окно компьютера и добавленная фраза', async () => {
+      await page.setViewportSize({ width: 1226, height: 1000 });
+      await page.goto('/home');
+      await memoryReady(page);
+      await addWord(page, 'auf jeden Fall', 'в любом случае');
+      await page.goto('/words');
+      await page.locator('.word-item').first().waitFor({ timeout: 20000 });
+    });
+
+    await test.step('Когда он открывает фразу', async () => {
+      await openWord(page, 'auf jeden Fall');
+    });
+
+    await test.step('Тогда текст фразы целиком в поле, полосы прокрутки нет', async () => {
+      const field = page.getByRole('dialog').getByLabel('Слово', { exact: true });
+      await expect(field).toHaveValue('auf jeden Fall');
+      const { scroll, client } = await field.evaluate((n) => ({ scroll: n.scrollHeight, client: n.clientHeight }));
+      expect(scroll).toBeLessThanOrEqual(client);
     });
   });
 });
