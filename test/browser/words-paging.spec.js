@@ -101,6 +101,48 @@ test.describe('Постраничный список слов', () => {
     });
   });
 
+  test('пользователь листает список на компьютере → полоса прокрутки у края окна, шапка и низ на месте, слова по центру', async ({ page }) => {
+    const search = page.getByPlaceholder('Поиск');
+    const start = page.getByRole('button', { name: 'НАЧАТЬ УРОК' });
+    const logo = page.getByRole('button', { name: /Sprecha/ });
+    const centre = (box) => box.x + box.width / 2;
+    let before;
+
+    await test.step('Дано 130 слов, открыт список', async () => {
+      await seedAndOpen(page);
+      before = [await logo.boundingBox(), await search.boundingBox(), await start.boundingBox()];
+    });
+
+    await test.step('Когда он листает колесом', async () => {
+      await rows(page).nth(2).hover();
+      await page.mouse.wheel(0, 600);
+      await expect.poll(() => listScrollTop(page)).toBeGreaterThan(0);
+    });
+
+    await test.step('Тогда шапка, поиск и кнопка там же', async () => {
+      expect([await logo.boundingBox(), await search.boundingBox(), await start.boundingBox()]).toEqual(before);
+    });
+
+    await test.step('Тогда прокручиваемая область доходит до края окна, как и низ', async () => {
+      const list = await page.locator('.vocabulary__list').boundingBox();
+      const footer = await page.getByRole('contentinfo').boundingBox();
+      expect(list.x + list.width).toBe(footer.x + footer.width);
+    });
+
+    await test.step('Тогда слова стоят по центру под поиском', async () => {
+      expect(centre(await rows(page).first().boundingBox())).toBeCloseTo(centre(await search.boundingBox()), 0);
+    });
+
+    await test.step('Когда поиск оставляет слов на один экран', async () => {
+      await search.fill('wort01');
+      await expect(rows(page)).toHaveCount(10);
+    });
+
+    await test.step('Тогда слова не сдвинулись вбок', async () => {
+      expect(centre(await rows(page).first().boundingBox())).toBeCloseTo(centre(await search.boundingBox()), 0);
+    });
+  });
+
   test('пользователь ищет слово после прокрутки → поиск начинается с первой страницы сверху', async ({ page }) => {
     await test.step('Дано список, прокрученный до второй страницы', async () => {
       await seedAndOpen(page);
