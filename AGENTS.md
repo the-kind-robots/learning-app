@@ -86,7 +86,7 @@ Always use `:reload` when requiring namespaces to pick up changes.
 - A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared.
 - Where to work is a dependency test, not a topic match. Name the shared thing the work needs — a live CouchDB, nginx routing, a migration over real data — and it stays in the main checkout. Cannot name one? It goes to the executor. Subsystems are examples, never the test: #351 was sent to the main checkout for touching the dictionary and needed nothing shared.
 - A worktree still proves browser behaviour on fixture data. It serves on `localhost`, a secure context, so OPFS, Web Locks, service workers and workers all run there; the browser tests' fixture dictionary is enough for anything that needs only one origin. Only the real data and the shared services stay behind — cold-start timing on the full dictionary, replication against a live CouchDB, nginx routing.
-- After a merge, run `.skills/gh-project-workflow/scripts/prune_worktrees.sh` (`finish_issue_flow.sh` does it; `--dry-run` previews). It removes merged worktrees and their branches.
+- Worktrees are the harness's: it removes them with their sessions. A merge deletes the branch.
 
 Measured 2026-10-18 on Claude Code 2.1.302; the editor boundary is a path-prefix check on your pinned root and belongs to the harness. `worktree.bgIsolation` is the owner's lever over it, not yours — it is set to `"none"` in `.claude/settings.local.json` (not tracked; the owner's local choice), which is why background sessions run in place in the main checkout. Re-measure after a CLI update.
 

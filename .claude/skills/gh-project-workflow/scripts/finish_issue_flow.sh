@@ -25,8 +25,8 @@ Options:
   --no-push                     Skip push
   --no-pr                       Skip PR creation
   --no-merge                    Skip merge
+  --add <path>                  Stage this path before committing (repeatable); without it, commit what is staged
   --keep-branch                 Do not delete branch on merge
-  --keep-worktrees              Do not prune merged worktrees after merge
   --help                        Show this help
 USAGE
 }
@@ -102,7 +102,7 @@ skip_push=0
 skip_pr=0
 skip_merge=0
 delete_branch=1
-prune=1
+add_paths=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -178,9 +178,9 @@ while [[ $# -gt 0 ]]; do
       delete_branch=0
       shift
       ;;
-    --keep-worktrees)
-      prune=0
-      shift
+    --add)
+      add_paths+=("$2")
+      shift 2
       ;;
     --help|-h)
       usage
@@ -210,7 +210,9 @@ if [[ -n "$issue_number" && -n "$repo" ]]; then
   issue_title="$(gh issue view "$issue_number" -R "$repo" --json title --jq '.title' 2>/dev/null || true)"
 fi
 
-git add -A
+if [[ "${#add_paths[@]}" -gt 0 ]]; then
+  git add -- "${add_paths[@]}"
+fi
 
 git diff --cached --quiet && die "No changes to commit"
 
@@ -309,9 +311,6 @@ fi
 pr_state="$(gh pr view "$pr_url" -R "$repo" --json state --jq '.state' 2>/dev/null || true)"
 if [[ "$pr_state" == "MERGED" ]]; then
   mark_issue_status_in_project "$owner" "$project_number" "$issue_number" "$status_field" "$done_status"
-  if [[ "$prune" -eq 1 ]]; then
-    "$(dirname "${BASH_SOURCE[0]}")/prune_worktrees.sh" --base "$base_branch" || echo "warn: worktree prune failed" >&2
-  fi
 fi
 
 echo "Commit Message: $commit_message"

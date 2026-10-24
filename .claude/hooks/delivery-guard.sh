@@ -138,8 +138,8 @@ or, when the issue already exists:
   gh issue develop <n> -R the-kind-robots/learning-app --checkout --base master
 
 From a <number>-<slug> branch \`gh pr create\` is allowed. To commit, push, open the PR and set Status in one step:
-  $FINISH --issue <n> --base master
-(with a dirty tree prefer manual git/gh steps — the finish script runs \`git add -A\`).
+  $FINISH --issue <n> --base master --add <path>
+(it stages only the paths named with --add).
 
 If the owner asked for the raw command, re-run it prefixed with DELIVERY_GUARD=off." ;;
       esac ;;

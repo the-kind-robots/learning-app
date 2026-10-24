@@ -89,16 +89,13 @@ Run this when coding is complete and user asks to wrap up.
 ```
 
 Important behavior:
-- Stages all changes, generates a commit message when not provided, commits, pushes branch.
+- Stages only the paths named with `--add <path>` (repeatable), never the whole tree; without `--add` it commits what is already staged. Generates a commit message when not provided, commits, pushes branch.
 - Creates PR if needed.
 - Merges PR (or falls back to enabling auto-merge when direct merge is blocked).
 - After a successful merge, attempts to set the GitHub Project `Status` field to `Done`.
 - When a PR is created and merge is not skipped, attempts to set project `Status` to `In review` before merging.
-- After a successful merge, attempts to set project `Status` to `Done`.
-- After a successful merge, runs `scripts/prune_worktrees.sh` (skip with `--keep-worktrees`). Run it alone after a plain `gh pr merge`; `--dry-run` previews. It removes `.claude/worktrees/*` whose PR is merged or whose commits are in `origin/<base>` and deletes their branches; keeps locked, current, tracked-changes, open-PR and unmerged ones, with the reason.
+- After a successful merge, attempts to set project `Status` to `Done`, and deletes the branch (`--keep-branch` keeps it). Worktrees are the harness's: it removes them with their sessions.
 - Successful finish changes the task boundary: later repo work should be treated as a new issue/branch by default unless it is obviously just archive/deploy/closeout cleanup for the just-finished task.
-
-If the worktree contains unrelated local changes, prefer manual Git/PR steps instead of staging everything through the wrapper script.
 
 ## Deploy
 
