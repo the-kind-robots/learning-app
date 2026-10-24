@@ -16,8 +16,8 @@
   left: 16px;
   margin-right: 17px;
   position: absolute;
-  top: 14px;
-  transform: scale(1.4);
+  top: 50%;
+  transform: translateY(-50%) scale(1.4);
   transform-origin: 50% 50%;
   vertical-align: middle;
   width: 14px;

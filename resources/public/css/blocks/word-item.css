@@ -25,6 +25,11 @@
   width: 100%;
 }
 
+/* Inside the row: the scrolling list clips whatever sticks out of it. */
+.word-item__display:focus-visible {
+  outline-offset: -2px;
+}
+
 @media (hover: hover) {
   .word-item__display:hover {
     background: rgb(var(--color-polar));
