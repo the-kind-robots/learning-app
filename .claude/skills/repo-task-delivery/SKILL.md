@@ -82,6 +82,7 @@ In those cases, use the narrower workflow skill directly.
    - When the question is whether UI is visually stable, anchored, centered correctly, or free of jumps, verify the actual rendered layout with precise visual instrumentation: frame-by-frame geometry, performance/layout traces, animation tooling, or an equivalent browser-level measurement.
    - If you only proved the DOM state or swap path, say that you did not yet prove visual stability.
    - Use `openspec-verify-change` when there is an OpenSpec change and it is implementation-complete.
+   - When the branch changes Clojure sources, run the `smell-reviewer` agent on the branch diff before opening the PR, and fix or answer each finding. "No findings" is not approval.
    - Run OpenSpec CLI commands plainly — `openspec ...`. Telemetry is off by one-time per-machine setup: `openspec config set telemetry.enabled false`.
 
 6. Close the OpenSpec loop, when step 3 opened one.
