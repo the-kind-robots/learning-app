@@ -137,7 +137,7 @@ test.describe('Постраничный список слов', () => {
 
     await test.step('Когда он правит перевод четвёртого слова и сохраняет', async () => {
       await rows(page).nth(3).getByRole('button').click();
-      await page.getByRole('textbox', { name: 'Перевод' }).fill('исправленный перевод');
+      await page.getByRole('textbox', { name: 'Переводы, по одному на строку' }).fill('исправленный перевод');
       await page.getByRole('button', { name: 'Сохранить' }).click();
     });
 
@@ -177,7 +177,7 @@ test.describe('Постраничный список слов', () => {
   // GH-439: rows used to clear `:words/editing` on their way in, which became a
   // dialog shutting itself once the sentinel started asking for pages.
   test('пользователь правит слово, пока подгружается страница → окно правки не закрывается', async ({ page }) => {
-    const translation = page.getByRole('textbox', { name: 'Перевод' });
+    const translation = page.getByRole('textbox', { name: 'Переводы, по одному на строку' });
 
     await test.step('Дано открытое окно правки с введённым переводом', async () => {
       await seedAndOpen(page);

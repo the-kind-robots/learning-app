@@ -16,6 +16,7 @@
    [client.support.time :as time]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is testing use-fixtures]]
+   [clojure.string :as str]
    [db :as db]
    [db.pouch :as pouch]
    [domain.examples :as examples]
@@ -455,13 +456,16 @@
             _ (await (db/insert (:user/db dbs) held))
             before (:_rev (await (db/get (:user/db dbs) (:_id held))))
             save!  (partial learner/insert! learner :entity/example)]
-        (is (true? (await (save! {:collection-id nil :example bellt :word "der Hund" :word-id "vocab:der hund"})))
-            "user-db holds the one held already")
-        (is (true? (await (save! {:collection-id "coll-tiere"
-                                  :example       {:structure [] :translation "Пёс спит." :value "Der Hund schläft."}
-                                  :word          "der Hund"
-                                  :word-id       "vocab:der hund"})))
-            "user-db holds the new one")
+        (is (= (:_id held)
+               (:id (await (save! {:collection-id nil :example bellt :word "der Hund" :word-id "vocab:der hund"}))))
+            "the one held already comes back with its id")
+        (is (str/starts-with?
+             (:id (await (save! {:collection-id "coll-tiere"
+                                 :example       {:structure [] :translation "Пёс спит." :value "Der Hund schläft."}
+                                 :word          "der Hund"
+                                 :word-id       "vocab:der hund"})))
+             "example:vocab:der hund:coll-tiere:")
+            "the new one comes back with its id")
         (is (= before (:_rev (await (db/get (:user/db dbs) (:_id held))))) "the one held already is kept")
         (is (= #{"Der Hund bellt." "Der Hund schläft."}
                (set (map :value (memory/examples-of (:learner/memory @store) ["vocab:der hund"])))))
@@ -470,7 +474,7 @@
 
 
 (deftest a-refused-example-is-not-held
-  (async-testing "the write of the example fails: the save resolves false"
+  (async-testing "the write of the example fails: the save resolves nil"
     (with-learner
      [hund]
      (^:async fn
@@ -479,7 +483,7 @@
             real    pouch/insert-all-if-absent]
         (set! pouch/insert-all-if-absent (fn [& _] (js/Promise.resolve #{})))
         (try
-          (is (false? (await (learner/insert! learner :entity/example example))))
+          (is (nil? (await (learner/insert! learner :entity/example example))))
           (finally
            (set! pouch/insert-all-if-absent real))))))))
 

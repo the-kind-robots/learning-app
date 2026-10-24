@@ -56,10 +56,11 @@
   "The box carries the colour and the states; the button inside it fills the
    box and takes the tap. The close button is that button's sibling, because
    a button holds no button."
-  [{:keys [key active? editing? deletable?] :as tile}]
+  [{:keys [accent key active? editing? deletable?] :as tile}]
   [:div.tile
    {:replicant/key key
-    :class [(when active? "tile--active")
+    :class [(str "tile--" (name accent))
+            (when active? "tile--active")
             (when editing? "tile--editing")]}
    [:button.tile__target (target-attrs tile)
     (name-and-count tile)]
@@ -98,9 +99,10 @@
 
 
 (defn- folder-tile
-  [{:keys [key head rows]}]
+  [{:keys [accent key head rows]}]
   [:div.tile.tile--folder
-   {:replicant/key key}
+   {:replicant/key key
+    :class         (str "tile--" (name accent))}
    (folder-head head)
    [:ul.tile__rows
     (for [row rows] (folder-row row))]])

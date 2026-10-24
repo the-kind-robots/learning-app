@@ -93,6 +93,16 @@
          (some? (learner/word learner id)))))
 
 
+(defn editable-word
+  "What the edit dialog starts from for the word `word-id`: `{:phrase? :word :translations}`, the translations
+   as the lines of their field. nil when the learner has no such word."
+  [learner word-id]
+  (when-let [word (learner/word learner word-id)]
+    {:phrase?      (phrase/phrase? word)
+     :translations (domain/russian-translations word)
+     :word         (:value word)}))
+
+
 (defn ^:async update!
   "Edits the word `word-id` in place: its `value` (the same vocab id, spelled differently) and `translation`.
    Resolves with whether memory took the change."

@@ -6,6 +6,7 @@
    [abort]
    [lambdaisland.glogi :as log]
    [ports.account :as account]
+   [ports.examples-generator :as examples-generator]
    [ports.learner :as learner]
    [ports.page :as page]
    [ports.world :as world]
@@ -123,7 +124,7 @@
                                   (.abort request)))]
     (reset! controller request)
     (try
-      (let [response (await (examples-generator subject (.-signal request)))]
+      (let [response (await (examples-generator/fetch examples-generator subject (.-signal request)))]
         (cond-> response
           (and @timed-out? (= :failure/aborted (:failure response))) (assoc :failure :failure/timeout)))
       (finally
