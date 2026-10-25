@@ -387,6 +387,35 @@
             "`auf` is there, `jeden` and `Fall` are not")))))
 
 
+(deftest a-verb-left-before-the-preposition-of-its-phrase-is-rejected
+  (testing "the infinitive or participle closes the clause, after the phrase's preposition"
+    (with-redefs [dictionary/lookup-dictionary-entries (fn [form]
+                                                         (when (= "nehmen" form)
+                                                           [{:pos "verb" :value "nehmen"}]))
+                  dictionary/lemma-ids (constantly #{})]
+      (are [issue target value verb-form]
+       (= issue
+          (:issue (#'sut/example-issue
+                   target
+                   {}
+                   nil
+                   #{}
+                   {:value       value
+                    :translation "Она сослалась на новое исследование."
+                    :structure   [{:usedForm       verb-form
+                                   :dictionaryForm "nehmen"
+                                   :translation    "брать"}
+                                  {:usedForm       "Studie"
+                                   :dictionaryForm "die Studie"
+                                   :translation    "исследование"}]})))
+       :verb-outside-bracket "Bezug nehmen auf" "Sie hat Bezug genommen auf die neue Studie." "genommen"
+       :verb-outside-bracket "Bezug nehmen auf" "Man sollte Bezug nehmen auf die neue Studie." "nehmen"
+       :verb-outside-bracket "Bezug nehmen auf" "Ohne Bezug zu nehmen auf die Studie, sprach sie weiter." "nehmen"
+       nil "Bezug nehmen auf" "Sie hat auf die neue Studie Bezug genommen." "genommen"
+       nil "Bezug nehmen auf" "Sie nimmt Bezug auf die neue Studie."        "nimmt"
+       nil "Bezug nehmen auf" "Sie wollte Bezug nehmen, auf die Studie aber nicht." "nehmen"))))
+
+
 (deftest an-article-pair-target-passes-on-the-sentence-when-structure-cannot-name-it
   (testing "`das heißt` is a construction the shape rule reads as an article pair"
     (let [example {:value       "Es regnet, das heißt, wir bleiben zu Hause."

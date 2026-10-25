@@ -357,6 +357,8 @@
    "The German sentence is outside the accepted length. See `details` for the number of words it must contain."
    :wrong-part-of-speech
    "The target is used as a different part of speech. `partOfSpeech` names the one required. A word spelled the same way of another part of speech (here e.g. `der Rauch` for the adjective `rauch`) is a different word and does not count."
+   :verb-outside-bracket
+   "The verb bracket decides word order, not the order of `word`. In a main clause the infinitive, participle or detached prefix closes the clause, and every object and prepositional phrase, the phrase's own preposition included, stands before it: `Anteil nehmen an` becomes `Sie hat großen Anteil an seinem Schicksal genommen.`, never `Sie hat großen Anteil genommen an seinem Schicksal.` The finite verb closes a subordinate clause the same way, and a `zu`-infinitive its infinitive clause."
    :target-lemma-missing
    "The sentence must contain the whole target: a single lemma as the word itself or any form of its lemma as a separate word of the sentence, and a multi-word target with every one of its words present, inflected as the sentence needs, in any tense, voice or word order. A placeholder (`etwas`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot the sentence fills with anything that fits, and an article may be any article."})
 
@@ -473,6 +475,45 @@
                    (split-sentence-words target)))))))
 
 
+(defn- verb-outside-bracket?
+  "Whether a target that ends in a verb and its preposition (`Bezug nehmen
+   auf`) has the verb's infinitive or participle right before that
+   preposition, as `word` lists it: `Sie hat Bezug genommen auf die Studie.`"
+  [target {:keys [structure value]}]
+  (let [[verb preposition] (take-last 2 (split-sentence-words target))
+        ;; Each preposition with the contractions the sentence may write it as.
+        spellings  (get {"an"    #{"an" "am" "ans"}
+                         "auf"   #{"auf" "aufs"}
+                         "aus"   #{"aus"}
+                         "bei"   #{"bei" "beim"}
+                         "für"   #{"für" "fürs"}
+                         "gegen" #{"gegen"}
+                         "in"    #{"in" "im" "ins"}
+                         "mit"   #{"mit"}
+                         "nach"  #{"nach"}
+                         "über"  #{"über" "übers"}
+                         "um"    #{"um" "ums"}
+                         "unter" #{"unter"}
+                         "von"   #{"von" "vom"}
+                         "vor"   #{"vor" "vorm"}
+                         "zu"    #{"zu" "zum" "zur"}}
+                        (str/lower-case preposition))
+        non-finite (->> structure
+                        (filter #(dictionary/same-lemma? verb (:dictionaryForm %)))
+                        (map (comp normalize-text :usedForm))
+                        (filter #(or (str/starts-with? % "ge") (str/ends-with? % "en")))
+                        (into #{(normalize-text verb)}))]
+    (boolean
+     (and spellings
+          (some #(and (= "verb" (:pos %)) (dictionary/same-lemma? verb (:value %)))
+                (dictionary/lookup-dictionary-entries verb))
+          (some (fn [[word next-word]]
+                  (and (non-finite (normalize-text (strip-word-edges word)))
+                       (= word (str/replace word #"\P{L}+$" ""))
+                       (spellings (normalize-text (strip-word-edges next-word)))))
+                (partition 2 1 (split-sentence-words value)))))))
+
+
 (def ^:private compatible-pos
   "The parts of speech a picked one lets through: a participle is an adjective
    and a verb at once, so `explodierte Bombe` named as `explodieren` is right
@@ -521,6 +562,10 @@
 
       (not (target-present? lemma-ids target (:value indexed) (:structure indexed)))
       {:issue :target-lemma-missing}
+
+      (and (several-words? target)
+           (verb-outside-bracket? target indexed))
+      {:issue :verb-outside-bracket}
 
       (and pos
            (not (several-words? target))
@@ -572,6 +617,7 @@
     "- Leave room around the target: roughly the target's own length plus a handful of words, and at least three words in all."
     "- Use the target in whatever form the sentence needs — participle, finite verb, passive, plural. Do not keep a verb in the infinitive just to match `word`."
     "- A phrase may change voice and word order: `einen Skonto gewähren` becomes `Ein Skonto wird gewährt.`"
+    "- The verb bracket decides word order, not the order of `word`. In a main clause the infinitive, participle or detached prefix closes the clause, and every object and prepositional phrase, the phrase's own preposition included, stands before it: `Anteil nehmen an` becomes `Sie hat großen Anteil an seinem Schicksal genommen.`, never `Sie hat großen Anteil genommen an seinem Schicksal.` The finite verb closes a subordinate clause the same way, and a `zu`-infinitive its infinitive clause."
     "- For past events in everyday speech use Perfekt; Präteritum only for `sein`, `haben`, modal verbs and narrative."
     "- `construction` is the grammar to build the sentence around. Follow it when it fits the word naturally; otherwise pick another natural construction. One main clause plus at most one subordinate clause or connector — never stack more."
     "- German sentence only: no labels, notes, markdown, or meta commentary."
@@ -617,6 +663,9 @@
     "Phrase, passive. word=einen Skonto gewähren gloss=предоставлять скидку:"
     "{\"value\":\"Bei Zahlung innerhalb von zehn Tagen wird ein Skonto von 2 % gewährt.\",\"translation\":\"При оплате в течение десяти дней предоставляется скидка 2 %.\",\"structure\":[{\"usedForm\":\"Zahlung\",\"dictionaryForm\":\"die Zahlung\",\"translation\":\"оплата\"},{\"usedForm\":\"Tagen\",\"dictionaryForm\":\"der Tag\",\"translation\":\"день\"},{\"usedForm\":\"wird\",\"dictionaryForm\":\"werden\",\"translation\":\"становиться\"},{\"usedForm\":\"Skonto\",\"dictionaryForm\":\"der Skonto\",\"translation\":\"скидка\"},{\"usedForm\":\"gewährt\",\"dictionaryForm\":\"gewähren\",\"translation\":\"предоставлять\"}]}"
     "The phrase changed voice and word order, and it is in the sentence, not in `structure`: `Bei`, `innerhalb`, `von` and `ein` are excluded as prepositions and articles, and `zehn` and `2 %` are figures, not words to annotate."
+    "Phrase with a verb and its preposition, Perfekt. word=Anteil nehmen an gloss=сочувствовать:"
+    "{\"value\":\"Die Nachbarn haben großen Anteil an seinem Schicksal genommen.\",\"translation\":\"Соседи глубоко сочувствовали его судьбе.\",\"structure\":[{\"usedForm\":\"Nachbarn\",\"dictionaryForm\":\"der Nachbar\",\"translation\":\"сосед\"},{\"usedForm\":\"haben\",\"dictionaryForm\":\"haben\",\"translation\":\"иметь\"},{\"usedForm\":\"großen\",\"dictionaryForm\":\"groß\",\"translation\":\"большой\"},{\"usedForm\":\"Anteil\",\"dictionaryForm\":\"der Anteil\",\"translation\":\"участие\"},{\"usedForm\":\"Schicksal\",\"dictionaryForm\":\"das Schicksal\",\"translation\":\"судьба\"},{\"usedForm\":\"genommen\",\"dictionaryForm\":\"nehmen\",\"translation\":\"брать\"}]}"
+    "The participle `genommen` closes the clause; `an seinem Schicksal` stands before it although `an` comes last in `word`."
     "Phrase. word=von Zeit zu Zeit gloss=время от времени:"
     "{\"value\":\"Von Zeit zu Zeit besuche ich meine Eltern.\",\"translation\":\"Время от времени я навещаю своих родителей.\",\"structure\":[{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"die Zeit\",\"translation\":\"время\"},{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"die Zeit\",\"translation\":\"время\"},{\"usedForm\":\"besuche\",\"dictionaryForm\":\"besuchen\",\"translation\":\"навещать\"},{\"usedForm\":\"Eltern\",\"dictionaryForm\":\"die Eltern\",\"translation\":\"родители\"}]}"
     "The phrase is in the sentence, not in `structure`: `von` and `zu` are excluded as prepositions, and each `Zeit` is annotated as the noun it is."]))
