@@ -15,7 +15,7 @@
 ;; The engine (db.*, db-migrations) is reached only by adapters.*; its regexes
 ;; are listed twice, in `engine` and in `above-adapters`: keep both in step.
 ;; Use cases do not schedule work (browser, abort); only views require
-;; presenters. The bare `db` is lib/db, the raw Pouch/Couch client, which the
+;; presenters; actions and effects reach the domain through use cases. The bare `db` is lib/db, the raw Pouch/Couch client, which the
 ;; backend shares; so it is barred from the client's logic layers by name
 ;; (`client-logic`), not from every namespace. `above-adapters` is
 ;; default-deny: every client namespace is in it except the explicit
@@ -31,13 +31,16 @@
              {:name client-logic :pattern "^(application(\\..*)?|use-cases\\..*|pages\\..*|domain\\..*|ports\\..*)$"}
              {:name use-cases :pattern "^use-cases\\..*$"}
              {:name scheduling :pattern "^(browser|abort)$"}
-             {:name presenter-free :pattern "^(use-cases\\..*|.*\\.actions|.*\\.effects)$"}]
+             {:name presenter-free :pattern "^(use-cases\\..*|.*\\.actions|.*\\.effects)$"}
+             {:name domain :pattern "^domain\\..*$"}
+             {:name actions-and-effects :pattern "^.*\\.(actions|effects)$"}]
 
  :config-in-ns
  {above-adapters      {:linters {:discouraged-namespace {engine {:message "Only adapters and the engine require the engine"}}}}
   outside-ports       {:linters {:discouraged-namespace {adapters {:message "Only ports require adapters"}}}}
   client-logic        {:linters {:discouraged-namespace {engine-lib {:message "The raw database client is for adapters and the engine"}}}}
   use-cases           {:linters {:discouraged-namespace {scheduling {:message "A use case decides; how work is scheduled is an adapter's"}}}}
-  presenter-free      {:linters {:discouraged-namespace {presenters {:message "A presenter is for the view only"}}}}}
+  presenter-free      {:linters {:discouraged-namespace {presenters {:message "A presenter is for the view only"}}}}
+  actions-and-effects {:linters {:discouraged-namespace {domain {:message "Actions and effects reach the domain through use cases"}}}}}
 
  :linters {:discouraged-namespace {:level :error}}}

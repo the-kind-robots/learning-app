@@ -72,12 +72,11 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [learner (await (learner-of dbs {}))
-            {:keys [word-id created?]} (await (sut/add! learner time/world
-                                                        "Entschuldigung, dass ich zu spät komme"
-                                                        "Извини, что я опоздал."
-                                                        :phrase
-                                                        nil))
+      (let [learner        (await (learner-of dbs {}))
+            {:keys [word-id created?]} (await (sut/add! learner
+                                                        time/world
+                                                        {:translation "Извини, что я опоздал."
+                                                         :value       "Entschuldigung, dass ich zu spät komme"}))
             [entry & more] (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
             reviews        (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (is (true? created?))
@@ -94,10 +93,10 @@
      (^:async fn
       [dbs]
       (let [learner (await (learner-of dbs
-                                                   {:active-id        "collection-1"
-                                                    :existing-example {:id "example-1"}}))]
-        (await (sut/add! learner time/world "auf jeden Fall" "во всяком случае" :phrase nil))
-        (await (sut/add! learner time/world "auf jeden Fall" "обязательно" :phrase nil))
+                                       {:active-id        "collection-1"
+                                        :existing-example {:id "example-1"}}))]
+        (await (sut/add! learner time/world {:translation "во всяком случае" :value "auf jeden Fall"}))
+        (await (sut/add! learner time/world {:translation "обязательно" :value "auf jeden Fall"}))
         (is (empty? (missing learner)) "the collection has its example already"))))))
 
 
@@ -107,8 +106,11 @@
      (^:async fn
       [dbs]
       (let [learner (await (learner-of dbs {}))]
-        (await (sut/add! learner time/world "auf jeden Fall" "во всяком случае" :phrase nil))
-        (let [{:keys [created?]} (await (sut/add! learner time/world "Auf jeden Fall" "обязательно, точно" :phrase nil))
+        (await (sut/add! learner time/world {:translation "во всяком случае" :value "auf jeden Fall"}))
+        (let [{:keys [created?]} (await (sut/add! learner
+                                                  time/world
+                                                  {:translation "обязательно, точно"
+                                                   :value       "Auf jeden Fall"}))
               entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
           (is (false? created?))
           (is (= 1 (count entries)))
@@ -124,8 +126,11 @@
      (^:async fn
       [dbs]
       (let [learner (await (learner-of dbs {}))]
-        (await (sut/add! learner time/world "Guten Morgen" "доброе утро" :word nil))
-        (let [{:keys [created?]} (await (sut/add! learner time/world "guten Morgen" "доброго утра" :phrase nil))
+        ;; The dictionary gives `Guten Morgen` as a noun: a word, for all its space.
+        (await (sut/add! learner time/world {:pos "noun" :translation "доброе утро" :value "Guten Morgen"}))
+        (let [{:keys [created?]}
+              (await
+               (sut/add! learner time/world {:translation "доброго утра" :value "guten Morgen"}))
               entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
           (is (false? created?))
           (is (= 1 (count entries)))
@@ -141,7 +146,7 @@
      (^:async fn
       [dbs]
       (let [learner (await (learner-of dbs {}))
-            result  (await (sut/add! learner time/world "auf jeden Fall" "   " :phrase nil))]
+            result  (await (sut/add! learner time/world {:translation "   " :value "auf jeden Fall"}))]
         (is (= {:error :failure/empty-translations} result))
         (is (empty? (missing learner))))))))
 
@@ -153,10 +158,8 @@
       [dbs]
       (await (sut/add! (await (learner-of dbs {}))
                        time/world
-                       "auf jeden Fall"
-                       "во всяком случае\n   обязательно\n"
-                       :phrase
-                       nil))
+                       {:translation "во всяком случае\n   обязательно\n"
+                        :value       "auf jeden Fall"}))
       (let [entries (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))]
         (is (= [{:lang "ru" :value "во всяком случае"} {:lang "ru" :value "обязательно"}]
                (:translation (first entries)))))))))

@@ -134,11 +134,12 @@
        (await (db/insert (:user/db dbs) (assoc hund :_rev "1-a" :value "der Dackel")))
        (is (= "der Pudel" (:value (await (db/get (:user/db dbs) "vocab:der hund")))))
        (await
-        (test-learner/with-learner dbs
-                              (^:async fn
-                               [{:keys [learner]}]
-                               (await (learner/change! learner [[:entity/word "vocab:der hund" #(update % :value str "!")]]))
-                               (is (= "der Pudel!" (:value (await (db/get (:user/db dbs) "vocab:der hund")))))))))))))
+        (test-learner/with-learner
+         dbs
+         (^:async fn
+          [{:keys [learner]}]
+          (await (learner/change! learner [[:entity/word "vocab:der hund" #(update % :value str "!")]]))
+          (is (= "der Pudel!" (:value (await (db/get (:user/db dbs) "vocab:der hund")))))))))))))
 
 
 (def ^:private tiere
@@ -154,9 +155,9 @@
       (let [scoped (active learner "coll-tiere")
             stored (fn ^:async f [] (await (db/get (:user/db dbs) "coll-tiere")))
             rev-1  (:_rev (await (stored)))]
-        (await (vocabulary/add! scoped time/world "der Hund" "пёс" :word nil))
+        (await (vocabulary/add! scoped time/world {:translation "пёс" :value "der Hund"}))
         (is (= rev-1 (:_rev (await (stored)))) "a word the collection lists is not written again")
-        (await (vocabulary/add! scoped time/world "die Katze" "кошка" :word nil))
+        (await (vocabulary/add! scoped time/world {:translation "кошка" :value "die Katze"}))
         (is (= ["vocab:der hund" "vocab:die katze"] (:word-ids (await (stored)))))
         (is (= ["coll-tiere"] (map :id (learner/collections-of learner "vocab:die katze")))
             "memory answers which collections name a word")
@@ -183,7 +184,7 @@
         (await (collections/rename-active! scoped time/world "Haustiere"))
         (let [renamed-at (:renamed-at (await (stored)))]
           (is (some? renamed-at))
-          (await (vocabulary/add! scoped time/world "die Katze" "кошка" :word nil))
+          (await (vocabulary/add! scoped time/world {:translation "кошка" :value "die Katze"}))
           (is (= renamed-at (:renamed-at (await (stored)))))))))))
 
 
@@ -242,8 +243,8 @@
       [{:keys [dbs learner store]}]
       (await (vocabulary/delete! (active learner nil) "vocab:der hund"))
       (let [no-collection (test-learner/with-active-collection learner (constantly nil))
-            {:keys [created?]} (await (vocabulary/add! no-collection time/world "der Hund" "пёс" :word nil))
-            memory       (:learner/memory @store)]
+            {:keys [created?]} (await (vocabulary/add! no-collection time/world {:translation "пёс" :value "der Hund"}))
+            memory        (:learner/memory @store)]
         (is (true? created?))
         (is (= ["review-1"] (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review"))))
             "no initial review is written")
@@ -282,7 +283,7 @@
       [{:keys [dbs learner]}]
       (let [stored (await (db/get (:user/db dbs) "vocab:der hund"))]
         (await (db/insert (:user/db dbs) (update stored :translation conj {:lang "ru" :value "собака"}))))
-      (let [added (await (vocabulary/add! (active learner nil) time/world "der Hund" "дворняга" :word nil))]
+      (let [added (await (vocabulary/add! (active learner nil) time/world {:translation "дворняга" :value "der Hund"}))]
         (is (false? (:created? added)))
         (is (= ["пёс" "собака" "дворняга"]
                (mapv :value (:translation (await (db/get (:user/db dbs) "vocab:der hund")))))))))))
@@ -297,7 +298,8 @@
        (await (db/insert (:user/db dbs) hund))
        (await (db/insert (:user/db dbs) review))
        (await
-        (test-learner/with-learner dbs (fn [{:keys [learner]}] (vocabulary/delete! (active learner nil) "vocab:der hund"))))
+        (test-learner/with-learner dbs
+                                   (fn [{:keys [learner]}] (vocabulary/delete! (active learner nil) "vocab:der hund"))))
        ;; Another device made the word again, with a review, and a pull
        ;; brought both.
        (await (db/insert (:user/db dbs) (dissoc hund :_rev)))
@@ -494,10 +496,10 @@
      []
      (^:async fn
       [{:keys [learner]}]
-      (let [calls  (atom 0)
-            stop   (learner/on-change learner #(swap! calls inc))]
+      (let [calls (atom 0)
+            stop  (learner/on-change learner #(swap! calls inc))]
         (is (= :status/loaded (learner/status learner)))
-        (await (vocabulary/add! (active learner nil) time/world "Igel" "ёж" :word nil))
+        (await (vocabulary/add! (active learner nil) time/world {:translation "ёж" :value "Igel"}))
         (is (pos? @calls) "memory moved")
         (let [seen @calls]
           (stop)

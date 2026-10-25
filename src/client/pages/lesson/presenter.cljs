@@ -1,15 +1,15 @@
 (ns pages.lesson.presenter
   (:require
    [clojure.string :as str]
-   [domain.lesson :as domain]))
+   [domain.lesson :as lesson]))
 
 
 (defn challenge-props
   [state]
-  (let [trial (domain/current-trial state)]
+  (let [trial (lesson/current-trial state)]
     {:kind   (cond
-               (domain/example-trial? trial) :trial/example
-               (domain/phrase-trial? trial)  :trial/phrase
+               (lesson/example-trial? trial) :trial/example
+               (lesson/phrase-trial? trial)  :trial/phrase
                :else                         :trial/word)
      :prompt (:prompt trial)}))
 
@@ -19,14 +19,14 @@
    and the longest answer taken."
   [state]
   (let [lesson-state (:lesson/state state)]
-    {:correct-answer (when (domain/example-trial? (domain/current-trial lesson-state))
-                       (domain/expected-answer lesson-state))
-     :max-length     domain/max-answer-length}))
+    {:correct-answer (when (lesson/example-trial? (lesson/current-trial lesson-state))
+                       (lesson/expected-answer lesson-state))
+     :max-length     lesson/max-answer-length}))
 
 
 (defn progress-props
   [state]
-  (domain/progress state))
+  (lesson/progress state))
 
 
 (defn answer-hint-props
@@ -36,7 +36,7 @@
   [state]
   (when-let [{:keys [dictionary-form translation word-index]}
              (when-let [open-index (:lesson/open-hint-index state)]
-               (->> (domain/answer-segments (domain/current-trial (:lesson/state state)))
+               (->> (lesson/answer-segments (lesson/current-trial (:lesson/state state)))
                     (filter #(= open-index (:word-index %)))
                     first))]
     (let [word-state (get (:lesson/answer-hints state) word-index)]
@@ -50,16 +50,16 @@
 (defn footer-props
   [state]
   (let [lesson-state (:lesson/state state)]
-    (when-let [result (domain/last-result lesson-state)]
-      (let [trial (domain/current-trial lesson-state)]
+    (when-let [result (lesson/last-result lesson-state)]
+      (let [trial (lesson/current-trial lesson-state)]
         {:variant        (if (:correct? result) :success :error)
-         :correct-answer (domain/expected-answer lesson-state)
-         :correct-answer-segments (when (domain/example-trial? trial)
+         :correct-answer (lesson/expected-answer lesson-state)
+         :correct-answer-segments (when (lesson/example-trial? trial)
                                     (mapv (fn [{:keys [type word-index] :as segment}]
                                             (assoc segment
                                                    :annotated? (= :annotated-word type)
                                                    :expanded?  (= word-index (:lesson/open-hint-index state))))
-                                          (domain/answer-segments trial)))
+                                          (lesson/answer-segments trial)))
          :user-answer    (when-not (str/blank? (:answer result))
                            (:answer result))
-         :finished?      (domain/finished? lesson-state)}))))
+         :finished?      (lesson/finished? lesson-state)}))))

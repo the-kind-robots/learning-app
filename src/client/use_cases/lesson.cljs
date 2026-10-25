@@ -37,6 +37,12 @@
                           (partial domain/random-trial random)))}))))
 
 
+(defn next-trial
+  "The lesson on its next trial, or nil when none is left."
+  [lesson-state]
+  (domain/advance lesson-state))
+
+
 (defn ^:async record-review!
   "Writes the review of the answer just checked in `lesson-state`."
   [learner world lesson-state]
@@ -58,13 +64,20 @@
      :state       (vocabulary-domain/translation-state existing translation)}))
 
 
-(defn answer-annotations
-  "Vocabulary state per annotated word of the trial's answer:
-   {word-index :word-state/unknown-word | :word-state/known-missing-translation | :word-state/known-with-translation}."
-  [learner trial]
-  (let [segments (filterv #(= :annotated-word (:type %))
-                          (domain/answer-segments trial))
-        infos    (map #(token-info learner (:dictionary-form %) (:translation %))
-                      segments)]
-    (zipmap (map :word-index segments)
-            (map :state infos))))
+(defn check-answer!
+  "Grades `answer` at once: `{:lesson-state .. :answer-hints ..}` for an example, `{:lesson-state .. :review ..}`
+   for a word, its review being written (`:review` resolves once it is). Nil once the current trial is answered.
+   The hints are the vocabulary state per annotated word of the answer, `{word-index :word-state/..}`."
+  [learner world lesson-state answer]
+  (when (nil? (domain/last-result lesson-state))
+    (let [checked (domain/check-answer lesson-state answer)
+          trial   (domain/current-trial checked)]
+      (if (domain/example-trial? trial)
+        {:answer-hints (->> (domain/answer-segments trial)
+                            (filter #(= :annotated-word (:type %)))
+                            (map (fn [{:keys [word-index dictionary-form translation]}]
+                                   [word-index (:state (token-info learner dictionary-form translation))]))
+                            (into {}))
+         :lesson-state checked}
+        {:lesson-state checked
+         :review       (record-review! learner world checked)}))))

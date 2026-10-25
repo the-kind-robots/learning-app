@@ -65,7 +65,8 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id created?]} (await (sut/add! (::learner dbs) time/world "der Hund" "пёс" :word nil))
+      (let [{:keys [word-id created?]} (await
+                                        (sut/add! (::learner dbs) time/world {:translation "пёс" :value "der Hund"}))
             vocabs  (await (db-queries/fetch-by-type (:user/db dbs) "vocab"))
             reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
         (is (string? word-id))
@@ -83,8 +84,10 @@
      (^:async fn
       [dbs]
       (await (js/Promise.all
-              (into-array (map (fn [i] (sut/add! (::learner dbs) time/world (str "word-" i) (str "перевод-" i) :word nil))
-                               (range 30)))))
+              (into-array
+               (map (fn [i]
+                      (sut/add! (::learner dbs) time/world {:translation (str "перевод-" i) :value (str "word-" i)}))
+                    (range 30)))))
       (let [cnt (await (count-of dbs))
             {:keys [words total]} (await (list-of dbs {}))]
         (is (= 30 cnt))
@@ -97,7 +100,7 @@
     (with-test-dbs
      (^:async fn
       [dbs]
-      (let [{:keys [word-id]} (await (sut/add! (::learner dbs) time/world "der Hund" "пёс" :word nil))]
+      (let [{:keys [word-id]} (await (sut/add! (::learner dbs) time/world {:translation "пёс" :value "der Hund"}))]
         (await (sut/add-review (::learner dbs) time/world word-id true "пёс"))
         (await (db/insert (:user/db dbs) {:type "example" :word-id word-id :value "Der Hund läuft"}))
         (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
@@ -141,7 +144,7 @@
                                     :modified-at time/test-now-iso}))
                       word-ids))))
         (await (seed-reviews! dbs word-ids))
-        (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))
+        (let [reviews  (await (db-queries/fetch-by-type (:user/db dbs) "review"))
               expected (->> (group-by :word-id reviews)
                             (map (fn [[word-id reviews]]
                                    (let [log (reduce retention/with-review
@@ -150,12 +153,10 @@
                                      [word-id (retention/level (retention/urgency log (time/now-ms)))])))
                             (into {}))
               {:keys [words]} (await (list-of dbs {}))
-              actual (into {} (map (juxt :id :retention-level)) words)
+              actual   (into {} (map (juxt :id :retention-level)) words)
               {subset :words} (await (list-of dbs {:word-ids (take 2 word-ids)}))]
           (is (= 35 (count reviews)))
           (is (= 5 (count (distinct (vals expected)))))
           (is (= expected actual))
           (is (= (select-keys expected (take 2 word-ids))
                  (into {} (map (juxt :id :retention-level)) subset)))))))))
-
-

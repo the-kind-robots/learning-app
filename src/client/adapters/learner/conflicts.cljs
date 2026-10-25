@@ -7,7 +7,7 @@
    [db :as db]
    [db.pouch :as pouch]
    [domain.collections :as collections]
-   [domain.vocabulary :as domain]
+   [domain.vocabulary :as vocabulary]
    [lambdaisland.glogi :as log]))
 
 
@@ -26,7 +26,7 @@
   (let [conflicting (await (all! (map #(db/get user-db (:_id doc) {:rev %})
                                       (:_conflicts doc))))
         revisions   (cons doc conflicting)
-        merged      (domain/merged-word revisions)
+        merged      (vocabulary/merged-word revisions)
         losers      (remove #(= (:_rev %) (:_rev merged)) revisions)]
     (await (db/insert user-db merged))
     (await (all! (map #(db/remove user-db %) losers)))))
@@ -37,13 +37,13 @@
   [user-db]
   (try
     (let [{rows :rows} (await (db/all-docs user-db
-                                       ;; Vocabulary ids share a prefix (ADR-0008), so the entries are a key range, not a scan of the
-                                       ;; database; phrases live in it too. `:conflicts` is the point of the query, and only `all-docs`,
-                                       ;; `get` and `changes` honour it: `find` silently answers without conflicts.
-                                       {:conflicts    true
-                                        :endkey       (str domain/id-prefix "￰")
-                                        :include-docs true
-                                        :startkey     domain/id-prefix}))
+                                           ;; Vocabulary ids share a prefix (ADR-0008), so the entries are a key range, not a scan of the
+                                           ;; database; phrases live in it too. `:conflicts` is the point of the query, and only `all-docs`,
+                                           ;; `get` and `changes` honour it: `find` silently answers without conflicts.
+                                           {:conflicts    true
+                                            :endkey       (str vocabulary/id-prefix "￰")
+                                            :include-docs true
+                                            :startkey     vocabulary/id-prefix}))
           conflicted   (->> rows
                             (map :doc)
                             (filter #(-> % :_conflicts seq)))]

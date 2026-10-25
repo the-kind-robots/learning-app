@@ -13,7 +13,6 @@
     :on          (if completes?
                    {:click       [[:action/select-suggestion
                                    {:lemma        lemma
-                                    :phrase?      phrase?
                                     :pos          pos
                                     :translations translations
                                     :focus-id     "new-word-translation"}]]
@@ -27,7 +26,7 @@
 
 
 (defn- add-form
-  [{:keys [error phrase? suggestions translation translation-invalid? word]}]
+  [{:keys [error phrase? pos suggestions translation translation-invalid? word]}]
   (let [{:keys [items]} suggestions]
     [:form.home__add-form
      {:id "home-add-form"
@@ -37,6 +36,7 @@
                     [:action/add-word
                      {:value       [:event.form.field/value "value"]
                       :translation [:event.form.field/value "translation"]
+                      :pos         pos
                       :focus-id    "new-word-value"}]]}}
      [:fieldset.home__add-fieldset
       ;; The mode has no control of its own: the legend and the label say which the form is about to save.
@@ -65,10 +65,11 @@
                          :input   [[:action/update-word [:event.target/value]]
                                    [:effect/autogrow-target]]
                          :keydown [[:action/handler-word-keydown
-                                    {:key      [:event.keyboard/key]
-                                     :shift?   [:event.keyboard/shift?]
-                                     :focus-id "new-word-translation"
-                                     :scroll-selector ".suggestions [data-active]"}]]}}]
+                                    (merge {:key      [:event.keyboard/key]
+                                            :shift?   [:event.keyboard/shift?]
+                                            :focus-id "new-word-translation"
+                                            :scroll-selector ".suggestions [data-active]"}
+                                           (select-keys suggestions [:active-idx :next-idx :previous-idx]))]]}}]
         [:ul.suggestions
          (for [item items]
            (suggestion-item item))]]

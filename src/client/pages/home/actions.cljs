@@ -1,8 +1,6 @@
 (ns pages.home.actions
   (:require
    [clojure.string :as str]
-   [domain.phrase :as phrase]
-   [domain.vocabulary :as domain]
    [nexus.registry :as nxr]
    [use-cases.vocabulary :as vocabulary]))
 
@@ -34,12 +32,12 @@
 
 
 (def ^:private fresh-form
-  {:home/add-error     nil
-   :home/mode-override nil
-   :home/suggestions   empty-suggestions
-   :home/translation   ""
+  {:home/add-error   nil
+   :home/pick        nil
+   :home/suggestions empty-suggestions
+   :home/translation ""
    :home/translation-typed? false
-   :home/word          ""})
+   :home/word        ""})
 
 
 (nxr/register-action! :action/open-home
@@ -115,23 +113,11 @@
     [[:effect/save {:home/suggestions empty-suggestions}]]))
 
 
-(defn- narrowed
-  "All shown suggestions, rows the typed text has left behind included: the list
-   neither shrinks nor empties between answers (#584). The marked entry stays
-   when it still completes `value`, else it moves to the first row that does,
-   else to none."
-  [{:suggestions/keys [items active-idx]} value]
-  (let [idxs (domain/completing-indexes value items)]
-    (suggestions items (if (some #{active-idx} idxs) active-idx (first idxs)))))
-
-
 ;; Keeps the shown suggestions, inert where they no longer complete the new value; the next answer replaces them.
 (nxr/register-action! :action/update-word
   (fn update-word [state value]
     [[:effect/save
       (cond-> {:home/word value}
-        (:home/suggestions state)
-        (assoc :home/suggestions (narrowed (:home/suggestions state) value))
         (and (str/blank? value) (not (:home/translation-typed? state)))
         (assoc :home/translation ""))]
      [:effect/suggest-completions value]]))
@@ -146,18 +132,8 @@
 
 
 (nxr/register-action! :action/add-word
-  (fn add-word [state {:keys [value translation focus-id]}]
-    (let [items (:suggestions/items (:home/suggestions state))
-          mode  (phrase/add-mode (:home/word state)
-                                 (mapv items (domain/completing-indexes (:home/word state) items))
-                                 (:home/mode-override state))
-          pos   (:pos (phrase/current-pick (:home/word state) (:home/mode-override state)))]
-      [[:effect/add-word
-        {:focus-id    focus-id
-         :mode        mode
-         :pos         pos
-         :translation translation
-         :value       value}]])))
+  (fn add-word [_ entered]
+    [[:effect/add-word entered]]))
 
 
 (nxr/register-action! :action/focus-word-input
@@ -166,43 +142,36 @@
 
 
 (defn- select-item
-  [{:keys [lemma pos translations] :as item} element-id]
-  ;; Picking a suggestion decides the mode by its pos, over the space heuristic: a multi-word pos=phrase
-  ;; lemma is a phrase, anything else a word. Click payloads carry `:phrase?`, keyboard selection the raw
-  ;; completion with `:pos`. The lemma and its part of speech are stored with the decision and expire
-  ;; when the value stops being it; the example request carries the part of speech to tell `rauch` from `der Rauch`.
+  [{:keys [lemma pos translations]} element-id]
+  ;; The picked lemma and its part of speech decide the mode over the space heuristic, and expire when the
+  ;; value stops being the lemma; the example request carries the part of speech to tell `rauch` from `der Rauch`.
   [[:effect/save
-    {:home/mode-override {:mode  (if (or (:phrase? item) (phrase/phrase-suggestion? item))
-                                   :phrase
-                                   :word)
-                          :pos   pos
-                          :value lemma}
-     :home/suggestions   empty-suggestions
-     :home/translation   (prefill-text translations)
+    {:home/pick        {:lemma lemma :pos pos}
+     :home/suggestions empty-suggestions
+     :home/translation (prefill-text translations)
      ;; A deliberate pick owns the field: later dictionary answers must not overwrite it.
      :home/translation-typed? true
-     :home/word          lemma}]
+     :home/word        lemma}]
    [:effect/focus element-id]])
 
 
 (nxr/register-action! :action/handler-word-keydown
-  (fn handle-word-keydown [state {:keys [key shift? focus-id scroll-selector]}]
-    (let [{:suggestions/keys [items active-idx]} (:home/suggestions state)
+  ;; The marked row and the arrows' targets come with the key, as the screen shows them.
+  (fn handle-word-keydown [state {:keys [key shift? focus-id scroll-selector active-idx next-idx previous-idx]}]
+    (let [items  (:suggestions/items (:home/suggestions state))
           n      (count items)
-          idxs   (domain/completing-indexes (:home/word state) items)
-          ;; Arrows walk the rows that still complete the field; the rest are inert.
           move   (fn [new-idx]
                    (when new-idx
                      [[:effect/prevent-default]
                       [:effect/save {:home/suggestions (suggestions items new-idx)}]
                       [:effect/scroll-nearest scroll-selector]]))
-          active (when (some #{active-idx} idxs) (get items active-idx))]
+          active (some->> active-idx (get items))]
       (cond
         (and (pos? n) (= key "ArrowDown"))
-        (move (or (first (filter #(> % (or active-idx -1)) idxs)) active-idx))
+        (move next-idx)
 
         (and (pos? n) (= key "ArrowUp"))
-        (move (or (last (filter #(< % (or active-idx 0)) idxs)) active-idx))
+        (move previous-idx)
 
         (and active (or (= key "Enter") (and (= key "Tab") (not shift?))))
         (into [[:effect/prevent-default]] (select-item active focus-id))
