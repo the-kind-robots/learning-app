@@ -10,6 +10,7 @@
    [examples :as examples]
    [examples.dictionary :as dictionary]
    [hiccup :as hiccup]
+   [i18n :as i18n]
    [migrations :as migrations]
    [next.jdbc :as jdbc]
    [next.jdbc.prepare :as prepare]
@@ -542,7 +543,8 @@
            (str "const SW_VERSION=\""
                 (service-worker-version)
                 "\";\n"
-                "const SERVE_NOW_ALLOWED=" (serve-now-allowed?)
+                "const SERVE_NOW_ALLOWED="
+                (serve-now-allowed?)
                 ";\n"
                 "const PRECACHE_URLS=" (cheshire/generate-string (precache-paths))
                 ";\n"
@@ -698,22 +700,22 @@
                (let [result (examples/get! db (examples/subject (:params request)))]
                  (example-response result))))))
 
-      ;; A different example for the same subject. The body carries what the
-      ;; learner already has; the answer is theirs alone and never cached.
-      :post
-      (fn [request]
-        (on-connection [db db-spec]
-          (if (nil? (authenticated-user-id db (request-token request)))
-            {:status 401 :body ""}
-            (let [body    (try
-                            (some-> (:body request) io/reader (cheshire/parse-stream true))
-                            (catch Exception _
-                              nil))
-                  {:keys [avoid error params]} (regeneration-request body)]
-              (if error
-                (bad-request error)
-                (example-response
-                 (examples/regenerate! db (examples/subject params) avoid)))))))}]
+       ;; A different example for the same subject. The body carries what the
+       ;; learner already has; the answer is theirs alone and never cached.
+       :post
+       (fn [request]
+         (on-connection [db db-spec]
+           (if (nil? (authenticated-user-id db (request-token request)))
+             {:status 401 :body ""}
+             (let [body (try
+                          (some-> (:body request) io/reader (cheshire/parse-stream true))
+                          (catch Exception _
+                            nil))
+                   {:keys [avoid error params]} (regeneration-request body)]
+               (if error
+                 (bad-request error)
+                 (example-response
+                  (examples/regenerate! db (examples/subject params) avoid)))))))}]
 
      ["/api/sync/updates"
       {:get
@@ -774,7 +776,7 @@
       {:html/layout
        (fn layout
          [{:html/keys [body]}]
-         [:html
+         [:html {:lang i18n/language}
           [:head
            [:meta {:charset "UTF-8"}]
            [:meta {:name "viewport" :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
@@ -799,7 +801,7 @@
            [:link {:rel "stylesheet" :href "/css/styles.css"}]
            [:script {:src "/js/app/main.js" :defer true}]]
           [:body
-           body]])
+           (i18n/interpolate body)]])
        :html/body
        [:<>
         [:style
@@ -835,7 +837,7 @@
            {:cx 18 :cy 112 :r 2.5 :fill "hsl(280 50% 65%)" :style "animation-delay:1s;animation-duration:4.5s"}]
           [:circle.sparkle
            {:cx 142 :cy 128 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:4.2s;animation-duration:5s"}]]
-         [:div.splash-sub "Загружаем..."]]]
+         [:div.splash-sub [:i18n :shell/loading]]]]
        :status 200}
       request))
 

@@ -54,21 +54,21 @@
     :on     {:click [[:action/dismiss-install-guide-backdrop [:event/self-click?]]]}}
    [:div.app-install-guide__card
     [:div.app-install-guide__header
-     [:h3 "Install Sprecha"]
+     [:h3 [:i18n :install-guide/title]]
      [:button.app-install-guide__close
-      {:aria-label "Close"
+      {:aria-label [:i18n :install-guide/close]
        :on {:click [[:action/dismiss-install-guide]]}}
       "×"]]
     [:div.app-install-guide__steps
      [:div.app-install-guide__step
       [:span.app-install-guide__step-number "1"]
       [:span.app-install-guide__step-icon (share-svg)]
-      [:span.app-install-guide__step-text "Tap " [:strong "Share"] " in the toolbar"]]
+      [:span.app-install-guide__step-text [:i18n :install-guide/share]]]
      [:div.app-install-guide__step
       [:span.app-install-guide__step-number "2"]
       [:span.app-install-guide__step-icon (add-square-svg)]
-      [:span.app-install-guide__step-text "Tap " [:strong "Add to Home Screen"]]]
+      [:span.app-install-guide__step-text [:i18n :install-guide/add-to-home]]]
      [:div.app-install-guide__step
       [:span.app-install-guide__step-number "3"]
       [:span.app-install-guide__step-icon (checkmark-svg)]
-      [:span.app-install-guide__step-text "Tap " [:strong "Add"] " to confirm"]]]]])
+      [:span.app-install-guide__step-text [:i18n :install-guide/add]]]]]])

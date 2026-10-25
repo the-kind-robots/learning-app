@@ -40,20 +40,20 @@
       :autocomplete   "off"
       :autocorrect    "off"
       :enterkeyhint   "done"
-      :aria-label     "Ответ на немецком"
-      :bank-label     "Плитки"
+      :aria-label     [:i18n :lesson/answer]
+      :bank-label     [:i18n :lesson/tiles]
       :correct-answer correct-answer
-      :hint-label     "Подсказка: собрать из плиток"
+      :hint-label     [:i18n :lesson/tiles-hint]
       :maxlength      max-length
-      :placeholder    "Введите перевод..."
+      :placeholder    [:i18n :lesson/answer-placeholder]
       :spellcheck     "false"
-      :tray-label     "Ваш ответ"
+      :tray-label     [:i18n :lesson/tray]
       :lang           "de"
       :on             {:keydown [[:action/submit-if-ctrl-enter
                                   {:key   [:event.keyboard/key]
                                    :ctrl? [:event.keyboard/ctrl?]}]]}}]
     [:div.lesson__action.page-footer__action
-     [:button.big-button {:type "submit"} "ПРОВЕРИТЬ"]]]])
+     [:button.big-button {:type "submit"} [:i18n :lesson/check]]]]])
 
 
 (defn- success-footer
@@ -64,7 +64,7 @@
                           (if finished? "#lesson-finish" "#lesson-next")]]}
    [:div.lesson__footer.lesson__footer--success.page-footer
     [:div.lesson__answer
-     [:h3.lesson__answer-header "Правильно!"]
+     [:h3.lesson__answer-header [:i18n :lesson/correct]]
      (answer-body props)]
     [:form
      {:on {:submit [[:effect/prevent-default]]}}
@@ -76,7 +76,7 @@
         :on   {:click (if finished?
                         [[:action/go-to-home]]
                         [[:action/next-trial]])}}
-       (if finished? "ЗАКОНЧИТЬ" "ДАЛЕЕ")]]]]])
+       (if finished? [:i18n :lesson/finish] [:i18n :lesson/next])]]]]])
 
 
 (defn- error-footer
@@ -88,16 +88,16 @@
     [:div.lesson__answer
      (when user-answer
        (list
-        [:h3.lesson__answer-header "Ваш ответ:"]
+        [:h3.lesson__answer-header [:i18n :lesson/your-answer]]
         [:p.lesson__answer-body {:lang "de"} user-answer]))
-     [:h3.lesson__answer-header "Правильно:"]
+     [:h3.lesson__answer-header [:i18n :lesson/correct-answer]]
      (answer-body props)]
     [:div.lesson__action.page-footer__action
      [:button.big-button
       {:id   "lesson-next"
        :type "button"
        :on   {:click [[:action/next-trial]]}}
-      "ДАЛЕЕ"]]]])
+      [:i18n :lesson/next]]]]])
 
 
 (defn- hint-card
@@ -108,10 +108,10 @@
    [:p.token-card__word {:lang "de"} word]
    [:p.token-card__translation {:lang "ru"} translation]
    (when (= :word-state/known-with-translation word-state)
-     [:p.token-card__state "✓ В словаре"])
+     [:p.token-card__state [:i18n :lesson/in-dictionary]])
    (when-let [action-label (case word-state
-                             :word-state/known-missing-translation "+ ДОБАВИТЬ ПЕРЕВОД"
-                             :word-state/unknown-word              "+ В СЛОВАРЬ"
+                             :word-state/known-missing-translation [:i18n :lesson/add-translation]
+                             :word-state/unknown-word [:i18n :lesson/add-to-dictionary]
                              nil)]
      [:button.token-card__button
       {:type "button"
@@ -140,7 +140,7 @@
      attrs
      [:div.lesson__progress
       {:role           "progressbar"
-       :aria-label     "Прогресс урока"
+       :aria-label     [:i18n :lesson/progress]
        :aria-valuemin  0
        :aria-valuemax  100
        :aria-valuenow  value
@@ -156,24 +156,24 @@
      [:h2.lesson__prompt {:lang "ru"} prompt]
      [:p.lesson__instruction
       (case kind
-        :trial/example "Переведите предложение на немецкий"
-        :trial/phrase  "Переведите фразу на немецкий"
-        :trial/word    "Переведите слово на немецкий")]]))
+        :trial/example [:i18n :lesson/translate-sentence]
+        :trial/phrase  [:i18n :lesson/translate-phrase]
+        :trial/word    [:i18n :lesson/translate-word])]]))
 
 
 (defn empty-state
   []
   [:div.lesson
-   [:h1.lesson__title.visually-hidden "Урок"]
+   [:h1.lesson__title.visually-hidden [:i18n :lesson/title]]
    [:main.lesson__body
     [:div.lesson__empty
      [:div.lesson__empty-state
-      [:p.lesson__empty-state-text "Нет слов для урока"]
-      [:p.lesson__empty-state-hint "Добавьте слова, чтобы начать обучение"]
+      [:p.lesson__empty-state-text [:i18n :lesson/empty]]
+      [:p.lesson__empty-state-hint [:i18n :lesson/empty-hint]]
       [:button.lesson__empty-state-cta
        {:type "button"
         :on   {:click [[:action/go-to-words]]}}
-       "Добавить слова"]]]]])
+       [:i18n :lesson/add-words]]]]]])
 
 
 (defn page
@@ -185,14 +185,14 @@
     ;; Opened before memory is loaded: the lesson is drawn once it is, and until then there is no trial.
     (nil? (:lesson/state state))
     [:div.lesson
-     [:h1.lesson__title.visually-hidden "Урок"]]
+     [:h1.lesson__title.visually-hidden [:i18n :lesson/title]]]
 
     :else
     (let [lesson-state (:lesson/state state)
           answer-hint  (presenter/answer-hint-props state)]
       [:div.lesson
        (when answer-hint (answer-hint-popover answer-hint))
-       [:h1.lesson__title.visually-hidden "Урок"]
+       [:h1.lesson__title.visually-hidden [:i18n :lesson/title]]
        ;; The lesson is closed by the shell's corner ✕ (`:action/close-screen`).
        [:header.lesson__header
         (progress lesson-state {})]

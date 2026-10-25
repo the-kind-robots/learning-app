@@ -1,0 +1,103 @@
+;; The interface in Russian. A key names what the text says, `{{:param}}` takes a value from the markup's
+;; `[:i18n :key {:param …}]`. The install guide is in English, as it was before the dictionary.
+{:collections/all             "Всё подряд"
+ :collections/delete          [:fn/str "Удалить набор «{{:name}}»"]
+ :collections/deleted         [:fn/str "Набор «{{:name}}» удалён"]
+ :collections/new             "Новый набор"
+ :collections/new-name        "Название нового набора:"
+ :collections/title           "Наборы"
+
+ :dialog/close                "Закрыть"
+
+ :example/failed              "Не получилось. Нажмите ↻ ещё раз."
+ :example/no-theme            "Без темы"
+ :example/regenerate          "Другой пример"
+ :example/regenerating        "Подбираю пример…"
+ :example/sentence            "Пример"
+ :example/translation         "Перевод примера"
+
+ :home/add                    "ДОБАВИТЬ"
+ :home/empty-translations     "Добавьте перевод."
+ :home/phrase-badge           "фраза"
+ :home/phrase-label           "Фраза (немецкий)"
+ :home/phrase-placeholder     "Новая фраза"
+ :home/phrase-save-failed     "Фраза не сохранилась: в приложении сбой, и это не ваша ошибка."
+ :home/subtitle               "Быстро добавляйте слова и учите немецкий даже без сети."
+ :home/title                  "Главная"
+ :home/translation-label      "Перевод (русский)"
+ :home/translation-placeholder "Перевод"
+ :home/word-label             "Слово (немецкий)"
+ :home/word-placeholder       "Новое слово"
+ :home/word-save-failed       "Слово не сохранилось: в приложении сбой, и это не ваша ошибка."
+ :home/words                  "Список слов"
+
+ :install-guide/add           ("Tap " [:strong "Add"] " to confirm")
+ :install-guide/add-to-home   ("Tap " [:strong "Add to Home Screen"])
+ :install-guide/close         "Close"
+ :install-guide/share         ("Tap " [:strong "Share"] " in the toolbar")
+ :install-guide/title         "Install Sprecha"
+
+ :lesson/add-to-dictionary    "+ В СЛОВАРЬ"
+ :lesson/add-translation      "+ ДОБАВИТЬ ПЕРЕВОД"
+ :lesson/add-words            "Добавить слова"
+ :lesson/answer               "Ответ на немецком"
+ :lesson/answer-placeholder   "Введите перевод..."
+ :lesson/check                "ПРОВЕРИТЬ"
+ :lesson/correct              "Правильно!"
+ :lesson/correct-answer       "Правильно:"
+ :lesson/empty                "Нет слов для урока"
+ :lesson/empty-hint           "Добавьте слова, чтобы начать обучение"
+ :lesson/finish               "ЗАКОНЧИТЬ"
+ :lesson/in-dictionary        "✓ В словаре"
+ :lesson/next                 "ДАЛЕЕ"
+ :lesson/progress             "Прогресс урока"
+ :lesson/start                "НАЧАТЬ УРОК"
+ :lesson/tiles                "Плитки"
+ :lesson/tiles-hint           "Подсказка: собрать из плиток"
+ :lesson/title                "Урок"
+ :lesson/translate-phrase     "Переведите фразу на немецкий"
+ :lesson/translate-sentence   "Переведите предложение на немецкий"
+ :lesson/translate-word       "Переведите слово на немецкий"
+ :lesson/tray                 "Ваш ответ"
+ :lesson/your-answer          "Ваш ответ:"
+
+ :phrase/add                  "Добавить фразу"
+
+ :shell/export-trace          "Экспортировать трассу"
+ :shell/install               "Установить приложение"
+ :shell/loading               "Загружаем..."
+ :shell/open-collections      "Открыть наборы"
+ :shell/read-error            "Не получается прочитать данные на устройстве. Перезагрузите страницу."
+ :shell/reload-build          "Перезагрузить сборку"
+
+ :sync/cancel                 "Отмена"
+ :sync/connect-device         "Подключить устройство"
+ :sync/qr                     "QR-код для подключения устройства"
+ :sync/recovery-link          "Ссылка восстановления"
+ :sync/recovery-link-copied   "Ссылка скопирована в буфер обмена"
+ :sync/recovery-link-title    "Sprecha: восстановление доступа"
+ :sync/scan-qr                "Отсканируйте QR-код на новом устройстве"
+ :sync/title                  "Синхронизация"
+
+ :word/add                    "Добавить слово"
+
+ :word-edit/delete            "Удалить слово"
+ :word-edit/delete-confirm    [:fn/str "Удалить «{{:word}}» окончательно?"]
+ :word-edit/remove-confirm    [:fn/str "Убрать «{{:word}}» из набора?"]
+ :word-edit/replaces          [:fn/str "Сохранится как новое слово в тех же темах. «{{:word}}» удалится вместе с прогрессом и примерами."]
+ :word-edit/reset             "Сбросить"
+ :word-edit/save              "Сохранить"
+ :word-edit/taken             "Такое слово уже есть"
+ :word-edit/translations      "Переводы, по одному на строку"
+ :word-edit/word              "Слово"
+
+ :words/empty                 "Слов пока нет"
+ :words/empty-hint            "Добавьте первое слово на главной странице"
+ :words/no-matches            "Ничего не найдено"
+ :words/no-matches-hint       "Попробуйте другой запрос"
+ :words/retention-due         [:fn/str "Нужно повторить ({{:percent}}%)"]
+ :words/retention-excellent   [:fn/str "Отлично запомнено ({{:percent}}%)"]
+ :words/retention-good        [:fn/str "Хорошо изучено ({{:percent}}%)"]
+ :words/retention-new         [:fn/str "Новое слово ({{:percent}}%)"]
+ :words/search                "Поиск"
+ :words/title                 "Мои слова"}
