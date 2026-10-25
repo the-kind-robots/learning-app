@@ -425,19 +425,27 @@
     (.addEventListener root
                        "keydown"
                        (fn [^js event]
-                         (cond
-                           (and (not (tiles? el))
-                                (.hasAttribute el "correct-answer")
-                                (.-altKey event)
-                                (= "Enter" (.-key event)))
-                           (do (.preventDefault event)
-                               (hint))
+                         (let [plain? (not (or (.-isComposing event)
+                                               (.-ctrlKey event)
+                                               (.-metaKey event)
+                                               (.-altKey event)))]
+                           (cond
+                             (and (not (tiles? el))
+                                  (.hasAttribute el "correct-answer")
+                                  (.-altKey event)
+                                  (= "Enter" (.-key event)))
+                             (do (.preventDefault event)
+                                 (hint))
 
-                           (and (tiles? el)
-                                (not (.-isComposing event))
-                                (not (or (.-ctrlKey event) (.-metaKey event) (.-altKey event))))
-                           (when (typed-key! el (.-key event))
-                             (.preventDefault event)))))
+                             ;; An answer holds no line break: Enter, and the Done key of a phone's
+                             ;; keyboard, submit the form as in a single-line input. Ctrl+Enter is the page's.
+                             (and plain? (not (tiles? el)) (= "Enter" (.-key event)))
+                             (do (.preventDefault event)
+                                 (.requestSubmit (.. el -internals -form)))
+
+                             (and plain? (tiles? el))
+                             (when (typed-key! el (.-key event))
+                               (.preventDefault event))))))
     (.addEventListener root "input" (fn [_] (publish! el)))))
 
 
