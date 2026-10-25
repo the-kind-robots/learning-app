@@ -1,5 +1,6 @@
 (ns pages.collections.effects
   (:require
+   [clojure.string :as str]
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
@@ -182,6 +183,46 @@
     (some-> (js/document.querySelector
              (str ".masonry [data-collection-id=\"" (js/CSS.escape id) "\"]"))
             .focus)))
+
+
+(def ^:private typing-listener
+  "Removes the keydown listener of the visit on display."
+  (volatile! nil))
+
+
+(nxr/register-effect! :effect/listen-for-typing
+  ;; On the document: when the screen opens nothing has focus, and a keystroke reaches no tile.
+  ;; A pause over a second starts a new search. A space counts only inside a search, so on its own it still
+  ;; presses the focused target.
+  (fn listen-for-typing [_ _]
+    (let [listener (js/AbortController.)
+          typed    (volatile! {:text "" :at 0})]
+      (vreset! typing-listener listener)
+      (js/document.addEventListener
+       "keydown"
+       (fn [^js event]
+         (let [character (.-key event)
+               now       (js/Date.now)
+               text      (if (< (- now (:at @typed)) 1000) (:text @typed) "")]
+           (when (and (= 1 (count character))
+                      (not (or (.-ctrlKey event) (.-altKey event) (.-metaKey event)))
+                      (not (and (= " " character) (= "" text))))
+             (let [text (str text character)]
+               (vreset! typed {:text text :at now})
+               (.preventDefault event)
+               (some-> (->> (js/document.querySelectorAll ".masonry [data-collection-id]")
+                            (js/Array.from)
+                            (filter #(str/includes? (str/lower-case (.-textContent
+                                                                     (.querySelector % ".tile__name, .tile__row-name")))
+                                                    (str/lower-case text)))
+                            first)
+                       .focus)))))
+       #js {:signal (.-signal listener)}))))
+
+
+(nxr/register-effect! :effect/stop-listening-for-typing
+  (fn stop-listening-for-typing [_ _]
+    (.abort @typing-listener)))
 
 
 (nxr/register-effect! :effect/switch-active-collection

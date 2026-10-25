@@ -1,4 +1,4 @@
-const { test, expect, docsOfType } = require('./fixtures');
+const { test, expect, docsOfType, nothingHappensFor } = require('./fixtures');
 const { seedWords } = require('./seed.shared');
 
 // Seeded at the engine level (see README, "Seeding from a spec"): a
@@ -291,6 +291,50 @@ test.describe('Плитки тем', () => {
       }
       await expect(page.getByText('e', { exact: true })).toHaveCount(0);
       await expect(page.getByText('f', { exact: true })).toHaveCount(0);
+    });
+  });
+
+  test('пользователь печатает часть названия на экране тем → фокус на первой подходящей теме', async ({ page }) => {
+    await test.step('Дано экран тем с папкой «Kurs» и темой «Solo»', async () => {
+      await page.goto('/');
+      await seedCollections(page, [...course, ['solo', 'Solo', ['vocab:g']]]);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await expect(page.getByRole('button', { name: 'Solo 1', exact: true })).toBeVisible();
+    });
+
+    await test.step('Когда он печатает «pit»', async () => {
+      await page.keyboard.type('pit');
+    });
+
+    await test.step('Тогда фокус на «Kapitel 1»', async () => {
+      await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toBeFocused();
+    });
+
+    await test.step('Когда он без паузы допечатывает «el 2»', async () => {
+      await page.keyboard.type('el 2');
+    });
+
+    await test.step('Тогда фокус на «Kapitel 2»', async () => {
+      await expect(page.getByRole('button', { name: 'Kapitel 2 1', exact: true })).toBeFocused();
+    });
+
+    await test.step('Когда он ждёт дольше секунды и печатает «so»', async () => {
+      await nothingHappensFor(page, 1200);
+      await page.keyboard.type('so');
+    });
+
+    await test.step('Тогда фокус на «Solo»', async () => {
+      await expect(page.getByRole('button', { name: 'Solo 1', exact: true })).toBeFocused();
+    });
+
+    await test.step('Когда он возвращается на главную и печатает в поле слова', async () => {
+      await page.keyboard.press('Escape');
+      await page.getByLabel('Слово (немецкий)').focus();
+      await page.keyboard.type('Haus');
+    });
+
+    await test.step('Тогда слово напечатано', async () => {
+      await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('Haus');
     });
   });
 });
