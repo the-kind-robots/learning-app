@@ -69,7 +69,7 @@ test.describe('Горячие клавиши главной', () => {
     });
   });
 
-  test('пользователь нажимает Alt+Enter на экране слов → урок не начинается', async ({ page }) => {
+  test('пользователь нажимает Alt+Enter на экране слов → начинается урок', async ({ page }) => {
     await test.step('Дано экран слов при непустом словаре', async () => {
       await page.goto('/home');
       await addHaus(page);
@@ -77,12 +77,33 @@ test.describe('Горячие клавиши главной', () => {
       await expect(page).toHaveURL(/\/words$/);
     });
 
+    await test.step('Когда он жмёт Alt+Enter в поиске', async () => {
+      await page.getByPlaceholder('Поиск').focus();
+      await page.keyboard.press('Alt+Enter');
+    });
+
+    await test.step('Тогда открыт урок с полем ответа', async () => {
+      await expect(page).toHaveURL(/\/lesson$/);
+      await expect(page.getByRole('textbox', { name: 'Ответ на немецком' })).toBeVisible();
+    });
+  });
+
+  test('пользователь нажимает Alt+Enter в диалоге слова → урок не начинается', async ({ page }) => {
+    await test.step('Дано открыт диалог слова', async () => {
+      await page.goto('/home');
+      await addHaus(page);
+      await page.getByRole('button', { name: 'Список слов' }).click();
+      await page.getByRole('listitem').filter({ hasText: 'Haus' }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+    });
+
     await test.step('Когда он жмёт Alt+Enter', async () => {
       await page.keyboard.press('Alt+Enter');
       await nothingHappensFor(page, 500);
     });
 
-    await test.step('Тогда он остаётся на экране слов', async () => {
+    await test.step('Тогда диалог открыт, и он на экране слов', async () => {
+      await expect(page.getByRole('dialog')).toBeVisible();
       await expect(page).toHaveURL(/\/words$/);
     });
   });

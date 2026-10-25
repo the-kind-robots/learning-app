@@ -208,14 +208,15 @@ typed into and the panel heading above it SHALL NOT move.
   content-sized list, which resizes whenever the match count changes, and not
   the 0.05 of the fixed-height list that opened once and never resized
 
-### Requirement: The home screen starts a lesson from the keyboard
+### Requirement: The home and words screens start a lesson from the keyboard
 
-`Alt`+`Enter` (`Option`+`Enter` on a Mac) on the home screen SHALL start the
-lesson — the same action the `НАЧАТЬ УРОК` button performs. The keystroke SHALL
-work wherever the focus sits on that screen, including when no element has
-focus, and has no meaning on any other screen. The keystroke's default action
-SHALL be suppressed, so it starts one lesson. When the vocabulary is empty the
-lesson footer is hidden, and the keystroke SHALL do nothing.
+`Alt`+`Enter` (`Option`+`Enter` on a Mac) on the home screen or the words
+screen SHALL start the lesson — the same action each screen's `НАЧАТЬ УРОК`
+button performs. The keystroke SHALL work wherever the focus sits on that
+screen, including when no element has focus, and has no meaning on any other
+screen. The keystroke's default action SHALL be suppressed, so it starts one
+lesson. Where the button is not shown the keystroke SHALL do nothing: with an
+empty vocabulary, and on the words screen while the word dialog is open.
 
 #### Scenario: Alt+Enter from the word field
 
@@ -247,9 +248,22 @@ lesson footer is hidden, and the keystroke SHALL do nothing.
 - **AND** the user presses `Enter` while `Alt` is held
 - **THEN** the lesson screen opens
 
+#### Scenario: Alt+Enter on the words screen
+
+- **WHEN** the words screen is open with a non-empty vocabulary
+- **AND** the search field has focus
+- **AND** the user presses `Enter` while `Alt` is held
+- **THEN** the lesson screen opens
+
+#### Scenario: Alt+Enter in the word dialog
+
+- **WHEN** the word dialog is open on the words screen
+- **AND** the user presses `Enter` while `Alt` is held
+- **THEN** no lesson is started and the dialog stays open
+
 #### Scenario: Alt+Enter on another screen
 
-- **WHEN** a screen other than home is open
+- **WHEN** a screen other than home and words is open
 - **AND** the user presses `Enter` while `Alt` is held
 - **THEN** no lesson is started by the keystroke
 
