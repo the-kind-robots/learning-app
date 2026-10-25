@@ -1,19 +1,19 @@
 {
   "scripts": {
     "test:browser": "playwright test",
-    "fetch-sqlite": "curl -L https://sqlite.org/2026/sqlite-wasm-3530100.zip -o /tmp/sqlite-wasm.zip && unzip -j /tmp/sqlite-wasm.zip 'sqlite-wasm-3530100/jswasm/sqlite3.js' -d resources/public/js/ && unzip -j /tmp/sqlite-wasm.zip 'sqlite-wasm-3530100/jswasm/sqlite3.wasm' -d resources/public/js/",
+    "fetch-sqlite": "curl -L https://sqlite.org/2026/sqlite-wasm-3540100.zip -o /tmp/sqlite-wasm.zip && unzip -oj /tmp/sqlite-wasm.zip 'sqlite-wasm-3540100/jswasm/sqlite3.js' -d resources/public/js/ && unzip -oj /tmp/sqlite-wasm.zip 'sqlite-wasm-3540100/jswasm/sqlite3.wasm' -d resources/public/js/",
     "fetch-web-vitals": "cp node_modules/web-vitals/dist/web-vitals.attribution.iife.js resources/public/js/web-vitals.js",
     "test:catalog": "node scripts/behavior-catalog.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
-    "playwright": "^1.62.1",
-    "shadow-cljs": "^3.4.12",
-    "web-vitals": "^6.1.1"
+    "@playwright/test": "^1.64.1",
+    "playwright": "^1.64.1",
+    "shadow-cljs": "^3.5.7",
+    "web-vitals": "^6.2.3"
   },
   "dependencies": {
-    "@sqlite.org/sqlite-wasm": "3.53.0-build1",
-    "@thi.ng/hiccup": "^5.4.13",
+    "@sqlite.org/sqlite-wasm": "3.54.1-build1",
+    "@thi.ng/hiccup": "^5.4.14",
     "events": "^3.3.0",
     "pouchdb": "^9.0.0",
     "pouchdb-find": "^9.0.0",
