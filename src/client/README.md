@@ -21,7 +21,8 @@ src/client/
 ├── main.cljs                 # Entry point: starts the app
 ├── application.cljs          # Nexus interceptors, app-wide effects, shell view, render!
 ├── collection_accents.cljs   # The colour of a collection, for the themes screen and the word dialog
-├── application/presenter.cljs# Shell props (sync entry, install prompt, build mark)
+├── application/presenter.cljs# Shell props (sync entry, install prompt, build mark), the screen change between renders
+├── view_transition.cljs      # Screen changes as view transitions, on a phone only (ADR-0024)
 ├── application/pages.cljs    # Every page once: path, open action, refresh, view
 ├── application/view.cljs     # The shell's markup
 ├── application/sync/         # Joining a device to the sync: menu, QR dialog, link

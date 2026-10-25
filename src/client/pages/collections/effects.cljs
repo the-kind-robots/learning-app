@@ -4,7 +4,8 @@
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
-   [use-cases.collections :as collections]))
+   [use-cases.collections :as collections]
+   [view-transition]))
 
 
 (def ^:private long-press-delay-ms 500)
@@ -168,11 +169,15 @@
                                    (map #(.getAttribute ^js % "data-collection-id")))
                               id)]
       (try
-        (await (collections/delete! learner id))
-        (dispatch [[:effect/enter :action/show-deleted
-                    {:deleted-message deleted-message
-                     :focus-id        focus-id
-                     :status-region   status-region}]])
+        ;; The tiles without it are shown once memory took the deletion, so the transition runs around both.
+        (await (view-transition/change!
+                :transition/close-gap
+                (fn ^:async delete-and-show! []
+                  (await (collections/delete! learner id))
+                  (dispatch [[:effect/enter :action/show-deleted
+                              {:deleted-message deleted-message
+                               :focus-id        focus-id
+                               :status-region   status-region}]]))))
         (catch js/Error err
           (log/error :effect/delete-collection {:error (str err)}))))))
 
