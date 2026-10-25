@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Refuses a commit whose staged Clojure files zprint would reformat (#664) —
+# the same check CI runs, on the index. Enabled per clone by
+# `git config core.hooksPath .githooks` (infra/scripts/install-dev-stand.sh
+# does it); `git commit --no-verify` skips it.
+exec "$(git rev-parse --show-toplevel)/scripts/zprint_check.sh" --staged

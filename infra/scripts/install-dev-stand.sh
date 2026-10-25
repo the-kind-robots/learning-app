@@ -200,6 +200,28 @@ else
     fi
 fi
 
+# The pre-commit hook refuses a Clojure file zprint would reformat, the check
+# CI runs too. Git reads hooks from .git/hooks unless told otherwise.
+if [ "$(git -C "${repo_root}" config --get core.hooksPath || true)" = ".githooks" ]; then
+    ok "git hooks from .githooks"
+else
+    todo "git does not run the hooks in .githooks"
+    note "would run: git config core.hooksPath .githooks"
+    if confirm "run it?"; then
+        git -C "${repo_root}" config core.hooksPath .githooks
+        done_ "git hooks from .githooks"
+    else
+        skip "git hooks"
+    fi
+fi
+
+if command -v zprint > /dev/null 2>&1; then
+    ok "zprint"
+else
+    manual "zprint is not on PATH — the pre-commit hook needs it" \
+        "https://github.com/kkinnear/zprint/releases/tag/1.3.0 (zprintl-1.3.0)"
+fi
+
 
 section "nginx"
 
