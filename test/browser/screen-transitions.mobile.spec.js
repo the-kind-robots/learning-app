@@ -281,6 +281,28 @@ test.describe('Переходы между экранами на телефон�
     });
   });
 
+  test('ученик создаёт набор → его плитка вырастает на своём месте, соседние расступаются', async ({ page }) => {
+    await test.step('Дано открытые наборы', async () => {
+      await openHome(page);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await expect(page.getByRole('button', { name: 'ДОБАВИТЬ НАБОР' })).toBeVisible();
+      await expect.poll(() => transitions(page)).toEqual(DEEPER);
+      await forgetTransitions(page);
+    });
+
+    await test.step('Когда он создаёт набор «Essen» кнопкой «ДОБАВИТЬ НАБОР»', async () => {
+      page.once('dialog', (dialog) => dialog.accept('Essen'));
+      await page.getByRole('button', { name: 'ДОБАВИТЬ НАБОР' }).click();
+    });
+
+    await test.step('Тогда вырастает одна плитка — новая', async () => {
+      await expect(page.getByRole('button', { name: /^Essen/ })).toBeVisible();
+      await expect.poll(async () => (await transitions(page))
+        .map(({ kind, animations }) => [kind, animations.filter((a) => a.endsWith(' tile-grow')).length]))
+        .toEqual([['open-gap', 1]]);
+    });
+  });
+
   test('при «уменьшить движение» ученик открывает список слов → экран сменяется сразу', async ({ page }) => {
     await test.step('Дано главная и просьба системы уменьшить движение', async () => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
