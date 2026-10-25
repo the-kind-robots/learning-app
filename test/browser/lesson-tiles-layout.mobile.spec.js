@@ -25,7 +25,7 @@ async function seedLongExample(page) {
   }, [wordId, SENTENCE, PROMPT]);
 }
 
-async function openTilesOfFailedExample(page) {
+async function showLongExample(page) {
   await page.goto('/home');
   await addWord(page, 'der Hund', 'пёс');
   await seedLongExample(page);
@@ -33,20 +33,16 @@ async function openTilesOfFailedExample(page) {
   await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('der Hund');
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
   await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('falsch');
-  await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
-  await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await page.getByRole('button', { name: 'Подсказка: собрать из плиток' }).click();
 }
 
 for (const height of [844, 667]) {
   test(`ученик открыл плитки длинного примера на экране ${height} → задание целиком в окне урока, слова над лотком и не налезают на него`, async ({ page }) => {
     await test.step('Дано длинный пример на экране телефона', async () => {
       await page.setViewportSize({ width: 390, height });
-      await openTilesOfFailedExample(page);
+      await showLongExample(page);
     });
 
-    await test.step('Когда плитки открыты', async () => {
+    await test.step('Когда плитки на экране', async () => {
       await expect(page.getByRole('group', { name: 'Плитки' })).toBeVisible();
     });
 
@@ -59,7 +55,6 @@ for (const height of [844, 667]) {
       expect(prompt.y).toBeGreaterThanOrEqual(body.y);
       expect(prompt.y + prompt.height).toBeLessThanOrEqual(body.y + body.height);
       expect(bank.y).toBeGreaterThanOrEqual(prompt.y + prompt.height);
-      expect(body.y + body.height).toBeLessThanOrEqual(tray.y);
-    });
+      expect(body.y + body.height).toBeLessThanOrEqual(tray.y);    });
   });
 }

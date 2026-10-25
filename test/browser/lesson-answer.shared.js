@@ -28,8 +28,18 @@ async function seedExample(page, translation = 'Пёс спит в саду.', s
   }, [wordId, translation, sentence]);
 }
 
-// Answers the word trial, advances, and answers the example trial with
-// `exampleAnswer`. Returns with the revealed answer on screen.
+// Answers an example by tapping the bank tile of each word of `answer`, in
+// order; punctuation has no tile.
+async function placeTiles(page, answer) {
+  const bank = page.getByRole('group', { name: 'Плитки' });
+  const words = answer.split(/\s+/).map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')).filter(Boolean);
+  for (const word of words) {
+    await bank.getByRole('button', { name: word, exact: true }).first().click();
+  }
+}
+
+// Answers the word trial, advances, and answers the example trial with the
+// tiles of `exampleAnswer`. Returns with the revealed answer on screen.
 async function playToExampleReveal(page, exampleAnswer) {
   await page.goto('/lesson');
   await expect(page.locator('.lesson__prompt')).toBeVisible();
@@ -37,7 +47,7 @@ async function playToExampleReveal(page, exampleAnswer) {
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
   await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
   await expect(page.locator('.lesson__instruction')).toContainText('предложение');
-  await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(exampleAnswer);
+  await placeTiles(page, exampleAnswer);
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
 }
 
@@ -70,4 +80,4 @@ async function answerWidths(page) {
   });
 }
 
-module.exports = { seedExample, setUpLesson, token, answerWidths };
+module.exports = { seedExample, placeTiles, setUpLesson, token, answerWidths };

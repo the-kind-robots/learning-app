@@ -12,7 +12,8 @@
 ;; fires `input` when the value changes, so the page treats it as it treated a
 ;; textarea. The twist is a light bulb, shown when it has a `correct-answer`: a
 ;; button, pressed once by tap or Alt+Enter, that swaps the textarea for tiles
-;; of the answer's words, a bank above the field and the placed tiles in it. The
+;; of the answer's words, a bank above the field and the placed tiles in it.
+;; Unless `bulb?` is set, it shows the tiles from the start instead. The
 ;; value is then the placed words, otherwise the typed text. It knows nothing of
 ;; the app state, Nexus or the page's CSS, and no UI text: `bank-label`,
 ;; `tray-label` and `hint-label` name its parts. It uses Replicant's string
@@ -32,7 +33,8 @@
 ;; Tiles are placed by tap, by drag (a bank tile too) and by typing: letters
 ;; typed on a keyboard make a prefix, shown as heavier leading letters on the
 ;; bank tiles it fits (`--answer-field-match-weight`), and a bank tile moves to
-;; the tray once the prefix fits one distinct bank word.
+;; the tray once the prefix fits one distinct bank word. A word is typed as if
+;; it had no umlauts: «uber» fits «über», «gross» fits «groß».
 ;;
 ;; Properties the element keeps: `internals` (its form side), `drag` (the
 ;; AbortController of the drag in progress), `dragged` (set when a drag
@@ -48,7 +50,7 @@
     [:div#field
      [:textarea]
      [:div#tray
-      {:role "group" :tabindex "-1"}]]
+      {:autofocus true :role "group" :tabindex "-1"}]]
     [:button#hint
      {:type "button"}
      [:svg
@@ -70,6 +72,12 @@
 
 (def ^:private reduced-motion
   (delay (js/matchMedia "(prefers-reduced-motion: reduce)")))
+
+
+(def ^:private bulb?
+  "Whether a field with a `correct-answer` starts as a textarea with the light
+   bulb; otherwise it starts with the tiles."
+  false)
 
 
 (def ^:private slide-ms
@@ -104,6 +112,13 @@
        (map #(str/replace % edge-punctuation ""))
        (remove str/blank?)
        vec))
+
+
+(defn- typed-form
+  "`text` as typed on a keyboard without umlauts: in lower case, with ä, ö, ü as
+   a, o, u and ß as ss."
+  [text]
+  (str/replace (str/lower-case text) #"[äöüß]" {"ä" "a" "ö" "o" "ü" "u" "ß" "ss"}))
 
 
 (defn- shuffled-words
@@ -149,7 +164,8 @@
 
 (defn- typed!
   "Sets the pending prefix to `prefix` and shows it: the leading letters it
-   spells go heavier on each bank tile whose word starts with it."
+   spells go heavier on each bank tile whose word starts with it. A letter
+   typed as two, ß as ss, goes heavier once both are typed."
   [^js el prefix]
   (set! (.-pending el) prefix)
   (let [bank (inside el "#bank")]
@@ -158,8 +174,11 @@
                       word     (.getAttribute span "data-word")
                       matched  (if (and (seq prefix)
                                         (identical? bank (.-parentNode tile))
-                                        (str/starts-with? (str/lower-case word) prefix))
-                                 (count prefix)
+                                        (str/starts-with? (typed-form word) prefix))
+                                 (->> (map (comp count typed-form) word)
+                                      (reductions +)
+                                      (take-while #(<= % (count prefix)))
+                                      count)
                                  0)]]
       (.replaceChildren span)
       (when (pos? matched)
@@ -328,7 +347,7 @@
     (listen "lostpointercapture" (fn [_] (settle!)))))
 
 
-;; Typing places tiles. The prefix is compared in lower case.
+;; Typing places tiles. The prefix is compared in its typed form.
 
 
 (defn- typed-key!
@@ -342,7 +361,7 @@
   (let [prefix  (or (.-pending el) "")
         tray    (inside el "#tray")
         bank    (array-seq (.-children (inside el "#bank")))
-        word-of (fn [^js tile] (str/lower-case (.-textContent tile)))
+        word-of (fn [^js tile] (typed-form (.-textContent tile)))
         place!  (fn [^js tile]
                   (tapped! el tile)
                   (.focus tray))
@@ -365,7 +384,7 @@
         true)
 
       (and (= 1 (count key)) (not (str/blank? key)))
-      (let [candidate (str prefix (str/lower-case key))
+      (let [candidate (str prefix (typed-form key))
             words     (fitting candidate)]
         (case (count words)
           0 nil
@@ -455,9 +474,14 @@
 
     Object
     (attributeChangedCallback [this attribute _ value]
-                              (if (= "correct-answer" attribute)
+                              (case attribute
+                                "correct-answer"
                                 (do (tiles-for! this value)
-                                    (typed! this ""))
+                                    (typed! this "")
+                                    (when (and value (not bulb?))
+                                      (.add (.. this -internals -states) "tiles")
+                                      (publish! this)))
+
                                 (let [[selector name] (if-let [part (labelled attribute)]
                                                         [part "aria-label"]
                                                         ["textarea" attribute])
@@ -469,7 +493,8 @@
   (js/Object.defineProperty AnswerField "formAssociated" #js {:value true})
   (js/Object.defineProperty AnswerField
                             "observedAttributes"
-                            #js {:get (fn [] (into-array (concat forwarded (keys labelled) ["correct-answer"])))})
+                            #js {:get (fn []
+                                        (into-array (concat forwarded (keys labelled) ["correct-answer"])))})
   (js/Object.defineProperty (.-prototype AnswerField)
                             "value"
                             #js {:get (fn [] (this-as ^js this (value-of this)))
