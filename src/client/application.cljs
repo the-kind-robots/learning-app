@@ -2,6 +2,9 @@
   (:require
    [application.pages :as pages]
    [application.presenter :as presenter]
+   [application.settings.actions]
+   [application.settings.effects]
+   [application.settings.presenter :as settings-presenter]
    [application.sync.actions]
    [application.sync.effects]
    [application.view :as view]
@@ -13,6 +16,7 @@
    [ports.account :as account]
    [ports.learner :as learner]
    [ports.navigation :as navigation]
+   [ports.page :as page]
    [ports.world :as world]
    [replicant.dom :as r]
    [view-transition]))
@@ -308,19 +312,23 @@
 (defn render!
   "Renders the shell of `after`, moving the way the screen change from `before` (nil: none) calls for."
   [before after]
-  (view-transition/change! (presenter/screen-change before after)
-                           #(r/render js/document.body (i18n/interpolate (view/shell after)))))
+  (let [language (settings-presenter/language after)]
+    (set! (.-lang js/document.documentElement) language)
+    (view-transition/change! (presenter/screen-change before after)
+                             #(r/render js/document.body (i18n/interpolate language (view/shell after))))))
 
 
 (defn state
-  "The state the screens are computed from: the interface's own, in
-   `:app-state` of `system`, with whether the learner's data is loading, loaded or unreadable (`:learner/status`).
-   The data itself is read from the learner, which `:effect/enter` hands to the actions."
+  "The state the screens are computed from: the interface's own, in `:app-state` of `system`, with whether the
+   learner's data is loading, loaded or unreadable (`:learner/status`), the language the learner picked
+   (`:learner/language`) and the system's (`:system/language`). The data itself is read from the learner, which
+   `:effect/enter` hands to the actions."
   [{:keys [app-state capabilities]}]
-  (let [{:keys [learner]} capabilities]
+  (let [{:keys [learner page]} capabilities]
     (assoc @app-state
-           :learner/status
-           (learner/status learner))))
+           :learner/language (learner/language learner)
+           :learner/status   (learner/status learner)
+           :system/language  (page/system-language page))))
 
 
 (defn start-render!

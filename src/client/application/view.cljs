@@ -4,6 +4,8 @@
   (:require
    [application.pages :as pages]
    [application.presenter :as presenter]
+   [application.settings.presenter :as settings-presenter]
+   [application.settings.view :as settings-view]
    [application.shell :as shell]
    [application.sync.presenter :as sync-presenter]
    [application.sync.view :as sync-view]
@@ -85,8 +87,12 @@
      [:div.app-shell__bar
       [:div.app-shell__bar-slot
        [:button.app-shell__logo
-        {:type "button"
-         :on   {:click [[:action/go-to-home]]}}
+        ;; The browser opens and closes the settings, and marks this button expanded while they are open.
+        ;; The name starts with the word on screen, then says what the press opens; the D is not read.
+        {:aria-label    [:i18n :settings/open]
+         :popovertarget "settings"
+         :title         [:i18n :settings/title]
+         :type          "button"}
         "Sprecha"
         ;; A development build's word mark ends in a red D; the ^boolean on the flag lets Closure drop it,
         ;; and the build mark below, from a release.
@@ -128,4 +134,6 @@
        (view state)
        (when read-error?
          [:div.app-shell__read-error [:i18n :shell/read-error]]))
+     ;; After the screen: its mount hook runs after the screen's, so the asking settings keep the focus.
+     (settings-view/menu (settings-presenter/props state))
      shell/status-region)))

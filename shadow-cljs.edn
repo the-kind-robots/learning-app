@@ -61,6 +61,8 @@
    ;; Stamps the development bundle with the checkout it came from. The hook
    ;; itself is what skips a release build, so this stays one line either way.
    :build-hooks [(dev.build-identity/stamp-the-build)]
+   ;; `i18n` inlines every `i18n/*.edn` it finds; cached, it would miss a language file added since.
+   :build-options {:cache-blockers #{i18n}}
    :devtools
    {:preloads     [dev.devtools-socket debux.preloads]
     :watch-dir    "resources/public/css"
@@ -70,6 +72,7 @@
   :node-test
   {:target    :node-test
    :output-to "target/node-tests.js"
+   :build-options {:cache-blockers #{i18n}}
    :autorun   true
    :ns-regexp "-test$"}
 

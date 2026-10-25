@@ -638,6 +638,16 @@
                {:error "Examples are temporarily unavailable"})}))
 
 
+(defn- page-language
+  "The language the page speaks to `request`: that of its first `Accept-Language` tag. The learner's pick is
+   in their user-db, which the server does not read; the client switches to it once it renders."
+  [request]
+  (i18n/system-language (some-> (get-in request [:headers "accept-language"])
+                                (str/split #"[,;]")
+                                first
+                                str/trim)))
+
+
 (def app-handler
   (http/ring-handler
    ;; Main handler
@@ -776,7 +786,7 @@
       {:html/layout
        (fn layout
          [{:html/keys [body]}]
-         [:html {:lang i18n/language}
+         [:html {:lang (page-language request)}
           [:head
            [:meta {:charset "UTF-8"}]
            [:meta {:name "viewport" :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
@@ -801,7 +811,7 @@
            [:link {:rel "stylesheet" :href "/css/styles.css"}]
            [:script {:src "/js/app/main.js" :defer true}]]
           [:body
-           (i18n/interpolate body)]])
+           (i18n/interpolate (page-language request) body)]])
        :html/body
        [:<>
         [:style

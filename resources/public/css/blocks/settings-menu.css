@@ -1,0 +1,100 @@
+/* Settings menu — a popover under the word mark; the learner's language. The screen stays as it is behind it. */
+
+.settings-menu {
+  background: rgb(var(--color-snow));
+  border: 1px solid rgb(0 0 0 / 0.08);
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.14);
+  color: rgb(var(--color-black-text));
+  font-family: Nunito, sans-serif;
+  inset: auto;
+  left: 8px;
+  margin: 0;
+  overflow: visible;
+  padding: 8px;
+  position: fixed;
+  top: 52px;
+  width: 196px;
+  /* An open popover sits in the top layer; the asking block, no popover, sits above the bar by this. */
+  z-index: 30;
+}
+
+/* The tip points at the word mark. */
+.settings-menu::before {
+  background: rgb(var(--color-snow));
+  border-left: 1px solid rgb(0 0 0 / 0.08);
+  border-top: 1px solid rgb(0 0 0 / 0.08);
+  content: "";
+  height: 12px;
+  left: 28px;
+  position: absolute;
+  top: -7px;
+  transform: rotate(45deg);
+  width: 12px;
+}
+
+.settings-menu__label {
+  color: rgb(var(--color-eel));
+  font-size: 13px;
+  font-weight: 700;
+  margin: 6px 10px 4px;
+  padding: 0;
+}
+
+.settings-menu__group {
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+/* The row is the radio's label; the radio itself covers the row unseen, so it takes the press. */
+.settings-menu__language {
+  align-items: center;
+  border-radius: 10px;
+  color: rgb(var(--color-black-text));
+  cursor: pointer;
+  display: flex;
+  font-size: 16px;
+  font-weight: 600;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0 10px;
+  position: relative;
+  transition: background-color 0.1s;
+}
+
+.settings-menu__radio {
+  cursor: pointer;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  position: absolute;
+}
+
+.settings-menu__language:has(:checked) {
+  background: rgb(var(--color-sea-sponge));
+  font-weight: 800;
+}
+
+.settings-menu__language:has(:focus-visible) {
+  outline: 2px solid rgb(var(--color-macaw));
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .settings-menu__language:not(:has(:checked)):hover {
+    background: rgb(var(--color-polar));
+  }
+}
+
+/* Darker than the leaf green: a state mark keeps 3:1 against the fill. */
+.settings-menu__check {
+  color: rgb(63 122 0);
+  flex: none;
+  height: 18px;
+  width: 18px;
+}

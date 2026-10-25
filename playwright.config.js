@@ -10,6 +10,8 @@ module.exports = defineConfig({
     baseURL: 'http://localhost:8301',
     channel: 'chrome',
     headless: true,
+    // The interface follows the system's language (#473); the specs read it in Russian.
+    locale: 'ru-RU',
     trace: 'retain-on-failure',
   },
   projects: [

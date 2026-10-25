@@ -97,6 +97,12 @@
   (memory/examples-of (memory learner) word-ids))
 
 
+(defn language
+  "The language the learner picked, or nil when none was picked."
+  [learner]
+  (memory/language (memory learner)))
+
+
 (defn matching-words
   "The words in scope of `coll` that match `query`."
   [learner coll query]

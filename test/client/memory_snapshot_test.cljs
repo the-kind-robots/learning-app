@@ -168,6 +168,7 @@
     :value         "Der Hund schläft."
     :word          "der Hund"
     :word-id       "vocab:der hund"}
+   {:_id "settings" :_rev "1-g" :language "en" :type "settings"}
    {:_id "task-1" :_rev "1-e" :type "task"}
    {:_id "vocab:weg" :_rev "2-f" :_deleted true}])
 
@@ -201,6 +202,7 @@
                        :word          "der Hund"
                        :word-id       "vocab:der hund"}}
    :examples-by-word {"vocab:der hund" #{"example:vocab:der hund:coll-tiere:0123456789ab"}}
+   :settings         {:id "settings" :language "en"}
    :slot-of          {"vocab:der hund" 0}})
 
 

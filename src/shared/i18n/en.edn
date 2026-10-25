@@ -1,6 +1,8 @@
 ;; The interface in English. Same keys as `ru.edn`; a key names what the text says, `{{:param}}` takes a
 ;; value from the markup's `[:i18n :key {:param …}]`.
-{:collections/all             "Everything"
+{:language/name               "English"
+
+ :collections/all             "Everything"
  :collections/delete          [:fn/str "Delete collection “{{:name}}”"]
  :collections/deleted         [:fn/str "Collection “{{:name}}” deleted"]
  :collections/new             "New collection"
@@ -62,6 +64,10 @@
  :lesson/your-answer          "Your answer:"
 
  :phrase/add                  "Add phrase"
+
+ :settings/language           "Language"
+ :settings/open               "Sprecha, settings"
+ :settings/title              "Settings"
 
  :shell/export-trace          "Export trace"
  :shell/install               "Install app"

@@ -1,6 +1,8 @@
 ;; The interface in Turkish, key for key with `ru.edn`. It speaks to the user as «sen», the way Turkish
 ;; apps do. Turkish nouns take no plural after a number, so no text needs a plural form.
-{:collections/all             "Tümü"
+{:language/name               "Türkçe"
+
+ :collections/all             "Tümü"
  :collections/delete          [:fn/str "“{{:name}}” setini sil"]
  :collections/deleted         [:fn/str "“{{:name}}” seti silindi"]
  :collections/new             "Yeni set"
@@ -62,6 +64,10 @@
  :lesson/your-answer          "Cevabın:"
 
  :phrase/add                  "İfade ekle"
+
+ :settings/language           "Dil"
+ :settings/open               "Sprecha, ayarlar"
+ :settings/title              "Ayarlar"
 
  :shell/export-trace          "İzi dışa aktar"
  :shell/install               "Uygulamayı yükle"

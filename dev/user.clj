@@ -4,6 +4,13 @@
    [sqlite.application-defined-functions]))
 
 
+;; `i18n` inlines the language files as it compiles, and a class newer than its source is loaded in its place:
+;; a language file added or edited since would not show. Its classes go before each start, so it compiles anew.
+(doseq [^java.io.File file (.listFiles (java.io.File. "classes"))
+        :when (re-matches #"i18n(\$.*|__init)\.class" (.getName file))]
+  (.delete file))
+
+
 ;; Improving Development Startup Time
 ;; https://clojure.org/guides/dev_startup_time
 (binding [*compile-files* true ;; compile during load
