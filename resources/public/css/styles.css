@@ -24,5 +24,6 @@
 @import url("./blocks/collections.css") layer(blocks);
 @import url("./blocks/sync-dialogs.css") layer(blocks);
 @import url("./blocks/view-transitions.css") layer(blocks);
+@import url("./blocks/in-screen-motion.css") layer(blocks);
 
 @import url("./utilities/visually-hidden.css") layer(utilities);

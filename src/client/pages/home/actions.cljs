@@ -62,8 +62,9 @@
 
 (nxr/register-action! :action/word-added
   ;; The form empties once the word is stored; home is computed again from memory, which took the word with PouchDB.
-  (fn word-added [_]
-    [[:effect/save fresh-form]
+  ;; The word list takes the words added since it was last open, to highlight them.
+  (fn word-added [state word-id]
+    [[:effect/save (assoc fresh-form :home/added (conj (or (:home/added state) #{}) word-id))]
      [:effect/clear-autogrow "new-word-value"]
      [:effect/clear-autogrow "new-word-translation"]
      [:effect/enter :action/refresh-page]]))

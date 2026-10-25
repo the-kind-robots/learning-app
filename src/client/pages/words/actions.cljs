@@ -49,12 +49,15 @@
 
 (nxr/register-action! :action/open-words
   ;; The screen and its first page in one write, in the task of the tap. It opens no dialog:
-  ;; leaving with a word open would bring it back on the return.
+  ;; leaving with a word open would bring it back on the return. It takes the words home added since the last
+  ;; opening, to highlight them this time only.
   (fn open-words [state context]
     [[:effect/save
       (shown state
              context
-             {:page/current  :page/words
+             {:home/added    nil
+              :page/current  :page/words
+              :words/added   (:home/added state)
               :words/editing nil
               :words/limit   first-rows
               :words/search  ""})]

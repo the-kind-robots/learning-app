@@ -34,4 +34,17 @@ const forgetTransitions = (page) => page.evaluate(() => { window.__transitions =
 const screenSettled = (page) =>
   page.waitForFunction(() => !document.documentElement.matches(':active-view-transition'));
 
-module.exports = { recordTransitions, transitions, forgetTransitions, screenSettled };
+// Something that just appeared on a phone may still be moving into place (the
+// answer panel rises): a spec that taps it by its coordinates waits for this.
+const motionSettled = (page) =>
+  page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
+
+// The CSS animations on an element and its pseudo-elements, as
+// `<keyframes>` or `<pseudo-element> <keyframes>`, sorted. A finished one
+// that fills both ways stays listed.
+const animationsOf = (locator) => locator.evaluate((element) => document.getAnimations()
+  .filter((a) => a.effect?.target === element && a.animationName)
+  .map((a) => (a.effect.pseudoElement ? `${a.effect.pseudoElement} ` : '') + a.animationName)
+  .sort());
+
+module.exports = { recordTransitions, transitions, forgetTransitions, screenSettled, motionSettled, animationsOf };

@@ -146,8 +146,12 @@
     [{{:keys [learner world]} :capabilities :keys [dispatch]} _ message]
     (try
       (when-let [raw-name (js/prompt message)]
-        (await (collections/create! learner world raw-name))
-        (dispatch [[:effect/enter :action/refresh-page]]))
+        ;; The reverse of a deletion: the transition runs around the write and the tiles with the new one.
+        (await (view-transition/change!
+                :transition/open-gap
+                (fn ^:async create-and-show! []
+                  (await (collections/create! learner world raw-name))
+                  (dispatch [[:effect/enter :action/refresh-page]])))))
       (catch js/Error err
         (log/error :effect/prompt-create-collection {:error (str err)})))))
 

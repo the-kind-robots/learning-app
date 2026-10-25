@@ -69,7 +69,7 @@
       (let [result (await (vocabulary/add! learner world entered))]
         (if (:error result)
           (dispatch [[:action/show-word-error (:error result)]])
-          (dispatch (cond-> [[:action/word-added]]
+          (dispatch (cond-> [[:action/word-added (:word-id result)]]
                       focus-id (conj [:effect/focus focus-id])))))
       ;; A write that threw is said on the form, which keeps what was typed
       ;; (#313). Nothing the user does fixes it, so no cause is told apart.

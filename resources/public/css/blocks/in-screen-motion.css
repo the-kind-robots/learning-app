@@ -1,0 +1,50 @@
+/* Motion inside a screen on a phone (ADR-0024): an element that appears moves as it mounts. The query is
+   `view-transition`'s own, so a screen moves only where its contents do. */
+
+@media (max-width: 699px) and (prefers-reduced-motion: no-preference) {
+  /* A checked answer: the panel rises; on a wrong one the learner's answer shakes once it is up. */
+
+  #lesson-footer > .lesson__footer:is(.lesson__footer--success, .lesson__footer--error) {
+    animation: rise-from-bottom 240ms var(--screen-easing) both;
+  }
+
+  .lesson__answer-body--given {
+    animation: shake 320ms ease-out 240ms both;
+  }
+
+  .word-edit-dialog.modal[open] {
+    animation: rise-from-bottom 240ms var(--screen-easing) both;
+  }
+
+  .word-edit-dialog.modal[open]::backdrop {
+    animation: fade-in 240ms ease-out both;
+  }
+
+  /* A word added since the list was last open: it drops into its row, tinted, and the tint fades. */
+
+  .word-item--added {
+    animation: row-fresh 960ms ease-out 190ms both;
+  }
+}
+
+/* By its own height: the panel sits on the bottom edge, and the dialog is nearly as tall as the screen. */
+@keyframes rise-from-bottom {
+  from { transform: translateY(100%); }
+}
+
+@keyframes shake {
+  15% { transform: translateX(-9px); }
+  30% { transform: translateX(8px); }
+  45% { transform: translateX(-6px); }
+  60% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes row-fresh {
+  from { background-color: rgb(var(--color-sea-sponge)); opacity: 0; transform: translateY(-12px); }
+  20% { background-color: rgb(var(--color-sea-sponge)); opacity: 1; transform: none; }
+}

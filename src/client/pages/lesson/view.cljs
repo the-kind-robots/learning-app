@@ -89,7 +89,7 @@
      (when user-answer
        (list
         [:h3.lesson__answer-header "Ваш ответ:"]
-        [:p.lesson__answer-body {:lang "de"} user-answer]))
+        [:p.lesson__answer-body.lesson__answer-body--given {:lang "de"} user-answer]))
      [:h3.lesson__answer-header "Правильно:"]
      (answer-body props)]
     [:div.lesson__action.page-footer__action

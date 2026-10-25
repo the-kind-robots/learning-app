@@ -1,5 +1,6 @@
 const { test, expect, nothingHappensFor, docsOfType } = require('./fixtures');
 const { seedWords } = require('./seed.shared');
+const { motionSettled } = require('./screen-transitions.shared');
 
 // On a phone «ДАЛЕЕ» and the next trial's «ПРОВЕРИТЬ» sit under the same
 // finger, so the second click of a double click lands on «ПРОВЕРИТЬ» of a
@@ -41,6 +42,7 @@ test.describe('Двойное нажатие на телефоне', () => {
         await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('falsch');
         await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
         await expect(page.getByRole('button', { name: 'ДАЛЕЕ' })).toBeFocused();
+        await motionSettled(page);
         before = await reviewCount(page);
         await recordClickCounts(page);
       });

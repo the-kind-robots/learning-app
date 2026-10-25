@@ -17,15 +17,17 @@
  * the header's row under the progress bar and the offset above the prompt both
  * shrink before the prompt is touched.
  *
- * `overflow:hidden` is the only enforced overflow rule and is required by the
- * "nothing scrolls on the lesson page" constraint.
+ * `overflow:clip` is the only enforced overflow rule and is required by the
+ * "nothing scrolls on the lesson page" constraint. Not `hidden`: that is still a
+ * scroll container, and focusing «ДАЛЕЕ» in a panel still rising from below the
+ * screen scrolled the whole lesson up by the panel's offset.
  */
 
 .lesson {
   display: flex;
   flex-direction: column;
   inset: 0;
-  overflow: hidden;
+  overflow: clip;
   position: fixed;
 }
 

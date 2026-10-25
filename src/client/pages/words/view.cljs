@@ -5,9 +5,12 @@
 
 
 (defn- word-list-item
-  [{:keys [id retention-band retention-color retention-percent translation value]}]
+  [{:keys [added? id retention-band retention-color retention-percent translation value]}]
+  ;; Keyed, so a filter that moves the rows keeps a highlight on its word.
   [:li.word-item
-   {:id (str "word-" id)}
+   {:class         (when added? "word-item--added")
+    :id            (str "word-" id)
+    :replicant/key id}
    [:button.word-item__display
     {:type "button"
      :on   {:click [[:effect/enter :action/open-word-edit id]]}}

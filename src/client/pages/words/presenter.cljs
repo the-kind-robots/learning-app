@@ -19,18 +19,14 @@
 
 
 (defn word-item-props
-  [{:keys [id value retention-level] :as row}]
+  [{:keys [id value retention-level] :as row} added]
   {:id id
+   :added? (contains? added id)
    :retention-band (retention-band retention-level)
    :retention-color (utils/prozent->color retention-level)
    :retention-percent (int retention-level)
    :value value
    :translation (str/join " · " (vocabulary/russian-translations row))})
-
-
-(defn word-list-props
-  [words]
-  (mapv word-item-props words))
 
 
 (defn empty-state
@@ -127,11 +123,11 @@
   "What the word list renders: the rows, the placeholder that replaces them, and whether the page chrome
    applies. An empty vocabulary drops the chrome, an empty filter keeps it; while `total` is nil the list
    shows nothing."
-  [{:words/keys [editing in-collection? more? rows search total]}]
+  [{:words/keys [added editing in-collection? more? rows search total]}]
   {:editing        (some-> editing editing-props)
    :in-collection? (boolean in-collection?)
    :empty-state    (empty-state rows total)
-   :items          (word-list-props rows)
+   :items          (mapv #(word-item-props % added) rows)
    :known?         (some? total)
    :more?          more?
    :search         search
