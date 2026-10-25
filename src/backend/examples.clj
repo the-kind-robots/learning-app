@@ -688,11 +688,11 @@
               :cefrLevel    (:cefrLevel word-meta "B2")
               :construction construction
               :translation  translations}
-       (:lemma word-meta) (assoc :lemma (:lemma word-meta))
+       (:lemma word-meta)        (assoc :lemma (:lemma word-meta))
        (utils/non-blank context) (assoc :context context)
-       (:avoid retry-context)     (assoc :avoid (:avoid retry-context))
-       (:example retry-context)   (assoc :previousAttempt (:example retry-context)
-                                         :previousIssue   (previous-issue-payload retry-context))))]))
+       (:avoid retry-context)    (assoc :avoid (:avoid retry-context))
+       (:example retry-context)  (assoc :previousAttempt (:example retry-context)
+                                        :previousIssue   (previous-issue-payload retry-context))))]))
 
 
 (def ^:private constructions
