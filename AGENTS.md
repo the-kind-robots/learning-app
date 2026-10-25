@@ -39,7 +39,7 @@ A refusal — from a hook or from workspace isolation — stops the work and goe
 - Branches come from `gh issue develop` (the start script) only. Never `git checkout -b` or `git switch -c`; a permission rule asks on both.
 - Run git commands plain and single: no pipes, `;` or `&&`.
 - Files change through Edit/Write, never a shell heredoc, `sed` or a script: worktree isolation cannot prove a shell edit stays inside the worktree.
-- Worktrees are the harness's: it removes them with their sessions. A merge deletes the branch.
+- Worktrees are the harness's: it removes them with their sessions. A merge deletes the branch; the session then runs `git fetch`, then `git switch --detach origin/master` in its worktree, so deleting the session asks nothing.
 - Subagents work inside the caller's worktree: `ops` (Haiku; issue/board scripts, commit of staged work, push, draft PR), `log-reader` (Haiku; digest of logs, CI and test output), `Explore`.
 
 # Issues
