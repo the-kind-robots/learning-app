@@ -1,0 +1,103 @@
+;; The interface in French, key for key with `ru.edn`. French typography puts a no-break space, ` `,
+;; before `:`, `?`, `!`, `%` and inside « », so a line never starts with the mark.
+{:collections/all             "Tous les mots"
+ :collections/delete          [:fn/str "Supprimer la collection « {{:name}} »"]
+ :collections/deleted         [:fn/str "Collection « {{:name}} » supprimée"]
+ :collections/new             "Nouvelle collection"
+ :collections/new-name        "Nom de la nouvelle collection :"
+ :collections/title           "Collections"
+
+ :dialog/close                "Fermer"
+
+ :example/failed              "Échec. Appuyez encore sur ↻."
+ :example/no-theme            "Sans thème"
+ :example/regenerate          "Autre exemple"
+ :example/regenerating        "Recherche d’un exemple…"
+ :example/sentence            "Exemple"
+ :example/translation         "Traduction de l’exemple"
+
+ :home/add                    "AJOUTER"
+ :home/empty-translations     "Ajoutez une traduction."
+ :home/phrase-badge           "expression"
+ :home/phrase-label           "Expression (allemand)"
+ :home/phrase-placeholder     "Nouvelle expression"
+ :home/phrase-save-failed     "L’expression n’a pas été enregistrée : erreur de l’application, pas la vôtre."
+ :home/subtitle               "Ajoutez vite des mots et apprenez l’allemand, même hors ligne."
+ :home/title                  "Accueil"
+ :home/translation-label      "Traduction (français)"
+ :home/translation-placeholder "Traduction"
+ :home/word-label             "Mot (allemand)"
+ :home/word-placeholder       "Nouveau mot"
+ :home/word-save-failed       "Le mot n’a pas été enregistré : erreur de l’application, pas la vôtre."
+ :home/words                  "Liste des mots"
+
+ :install-guide/add           ("Touchez " [:strong "Ajouter"] " pour confirmer")
+ :install-guide/add-to-home   ("Touchez " [:strong "Sur l’écran d’accueil"])
+ :install-guide/close         "Fermer"
+ :install-guide/share         ("Touchez " [:strong "Partager"] " dans la barre d’outils")
+ :install-guide/title         "Installer Sprecha"
+
+ :lesson/add-to-dictionary    "+ AU DICTIONNAIRE"
+ :lesson/add-translation      "+ AJOUTER UNE TRADUCTION"
+ :lesson/add-words            "Ajouter des mots"
+ :lesson/answer               "Réponse en allemand"
+ :lesson/answer-placeholder   "Saisissez la traduction…"
+ :lesson/check                "VÉRIFIER"
+ :lesson/correct              "Correct !"
+ :lesson/correct-answer       "Bonne réponse :"
+ :lesson/empty                "Aucun mot pour la leçon"
+ :lesson/empty-hint           "Ajoutez des mots pour commencer"
+ :lesson/finish               "TERMINER"
+ :lesson/in-dictionary        "✓ Dans le dictionnaire"
+ :lesson/next                 "SUIVANT"
+ :lesson/progress             "Progression de la leçon"
+ :lesson/start                "COMMENCER LA LEÇON"
+ :lesson/tiles                "Tuiles"
+ :lesson/tiles-hint           "Indice : composer avec les tuiles"
+ :lesson/title                "Leçon"
+ :lesson/translate-phrase     "Traduisez l’expression en allemand"
+ :lesson/translate-sentence   "Traduisez la phrase en allemand"
+ :lesson/translate-word       "Traduisez le mot en allemand"
+ :lesson/tray                 "Votre réponse"
+ :lesson/your-answer          "Votre réponse :"
+
+ :phrase/add                  "Ajouter une expression"
+
+ :shell/export-trace          "Exporter la trace"
+ :shell/install               "Installer l’application"
+ :shell/loading               "Chargement…"
+ :shell/open-collections      "Ouvrir les collections"
+ :shell/read-error            "Impossible de lire les données de l’appareil. Rechargez la page."
+ :shell/reload-build          "Recharger la version"
+
+ :sync/cancel                 "Annuler"
+ :sync/connect-device         "Connecter un appareil"
+ :sync/qr                     "QR code pour connecter un appareil"
+ :sync/recovery-link          "Lien de récupération"
+ :sync/recovery-link-copied   "Lien copié dans le presse-papiers"
+ :sync/recovery-link-title    "Sprecha : récupération de l’accès"
+ :sync/scan-qr                "Scannez le QR code sur le nouvel appareil"
+ :sync/title                  "Synchronisation"
+
+ :word/add                    "Ajouter un mot"
+
+ :word-edit/delete            "Supprimer le mot"
+ :word-edit/delete-confirm    [:fn/str "Supprimer « {{:word}} » définitivement ?"]
+ :word-edit/remove-confirm    [:fn/str "Retirer « {{:word}} » de la collection ?"]
+ :word-edit/replaces          [:fn/str "Sera enregistré comme nouveau mot dans les mêmes thèmes. « {{:word}} » sera supprimé avec sa progression et ses exemples."]
+ :word-edit/reset             "Réinitialiser"
+ :word-edit/save              "Enregistrer"
+ :word-edit/taken             "Ce mot existe déjà"
+ :word-edit/translations      "Traductions, une par ligne"
+ :word-edit/word              "Mot"
+
+ :words/empty                 "Pas encore de mots"
+ :words/empty-hint            "Ajoutez votre premier mot sur l’accueil"
+ :words/no-matches            "Aucun résultat"
+ :words/no-matches-hint       "Essayez une autre recherche"
+ :words/retention-due         [:fn/str "À réviser ({{:percent}} %)"]
+ :words/retention-excellent   [:fn/str "Parfaitement mémorisé ({{:percent}} %)"]
+ :words/retention-good        [:fn/str "Bien appris ({{:percent}} %)"]
+ :words/retention-new         [:fn/str "Nouveau mot ({{:percent}} %)"]
+ :words/search                "Rechercher"
+ :words/title                 "Mes mots"}
