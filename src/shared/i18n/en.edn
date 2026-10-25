@@ -1,0 +1,103 @@
+;; The interface in English. Same keys as `ru.edn`; a key names what the text says, `{{:param}}` takes a
+;; value from the markup's `[:i18n :key {:param …}]`.
+{:collections/all             "Everything"
+ :collections/delete          [:fn/str "Delete collection “{{:name}}”"]
+ :collections/deleted         [:fn/str "Collection “{{:name}}” deleted"]
+ :collections/new             "New collection"
+ :collections/new-name        "Name of the new collection:"
+ :collections/title           "Collections"
+
+ :dialog/close                "Close"
+
+ :example/failed              "That didn't work. Tap ↻ again."
+ :example/no-theme            "No theme"
+ :example/regenerate          "Another example"
+ :example/regenerating        "Finding an example…"
+ :example/sentence            "Example"
+ :example/translation         "Example translation"
+
+ :home/add                    "ADD"
+ :home/empty-translations     "Add a translation."
+ :home/phrase-badge           "phrase"
+ :home/phrase-label           "Phrase (German)"
+ :home/phrase-placeholder     "New phrase"
+ :home/phrase-save-failed     "The phrase wasn't saved: the app failed, not you."
+ :home/subtitle               "Add words fast and learn German, even offline."
+ :home/title                  "Home"
+ :home/translation-label      "Translation (English)"
+ :home/translation-placeholder "Translation"
+ :home/word-label             "Word (German)"
+ :home/word-placeholder       "New word"
+ :home/word-save-failed       "The word wasn't saved: the app failed, not you."
+ :home/words                  "Word list"
+
+ :install-guide/add           ("Tap " [:strong "Add"] " to confirm")
+ :install-guide/add-to-home   ("Tap " [:strong "Add to Home Screen"])
+ :install-guide/close         "Close"
+ :install-guide/share         ("Tap " [:strong "Share"] " in the toolbar")
+ :install-guide/title         "Install Sprecha"
+
+ :lesson/add-to-dictionary    "+ ADD TO DICTIONARY"
+ :lesson/add-translation      "+ ADD TRANSLATION"
+ :lesson/add-words            "Add words"
+ :lesson/answer               "Answer in German"
+ :lesson/answer-placeholder   "Type the translation..."
+ :lesson/check                "CHECK"
+ :lesson/correct              "Correct!"
+ :lesson/correct-answer       "Correct answer:"
+ :lesson/empty                "No words for a lesson"
+ :lesson/empty-hint           "Add words to start learning"
+ :lesson/finish               "FINISH"
+ :lesson/in-dictionary        "✓ In dictionary"
+ :lesson/next                 "NEXT"
+ :lesson/progress             "Lesson progress"
+ :lesson/start                "START LESSON"
+ :lesson/tiles                "Tiles"
+ :lesson/tiles-hint           "Hint: build it from tiles"
+ :lesson/title                "Lesson"
+ :lesson/translate-phrase     "Translate the phrase into German"
+ :lesson/translate-sentence   "Translate the sentence into German"
+ :lesson/translate-word       "Translate the word into German"
+ :lesson/tray                 "Your answer"
+ :lesson/your-answer          "Your answer:"
+
+ :phrase/add                  "Add phrase"
+
+ :shell/export-trace          "Export trace"
+ :shell/install               "Install app"
+ :shell/loading               "Loading..."
+ :shell/open-collections      "Open collections"
+ :shell/read-error            "Can't read data on this device. Reload the page."
+ :shell/reload-build          "Reload build"
+
+ :sync/cancel                 "Cancel"
+ :sync/connect-device         "Connect a device"
+ :sync/qr                     "QR code to connect a device"
+ :sync/recovery-link          "Recovery link"
+ :sync/recovery-link-copied   "Link copied to clipboard"
+ :sync/recovery-link-title    "Sprecha: restore access"
+ :sync/scan-qr                "Scan the QR code on the new device"
+ :sync/title                  "Sync"
+
+ :word/add                    "Add word"
+
+ :word-edit/delete            "Delete word"
+ :word-edit/delete-confirm    [:fn/str "Delete “{{:word}}” for good?"]
+ :word-edit/remove-confirm    [:fn/str "Remove “{{:word}}” from the collection?"]
+ :word-edit/replaces          [:fn/str "It will be saved as a new word in the same themes. “{{:word}}” will be deleted with its progress and examples."]
+ :word-edit/reset             "Reset"
+ :word-edit/save              "Save"
+ :word-edit/taken             "This word already exists"
+ :word-edit/translations      "Translations, one per line"
+ :word-edit/word              "Word"
+
+ :words/empty                 "No words yet"
+ :words/empty-hint            "Add your first word on the home screen"
+ :words/no-matches            "Nothing found"
+ :words/no-matches-hint       "Try a different search"
+ :words/retention-due         [:fn/str "Due for review ({{:percent}}%)"]
+ :words/retention-excellent   [:fn/str "Remembered perfectly ({{:percent}}%)"]
+ :words/retention-good        [:fn/str "Learned well ({{:percent}}%)"]
+ :words/retention-new         [:fn/str "New word ({{:percent}}%)"]
+ :words/search                "Search"
+ :words/title                 "My words"}
