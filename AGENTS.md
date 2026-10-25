@@ -19,7 +19,7 @@ Whether the work also needs an OpenSpec change: `repo-task-delivery`, step 3. Pr
 
 If the user asks for a blocked command outright, prefix it with `DELIVERY_GUARD=off`. That turns the refusal into a normal approval prompt, so the owner still confirms. Never reach for it on your own judgement.
 
-A refusal — from a hook or from workspace isolation — stops the work and goes to the owner. Report what you were doing, what was refused, and the refusal verbatim. Do not look for a way around it: no commit assembled in a side worktree and pushed to the branch ref, no rewording a command past a static check.
+A refusal — from a hook or from workspace isolation — stops the work and goes to the owner. Report what you were doing, what was refused, and the refusal verbatim. Do not look for a way around it: no commit assembled in a side worktree and pushed to the branch ref, no rewording a command past a static check. One exception: a refusal of a command's form — a shell edit, a chained or piped git command — is answered by redoing that step with Edit/Write or as plain single commands. The target never changes.
 
 **Behaviour is normative in exactly two files**: the change's delta spec and the synced main spec. The proposal, the design notes, the tasks, the ADR and the documentation link to it — they never restate it.
 
@@ -38,6 +38,7 @@ A refusal — from a hook or from workspace isolation — stops the work and goe
 - A worktree isolates files, not the runtime: CouchDB, nginx and the dev ports stay shared. It still proves browser behaviour on fixture data — it serves on `localhost`, a secure context, so OPFS, Web Locks, service workers and workers run there.
 - Branches come from `gh issue develop` (the start script) only. Never `git checkout -b` or `git switch -c`; a permission rule asks on both.
 - Run git commands plain and single: no pipes, `;` or `&&`.
+- Files change through Edit/Write, never a shell heredoc, `sed` or a script: worktree isolation cannot prove a shell edit stays inside the worktree.
 - Worktrees are the harness's: it removes them with their sessions. A merge deletes the branch.
 - Subagents work inside the caller's worktree: `ops` (Haiku; issue/board scripts, commit of staged work, push, draft PR), `log-reader` (Haiku; digest of logs, CI and test output), `Explore`.
 
