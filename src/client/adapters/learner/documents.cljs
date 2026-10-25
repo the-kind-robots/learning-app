@@ -86,8 +86,9 @@
    and replication leaves one document without a conflict."
   [word-id word collection-id example]
   (let [{:keys [translation value]} example
-        structure                 (sorted-keys (:structure example))]
-    (cond-> {:_id         (str "example:" (pair-key word-id collection-id) ":" (content-hash value translation structure))
+        structure (sorted-keys (:structure example))]
+    (cond-> {:_id         (str "example:" (pair-key word-id collection-id)
+                               ":"        (content-hash value translation structure))
              :structure   structure
              :translation translation
              :type        (:type example-schema)

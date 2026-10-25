@@ -69,7 +69,8 @@
         (catch Exception error
           (.close opened)
           (throw (ex-info (str "Dictionary file unreadable: " file)
-                          {:file (str file)} error))))
+                          {:file (str file)}
+                          error))))
       (when-let [previous (first (reset-vals! connection opened))]
         (.close ^java.sql.Connection previous))
       opened)))
@@ -92,12 +93,13 @@
 (defn- lemmas-of-form
   "Lemma rows whose surface forms include `form`, by the form index."
   [form]
-  (query ["SELECT l.id, l.value, l.pos, l.cefr_level
+  (query
+   ["SELECT l.id, l.value, l.pos, l.cefr_level
            FROM surface_forms s JOIN lemmas l ON l.id = s.lemma_id
            WHERE s.normalized_form = ?
            ORDER BY l.rank DESC, l.id
            LIMIT 20"
-          form]))
+    form]))
 
 
 (defn- translations-by-lemma

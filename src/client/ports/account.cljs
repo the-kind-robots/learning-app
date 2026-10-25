@@ -12,22 +12,22 @@
 
 (defprotocol Account
   (exists?
-   [a]
-   "Whether this device has an account.")
+    [a]
+    "Whether this device has an account.")
   (sync!
-   [a reason]
-   "Asks for a replication pass with the account, if there is one and the device is online.")
+    [a reason]
+    "Asks for a replication pass with the account, if there is one and the device is online.")
   (sync-link
-   [a]
-   [a nonce]
-   "A promise of the link another device opens to join this account, nil without one. With a `nonce` the
+    [a]
+    [a nonce]
+    "A promise of the link another device opens to join this account, nil without one. With a `nonce` the
      opener echoes it back, so whoever showed the link can tell it joined.")
   (on-device-joined
-   [a nonce f]
-   "Calls `f` once the device that opened the link carrying `nonce` has joined.")
+    [a nonce f]
+    "Calls `f` once the device that opened the link carrying `nonce` has joined.")
   (initialized
-   [a]
-   "A promise that resolves once the learner's memory is loaded and the first replication pass is done, or a
+    [a]
+    "A promise that resolves once the learner's memory is loaded and the first replication pass is done, or a
      minute after memory loaded."))
 
 

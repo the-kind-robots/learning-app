@@ -19,15 +19,18 @@
    one xl/sharedStrings.xml plus one xl/worksheets/sheet1.xml.
    Headers are Word + SUBTLEX (other real columns omitted as irrelevant)."
   []
-  (let [file (java.io.File/createTempFile "subtlex" ".xlsx")
-        shared-strings "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+  (let
+    [file (java.io.File/createTempFile "subtlex" ".xlsx")
+     shared-strings
+     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">
   <si><t>Word</t></si>
   <si><t>SUBTLEX</t></si>
   <si><t>für</t></si>
   <si><t>Mädchen</t></si>
 </sst>"
-        sheet "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+     sheet
+     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">
   <sheetData>
     <row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c></row>
@@ -55,7 +58,7 @@
     (let [input  (minimal-subtlex-xlsx)
           output (java.io.File/createTempFile "frequency-xlsx" ".tsv")]
       (.deleteOnExit output)
-      (wf/-main "--input" (.getAbsolutePath input)
+      (wf/-main "--input"  (.getAbsolutePath input)
                 "--output" (.getAbsolutePath output))
       (is (= ["word\tcount\tsource"
               "für\t4179.78\tsubtlex-de"

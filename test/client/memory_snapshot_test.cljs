@@ -268,7 +268,8 @@
          [dbs]
          (await (seeded! dbs))
          (let [first-start (await (session! dbs puts))]
-           (is (= 1 (get-in first-start [:reads :full])) "the first start reads user-db in full, and device-db not at all")
+           (is (= 1 (get-in first-start [:reads :full]))
+               "the first start reads user-db in full, and device-db not at all")
            (is (= (memory/position (:memory first-start)) (stored-position entries))
                "the snapshot carries the position of the memory it holds"))
          (let [position (stored-position entries)]

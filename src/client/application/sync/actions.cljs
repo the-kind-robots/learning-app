@@ -20,7 +20,7 @@
   (fn show-sync-qr [_ qr]
     [[:effect/save
       {:app/sync-menu-open? false
-       :app/sync-qr         qr}]]))
+       :app/sync-qr qr}]]))
 
 
 (nxr/register-action! :action/close-sync-qr

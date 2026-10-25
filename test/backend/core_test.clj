@@ -503,18 +503,18 @@
            (sut/regeneration-request {:word "Hund" :translations 5 :avoid "x"}))))
   (testing "a body that is not an object, or has no word, is refused"
     (are [body error] (= {:error error} (sut/regeneration-request body))
-      nil                    "Invalid JSON body"
-      [1 2]                  "Invalid JSON body"
-      {}                     "Missing 'word' parameter"
-      {:word "  "}           "Missing 'word' parameter"
-      {:word 5}              "Missing 'word' parameter"))
+     nil          "Invalid JSON body"
+     [1 2]        "Invalid JSON body"
+     {}           "Missing 'word' parameter"
+     {:word "  "} "Missing 'word' parameter"
+     {:word 5}    "Missing 'word' parameter"))
   (testing "five sentences of 300 characters are the most"
     (is (nil? (:error (sut/regeneration-request
                        {:word "Hund" :avoid (repeat 5 (apply str (repeat 300 "a")))}))))
     (are [avoid] (= {:error "Too many or too long 'avoid' sentences"}
                     (sut/regeneration-request {:word "Hund" :avoid avoid}))
-      (repeat 6 "Der Hund bellt.")
-      [(apply str (repeat 301 "a"))])))
+     (repeat 6 "Der Hund bellt.")
+     [(apply str (repeat 301 "a"))])))
 
 
 (def ^:private real-generation
@@ -572,12 +572,12 @@
                            {:port 0 :legacy-return-value? false})
           config (provider/config)]
       (try
-        (with-redefs [provider/config (constantly
-                                       (assoc config
-                                              :api-url
-                                              (str "http://localhost:"
-                                                   (server/server-port provider-server)
-                                                   "/")))
+        (with-redefs [provider/config      (constantly
+                                            (assoc config
+                                                   :api-url
+                                                   (str "http://localhost:"
+                                                        (server/server-port provider-server)
+                                                        "/")))
                       dictionary/lookup-dictionary-entries (constantly nil)
                       dictionary/lemma-ids (constantly #{})]
           (with-example-server
@@ -789,7 +789,7 @@
 
 
 (deftest a-word-saved-in-an-inflected-form-gets-an-example-in-another-form
-  (let [calls (atom 0)
+  (let [calls  (atom 0)
         lemmas {"explodiert" #{1 2} "explodierte" #{1 2} "explodieren" #{1}}]
     (with-redefs [examples/example-api-request
                   (support.generation/provider-answering-in-turn

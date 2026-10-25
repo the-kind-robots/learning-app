@@ -37,15 +37,15 @@
   "What `start!` returns for a device without an account. Such a device runs
    no pass, so its sync is inert, there is no first pass to wait for, and no
    device can join."
-  {:connect-push!    (constantly nil)
+  {:connect-push! (constantly nil)
    :disconnect-push! (constantly nil)
-   :exists?          false
-   :first-pass       (js/Promise.resolve nil)
+   :exists?       false
+   :first-pass    (js/Promise.resolve nil)
    :on-device-joined (fn [_ _] nil)
-   :pause!           (constantly nil)
-   :resume!          (constantly nil)
-   :sync!            (constantly nil)
-   :sync-link        (fn [& _] (js/Promise.resolve nil))})
+   :pause!        (constantly nil)
+   :resume!       (constantly nil)
+   :sync!         (constantly nil)
+   :sync-link     (fn [& _] (js/Promise.resolve nil))})
 
 
 (defn- ^:async sync-link
@@ -193,12 +193,12 @@
                   (reset! wanted true)
                   (or @running
                       (reset! running
-                              (.then (run! nil)
-                                     (fn [result]
-                                       (when (pos? (:pulled result 0))
-                                         (doseq [f @pulled-hooks]
-                                           (f)))
-                                       result))))))
+                        (.then (run! nil)
+                               (fn [result]
+                                 (when (pos? (:pulled result 0))
+                                   (doseq [f @pulled-hooks]
+                                     (f)))
+                                 result))))))
               ;; A pass's end judges the feed, because only then it knows what it pulled.
               push! (gfn/throttle #(when (and (nil? @running) (local-writes?))
                                      (request!))
@@ -214,18 +214,18 @@
            ;; `f` is called once the device that opened the link carrying `nonce` has joined; the proof
            ;; it echoes arrives with a pull. The hook forgets itself then.
            :on-device-joined (fn on-device-joined
-                                       [nonce f]
-                                       (let [done        (volatile! false)
-                                             unsubscribe (volatile! nil)]
-                                         (vreset! unsubscribe
-                                                  (on-pulled (fn []
-                                                               (-> (joined? databases nonce)
-                                                                   (.then (fn [joined]
-                                                                            (when (and joined (not @done))
-                                                                              (vreset! done true)
-                                                                              (@unsubscribe)
-                                                                              (f))))))))
-                                         nil))
+                               [nonce f]
+                               (let [done        (volatile! false)
+                                     unsubscribe (volatile! nil)]
+                                 (vreset! unsubscribe
+                                          (on-pulled (fn []
+                                                       (-> (joined? databases nonce)
+                                                           (.then (fn [joined]
+                                                                    (when (and joined (not @done))
+                                                                      (vreset! done true)
+                                                                      (@unsubscribe)
+                                                                      (f))))))))
+                                 nil))
            :sync-link        sync-link
            :sync!            request!
            ;; Push channel (ADR-0009): a poke pulls through the normal path.

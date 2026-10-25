@@ -42,7 +42,8 @@
   "Saves the fetched `example` of `pair`. Resolves with the example's entity, or nil when the learner's data
    does not hold it afterwards."
   [learner pair example]
-  (learner/insert! learner :entity/example
+  (learner/insert! learner
+                   :entity/example
                    {:collection-id (:collection-id pair)
                     :example       example
                     :word          (:value (:word pair))

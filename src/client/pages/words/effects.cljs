@@ -73,12 +73,13 @@
     (try
       (doseq [replacement replacements]
         (when-not (await (examples/replace! learner replacement))
-          (log/error :effect/replace-example {:collection-id (:collection-id replacement)
-                                              :word-id       (:word-id replacement)})))
+          (log/error :effect/replace-example
+                     {:collection-id (:collection-id replacement)
+                      :word-id       (:word-id replacement)})))
       (catch js/Error err
         (log/error :effect/replace-example {:error (str err)}))
       (finally
-        (dispatch [[:action/close-word-edit]])))))
+       (dispatch [[:action/close-word-edit]])))))
 
 
 ;; The request that is out, to be aborted when the dialog closes.
@@ -95,11 +96,11 @@
   (fn ^:async request-another-example
     [{{:keys [examples-generator]} :capabilities :keys [dispatch]} _ {:keys [avoid subject word-id]}]
     (let [controller (js/AbortController.)
-          _          (reset! request controller)
+          _ (reset! request controller)
           answer     (try
                        (await (examples-generator/regenerate examples-generator subject avoid (.-signal controller)))
                        (finally
-                         (reset! request nil)))]
+                        (reset! request nil)))]
       (dispatch [[:action/example-arrived word-id answer]]))))
 
 

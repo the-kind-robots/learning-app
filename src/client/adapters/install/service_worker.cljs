@@ -73,26 +73,27 @@
    waiting one to serve now and reloads onto it, or reloads plainly; other tabs keep the code they loaded.
    Only a development build has a mark."
   [registration]
-  (letfn [(reload! []
-            (js/location.reload))
-          (take-or-reload! [^js reg]
-            (if-let [^js waiting (.-waiting reg)]
-              ;; The page reloads once: on activation, on redundancy, or at the timeout. A reload while the
-              ;; worker is still activating can hang the navigation (measured, 2 runs of 4).
-              (let [reloaded? (atom false)
-                    reload-once! (fn []
-                                   (when-not @reloaded?
-                                     (reset! reloaded? true)
-                                     (reload!)))]
-                (.addEventListener waiting
-                                   "statechange"
-                                   #(when (contains? #{"activated" "redundant"} (.-state waiting))
-                                      (reload-once!)))
-                ;; How long the build mark waits for the worker to activate before it reloads anyway.
-                (js/setTimeout reload-once! 3000)
-                ;; Makes the receiving worker call skipWaiting; only a development build sends it.
-                (.postMessage waiting #js {:type "activate-waiting"}))
-              (reload!)))]
+  (letfn
+    [(reload! []
+       (js/location.reload))
+     (take-or-reload! [^js reg]
+       (if-let [^js waiting (.-waiting reg)]
+         ;; The page reloads once: on activation, on redundancy, or at the timeout. A reload while the
+         ;; worker is still activating can hang the navigation (measured, 2 runs of 4).
+         (let [reloaded?    (atom false)
+               reload-once! (fn []
+                              (when-not @reloaded?
+                                (reset! reloaded? true)
+                                (reload!)))]
+           (.addEventListener waiting
+                              "statechange"
+                              #(when (contains? #{"activated" "redundant"} (.-state waiting))
+                                 (reload-once!)))
+           ;; How long the build mark waits for the worker to activate before it reloads anyway.
+           (js/setTimeout reload-once! 3000)
+           ;; Makes the receiving worker call skipWaiting; only a development build sends it.
+           (.postMessage waiting #js {:type "activate-waiting"}))
+         (reload!)))]
     (-> registration
         (.then (fn [^js reg]
                  (if reg

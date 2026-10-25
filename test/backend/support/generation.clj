@@ -65,4 +65,4 @@
   (let [latch (CountDownLatch. (int expected-joins))]
     (with-redefs-fn {#'single-flight/joined (fn [_task-id] (.countDown latch))}
       #(body (fn joined []
-             (.await latch 2 TimeUnit/SECONDS))))))
+               (.await latch 2 TimeUnit/SECONDS))))))

@@ -233,9 +233,9 @@
   "Starts the learner's data. Memory is read and followed without awaiting; the snapshot check (ADR-0018) is
    what replication waits for. Resolves with the learner."
   []
-  (let [store (atom {:learner/memory memory/empty-memory})
+  (let [store     (atom {:learner/memory memory/empty-memory})
         _ (databases/persist!)
         databases (await (databases/open-pouch!))
-        checked (loader/start-reading! databases store)
+        checked   (loader/start-reading! databases store)
         _ (loader/start! databases store)]
     (new-learner {:checked checked :databases databases :store store})))

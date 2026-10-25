@@ -242,7 +242,7 @@
             {:word  "Vater"
              :forms [{:form "Mutter" :tags ["feminine"]}
                      {:form "Vaters" :tags ["genitive" "singular"]}
-                     {:form "Väter"  :tags ["nominative" "plural"]}]})))))
+                     {:form "Väter" :tags ["nominative" "plural"]}]})))))
 
 
 (deftest inflected-forms-excludes-masculine-cross-reference
@@ -250,7 +250,7 @@
     (is (= ["Schauspielerinnen"]
            (kaikki/inflected-forms
             {:word  "Schauspielerin"
-             :forms [{:form "Schauspieler"      :tags ["masculine"]}
+             :forms [{:form "Schauspieler" :tags ["masculine"]}
                      {:form "Schauspielerinnen" :tags ["nominative" "plural"]}]})))))
 
 
@@ -259,5 +259,5 @@
     (is (= ["Angestellte"]
            (kaikki/inflected-forms
             {:word  "Angestellter"
-             :forms [{:form "Angest."     :tags ["abbreviation"]}
+             :forms [{:form "Angest." :tags ["abbreviation"]}
                      {:form "Angestellte" :tags ["nominative" "plural"]}]})))))

@@ -49,14 +49,14 @@
         [dictionary learner] (await (js/Promise.all #js [(dictionary/start!)
                                                          (.then (account/check-incoming-auth!) #(learner/start!))]))
         account            (await (account/start! {:learner learner :page page :world world}))
-        capabilities       {:account            account
-                            :dictionary         dictionary
+        capabilities       {:account    account
+                            :dictionary dictionary
                             :examples-generator examples-generator
-                            :install            install
-                            :learner            learner
-                            :navigation         navigation
-                            :page               page
-                            :world              world}
+                            :install    install
+                            :learner    learner
+                            :navigation navigation
+                            :page       page
+                            :world      world}
         system             {:app-state    app-state
                             :capabilities capabilities}
         dispatch           (fn [dispatch-data actions]
@@ -78,8 +78,9 @@
                           (let [current-page (pages/table entered)]
                             ;; The keyboard's mode belongs to the screen, so it is set once, as the screen is entered.
                             (page/overlay-keyboard! page (:keyboard-overlays? current-page))
-                            (dispatch {} [[:effect/enter (:open current-page)]
-                                          [:effect/after-paint [[:effect/sync]]]]))))))
+                            (dispatch {}
+                                      [[:effect/enter (:open current-page)]
+                                       [:effect/after-paint [[:effect/sync]]]]))))))
 
 
 (defn ^:async ^:export start

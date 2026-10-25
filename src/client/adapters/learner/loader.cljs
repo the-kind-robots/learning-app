@@ -129,7 +129,8 @@
 (defn- ^:async refusal
   "Why the snapshot with `header` cannot start memory from user-db now, or nil."
   [databases {:keys [position version] :as header}]
-  (let [[feed-head db-id] (await (js/Promise.all #js [(pouch/feed-position databases db-key) (pouch/id databases db-key)]))]
+  (let [[feed-head db-id] (await (js/Promise.all #js [(pouch/feed-position databases db-key)
+                                                      (pouch/id databases db-key)]))]
     (cond
       (not= snapshot/format-version version) :version
       (not= (:db/id header) db-id) :db-id
@@ -233,10 +234,10 @@
         _ (.delete reads store)]
     (when-let [{:keys [memory stored]} (await read)]
       (let [feed     (pouch/follow-changes databases
-                                         db-key
-                                         (:seq (memory/position memory))
-                                         (fn [docs position]
-                                           (swap! store update :learner/memory memory/with-changes docs position)))
+                                           db-key
+                                           (:seq (memory/position memory))
+                                           (fn [docs position]
+                                             (swap! store update :learner/memory memory/with-changes docs position)))
             stopped? (volatile! false)
             write!   (snapshot-writer databases store stored stopped?)]
         (.set followers store (:catch-up! feed))

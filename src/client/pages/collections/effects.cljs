@@ -62,9 +62,10 @@
     (js/window.addEventListener
      "click"
      (fn [^js click]
-       (when (= card-id (some-> ^js (.-target click)
-                                (.closest "[data-collection-id]")
-                                (.getAttribute "data-collection-id")))
+       (when (= card-id
+                (some-> ^js (.-target click)
+                        (.closest "[data-collection-id]")
+                        (.getAttribute "data-collection-id")))
          (.abort listener)
          (.stopPropagation click)
          (.preventDefault click)))

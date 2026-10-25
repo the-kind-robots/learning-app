@@ -114,15 +114,15 @@
 (deftest a-rename-and-a-later-add-word-on-another-device-keep-the-rename-and-both-words
   (async-testing "the name is the renamed one on both devices, and both words are in"
     (with-devices
-      (^:async fn
-       [{:keys [laptop phone] :as devices}]
-       (await (rename! phone "Haus" "2026-02-01"))
-       (await (add-word! laptop "vocab:katze"))
-       (await (add-word! phone "vocab:hund"))
-       (await (settled! devices))
-       (doseq [dbs [phone laptop]]
-         (is (= "Haus" (:name (await (db/get (:user/db dbs) "c1")))))
-         (is (= #{"vocab:hund" "vocab:katze"} (set (:word-ids (await (db/get (:user/db dbs) "c1")))))))))))
+     (^:async fn
+      [{:keys [laptop phone] :as devices}]
+      (await (rename! phone "Haus" "2026-02-01"))
+      (await (add-word! laptop "vocab:katze"))
+      (await (add-word! phone "vocab:hund"))
+      (await (settled! devices))
+      (doseq [dbs [phone laptop]]
+        (is (= "Haus" (:name (await (db/get (:user/db dbs) "c1")))))
+        (is (= #{"vocab:hund" "vocab:katze"} (set (:word-ids (await (db/get (:user/db dbs) "c1")))))))))))
 
 
 (deftest a-change-written-to-the-version-that-lost-is-kept
@@ -201,31 +201,35 @@
   "Runs `sync/sync-once!` on `dbs` with a replication that pulled `pulled-ids`, and counts the
    reads of a collection's versions. Resolves with the count."
   [dbs pulled-ids]
-  (let [reads (atom 0)
+  (let [reads    (atom 0)
         versions pouch/doc-versions]
-    (with-redefs [pouch/sync-once! (fn [_ _ _] (js/Promise.resolve {:pulled 1 :pulled-ids pulled-ids :pulled-revs #{} :pushed 0}))
-                  pouch/doc-versions     (fn [& args] (swap! reads inc) (apply versions args))]
-      (await (account/sync-once! dbs "account" (fn [{:keys [pulled-ids]}]
-                                 (learner-adapter/resolve-conflicts! {:databases dbs} pulled-ids)))))
+    (with-redefs [pouch/sync-once!   (fn [_ _ _]
+                                       (js/Promise.resolve
+                                        {:pulled 1 :pulled-ids pulled-ids :pulled-revs #{} :pushed 0}))
+                  pouch/doc-versions (fn [& args] (swap! reads inc) (apply versions args))]
+      (await (account/sync-once! dbs
+                                 "account"
+                                 (fn [{:keys [pulled-ids]}]
+                                   (learner-adapter/resolve-conflicts! {:databases dbs} pulled-ids)))))
     @reads))
 
 
 (deftest a-pull-that-brings-a-conflicted-collection-resolves-it
   (async-testing "the collection the pull names has one live version afterwards"
     (with-devices
-      (^:async fn
-       [{:keys [laptop phone]}]
-       (await (add-word! phone "vocab:hund"))
-       (await (add-word! laptop "vocab:katze"))
-       (await (replication/replicated! (:user/db laptop) (:user/db phone)))
-       (is (= 1 (await (pass-pulling! phone {"collection" #{"c1"}}))))
-       (is (= 1 (await (live-count phone))))
-       (is (= #{"vocab:hund" "vocab:katze"} (set (:word-ids (await (db/get (:user/db phone) "c1"))))))))))
+     (^:async fn
+      [{:keys [laptop phone]}]
+      (await (add-word! phone "vocab:hund"))
+      (await (add-word! laptop "vocab:katze"))
+      (await (replication/replicated! (:user/db laptop) (:user/db phone)))
+      (is (= 1 (await (pass-pulling! phone {"collection" #{"c1"}}))))
+      (is (= 1 (await (live-count phone))))
+      (is (= #{"vocab:hund" "vocab:katze"} (set (:word-ids (await (db/get (:user/db phone) "c1"))))))))))
 
 
 (deftest a-pull-that-brings-only-words-reads-no-collection
   (async-testing "no versions are read when the pull names no collection"
     (with-devices
-      (^:async fn
-       [{:keys [phone]}]
-       (is (zero? (await (pass-pulling! phone {"vocab" #{"vocab:hund"}}))))))))
+     (^:async fn
+      [{:keys [phone]}]
+      (is (zero? (await (pass-pulling! phone {"vocab" #{"vocab:hund"}}))))))))

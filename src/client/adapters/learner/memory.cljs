@@ -107,26 +107,34 @@
   [memory {:keys [id word-ids] :as collection}]
   (if-let [previous (get-in memory [:collections id])]
     (let [[before after] (differing (:word-ids previous) word-ids)
-          held           (set before)
-          now            (set after)]
+          held (set before)
+          now  (set after)]
       (-> memory
           (assoc-in [:collections id] collection)
-          (update :collections-by-word #(reduce (fn [index word-id] (index-remove index word-id id))
-                                                % (remove now held)))
-          (update :collections-by-word #(reduce (fn [index word-id] (index-add index word-id id))
-                                                % (remove held now)))))
+          (update :collections-by-word
+                  #(reduce (fn [index word-id] (index-remove index word-id id))
+                           %
+                           (remove now held)))
+          (update :collections-by-word
+                  #(reduce (fn [index word-id] (index-add index word-id id))
+                           %
+                           (remove held now)))))
     (-> memory
         (assoc-in [:collections id] collection)
-        (update :collections-by-word #(reduce (fn [index word-id] (index-add index word-id id))
-                                              % word-ids)))))
+        (update :collections-by-word
+                #(reduce (fn [index word-id] (index-add index word-id id))
+                         %
+                         word-ids)))))
 
 
 (defn- remove-collection
   [memory {:keys [id word-ids]}]
   (-> memory
       (update :collections dissoc id)
-      (update :collections-by-word #(reduce (fn [index word-id] (index-remove index word-id id))
-                                            % word-ids))))
+      (update :collections-by-word
+              #(reduce (fn [index word-id] (index-remove index word-id id))
+                       %
+                       word-ids))))
 
 
 (defn- add-example
@@ -407,4 +415,3 @@
           (let [matched (into [] (filter #(vocabulary/matches? (:search %) query)) scope)]
             (vreset! matches-cache [scope query matched])
             matched))))))
-

@@ -68,7 +68,8 @@
                 :retained   true}
         memory (sut/with-docs sut/empty-memory [review])]
     (is (= ["r1"] (review-ids (sut/with-docs memory [(assoc review :_rev "2-b")]) "vocab:der hund")) "arriving again")
-    (is (= ["r1"] (review-ids (sut/with-docs memory [{:_deleted true :_id "r1" :_rev "2-b"}]) "vocab:der hund")) "a deletion")))
+    (is (= ["r1"] (review-ids (sut/with-docs memory [{:_deleted true :_id "r1" :_rev "2-b"}]) "vocab:der hund"))
+        "a deletion")))
 
 
 (deftest reviews-of-the-same-second-give-one-retention-whatever-their-order
@@ -122,10 +123,11 @@
 
 
 (deftest a-revision-changing-one-word-leaves-the-other-words-as-they-were
-  (let [ids     ["vocab:a" "vocab:b" "vocab:c"]
-        before  (sut/with-docs sut/empty-memory [(collection-doc "coll-x" "1-a" ids)
-                                                 (collection-doc "coll-y" "1-a" ["vocab:a"])])
-        after   (sut/with-docs before [(collection-doc "coll-x" "2-b" ["vocab:a" "vocab:b" "vocab:d"])])]
+  (let [ids    ["vocab:a" "vocab:b" "vocab:c"]
+        before (sut/with-docs sut/empty-memory
+                              [(collection-doc "coll-x" "1-a" ids)
+                               (collection-doc "coll-y" "1-a" ["vocab:a"])])
+        after  (sut/with-docs before [(collection-doc "coll-x" "2-b" ["vocab:a" "vocab:b" "vocab:d"])])]
     (is (identical? (get-in before [:collections-by-word "vocab:b"])
                     (get-in after [:collections-by-word "vocab:b"]))
         "a word the revision keeps")
@@ -193,5 +195,3 @@
         (await (wait/until #(nil? (sut/word (memory) "vocab:die katze"))))
         (is (nil? (sut/word (memory) "vocab:die katze")))
         (stop))))))
-
-

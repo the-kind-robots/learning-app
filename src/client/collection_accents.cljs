@@ -52,5 +52,5 @@
   (into {}
         (for [[position {:keys [children collection parent]}] (map-indexed vector (reading-order items))
               {:keys [id]} (cons collection (cons parent children))
-              :when id]
+              :when        id]
           [id (accent-at (inc position))])))

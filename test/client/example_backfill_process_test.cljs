@@ -79,8 +79,9 @@
                                (let [unlisten (volatile! (fn []))
                                      timer    [(+ @now ms) (swap! ids inc)]
                                      cancel   #(swap! timers dissoc timer)]
-                                 (swap! timers assoc timer
-                                        (fn [] (@unlisten) (resolve nil)))
+                                 (swap! timers assoc
+                                   timer
+                                   (fn [] (@unlisten) (resolve nil)))
                                  (vreset! unlisten (abort/on-abort f (fn [] (cancel) (@unlisten) (resolve nil)))))))))
                  (random [_] 0.5))
      :now      now}))
@@ -152,25 +153,25 @@
    is visible until `hide!`."
   [docs {:keys [account-exists? answer catch-up initialized]}]
   (let [{world :world :as ticking} (clock)
-        store         (atom {:learner/memory (memory-of docs)})
-        reads         (atom 0)
-        requests      (atom [])
-        saves         (atom [])
-        online        (atom true)
-        visible       (atom true)
-        on-inactive   (atom nil)
-        waiting       (atom [])
-        active?       #(and @visible @online)
-        change-page!  (fn []
-                        (if (active?)
-                          (let [resolvers @waiting]
-                            (reset! waiting [])
-                            (run! #(% nil) resolvers))
-                          (some-> @on-inactive (apply []))))]
+        store        (atom {:learner/memory (memory-of docs)})
+        reads        (atom 0)
+        requests     (atom [])
+        saves        (atom [])
+        online       (atom true)
+        visible      (atom true)
+        on-inactive  (atom nil)
+        waiting      (atom [])
+        active?      #(and @visible @online)
+        change-page! (fn []
+                       (if (active?)
+                         (let [resolvers @waiting]
+                           (reset! waiting [])
+                           (run! #(% nil) resolvers))
+                         (some-> @on-inactive (apply []))))]
     (merge
      ticking
      {:capabilities
-      {:world    world
+      {:world   world
        :examples-generator (reify examples-generator/ExamplesGenerator
                              (fetch [_ subject ^js signal]
                                (js/Promise.
@@ -178,51 +179,51 @@
                                   (.addEventListener signal "abort" #(resolve {:failure :failure/aborted}))
                                   (let [n (count @requests)]
                                     (swap! requests
-                                           conj
-                                           {:at      (world/clock world :now-ms)
-                                            :subject subject
-                                            :reject  reject
-                                            :resolve resolve
-                                            :signal  signal})
+                                      conj
+                                      {:at      (world/clock world :now-ms)
+                                       :subject subject
+                                       :reject  reject
+                                       :resolve resolve
+                                       :signal  signal})
                                     (when-let [answered (some-> answer (apply [subject n]))]
                                       (resolve answered))))))
                              (regenerate [_ _ _ _]
                                (js/Promise.resolve {:failure :failure/network})))
-       :page     (reify page/Page
-                   (active? [_] (active?))
-                   (yield [_] (browser/yield))
-                   (until-active [_ _]
-                     (js/Promise.
-                      (fn [resolve]
-                        (if (active?)
-                          (resolve nil)
-                          (swap! waiting conj resolve)))))
-                   (on-inactive [_ f ^js signal]
-                     (reset! on-inactive f)
-                     (.addEventListener signal "abort" #(reset! on-inactive nil))))
-       :account  (reify account/Account
-                   (exists? [_] (not (false? account-exists?)))
-                   (initialized [_] (or initialized (js/Promise.resolve nil))))
-       :learner  (reify learner/Learner
-                   (fresh-memory [_]
-                     (if catch-up
-                       (catch-up store)
-                       (js/Promise.resolve (:learner/memory @store))))
-                   (memory [_] (:learner/memory @store))
-                   (on-change [_ f] (learner-adapter/on-change {:store store} f))
-                   (insert! [_ _ example]
-                     (swap! saves conj [(:word example)])
-                     (swap! store
-                            update
-                            :learner/memory
-                            memory/with-docs
-                            [(assoc (documents/example-doc (:word-id example)
-                                                           (:word example)
-                                                           (:collection-id example)
-                                                           (:example example))
-                                    :_rev
-                                    "1-a")])
-                     (js/Promise.resolve {:id "example:stub"})))}
+       :page    (reify page/Page
+                  (active? [_] (active?))
+                  (yield [_] (browser/yield))
+                  (until-active [_ _]
+                    (js/Promise.
+                     (fn [resolve]
+                       (if (active?)
+                         (resolve nil)
+                         (swap! waiting conj resolve)))))
+                  (on-inactive [_ f ^js signal]
+                    (reset! on-inactive f)
+                    (.addEventListener signal "abort" #(reset! on-inactive nil))))
+       :account (reify account/Account
+                  (exists? [_] (not (false? account-exists?)))
+                  (initialized [_] (or initialized (js/Promise.resolve nil))))
+       :learner (reify learner/Learner
+                  (fresh-memory [_]
+                    (if catch-up
+                      (catch-up store)
+                      (js/Promise.resolve (:learner/memory @store))))
+                  (memory [_] (:learner/memory @store))
+                  (on-change [_ f] (learner-adapter/on-change {:store store} f))
+                  (insert! [_ _ example]
+                    (swap! saves conj [(:word example)])
+                    (swap! store
+                      update
+                      :learner/memory
+                      memory/with-docs
+                      [(assoc (documents/example-doc (:word-id example)
+                                                     (:word example)
+                                                     (:collection-id example)
+                                                     (:example example))
+                              :_rev
+                              "1-a")])
+                    (js/Promise.resolve {:id "example:stub"})))}
       :change! #(swap! store update :learner/memory memory/with-docs %)
       :hide! (fn [] (reset! visible false) (change-page!))
       :reads reads
@@ -384,7 +385,8 @@
 
 
 (deftest nothing-is-sent-before-the-learner-is-initialized
-  (async-testing "memory loaded and the first pass done, whatever the learner says it waits for; the session cookie is written before"
+  (async-testing
+    "memory loaded and the first pass done, whatever the learner says it waits for; the session cookie is written before"
     (let [[initialized initialized!] (deferred)]
       (await
        (run three-words
@@ -401,9 +403,9 @@
 (deftest memory-catches-up-before-the-first-pick
   (async-testing "an example the pass brought but the feed dropped is in memory before anything is asked"
     (let [w    (world three-words
-                     {:catch-up (fn [store]
-                                  (swap! store update :learner/memory memory/with-docs [(example-doc "Hund" nil)])
-                                  (js/Promise.resolve nil))})
+                      {:catch-up (fn [store]
+                                   (swap! store update :learner/memory memory/with-docs [(example-doc "Hund" nil)])
+                                   (js/Promise.resolve nil))})
           stop (start! (:capabilities w))]
       (try
         (await ((:advance! w) 0))
@@ -639,20 +641,28 @@
         removes (.-removeEventListener proto)
         held    (js/Map.)]
     ;; Plain JavaScript: the wrappers need the caller's `this` and any rest.
-    (set! (.-addEventListener proto)
-          ((js/Function. "orig" "held"
-                         "return function (type, listener, ...rest) {
+    (set!
+     (.-addEventListener proto)
+     ((js/Function.
+       "orig"
+       "held"
+       "return function (type, listener, ...rest) {
                             if (type === 'abort') held.set(listener, this);
                             return orig.call(this, type, listener, ...rest);
                           }")
-           adds held))
-    (set! (.-removeEventListener proto)
-          ((js/Function. "orig" "held"
-                         "return function (type, listener, ...rest) {
+      adds
+      held))
+    (set!
+     (.-removeEventListener proto)
+     ((js/Function.
+       "orig"
+       "held"
+       "return function (type, listener, ...rest) {
                             if (type === 'abort') held.delete(listener);
                             return orig.call(this, type, listener, ...rest);
                           }")
-           removes held))
+      removes
+      held))
     (try
       (await (f (fn [except]
                   (count (remove (fn [signal]
@@ -671,15 +681,17 @@
         (^:async fn
          [held]
          (await
-          (run docs
-               {:answer (constantly an-example)}
-               (^:async fn
-                [{:keys [advance! requests]}]
-                (dotimes [_ 6]
-                  (await (advance! 5000)))
-                (is (<= 6 (count @requests)) "the backfill paused at least six times")
-                (is (<= (held (map :signal @requests)) 3)
-                    "only the wait it is in now listens (its pause and its race), plus the one release of the inactivity watch"))))))))))
+          (run
+           docs
+           {:answer (constantly an-example)}
+           (^:async fn
+            [{:keys [advance! requests]}]
+            (dotimes [_ 6]
+              (await (advance! 5000)))
+            (is (<= 6 (count @requests)) "the backfill paused at least six times")
+            (is
+             (<= (held (map :signal @requests)) 3)
+             "only the wait it is in now listens (its pause and its race), plus the one release of the inactivity watch"))))))))))
 
 
 (deftest stopping-leaves-no-watch-on-the-store

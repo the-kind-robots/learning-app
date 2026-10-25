@@ -50,13 +50,14 @@
 
 
 (deftest initialized-waits-for-memory-and-the-first-pass-and-drops-the-timer
-  (async-testing "memory loaded, first pass pending: not yet; the pass completes: initialized, the minute's sleep cancelled"
-    (let [store                   (atom {:learner/memory memory/empty-memory})
+  (async-testing
+    "memory loaded, first pass pending: not yet; the pass completes: initialized, the minute's sleep cancelled"
+    (let [store (atom {:learner/memory memory/empty-memory})
           {:keys [aborted? slept world]} (sleeping)
           [first-pass pass-done!] (let [resolve (atom nil)
                                         promise (js/Promise. #(reset! resolve %))]
                                     [promise @resolve])
-          initialized             (account/initialization (over store) world first-pass)]
+          initialized (account/initialization (over store) world first-pass)]
       (is (false? (await (settled initialized))) "memory is not loaded")
       (swap! store assoc :learner/loaded? true)
       (is (false? (await (settled initialized))) "the first pass is pending")
@@ -68,9 +69,9 @@
 
 (deftest initialized-stops-waiting-for-a-first-pass-after-a-minute
   (async-testing "a first pass that never comes: initialized when the minute is up"
-    (let [store                 (atom {:learner/memory memory/empty-memory :learner/loaded? true})
+    (let [store       (atom {:learner/memory memory/empty-memory :learner/loaded? true})
           {:keys [wake! world]} (sleeping)
-          initialized           (account/initialization (over store) world (js/Promise. (fn [_])))]
+          initialized (account/initialization (over store) world (js/Promise. (fn [_])))]
       (is (false? (await (settled initialized))))
       (wake!)
       (is (true? (await (settled initialized)))))))

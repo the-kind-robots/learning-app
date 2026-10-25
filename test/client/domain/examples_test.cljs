@@ -11,8 +11,8 @@
 
 (deftest an-example-is-complete-with-its-sentence-and-its-translation
   (are [example complete?] (= complete? (sut/complete? example))
-    {:value "Er isst." :translation "Он ест."} true
-    {:value "Er isst." :translation ""}        false
-    {:value "Er isst." :translation "   "}     false
-    {:value "  " :translation "Он ест."}       false
-    {:value "" :translation ""}                false))
+   {:value "Er isst." :translation "Он ест."} true
+   {:value "Er isst." :translation ""} false
+   {:value "Er isst." :translation "   "} false
+   {:value "  " :translation "Он ест."} false
+   {:value "" :translation ""} false))

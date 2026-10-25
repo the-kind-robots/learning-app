@@ -23,9 +23,9 @@
 
 (deftest folding-german-reads-umlauts-as-their-base-letters
   (are [text folded] (= folded (sut/fold-german text))
-    "für"      "fur"
-    "Schön"    "schon"
-    "Mädchen"  "madchen"
-    "Straße"   "strasse"
-    "fuer"     "fuer"
-    "Wie geht's?" "wie geht s"))
+   "für"         "fur"
+   "Schön"       "schon"
+   "Mädchen"     "madchen"
+   "Straße"      "strasse"
+   "fuer"        "fuer"
+   "Wie geht's?" "wie geht s"))

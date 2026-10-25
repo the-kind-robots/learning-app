@@ -21,8 +21,8 @@
   [conn]
   ;; text_id is a build-pipeline join key only — absent from the shipped artifact.
   (jdbc/execute!
-   conn
-   ["CREATE TABLE lemmas (
+    conn
+    ["CREATE TABLE lemmas (
         id    INTEGER PRIMARY KEY,
         value TEXT    NOT NULL,
         pos   TEXT,
@@ -31,21 +31,21 @@
   ;; WITHOUT ROWID: hot path is WHERE lemma_id = ? ORDER BY rank —
   ;; a free clustered B-tree scan on the composite PK.
   (jdbc/execute!
-   conn
-   ["CREATE TABLE translations (
+    conn
+    ["CREATE TABLE translations (
         lemma_id INTEGER NOT NULL REFERENCES lemmas(id),
         rank     INTEGER NOT NULL,
         value    TEXT    NOT NULL,
         PRIMARY KEY (lemma_id, rank)
       ) WITHOUT ROWID"])
   (jdbc/execute! conn
-                 ["CREATE TABLE labels (
+    ["CREATE TABLE labels (
         id   INTEGER PRIMARY KEY,
         name TEXT    NOT NULL UNIQUE)"])
   ;; (lemma_id, rank) mirrors the translations PK; prefix lookup is free.
   (jdbc/execute!
-   conn
-   ["CREATE TABLE translation_labels (
+    conn
+    ["CREATE TABLE translation_labels (
         lemma_id INTEGER NOT NULL,
         rank     INTEGER NOT NULL,
         label_id INTEGER NOT NULL REFERENCES labels(id),
@@ -54,8 +54,8 @@
       ) WITHOUT ROWID"])
   ;; WITHOUT ROWID: normalized_form is the leading PK column — lookups are clustered.
   (jdbc/execute!
-   conn
-   ["CREATE TABLE surface_forms (
+    conn
+    ["CREATE TABLE surface_forms (
         normalized_form TEXT    NOT NULL,
         lemma_id        INTEGER NOT NULL REFERENCES lemmas(id),
         PRIMARY KEY (normalized_form, lemma_id)
@@ -117,11 +117,11 @@
       (create-tables! conn)
       (println "  Writing dictionary.sqlite...")
       (jdbc/with-transaction [tx conn]
-        (insert-lemmas!             tx lemmas)
-        (insert-translations!       tx translations)
-        (insert-labels!             tx labels)
+        (insert-lemmas! tx lemmas)
+        (insert-translations! tx translations)
+        (insert-labels! tx labels)
         (insert-translation-labels! tx translation-labels)
-        (insert-surface-forms!      tx surface-forms)))
+        (insert-surface-forms! tx surface-forms)))
     (let [stats (finalize! output-dir tmp-path "dictionary.sqlite")]
       (assoc stats
              :lemma-count (count lemmas)
@@ -169,19 +169,23 @@
 
 (defn lemma:key->id
   [conn & {:as opts}]
-  (into {} (map (fn [{:keys [value pos id]}]
-                  [(str "lemma:" (str/lower-case value) ":" pos) id]))
+  (into {}
+        (map (fn [{:keys [value pos id]}]
+               [(str "lemma:" (str/lower-case value) ":" pos) id]))
         (jdbc/execute! conn ["SELECT id, value, pos FROM lemmas"] opts)))
+
 
 (defn label:name->id
   [conn & {:as opts}]
-  (into {} (map (juxt :name :id))
+  (into {}
+        (map (juxt :name :id))
         (jdbc/execute! conn ["SELECT id, name FROM labels"] opts)))
 
 
 (defn already-translated
   [conn & {:as opts}]
-  (into #{} (map :lemma_id)
+  (into #{}
+        (map :lemma_id)
         (jdbc/execute! conn ["SELECT DISTINCT lemma_id FROM translations"] opts)))
 
 
@@ -206,10 +210,10 @@
 (defn- translation-labels
   [translations label->id]
   (for [{:keys [lemma-id rank labels]} translations
-        :when  labels
-        label  labels
-        :let   [label-id (label->id label)]
-        :when  label-id]
+        :when labels
+        label labels
+        :let  [label-id (label->id label)]
+        :when label-id]
     {:lemma-id lemma-id :rank rank :label-id label-id}))
 
 
@@ -220,36 +224,37 @@
   [output-dir]
   (let [sqlite-path (str output-dir "/dictionary.sqlite")
         jsonl-path  (str output-dir "/enrichment-output.jsonl")
-        _           (when-not (.exists (io/file jsonl-path))
-                      (throw (ex-info "enrichment-output.jsonl not found" {:path jsonl-path})))
+        _ (when-not (.exists (io/file jsonl-path))
+            (throw (ex-info "enrichment-output.jsonl not found" {:path jsonl-path})))
         enrichment  (read-enrichment jsonl-path)
-        _           (println (format "  Patch records: %,d" (count enrichment)))]
+        _ (println (format "  Patch records: %,d" (count enrichment)))]
 
     (with-open [conn (jdbc/get-connection {:dbtype "sqlite" :dbname sqlite-path})]
-      (let [conn (jdbc/with-options conn {:builder-fn rs/as-unqualified-maps})
+      (let [conn           (jdbc/with-options conn {:builder-fn rs/as-unqualified-maps})
 
-            lemma-key->id      (lemma:key->id conn)
-            label-name->id     (label:name->id conn)
+            lemma-key->id  (lemma:key->id conn)
+            label-name->id (label:name->id conn)
             already-translated (already-translated conn)
 
             ;; Extract missing translations and new labels
-            translations (missing-translations enrichment already-translated lemma-key->id)
-            labels       (->> translations
-                              (mapcat :labels)
-                              (remove nil?)
-                              (distinct)
-                              (keep #(when-not (label-name->id %) {:name %})))
+            translations   (missing-translations enrichment already-translated lemma-key->id)
+            labels         (->> translations
+                                (mapcat :labels)
+                                (remove nil?)
+                                (distinct)
+                                (keep #(when-not (label-name->id %) {:name %})))
 
             ;; Report stats
-            unmatched (count (remove #(lemma-key->id (lemma-key %)) (keys enrichment)))
-            _         (println (format "  Unmatched: %,d  Inserting: %,d translations  New labels: %,d"
-                                       unmatched (count translations) (count labels)))]
+            unmatched      (count (remove #(lemma-key->id (lemma-key %)) (keys enrichment)))
+            _ (println (format "  Unmatched: %,d  Inserting: %,d translations  New labels: %,d"
+                               unmatched
+                               (count translations)
+                               (count labels)))]
         ;; Update tables
         (jdbc/with-transaction+options [tx conn]
-          (insert-translations! tx translations)
-          (insert-labels!       tx labels)
-          ;; Update translations -> labels connection
-          (let [label-name->id     (label:name->id tx)
-                translation-labels (translation-labels translations label-name->id)]
-            (insert-translation-labels! tx translation-labels)))))))
-
+                                       (insert-translations! tx translations)
+                                       (insert-labels! tx labels)
+                                       ;; Update translations -> labels connection
+                                       (let [label-name->id     (label:name->id tx)
+                                             translation-labels (translation-labels translations label-name->id)]
+                                         (insert-translation-labels! tx translation-labels)))))))
