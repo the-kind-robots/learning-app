@@ -31,7 +31,7 @@
   [responses f]
   (with-redefs [sut/example-api-request (support.generation/provider-answering-in-turn (atom 0) responses)
                 dictionary/lookup-dictionary-entries (constantly nil)
-                dictionary/lemma-ids (constantly #{})]
+                dictionary/lemma-ids    (constantly #{})]
     (f)))
 
 
@@ -133,15 +133,16 @@
                                                       nil
                                                       3
                                                       [avoided])))
-      "Die Leiter steht neben der Wand!"
-      "die leiter steht neben der wand"
-      "Die Leiter, steht neben der Wand."))
+     "Die Leiter steht neben der Wand!"
+     "die leiter steht neben der wand"
+     "Die Leiter, steht neben der Wand."))
   (testing "when every attempt repeats it, the caller gets no example"
     (is (nil? (generating [(support.generation/example-completion good-example)]
                           #(sut/generate-one! (sut/subject {:word "Leiter" :translation "лестница"})
                                               nil
                                               2
                                               [(:value good-example)]))))))
+
 
 (deftest a-rate-limited-generation-is-not-retried
   (testing "the failure is reported at once, though a valid answer waited behind it"
@@ -386,6 +387,35 @@
             "`auf` is there, `jeden` and `Fall` are not")))))
 
 
+(deftest a-verb-left-before-the-preposition-of-its-phrase-is-rejected
+  (testing "the infinitive or participle closes the clause, after the phrase's preposition"
+    (with-redefs [dictionary/lookup-dictionary-entries (fn [form]
+                                                         (when (= "nehmen" form)
+                                                           [{:pos "verb" :value "nehmen"}]))
+                  dictionary/lemma-ids (constantly #{})]
+      (are [issue target value verb-form]
+       (= issue
+          (:issue (#'sut/example-issue
+                   target
+                   {}
+                   nil
+                   #{}
+                   {:value       value
+                    :translation "Она сослалась на новое исследование."
+                    :structure   [{:usedForm       verb-form
+                                   :dictionaryForm "nehmen"
+                                   :translation    "брать"}
+                                  {:usedForm       "Studie"
+                                   :dictionaryForm "die Studie"
+                                   :translation    "исследование"}]})))
+       :verb-outside-bracket "Bezug nehmen auf" "Sie hat Bezug genommen auf die neue Studie." "genommen"
+       :verb-outside-bracket "Bezug nehmen auf" "Man sollte Bezug nehmen auf die neue Studie." "nehmen"
+       :verb-outside-bracket "Bezug nehmen auf" "Ohne Bezug zu nehmen auf die Studie, sprach sie weiter." "nehmen"
+       nil "Bezug nehmen auf" "Sie hat auf die neue Studie Bezug genommen." "genommen"
+       nil "Bezug nehmen auf" "Sie nimmt Bezug auf die neue Studie."        "nimmt"
+       nil "Bezug nehmen auf" "Sie wollte Bezug nehmen, auf die Studie aber nicht." "nehmen"))))
+
+
 (deftest an-article-pair-target-passes-on-the-sentence-when-structure-cannot-name-it
   (testing "`das heißt` is a construction the shape rule reads as an article pair"
     (let [example {:value       "Es regnet, das heißt, wir bleiben zu Hause."
@@ -428,8 +458,11 @@
                     dictionary/lemma-ids (constantly #{})]
         (is (= nil
                (#'sut/example-issue
-                "vorstellen" {}
-                nil #{} example)))))))
+                "vorstellen"
+                {}
+                nil
+                #{}
+                example)))))))
 
 
 (deftest a-subject-reads-what-the-caller-sent
@@ -451,49 +484,104 @@
 
 
 (def ^:private dictionary-lemmas
-  [{:value "das Fenster" :pos "noun" :rank 900 :forms ["Fensters" "Fenstern"]
+  [{:value        "das Fenster"
+    :pos          "noun"
+    :rank         900
+    :forms        ["Fensters" "Fenstern"]
     :translations [{:lang "ru" :value "окно"}]
-    :enrichment {:cefr-level "a1"}}
-   {:value "der Ärger" :pos "noun" :rank 500 :forms []
+    :enrichment   {:cefr-level "a1"}}
+   {:value        "der Ärger"
+    :pos          "noun"
+    :rank         500
+    :forms        []
     :translations [{:lang "ru" :value "досада"}]}
-   {:value "die Leiter" :pos "noun" :rank 400 :forms []
+   {:value        "die Leiter"
+    :pos          "noun"
+    :rank         400
+    :forms        []
     :translations [{:lang "ru" :value "лестница"}]}
-   {:value "der Leiter" :pos "noun" :rank 300 :forms []
+   {:value        "der Leiter"
+    :pos          "noun"
+    :rank         300
+    :forms        []
     :translations [{:lang "ru" :value "руководитель"}]}
-   {:value "gutern" :pos "verb" :rank 990 :forms ["gute"]
+   {:value        "gutern"
+    :pos          "verb"
+    :rank         990
+    :forms        ["gute"]
     :translations [{:lang "ru" :value "ничего"}]}
-   {:value "das Gute" :pos "noun" :rank 10 :forms []
+   {:value        "das Gute"
+    :pos          "noun"
+    :rank         10
+    :forms        []
     :translations [{:lang "ru" :value "добро"}]}
-   {:value "Bezug auf etwas nehmen" :pos "phrase" :rank 100 :forms []
+   {:value        "Bezug auf etwas nehmen"
+    :pos          "phrase"
+    :rank         100
+    :forms        []
     :translations [{:lang "ru" :value "ссылаться"}]}
-   {:value "schon" :pos "adv" :rank 200 :forms []
+   {:value        "schon"
+    :pos          "adv"
+    :rank         200
+    :forms        []
     :translations [{:lang "ru" :value "уже"}]}
-   {:value "schön" :pos "adj" :rank 150 :forms []
+   {:value        "schön"
+    :pos          "adj"
+    :rank         150
+    :forms        []
     :translations [{:lang "ru" :value "красивый"}]}
-   {:value "explodieren" :pos "verb" :rank 710 :forms ["explodiert" "explodierte"]
+   {:value        "explodieren"
+    :pos          "verb"
+    :rank         710
+    :forms        ["explodiert" "explodierte"]
     :translations [{:lang "ru" :value "взрываться"}]}
-   {:value "explodiert" :pos "adj" :rank 309 :forms []
+   {:value        "explodiert"
+    :pos          "adj"
+    :rank         309
+    :forms        []
     :translations [{:lang "ru" :value "взорванный"}]}
-   {:value "federn" :pos "verb" :rank 120 :forms ["federt"]
+   {:value        "federn"
+    :pos          "verb"
+    :rank         120
+    :forms        ["federt"]
     :translations [{:lang "ru" :value "пружинить"}]}
-   {:value "die Feder" :pos "noun" :rank 650 :forms ["Federn"]
+   {:value        "die Feder"
+    :pos          "noun"
+    :rank         650
+    :forms        ["Federn"]
     :translations [{:lang "ru" :value "перо"}]}
-   {:value "erhöhen" :pos "verb" :rank 800 :forms ["erhöht" "erhöhte"]
+   {:value        "erhöhen"
+    :pos          "verb"
+    :rank         800
+    :forms        ["erhöht" "erhöhte"]
     :translations [{:lang "ru" :value "повышать"}]}
-   {:value "erhöht" :pos "adj" :rank 250 :forms []
+   {:value        "erhöht"
+    :pos          "adj"
+    :rank         250
+    :forms        []
     :translations [{:lang "ru" :value "повышенный"}]}
-   {:value "nehmen" :pos "verb" :rank 950 :forms ["nahm" "nimmt"]
+   {:value        "nehmen"
+    :pos          "verb"
+    :rank         950
+    :forms        ["nahm" "nimmt"]
     :translations [{:lang "ru" :value "брать"}]}
-   {:value "der Rauch" :pos "noun" :rank 600 :forms []
+   {:value        "der Rauch"
+    :pos          "noun"
+    :rank         600
+    :forms        []
     :translations [{:lang "ru" :value "дым"}]}
-   {:value "rauch" :pos "adj" :rank 300 :forms []
+   {:value        "rauch"
+    :pos          "adj"
+    :rank         300
+    :forms        []
     :translations [{:lang "ru" :value "густой"} {:lang "ru" :value "волосатый"}]}])
 
 
 (defn- temp-dir
   []
   (.toFile (java.nio.file.Files/createTempDirectory
-            "dictionary-test" (make-array java.nio.file.attribute.FileAttribute 0))))
+            "dictionary-test"
+            (make-array java.nio.file.attribute.FileAttribute 0))))
 
 
 (defn- with-dictionary
@@ -514,117 +602,121 @@
 
 (deftest a-bare-word-resolves-through-its-surface-form-to-the-lemma-entry
   (with-dictionary
-    (fn []
-      (let [entry (first (dictionary/lookup-dictionary-entries "Fenster"))]
-        (is (= "das Fenster" (:value entry)))
-        (is (= "noun" (:pos entry)))
-        (is (= "a1" (get-in entry [:meta :cefr_level])))
-        (is (= [{:lang "ru" :value "окно"}] (:translation entry)))))))
+   (fn []
+     (let [entry (first (dictionary/lookup-dictionary-entries "Fenster"))]
+       (is (= "das Fenster" (:value entry)))
+       (is (= "noun" (:pos entry)))
+       (is (= "a1" (get-in entry [:meta :cefr_level])))
+       (is (= [{:lang "ru" :value "окно"}] (:translation entry)))))))
 
 
 (deftest a-phrase-without-an-article-is-found-as-any-word
   (with-dictionary
-    (fn []
-      (is (= ["Bezug auf etwas nehmen"]
-             (mapv :value (dictionary/lookup-dictionary-entries "Bezug auf etwas nehmen")))))))
+   (fn []
+     (is (= ["Bezug auf etwas nehmen"]
+            (mapv :value (dictionary/lookup-dictionary-entries "Bezug auf etwas nehmen")))))))
 
 
 (deftest an-article-keeps-the-lemma-distinct
   (with-dictionary
-    (fn []
-      (are [word values] (= values (mapv :value (dictionary/lookup-dictionary-entries word)))
-        "die Leiter" ["die Leiter"]
-        "der Leiter" ["der Leiter"]
-        "Leiter"     ["die Leiter" "der Leiter"]))))
+   (fn []
+     (are [word values] (= values (mapv :value (dictionary/lookup-dictionary-entries word)))
+      "die Leiter" ["die Leiter"]
+      "der Leiter" ["der Leiter"]
+      "Leiter"     ["die Leiter" "der Leiter"]))))
 
 
 (deftest a-bare-word-is-found-exact-first-whatever-the-rank
   (with-dictionary
-    (fn []
-      (is (= ["das Gute" "gutern"]
-             (mapv :value (dictionary/lookup-dictionary-entries "Gute")))
-          "the noun written exactly so outranks a verb that merely has the form"))))
+   (fn []
+     (is (= ["das Gute" "gutern"]
+            (mapv :value (dictionary/lookup-dictionary-entries "Gute")))
+         "the noun written exactly so outranks a verb that merely has the form"))))
 
 
 (deftest a-word-with-an-umlaut-is-found
   (with-dictionary
-    (fn []
-      (is (= ["der Ärger"] (mapv :value (dictionary/lookup-dictionary-entries "Ärger")))))))
+   (fn []
+     (is (= ["der Ärger"] (mapv :value (dictionary/lookup-dictionary-entries "Ärger")))))))
 
 
 (deftest a-word-typed-without-its-umlaut-also-finds-the-umlaut-twin
   (with-dictionary
-    (fn []
-      (is (= #{"schon" "schön"}
-             (set (map :value (dictionary/lookup-dictionary-entries "schon")))))
-      (is (= "adv" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["уже"] nil)))
-          "the gloss picks the word typed, not its twin")
-      (is (= "adj" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["красивый"] nil)))))))
+   (fn []
+     (is (= #{"schon" "schön"}
+            (set (map :value (dictionary/lookup-dictionary-entries "schon")))))
+     (is (= "adv" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["уже"] nil)))
+         "the gloss picks the word typed, not its twin")
+     (is (= "adj" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["красивый"] nil)))))))
 
 
 (deftest a-picked-part-of-speech-decides-the-entry
   (with-dictionary
-    (fn []
-      (are [translations pos lemma] (= lemma (:lemma (dictionary/lookup-word-meta "rauch" translations pos)))
-        []                    nil    "der Rauch"
-        ["густой"]            nil    "rauch"
-        []                    "adj"  "rauch"
-        ["дым"]               "adj"  "rauch"
-        []                    "noun" "der Rauch"
-        ["густой"]            "noun" "der Rauch"
-        []                    "verb" "der Rauch"))))
+   (fn []
+     (are [translations pos lemma] (= lemma (:lemma (dictionary/lookup-word-meta "rauch" translations pos)))
+      []         nil    "der Rauch"
+      ["густой"] nil    "rauch"
+      []         "adj"  "rauch"
+      ["дым"]    "adj"  "rauch"
+      []         "noun" "der Rauch"
+      ["густой"] "noun" "der Rauch"
+      []         "verb" "der Rauch"))))
 
 
 (deftest the-adjective-and-the-noun-do-not-share-a-cached-example
   (with-dictionary
-    (fn []
-      (let [key-of (fn [pos]
-                     (let [subject (sut/subject {:word "rauch" :pos pos})]
-                       (sut/subject-key subject (sut/word-meta subject))))]
-        (is (not= (key-of "adj") (key-of nil)))
-        (is (= (key-of "noun") (key-of nil))
-            "the noun is what the lookup chooses without a pick, so it shares that row")))))
+   (fn []
+     (let [key-of (fn [pos]
+                    (let [subject (sut/subject {:word "rauch" :pos pos})]
+                      (sut/subject-key subject (sut/word-meta subject))))]
+       (is (not= (key-of "adj") (key-of nil)))
+       (is (= (key-of "noun") (key-of nil))
+           "the noun is what the lookup chooses without a pick, so it shares that row")))))
 
 
 (deftest a-picked-part-of-speech-rejects-the-word-of-another-one
   (with-dictionary
-    (fn []
-      (let [example (fn [sentence used form]
-                      {:value       sentence
-                       :translation "Дым фабрики густой."
-                       :structure   [{:usedForm used :dictionaryForm form :translation "дым"}]})
-            noun    (example "Der Rauch der Fabrik ist dicht." "Rauch" "der Rauch")
-            adj     (example "Ihre Haare sind sehr rauch." "rauch" "rauch")]
-        (are [pos example issue] (= issue (:issue (#'sut/example-issue "rauch" (sut/target-lemma-ids "rauch") pos #{} example)))
-          "adj" noun :wrong-part-of-speech
-          "adj" adj  nil
-          nil   noun nil))
-      (let [participle {:value       "Die explodierte Bombe war laut."
-                        :translation "Взорванная бомба была громкой."
-                        :structure   [{:usedForm "explodierte" :dictionaryForm "explodieren" :translation "взрываться"}]}]
-        (are [target pos issue] (= issue (:issue (#'sut/example-issue target (sut/target-lemma-ids target) pos #{} participle)))
-          "explodiert" "adj"  nil
-          "explodiert" "verb" nil
-          "explodiert" "noun" :wrong-part-of-speech)))))
+   (fn []
+     (let [example (fn [sentence used form]
+                     {:value       sentence
+                      :translation "Дым фабрики густой."
+                      :structure   [{:usedForm used :dictionaryForm form :translation "дым"}]})
+           noun    (example "Der Rauch der Fabrik ist dicht." "Rauch" "der Rauch")
+           adj     (example "Ihre Haare sind sehr rauch." "rauch" "rauch")]
+       (are [pos example issue]
+        (= issue (:issue (#'sut/example-issue "rauch" (sut/target-lemma-ids "rauch") pos #{} example)))
+        "adj" noun :wrong-part-of-speech
+        "adj" adj  nil
+        nil   noun nil))
+     (let [participle
+           {:value       "Die explodierte Bombe war laut."
+            :translation "Взорванная бомба была громкой."
+            :structure   [{:usedForm "explodierte" :dictionaryForm "explodieren" :translation "взрываться"}]}]
+       (are [target pos issue]
+        (= issue (:issue (#'sut/example-issue target (sut/target-lemma-ids target) pos #{} participle)))
+        "explodiert" "adj"  nil
+        "explodiert" "verb" nil
+        "explodiert" "noun" :wrong-part-of-speech)))))
 
 
 (deftest a-subject-keeps-the-picked-part-of-speech
   (are [pos expected] (= expected (:pos (sut/subject {:word "rauch" :pos pos})))
-    nil     nil
-    "  "    nil
-    " adj " "adj"))
+   nil     nil
+   "  "    nil
+   " adj " "adj"))
 
 
 (deftest a-word-the-dictionary-does-not-know-has-no-entry
   (with-dictionary
-    (fn []
-      (is (= [] (dictionary/lookup-dictionary-entries "Quatsch")))
-      (is (nil? (dictionary/lookup-word-meta "Quatsch" ["чушь"] nil))))))
+   (fn []
+     (is (= [] (dictionary/lookup-dictionary-entries "Quatsch")))
+     (is (nil? (dictionary/lookup-word-meta "Quatsch" ["чушь"] nil))))))
 
 
 (deftest a-missing-dictionary-file-stops-the-start-naming-the-file
-  (let [dir (.toString (java.nio.file.Files/createTempDirectory
-                        "dictionary-missing" (make-array java.nio.file.attribute.FileAttribute 0)))
+  (let [dir   (.toString (java.nio.file.Files/createTempDirectory
+                          "dictionary-missing"
+                          (make-array java.nio.file.attribute.FileAttribute 0)))
         error (try (dictionary/open! {"LEARNING_APP__DICTIONARY_DIR" dir})
                    (catch clojure.lang.ExceptionInfo error error))]
     (is (re-find #"dictionary\.sqlite" (ex-message error)))))
@@ -878,27 +970,30 @@
                 dictionary/lemma-ids (constantly #{})]
     (is (= :structure-mismatch
            (:issue (#'sut/example-issue
-                    "Leiter" {}
-                    nil #{} (candidate "Der Hund läuft schnell im Park."
+                    "Leiter"
+                    {}
+                    nil
+                    #{}
+                    (candidate "Der Hund läuft schnell im Park."
                                "Собака быстро бежит по парку."
                                ["Leiter" "die Leiter" "лестница"])))))))
 
 
 (deftest a-form-belongs-to-every-lemma-it-is-a-form-of
   (with-dictionary
-    (fn []
-      (are [form n] (= n (count (dictionary/lemma-ids form)))
-        "explodiert"  2
-        "Federn"      2
-        "erhöht"      2
-        "sich erhöhen" 1
-        "die Feder"   1
-        "die Federn"  0
-        "Quatsch"     0)
-      (is (= (dictionary/lemma-ids "erhöhen") (dictionary/lemma-ids "sich erhöhen"))
-          "`sich` is not part of the lemma")
-      (is (not= (dictionary/lemma-ids "die Feder") (dictionary/lemma-ids "Federn"))
-          "an article names its own lemma only"))))
+   (fn []
+     (are [form n] (= n (count (dictionary/lemma-ids form)))
+      "explodiert"   2
+      "Federn"       2
+      "erhöht"       2
+      "sich erhöhen" 1
+      "die Feder"    1
+      "die Federn"   0
+      "Quatsch"      0)
+     (is (= (dictionary/lemma-ids "erhöhen") (dictionary/lemma-ids "sich erhöhen"))
+         "`sich` is not part of the lemma")
+     (is (not= (dictionary/lemma-ids "die Feder") (dictionary/lemma-ids "Federn"))
+         "an article names its own lemma only"))))
 
 
 (defn- issue-of
@@ -909,33 +1004,41 @@
   (:issue (#'sut/example-issue
            target
            (sut/target-lemma-ids target)
-           nil #{} (apply candidate value "Перевод предложения." items))))
+           nil
+           #{}
+           (apply candidate value "Перевод предложения." items))))
 
 
 (deftest a-word-saved-in-one-form-is-present-in-another-form-of-its-lemma
   (with-dictionary
-    (fn []
-      (are [target value items] (nil? (apply issue-of target value items))
-        "explodiert" "Die Bombe explodierte laut im Hof." [["Bombe" "die Bombe" "бомба"]
-                                                           ["Hof" "der Hof" "двор"]]
-        "federn"     "Die Feder liegt auf dem Tisch."     [["Feder" "die Feder" "перо"]
-                                                           ["liegt" "liegen" "лежать"]]
-        "federn"     "Die Federn des Vogels sind weich."  [["Vogels" "der Vogel" "птица"]
-                                                           ["weich" "weich" "мягкий"]]
-        "erhöht"     "Der Chef erhöhte den Preis stark."  [["Chef" "der Chef" "начальник"]
-                                                           ["Preis" "der Preis" "цена"]]
-        "Bezug auf etwas nehmen" "Er nahm auf die Regel Bezug." [["Regel" "die Regel" "правило"]]
-        "Quatsch"    "Das ist doch alles Quatsch hier."   [["alles" "alles" "всё"]]))))
+   (fn []
+     (are [target value items] (nil? (apply issue-of target value items))
+      "explodiert" "Die Bombe explodierte laut im Hof."
+                                                        [["Bombe" "die Bombe" "бомба"]
+                                                         ["Hof" "der Hof" "двор"]]
+      "federn"     "Die Feder liegt auf dem Tisch."
+                                                        [["Feder" "die Feder" "перо"]
+                                                         ["liegt" "liegen" "лежать"]]
+      "federn"     "Die Federn des Vogels sind weich."
+                                                        [["Vogels" "der Vogel" "птица"]
+                                                         ["weich" "weich" "мягкий"]]
+      "erhöht"     "Der Chef erhöhte den Preis stark."
+                                                        [["Chef" "der Chef" "начальник"]
+                                                         ["Preis" "der Preis" "цена"]]
+      "Bezug auf etwas nehmen" "Er nahm auf die Regel Bezug." [["Regel" "die Regel" "правило"]]
+      "Quatsch"    "Das ist doch alles Quatsch hier."   [["alles" "alles" "всё"]]))))
 
 
 (deftest a-word-is-missing-when-the-sentence-has-no-form-of-its-lemma
   (with-dictionary
-    (fn []
-      (are [target value items] (= :target-lemma-missing (apply issue-of target value items))
-        "explodiert" "Der Hund läuft schnell im Park."    [["Hund" "der Hund" "собака"]
-                                                           ["Park" "der Park" "парк"]]
-        "erhöht"     "Der Hund läuft schnell im Park."    [["Hund" "der Hund" "собака"]]
-        "Quatsch"    "Das ist doch alles Unsinn hier."    [["alles" "alles" "всё"]]
-        "explodiert" "Der Hund läuft schnell im Park."    [["Hund" "der Hund" "собака"]
-                                                           ["explodierte" "explodieren" "взрываться"]]
-        "Bezug auf etwas nehmen" "Er nahm auf die Regel Rücksicht." [["Regel" "die Regel" "правило"]]))))
+   (fn []
+     (are [target value items] (= :target-lemma-missing (apply issue-of target value items))
+      "explodiert" "Der Hund läuft schnell im Park."
+                                                     [["Hund" "der Hund" "собака"]
+                                                      ["Park" "der Park" "парк"]]
+      "erhöht"     "Der Hund läuft schnell im Park." [["Hund" "der Hund" "собака"]]
+      "Quatsch"    "Das ist doch alles Unsinn hier." [["alles" "alles" "всё"]]
+      "explodiert" "Der Hund läuft schnell im Park."
+                                                     [["Hund" "der Hund" "собака"]
+                                                      ["explodierte" "explodieren" "взрываться"]]
+      "Bezug auf etwas nehmen" "Er nahm auf die Regel Rücksicht." [["Regel" "die Regel" "правило"]]))))
