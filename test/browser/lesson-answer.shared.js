@@ -32,7 +32,7 @@ async function seedExample(page, translation = 'Пёс спит в саду.', s
 // order; punctuation has no tile.
 async function placeTiles(page, answer) {
   const bank = page.getByRole('group', { name: 'Плитки' });
-  const words = answer.split(/\s+/).map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')).filter(Boolean);
+  const words = answer.split(/\s+/).map((word) => word.replace(/^(?:(?![%‰])\p{P})+|(?:(?![%‰])\p{P})+$/gu, '')).filter(Boolean);
   for (const word of words) {
     await bank.getByRole('button', { name: word, exact: true }).first().click();
   }

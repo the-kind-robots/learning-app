@@ -136,6 +136,30 @@ test.describe('Плитки у примера', () => {
     });
   });
 
+  for (const [written, euro, percent] of [['слитно', '1000€', '50%'], ['через пробел', '1000 €', '50 %']]) {
+    test(`ученик видит пример с суммой и процентом ${written} → знаки € и % на плитках с числом`, async ({ page }) => {
+      const words = ['Der', 'Hund', 'kostet', euro, 'und', percent, 'mehr'];
+
+      await test.step(`Дано пример с суммой и процентом ${written}`, async () => {
+        await showExample(page, `Der Hund kostet ${euro} und ${percent} mehr.`);
+      });
+
+      await test.step('Тогда знаки на плитках с числом, а точки нет ни на одной', async () => {
+        const texts = await bank(page).getByRole('button').allTextContents();
+        expect([...texts].sort()).toEqual([...words].sort());
+      });
+
+      await test.step('Когда он расставляет плитки по порядку и проверяет', async () => {
+        await place(page, words);
+        await check(page).click();
+      });
+
+      await test.step('Тогда он видит «Правильно!»', async () => {
+        await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
+      });
+    });
+  }
+
   async function dragTo(page, tile, x, y) {
     const from = await tile.boundingBox();
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
