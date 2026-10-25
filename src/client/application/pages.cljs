@@ -27,17 +27,17 @@
                                  [[:action/show-collections context]])
                       :view    pages.collections.view/page}
    ;; A keystroke offers no more than the screen does: an empty vocabulary hides the lesson and words buttons.
-   :page/home        {:hotkeys            (fn [state]
-                                            (merge {"Alt+KeyT" [[:action/go-to-collections]]}
-                                                   (when-not (:home/empty-vocab? state)
-                                                     {"Alt+Enter" [[:action/go-to-lesson]]
-                                                      "Alt+KeyW"  [[:action/go-to-words]]})))
+   :page/home        {:hotkeys (fn [state]
+                                 (merge {"Alt+KeyT" [[:action/go-to-collections]]}
+                                        (when-not (:home/empty-vocab? state)
+                                          {"Alt+Enter" [[:action/go-to-lesson]]
+                                           "Alt+KeyW"  [[:action/go-to-words]]})))
                       :keyboard-overlays? true
-                      :open               :action/open-home
-                      :path               "/home"
-                      :refresh            (fn [_ context]
-                                            [[:action/show-home context]])
-                      :view               pages.home.view/page}
+                      :open    :action/open-home
+                      :path    "/home"
+                      :refresh (fn [_ context]
+                                 [[:action/show-home context]])
+                      :view    pages.home.view/page}
    ;; A lesson is a mode, not a step deeper: it fades in and out. Within it, «ДАЛЕЕ» moves the trial.
    :page/lesson      {:open        :action/open-lesson
                       :path        "/lesson"
@@ -52,16 +52,18 @@
                                                          (nil? (lesson/last-result (:lesson/state after))))
                                                 :transition/next-trial))}
                       :view        pages.lesson.view/page}
-   ;; An open word dialog takes `Escape` itself.
-   :page/words       {:hotkeys            (fn [state]
-                                            (when-not (:words/editing state)
-                                              {"Escape" [[:action/close-screen]]}))
+   ;; An open word dialog takes `Escape` itself and covers the lesson button; an empty vocabulary hides it.
+   :page/words       {:hotkeys (fn [state]
+                                 (when-not (:words/editing state)
+                                   (merge {"Escape" [[:action/close-screen]]}
+                                          (when (some-> (:words/total state) pos?)
+                                            {"Alt+Enter" [[:action/go-to-lesson]]}))))
                       :keyboard-overlays? true
-                      :open               :action/open-words
-                      :path               "/words"
-                      :refresh            (fn [_ context]
-                                            [[:action/show-words context]])
-                      :view               pages.words.view/page}})
+                      :open    :action/open-words
+                      :path    "/words"
+                      :refresh (fn [_ context]
+                                 [[:action/show-words context]])
+                      :view    pages.words.view/page}})
 
 
 (def home
