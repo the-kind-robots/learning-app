@@ -141,8 +141,13 @@
 (defn page
   [state]
   (let [{:keys [tiles]} (presenter/page-props state)]
+    ;; Keyed: a screen's root stands where the last screen's `div` stood, and without a key Replicant
+    ;; reuses that node and mounts nothing.
     [:div.switcher
-     {:on {:click [[:action/exit-editing-on-background [:event/self-click?]]]}}
+     {:on                   {:click [[:action/exit-editing-on-background [:event/self-click?]]]}
+      :replicant/key        :page/collections
+      :replicant/on-mount   [[:effect/listen-for-typing]]
+      :replicant/on-unmount [[:effect/stop-listening-for-typing]]}
      [:h1.switcher__title.visually-hidden "Наборы"]
      [:div.masonry
       {:on {:click [[:action/exit-editing-on-background [:event/self-click?]]]}}
