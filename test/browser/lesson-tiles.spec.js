@@ -14,6 +14,9 @@ const marked = (page) => bank(page).locator('b');
 // The bank is shuffled, so the marked letters are compared sorted.
 const markedTexts = async (page) => (await marked(page).allTextContents()).sort();
 const check = (page) => page.getByRole('button', { name: 'ПРОВЕРИТЬ' });
+// The field a checked example keeps: the placed tiles, no longer movable.
+const checkedField = (page) => page.getByRole('list', { name: 'Ваш ответ' });
+const checkedTiles = (page) => checkedField(page).getByRole('listitem');
 
 async function showWord(page, sentence) {
   await page.goto('/home');
@@ -118,6 +121,49 @@ test.describe('Плитки у примера', () => {
     await test.step('Тогда он видит «Правильно:», свой неполный ответ и эталон', async () => {
       await expect(page.getByRole('heading', { name: 'Правильно:' })).toBeVisible();
       await expect(page.getByText('Der Hund schläft im', { exact: true })).toBeVisible();
+    });
+  });
+
+  test('ученик проверил пример с ошибкой → поле с его плитками осталось над «Ваш ответ» и «Правильно»', async ({ page }) => {
+    await test.step('Дано плитки расставлены в неверном порядке', async () => {
+      await showExample(page);
+      await place(page, ['Der', 'Hund', 'im', 'schläft']);
+    });
+
+    await test.step('Когда он нажимает ПРОВЕРИТЬ', async () => {
+      await check(page).click();
+    });
+
+    await test.step('Тогда поле показывает его плитки в том же порядке, банка нет', async () => {
+      await expect(checkedTiles(page)).toHaveText(['Der', 'Hund', 'im', 'schläft']);
+      await expect(checkedField(page).getByRole('button')).toHaveCount(0);
+      await expect(bank(page)).toHaveCount(0);
+    });
+
+    await test.step('И под полем «Ваш ответ:» стоит над «Правильно:»', async () => {
+      const field = await checkedField(page).boundingBox();
+      const mine = await page.getByRole('heading', { name: 'Ваш ответ:' }).boundingBox();
+      const right = await page.getByRole('heading', { name: 'Правильно:' }).boundingBox();
+      expect(field.y + field.height).toBeLessThanOrEqual(mine.y);
+      expect(mine.y).toBeLessThan(right.y);
+    });
+  });
+
+  test('ученик проверил верный пример → поле с его плитками осталось над «Правильно!»', async ({ page }) => {
+    await test.step('Дано плитки в порядке предложения', async () => {
+      await showExample(page);
+      await place(page, SENTENCE);
+    });
+
+    await test.step('Когда он нажимает ПРОВЕРИТЬ', async () => {
+      await check(page).click();
+    });
+
+    await test.step('Тогда поле показывает его плитки над «Правильно!»', async () => {
+      await expect(checkedTiles(page)).toHaveText(SENTENCE);
+      const field = await checkedField(page).boundingBox();
+      const right = await page.getByRole('heading', { name: 'Правильно!' }).boundingBox();
+      expect(field.y + field.height).toBeLessThanOrEqual(right.y);
     });
   });
 

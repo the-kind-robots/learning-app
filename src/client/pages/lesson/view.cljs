@@ -56,12 +56,22 @@
      [:button.big-button {:type "submit"} "ПРОВЕРИТЬ"]]]])
 
 
+(defn- checked-field
+  "The field of a checked example: the tiles as they were placed, no longer movable."
+  [{:keys [placed-tiles]}]
+  (when placed-tiles
+    (into [:ol.lesson__checked-field {:aria-label "Ваш ответ" :lang "de"}]
+          (map (fn [tile] [:li.lesson__checked-tile tile]))
+          placed-tiles)))
+
+
 (defn- success-footer
   [{:keys [finished?] :as props}]
   [:footer#lesson-footer
    {:replicant/key      :success
     :replicant/on-mount [[:action/focus-continue-button
                           (if finished? "#lesson-finish" "#lesson-next")]]}
+   (checked-field props)
    [:div.lesson__footer.lesson__footer--success.page-footer
     [:div.lesson__answer
      [:h3.lesson__answer-header "Правильно!"]
@@ -84,6 +94,7 @@
   [:footer#lesson-footer
    {:replicant/key      :error
     :replicant/on-mount [[:action/focus-continue-button "#lesson-next"]]}
+   (checked-field props)
    [:div.lesson__footer.lesson__footer--error.page-footer
     [:div.lesson__answer
      (when user-answer
@@ -111,7 +122,7 @@
      [:p.token-card__state "✓ В словаре"])
    (when-let [action-label (case word-state
                              :word-state/known-missing-translation "+ ДОБАВИТЬ ПЕРЕВОД"
-                             :word-state/unknown-word              "+ В СЛОВАРЬ"
+                             :word-state/unknown-word "+ В СЛОВАРЬ"
                              nil)]
      [:button.token-card__button
       {:type "button"

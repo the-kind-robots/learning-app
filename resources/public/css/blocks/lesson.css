@@ -154,8 +154,11 @@
 
 /* The answer field. Font and colour reach its text by inheritance; the box of
    its field, the tiles' gaps and the bulb come in as custom properties; only
-   the tile, which has no neat set of them, is styled through its part. */
-.lesson__input {
+   the tile, which has no neat set of them, is styled through its part. The
+   field a checked example keeps reads the same properties, so it looks the
+   field it was. */
+.lesson__input,
+.lesson__checked-field {
   --answer-field-background: rgb(var(--color-polar));
   --answer-field-border: 2px solid rgb(var(--color-swan));
   --answer-field-caret-color: rgb(var(--color-owl));
@@ -165,7 +168,9 @@
   /* The right padding keeps text out from under the light bulb. */
   --answer-field-padding: 0.625rem 3rem 0.625rem 0.875rem;
   --answer-field-radius: 0.625rem;
+}
 
+.lesson__input {
   color: rgb(var(--color-black-text));
   font-family: Nunito, sans-serif;
   font-size: 1.25rem;
@@ -176,7 +181,27 @@
   width: 100%;
 }
 
-.lesson__input::part(tile) {
+/* Where the field stood: as wide as the footer's padding leaves it. */
+.lesson__checked-field {
+  align-content: flex-start;
+  align-items: center;
+  background: var(--answer-field-background);
+  border: var(--answer-field-border);
+  border-radius: var(--answer-field-radius);
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--answer-field-gap);
+  list-style: none;
+  margin: 16px auto;
+  max-width: 600px;
+  min-height: var(--answer-field-min-height);
+  padding: var(--answer-field-padding);
+  width: calc(100% - 32px);
+}
+
+.lesson__input::part(tile),
+.lesson__checked-tile {
   background: rgb(var(--color-snow));
   border: 0;
   border-radius: 10px;
@@ -188,6 +213,12 @@
   font-weight: 700;
   height: 40px;
   padding: 0 12px;
+}
+
+/* A button centres its word by itself; a list item is told to. */
+.lesson__checked-tile {
+  align-items: center;
+  display: flex;
 }
 
 .lesson__answer {
@@ -334,7 +365,8 @@
     flex-basis: calc(30dvh - 112px);
   }
 
-  .lesson__input {
+  .lesson__input,
+  .lesson__checked-field {
     --answer-field-min-height: 170px;
   }
 

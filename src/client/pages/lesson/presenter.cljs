@@ -60,6 +60,9 @@
                                                    :annotated? (= :annotated-word type)
                                                    :expanded?  (= word-index (:lesson/open-hint-index state))))
                                           (lesson/answer-segments trial)))
+         ;; The tiles were joined by spaces into the answer, so its words are the tiles in tray order.
+         :placed-tiles   (when (lesson/example-trial? trial)
+                           (vec (re-seq #"\S+" (:answer result))))
          :user-answer    (when-not (str/blank? (:answer result))
                            (:answer result))
          :finished?      (lesson/finished? lesson-state)}))))
