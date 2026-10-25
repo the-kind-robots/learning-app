@@ -14,8 +14,8 @@
   []
   [:button.app-shell__corner-icon
    {:type       "button"
-    :aria-label "Открыть наборы"
-    :title      "Наборы"
+    :aria-label [:i18n :shell/open-collections]
+    :title      [:i18n :collections/title]
     :on         {:click [[:action/go-to-collections]]}}
    [:svg.app-shell__corner-icon-svg
     {:viewBox "0 0 16 16" :aria-hidden "true"}
@@ -29,8 +29,8 @@
   []
   [:button.app-shell__corner-icon
    {:type       "button"
-    :aria-label "Закрыть"
-    :title      "Закрыть"
+    :aria-label [:i18n :dialog/close]
+    :title      [:i18n :dialog/close]
     :on         {:click [[:action/close-screen]]}}
    [:svg.app-shell__corner-icon-svg
     {:viewBox "0 0 16 16" :aria-hidden "true"}
@@ -96,8 +96,8 @@
       (when ^boolean goog/DEBUG
         [:button.app-shell__build-mark
          {:type       "button"
-          :aria-label "Перезагрузить сборку"
-          :title      "Перезагрузить сборку"
+          :aria-label [:i18n :shell/reload-build]
+          :title      [:i18n :shell/reload-build]
           :on         {:click [[:effect/get-newest-build]]}}
          build-mark])
       [:div.app-shell__actions
@@ -105,16 +105,16 @@
        (when ^boolean goog/DEBUG
          [:button.app-shell__icon-button
           {:type       "button"
-           :title      "Экспортировать трассу"
-           :aria-label "Экспортировать трассу"
+           :title      [:i18n :shell/export-trace]
+           :aria-label [:i18n :shell/export-trace]
            :on         {:click [[:effect/export-trace]]}}
           (trace-export-icon)])
        ;; Install is not a sync action, and it is offered before any account exists.
        (when show-install?
          [:button.app-shell__icon-button
           {:type       "button"
-           :title      "Установить приложение"
-           :aria-label "Установить приложение"
+           :title      [:i18n :shell/install]
+           :aria-label [:i18n :shell/install]
            :on         {:click [[:action/pwa-install-requested]]}}
           (install-icon)])
        (sync-view/sync-button sync)
@@ -127,5 +127,5 @@
      (if-let [view (:view (pages/table page))]
        (view state)
        (when read-error?
-         [:div.app-shell__read-error "Не получается прочитать данные на устройстве. Перезагрузите страницу."]))
+         [:div.app-shell__read-error [:i18n :shell/read-error]]))
      shell/status-region)))

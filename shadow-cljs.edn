@@ -7,6 +7,7 @@
   [com.lambdaisland/glogi "1.4.177"]
   [metosin/reitit "0.11.0"]
   [no.cjohansen/dataspex "2026.06.3"]
+  [no.cjohansen/m1p "2026.07.1"]
   [no.cjohansen/nexus "2026.08.1"]
   [no.cjohansen/replicant "2026.07.1"]
   ;; Tests only: property tests (`client.memory-test`). Nothing the app

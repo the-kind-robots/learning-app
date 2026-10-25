@@ -21,13 +21,13 @@
   [{:keys [id name]}]
   [:button.tile__close
    {:type       "button"
-    :aria-label (str "Удалить набор «" name "»")
+    :aria-label [:i18n :collections/delete {:name name}]
     :on         {:pointerdown [[:effect/stop-propagation]]
                  :click       [[:effect/stop-propagation]
                                [:effect/delete-collection
-                                {:deleted-message (str "Набор «" name "» удалён")
-                                 :id              id
-                                 :status-region   shell/status-region-id}]]}}
+                                {:deleted-message [:i18n :collections/deleted {:name name}]
+                                 :id id
+                                 :status-region shell/status-region-id}]]}}
    (close-icon)])
 
 
@@ -48,7 +48,7 @@
 (defn- name-and-count
   [{:keys [name lang count main?]}]
   (list
-   [:span.tile__name {:lang lang} (if main? "Всё подряд" name)]
+   [:span.tile__name {:lang lang} (if main? [:i18n :collections/all] name)]
    [:span.tile__count count]))
 
 
@@ -56,14 +56,14 @@
   "The class of the colour a tile has."
   [accent]
   (case accent
-    :accent/owl "tile--owl"
-    :accent/macaw "tile--macaw"
-    :accent/fox "tile--fox"
+    :accent/owl      "tile--owl"
+    :accent/macaw    "tile--macaw"
+    :accent/fox      "tile--fox"
     :accent/starfish "tile--starfish"
-    :accent/beetle "tile--beetle"
-    :accent/bee "tile--bee"
+    :accent/beetle   "tile--beetle"
+    :accent/bee      "tile--bee"
     :accent/cardinal "tile--cardinal"
-    :accent/peacock "tile--peacock"))
+    :accent/peacock  "tile--peacock"))
 
 
 (defn- plain-tile
@@ -116,7 +116,7 @@
   [{:keys [accent key head rows]}]
   [:div.tile.tile--folder
    {:replicant/key key
-    :class         (accent-class accent)}
+    :class (accent-class accent)}
    (folder-head head)
    [:ul.tile__rows
     (for [row rows] (folder-row row))]])
@@ -126,10 +126,10 @@
   []
   [:button.switcher__add
    {:type       "button"
-    :aria-label "Новый набор"
+    :aria-label [:i18n :collections/new]
     :on         {:click [[:effect/stop-propagation]
                          [:effect/save {:collections/editing-id nil}]
-                         [:effect/prompt-create-collection "Название нового набора:"]]}}
+                         [:effect/prompt-create-collection [:i18n :collections/new-name]]]}}
    [:svg {:viewBox "0 0 40 40" :width 28 :height 28 :aria-hidden "true"}
     [:path
      {:d "M20 8 V32 M8 20 H32"
@@ -144,11 +144,11 @@
     ;; Keyed: a screen's root stands where the last screen's `div` stood, and without a key Replicant
     ;; reuses that node and mounts nothing.
     [:div.switcher
-     {:on                   {:click [[:action/exit-editing-on-background [:event/self-click?]]]}
-      :replicant/key        :page/collections
-      :replicant/on-mount   [[:effect/listen-for-typing]]
+     {:on {:click [[:action/exit-editing-on-background [:event/self-click?]]]}
+      :replicant/key :page/collections
+      :replicant/on-mount [[:effect/listen-for-typing]]
       :replicant/on-unmount [[:effect/stop-listening-for-typing]]}
-     [:h1.switcher__title.visually-hidden "Наборы"]
+     [:h1.switcher__title.visually-hidden [:i18n :collections/title]]
      [:div.masonry
       {:on {:click [[:action/exit-editing-on-background [:event/self-click?]]]}}
       (for [tile tiles]

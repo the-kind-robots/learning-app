@@ -5,6 +5,7 @@
    [application.sync.actions]
    [application.sync.effects]
    [application.view :as view]
+   [i18n :as i18n]
    [install-guide.core]
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
@@ -62,9 +63,9 @@
                       ;; Marked skip-interpolation: Nexus would otherwise walk every word id of a theme
                       ;; for placeholders on each keystroke.
                       (with-meta {:active-collection (learner/active-collection (:learner capabilities))
-                                  :learner           (:learner capabilities)
-                                  :now-ms            (world/clock (:world capabilities) :now-ms)
-                                  :random            #(world/random (:world capabilities))}
+                                  :learner (:learner capabilities)
+                                  :now-ms  (world/clock (:world capabilities) :now-ms)
+                                  :random  #(world/random (:world capabilities))}
                                  {:nexus/skip-interpolation true})]
                      args)])))
 
@@ -308,7 +309,7 @@
   "Renders the shell of `after`, moving the way the screen change from `before` (nil: none) calls for."
   [before after]
   (view-transition/change! (presenter/screen-change before after)
-                           #(r/render js/document.body (view/shell after))))
+                           #(r/render js/document.body (i18n/interpolate (view/shell after)))))
 
 
 (defn state
@@ -318,7 +319,8 @@
   [{:keys [app-state capabilities]}]
   (let [{:keys [learner]} capabilities]
     (assoc @app-state
-           :learner/status (learner/status learner))))
+           :learner/status
+           (learner/status learner))))
 
 
 (defn start-render!

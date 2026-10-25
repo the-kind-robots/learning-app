@@ -22,7 +22,7 @@
                    {:pointerdown [[:effect/prevent-default]]})}
    [:span {:lang "de"} lemma]
    (when phrase?
-     [:span.suggestions__badge "фраза"])])
+     [:span.suggestions__badge [:i18n :home/phrase-badge]])])
 
 
 (defn- add-form
@@ -40,12 +40,12 @@
                       :focus-id    "new-word-value"}]]}}
      [:fieldset.home__add-fieldset
       ;; The mode has no control of its own: the legend and the label say which the form is about to save.
-      [:legend.home__add-legend.visually-hidden (if phrase? "Добавить фразу" "Добавить слово")]
+      [:legend.home__add-legend.visually-hidden (if phrase? [:i18n :phrase/add] [:i18n :word/add])]
       [:div.home__add-form-row
        [:div.autocomplete
         [:div.home__add-label-row
          [:label.home__add-form-label.visually-hidden {:for "new-word-value"}
-          (if phrase? "Фраза (немецкий)" "Слово (немецкий)")]]
+          (if phrase? [:i18n :home/phrase-label] [:i18n :home/word-label])]]
         [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-value"
           :name         "value"
@@ -59,7 +59,7 @@
           :maxlength    200
           :lang         "de"
           :value        word
-          :placeholder  (if phrase? "Новая фраза" "Новое слово")
+          :placeholder  (if phrase? [:i18n :home/phrase-placeholder] [:i18n :home/word-placeholder])
           :on           {:blur    [[:action/dismiss-suggestions]]
                          :focus   [[:effect/autogrow-target]]
                          :input   [[:action/update-word [:event.target/value]]
@@ -74,7 +74,7 @@
          (for [item items]
            (suggestion-item item))]]
        [:div.home__add-translation
-        [:label.home__add-form-label.visually-hidden {:for "new-word-translation"} "Перевод (русский)"]
+        [:label.home__add-form-label.visually-hidden {:for "new-word-translation"} [:i18n :home/translation-label]]
         [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-translation"
           :name         "translation"
@@ -87,7 +87,7 @@
           :maxlength    500
           :lang         "ru"
           :value        translation
-          :placeholder  "Перевод"
+          :placeholder  [:i18n :home/translation-placeholder]
           :required     true
           :class        (when translation-invalid?
                           "home__add-form-input--error")
@@ -105,12 +105,12 @@
       (when error
         [:p.home__add-error {:role "alert"}
          (case error
-           :error/empty-translations "Добавьте перевод."
+           :error/empty-translations [:i18n :home/empty-translations]
            :error/save-failed        (if phrase?
-                                       "Фраза не сохранилась: в приложении сбой, и это не ваша ошибка."
-                                       "Слово не сохранилось: в приложении сбой, и это не ваша ошибка."))])
+                                       [:i18n :home/phrase-save-failed]
+                                       [:i18n :home/word-save-failed]))])
       [:button.home__add-form-submit.big-button.big-button--request-stable
-       {:type "submit"} "ДОБАВИТЬ"]]]))
+       {:type "submit"} [:i18n :home/add]]]]))
 
 
 (defn- collection-heading
@@ -131,10 +131,10 @@
   (let [{:keys [active-collection empty-vocab? form]} (presenter/page-props state)]
     [:div.home
      [:header.home__intro
-      [:h1.home__title.visually-hidden "Главная"]
+      [:h1.home__title.visually-hidden [:i18n :home/title]]
       [:p.home__subtitle
        {:style {:visibility (if empty-vocab? "visible" "hidden")}}
-       "Быстро добавляйте слова и учите немецкий даже без сети."]]
+       [:i18n :home/subtitle]]]
 
      [:div.home__heading-slot
       (when active-collection
@@ -144,21 +144,21 @@
       [:section#home-add-panel.home__add
        {:replicant/on-mount [[:action/focus-word-input "new-word-value"]]}
        [:header.home__add-header
-        [:h2.home__panel-title (if (:phrase? form) "Добавить фразу" "Добавить слово")]
+        [:h2.home__panel-title (if (:phrase? form) [:i18n :phrase/add] [:i18n :word/add])]
         [:button#home-words-button.home__words-button
          {:type        "button"
           :class       (when empty-vocab? "home__words-button--hidden")
           :aria-hidden (when empty-vocab? "true")
           :tabindex    (when empty-vocab? "-1")
           :on          {:click [[:action/go-to-words]]}}
-         "Список слов"]]
+         [:i18n :home/words]]]
 
        (add-form form)]]
 
      [:footer#home-lesson-footer.home__footer.page-footer
       {:hidden empty-vocab?}
-      [:h2.home__lesson-title.visually-hidden "Урок"]
+      [:h2.home__lesson-title.visually-hidden [:i18n :lesson/title]]
       [:div.page-footer__action
        [:button.home__lesson-button.big-button.green-button
         {:on {:click [[:action/go-to-lesson]]}}
-        "НАЧАТЬ УРОК"]]]]))
+        [:i18n :lesson/start]]]]]))

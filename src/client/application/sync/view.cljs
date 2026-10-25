@@ -30,17 +30,17 @@
        [:button.sync-menu-dialog__item
         {:type "button"
          :on   {:click [[:effect/open-sync-qr]]}}
-        "Подключить устройство"]
+        [:i18n :sync/connect-device]]
        [:button.sync-menu-dialog__item
         {:type "button"
          :on   {:click [[:effect/share-sync-link
-                         {:copied-message "Ссылка скопирована в буфер обмена"
-                          :title          "Sprecha: восстановление доступа"}]]}}
-        "Ссылка восстановления"]))
+                         {:copied-message [:i18n :sync/recovery-link-copied]
+                          :title [:i18n :sync/recovery-link-title]}]]}}
+        [:i18n :sync/recovery-link]]))
     [:button.sync-menu-dialog__item.sync-menu-dialog__item--cancel
      {:type "button"
       :on   {:click [[:action/close-sync-menu]]}}
-     "Отмена"]]])
+     [:i18n :sync/cancel]]]])
 
 
 (defn- sync-qr-dialog
@@ -50,13 +50,13 @@
     :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
          :close [[:action/close-sync-qr]]}}
    [:div.pairing-dialog__content
-    [:h2.pairing-dialog__title "Подключить устройство"]
-    [:p.pairing-dialog__hint "Отсканируйте QR-код на новом устройстве"]
-    [:img.pairing-dialog__qr {:src qr-url :alt "QR-код для подключения устройства"}]
+    [:h2.pairing-dialog__title [:i18n :sync/connect-device]]
+    [:p.pairing-dialog__hint [:i18n :sync/scan-qr]]
+    [:img.pairing-dialog__qr {:src qr-url :alt [:i18n :sync/qr]}]
     [:button.pairing-dialog__close
      {:type "button"
       :on   {:click [[:action/close-sync-qr]]}}
-     "Закрыть"]]])
+     [:i18n :dialog/close]]]])
 
 
 (defn sync-button
@@ -65,8 +65,8 @@
   (when show-sync?
     [:button.app-shell__icon-button
      {:type       "button"
-      :title      "Синхронизация"
-      :aria-label "Синхронизация"
+      :title      [:i18n :sync/title]
+      :aria-label [:i18n :sync/title]
       :on         {:click [[:action/open-sync-menu]]}}
      (sync-icon)]))
 
