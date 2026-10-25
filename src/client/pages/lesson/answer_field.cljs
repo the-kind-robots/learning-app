@@ -90,7 +90,8 @@
 
 
 (def ^:private edge-punctuation
-  (js/RegExp. "^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$" "gu"))
+  "Punctuation at a word's edges; a percent sign belongs to its number."
+  (js/RegExp. "^(?:(?![%‰])\\p{P})+|(?:(?![%‰])\\p{P})+$" "gu"))
 
 
 (def ^:private forwarded
@@ -106,12 +107,17 @@
 
 (defn- words-of
   "The words of `sentence`, in order, with their case and without the
-   punctuation at their edges."
+   punctuation at their edges. A sign written apart joins the word before it:
+   «1000 €» is one word."
   [sentence]
   (->> (str/split (str/trim (or sentence "")) #"\s+")
        (map #(str/replace % edge-punctuation ""))
        (remove str/blank?)
-       vec))
+       (reduce (fn [words word]
+                 (if (and (seq words) (not (.test (js/RegExp. "[\\p{L}\\p{N}]" "u") word)))
+                   (conj (pop words) (str (peek words) " " word))
+                   (conj words word)))
+               [])))
 
 
 (defn- typed-form
