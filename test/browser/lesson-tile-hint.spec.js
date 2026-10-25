@@ -137,8 +137,8 @@ test.describe('Подсказка плитками у повторного пр�
     });
     const unfocused = await bulb();
 
-    await test.step('Когда он жмёт Shift+Tab', async () => {
-      await page.keyboard.press('Shift+Tab');
+    await test.step('Когда он жмёт Tab', async () => {
+      await page.keyboard.press('Tab');
     });
 
     await test.step('Тогда лампочка в фокусе и выглядит иначе — с рамкой', async () => {

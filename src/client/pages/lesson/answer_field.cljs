@@ -43,6 +43,12 @@
 (def ^:private skeleton
   (rs/render
    (list
+    [:div#bank
+     {:role "group"}]
+    [:div#field
+     [:textarea]
+     [:div#tray
+      {:role "group" :tabindex "-1"}]]
     [:button#hint
      {:type "button"}
      [:svg
@@ -54,14 +60,7 @@
        :stroke-width   "2.2"
        :viewBox        "0 0 24 24"}
       [:path {:d "M9 15.5a5.5 5.5 0 1 1 6 0V18H9z"}]
-      [:path {:d "M10 21h4"}]]]
-    [:div#bank
-     {:role "group"}]
-    [:div#field
-     [:textarea
-      {:autofocus true}]
-     [:div#tray
-      {:role "group" :tabindex "-1"}]])))
+      [:path {:d "M10 21h4"}]]])))
 
 
 (def ^:private stylesheet
