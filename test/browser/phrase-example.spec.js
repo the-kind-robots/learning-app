@@ -1,6 +1,6 @@
 const { test, expect, docsOfType } = require('./fixtures');
 const { fillTranslation } = require('./add-form.shared');
-const { token } = require('./lesson-answer.shared');
+const { placeTiles, token } = require('./lesson-answer.shared');
 const { becomeAccount } = require('./account.shared');
 
 // A phrase gets an example, like a word does (GH-371). The path CI does not
@@ -114,7 +114,7 @@ test.describe('Пример к фразе', () => {
     });
 
     await test.step('Когда он верно переводит предложение', async () => {
-      await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(SENTENCE);
+      await placeTiles(page, SENTENCE);
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
     });
 
@@ -132,7 +132,7 @@ test.describe('Пример к фразе', () => {
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
       await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
       await expect(page.locator('.lesson__instruction')).toHaveText('Переведите предложение на немецкий');
-      await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(SENTENCE);
+      await placeTiles(page, SENTENCE);
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
     });
 

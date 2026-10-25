@@ -224,27 +224,6 @@ Checking an answer that is empty or only whitespace SHALL grade it as not recall
 - **THEN** the correct answer is revealed and «ДАЛЕЕ» continues the lesson
 - **AND** a review is recorded as not retained
 
-### Requirement: An example shown again offers a tile hint
-
-Every showing of an example, the first included, SHALL show a light bulb button in the top-right corner of the answer field, over the plain field. Activating it SHALL replace the field with a tray and a bank of the answer's words as shuffled tiles, and remove the bulb; the showing SHALL NOT return to the plain field. Tiles SHALL keep the sentence's case and carry no punctuation; a repeated word SHALL be a separate tile. Word and phrase trials SHALL have no light bulb.
-
-#### Scenario: First showing
-
-- **WHEN** an example is shown for the first time in the lesson
-- **THEN** the light bulb appears in the answer field's top-right corner
-- **AND** the plain field is shown, with no tiles
-
-#### Scenario: Shown again after a wrong answer
-
-- **WHEN** the learner answered an example wrongly and it is shown again
-- **THEN** the light bulb appears in the answer field's top-right corner
-
-#### Scenario: Bulb activated
-
-- **WHEN** the learner activates the light bulb
-- **THEN** the field is replaced by an empty tray and a bank holding every word of the answer as a tile
-- **AND** the light bulb is gone
-
 ### Requirement: Tiles are placed, returned and reordered
 
 Activating a bank tile SHALL append it to the tray; activating a placed tile SHALL return it to the bank, and the bank SHALL close ranks with no empty places. A tile SHALL be draggable: it follows the pointer, a caret marks where it will land, and releasing it there puts it there, reordering the tray for a placed tile and inserting it into the tray for a bank tile. A bank tile released outside the tray SHALL stay in the bank.
@@ -284,17 +263,6 @@ The check button SHALL be available whatever the number of placed tiles. The ans
 - **WHEN** every tile is placed in the sentence's order and the learner checks
 - **THEN** the lesson shows «Правильно!»
 
-### Requirement: A long example stays whole while the keyboard is open
-
-While the on-screen keyboard is open the lesson SHALL show the whole prompt: the answer area SHALL start at two rows (the field still grows with its text), the prompt SHALL be set at 18px, the instruction line SHALL be hidden, and no prompt text SHALL be clipped by the lesson body.
-
-#### Scenario: Long prompt, keyboard open
-
-- **WHEN** a long example is on screen and the keyboard opens
-- **THEN** the instruction line is hidden
-- **AND** the prompt is fully visible above the answer field
-- **AND** the answer field is two rows high
-
 ### Requirement: A lesson takes the most due words
 Words and phrases SHALL be selected into the lesson from the most due vocabulary in the active scope: the lesson takes the most due items there are, up to its size.
 
@@ -321,12 +289,18 @@ An item that is strictly more due than another SHALL be preferred to it every ti
 
 ### Requirement: Tiles are placed by typing
 
-While tiles are shown, letters typed on a physical keyboard SHALL accumulate as a prefix, compared without regard to case. While a prefix is pending, every bank tile whose word starts with it SHALL show those leading letters in a heavier weight, and no tile SHALL change its size; the highlight SHALL clear with the prefix. As soon as the prefix fits exactly one distinct word among the bank's tiles, the first tile of that word in bank order SHALL move to the end of the tray and the prefix SHALL clear; tiles of the same text count as one word. Space and Enter SHALL act alike: when the pending prefix identifies a bank word, either as the only distinct word it fits or as a whole bank word it spells (such as «die» beside «dieser»), the first tile of that word in bank order SHALL move to the end of the tray; when it identifies none, they SHALL do nothing and the prefix SHALL stay. A letter that would make the prefix fit no bank word SHALL be ignored. Backspace SHALL erase the prefix's last letter, or with no prefix return the last placed tile to the bank. Typing SHALL NOT open an on-screen keyboard, and Enter with no prefix SHALL NOT place or check anything.
+While tiles are shown, letters typed on a physical keyboard SHALL accumulate as a prefix, compared without regard to case and as if the words had no umlauts: ä, ö, ü SHALL match a, o, u, and ß SHALL match ss. While a prefix is pending, every bank tile whose word starts with it SHALL show those leading letters in a heavier weight, and no tile SHALL change its size; the highlight SHALL clear with the prefix. As soon as the prefix fits exactly one distinct word among the bank's tiles, the first tile of that word in bank order SHALL move to the end of the tray and the prefix SHALL clear; tiles of the same text count as one word. Space and Enter SHALL act alike: when the pending prefix identifies a bank word, either as the only distinct word it fits or as a whole bank word it spells (such as «die» beside «dieser»), the first tile of that word in bank order SHALL move to the end of the tray; when it identifies none, they SHALL do nothing and the prefix SHALL stay. A letter that would make the prefix fit no bank word SHALL be ignored. Backspace SHALL erase the prefix's last letter, or with no prefix return the last placed tile to the bank. Typing SHALL NOT open an on-screen keyboard, and Enter with no prefix SHALL NOT place or check anything.
 
 #### Scenario: A unique prefix places its tile
 
 - **WHEN** the bank holds «Der», «Hund», «schläft» and the learner types «h»
 - **THEN** «Hund» moves to the end of the tray and no prefix is pending
+
+#### Scenario: Umlauts typed without them
+
+- **WHEN** the bank holds «über» and «groß» beside words that start otherwise
+- **THEN** typing «u» places «über»
+- **AND** typing «g», «r», «o», «s», «s» places «groß»
 
 #### Scenario: A pending prefix is highlighted on the tiles
 
@@ -361,24 +335,24 @@ While tiles are shown, letters typed on a physical keyboard SHALL accumulate as 
 - **THEN** its last letter is erased
 - **AND** with no prefix pending, Backspace returns the last placed tile to the bank
 
-### Requirement: The light bulb answers the keyboard
-
-While the light bulb is shown, Alt+Enter in the answer field SHALL activate it, as a tap does. The light bulb SHALL show a focus ring when it is focused from the keyboard.
-
-#### Scenario: Alt+Enter while typing
-
-- **WHEN** the light bulb is shown and the learner presses Alt+Enter in the answer field
-- **THEN** the field is replaced by an empty tray and a bank of the answer's tiles
-- **AND** the light bulb is gone
-
-#### Scenario: Bulb reached by keyboard
-
-- **WHEN** the learner moves focus to the light bulb with the keyboard
-- **THEN** the light bulb shows a focus ring
-
 ### Requirement: A lesson opened on a phone does not raise the keyboard
 On a device without a fine pointer, opening a lesson SHALL NOT focus the answer field, every time, including the first lesson after the app starts. On a device with a fine pointer the answer field SHALL receive focus when the lesson opens.
 
 #### Scenario: First lesson after a cold start on a phone
 - **WHEN** the app has just started on a phone and the learner starts a lesson
 - **THEN** the answer field is not focused
+
+### Requirement: An example is answered with tiles
+
+Every showing of an example SHALL show, in place of the plain field, a tray and a bank of the answer's words as shuffled tiles, with no light bulb; the showing SHALL NOT offer the plain field. Tiles SHALL keep the sentence's case and carry no punctuation; a repeated word SHALL be a separate tile. Word and phrase trials SHALL show the plain field and no light bulb.
+
+#### Scenario: Example shown
+
+- **WHEN** an example is shown in the lesson
+- **THEN** the answer field is an empty tray and a bank holding every word of the answer as a tile
+- **AND** there is no light bulb and no plain field
+
+#### Scenario: Word shown
+
+- **WHEN** a word or a phrase is to be translated
+- **THEN** the plain field is shown, with no tiles and no light bulb

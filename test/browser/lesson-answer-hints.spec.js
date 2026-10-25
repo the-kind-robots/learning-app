@@ -25,7 +25,7 @@ test.describe('Подсказки к словам в разборе ответа
 
   test('пользователь неверно отвечает на пример → видит эталон со словами с подсказками', async ({ page }) => {
     await test.step('Когда он неверно отвечает на предложение', async () => {
-      await setUpLesson(page, 'Die Katze schläft.');
+      await setUpLesson(page, 'Der Hund');
     });
 
     await test.step('Тогда видно «Правильно:» и эталон со словами с подсказками', async () => {
