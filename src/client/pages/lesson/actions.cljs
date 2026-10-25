@@ -1,6 +1,5 @@
 (ns pages.lesson.actions
   (:require
-   [domain.lesson :as domain]
    [nexus.registry :as nxr]
    [use-cases.lesson :as lesson]))
 
@@ -43,26 +42,16 @@
 
 
 (nxr/register-action! :action/check-answer
-  ;; The answer is graded and shown at once; the review is written, and the word hints looked up, after.
   (fn check-answer [state answer]
-    (let [from (:lesson/state state)]
-      (cond
-        (nil? from)
-        [[:effect/log-warning :lesson/check-answer-missing {:answer answer}]]
-
-        (nil? (domain/last-result from))
-        (let [checked  (domain/check-answer from answer)
-              example? (domain/example-trial? (domain/current-trial checked))]
-          [[:effect/save (shown {:lesson-state checked})]
-           (if example?
-             [:effect/look-up-answer-annotations checked]
-             [:effect/record-review checked])])))))
+    (if-let [lesson-state (:lesson/state state)]
+      [[:effect/check-answer lesson-state answer]]
+      [[:effect/log-warning :lesson/check-answer-missing {:answer answer}]])))
 
 
 (nxr/register-action! :action/next-trial
   (fn next-trial [state]
     (let [from (:lesson/state state)]
-      (when-let [lesson-state (some-> from domain/advance)]
+      (when-let [lesson-state (some-> from lesson/next-trial)]
         [[:action/update-lesson from lesson-state]]))))
 
 

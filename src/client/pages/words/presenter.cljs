@@ -2,7 +2,7 @@
   (:require
    [clojure.string :as str]
    [collection-accents :as colours]
-   [domain.vocabulary :as domain]
+   [domain.vocabulary :as vocabulary]
    [pages.words.edit :as edit]
    [utils :as utils]))
 
@@ -20,12 +20,12 @@
 
 (defn word-item-props
   [{:keys [id value retention-level] :as row}]
-  {:id          id
-   :retention-band    (retention-band retention-level)
-   :retention-color   (utils/prozent->color retention-level)
+  {:id id
+   :retention-band (retention-band retention-level)
+   :retention-color (utils/prozent->color retention-level)
    :retention-percent (int retention-level)
-   :value       value
-   :translation (str/join " · " (domain/russian-translations row))})
+   :value value
+   :translation (str/join " · " (vocabulary/russian-translations row))})
 
 
 (defn word-list-props
@@ -62,7 +62,7 @@
   (let [lower      (str/lower-case sentence)
         dictionary (str/lower-case (str word))
         forms      (concat [word]
-                           (for [item structure
+                           (for [item  structure
                                  :when (= dictionary (str/lower-case (str (:dictionaryForm item))))]
                              (:usedForm item))
                            [(str/replace dictionary #"^(?:der|die|das|ein|eine)\s+" "")])
@@ -97,30 +97,30 @@
         pending? (= :request/pending (:status example-request))
         status?  (fn [id status]
                    (and (= id (:collection-id example-request)) (= status (:status example-request))))]
-    {:examples        (mapv (fn [id]
-                              (let [example       (get examples id)
-                                    regenerating? (status? id :request/pending)
-                                    failed?       (status? id :request/failed)]
-                                {:accent               (get accents id)
-                                 :collection-id        id
-                                 :failed?              failed?
-                                 :regenerate-disabled? pending?
-                                 :regenerating?        regenerating?
-                                 :sentence             (highlighted-sentence (:value example) stored-word (:structure example))
-                                 :status-shown?        (or regenerating? failed?)
-                                 :title                (some-> (get names id) path-title)
-                                 :translation          (:translation example)}))
-                            collection-ids)
-     :id              (:id editing)
-     :replaces        (when (and (edit/renamed? editing) (not word-taken?)) stored-word)
+    {:examples       (mapv (fn [id]
+                             (let [example       (get examples id)
+                                   regenerating? (status? id :request/pending)
+                                   failed?       (status? id :request/failed)]
+                               {:accent        (get accents id)
+                                :collection-id id
+                                :failed?       failed?
+                                :regenerate-disabled? pending?
+                                :regenerating? regenerating?
+                                :sentence      (highlighted-sentence (:value example) stored-word (:structure example))
+                                :status-shown? (or regenerating? failed?)
+                                :title         (some-> (get names id) path-title)
+                                :translation   (:translation example)}))
+                           collection-ids)
+     :id             (:id editing)
+     :replaces       (when (and (edit/renamed? editing) (not word-taken?)) stored-word)
      :reset-disabled? (not (changed? editing))
-     :save-disabled?  (not (and (changed? editing) (edit/valid? editing)))
-     :stored-word     stored-word
+     :save-disabled? (not (and (changed? editing) (edit/valid? editing)))
+     :stored-word    stored-word
      :translation-rows (max 1 (count translation-lines))
-     :translations    translation-lines
-     :word            word
+     :translations   translation-lines
+     :word           word
      :word-multiline? (:phrase? editing)
-     :word-taken?     word-taken?}))
+     :word-taken?    word-taken?}))
 
 
 (defn page-props
@@ -128,11 +128,11 @@
    applies. An empty vocabulary drops the chrome, an empty filter keeps it; while `total` is nil the list
    shows nothing."
   [{:words/keys [editing in-collection? more? rows search total]}]
-  {:editing     (some-> editing editing-props)
+  {:editing        (some-> editing editing-props)
    :in-collection? (boolean in-collection?)
-   :empty-state (empty-state rows total)
-   :items       (word-list-props rows)
-   :known?      (some? total)
-   :more?       more?
-   :search      search
-   :vocabulary? (boolean (some-> total pos?))})
+   :empty-state    (empty-state rows total)
+   :items          (word-list-props rows)
+   :known?         (some? total)
+   :more?          more?
+   :search         search
+   :vocabulary?    (boolean (some-> total pos?))})

@@ -12,31 +12,35 @@
 
 (deftest the-input-is-a-phrase-when-it-has-more-than-a-word-and-its-article
   (testing "single word is not a phrase"
-    (is (false? (sut/phrase-value? "Fenster" []))))
+    (is (false? (sut/phrase-value? "Fenster" nil))))
   (testing "multi-word input is a phrase"
-    (is (true? (sut/phrase-value? "auf jeden Fall" [])))
-    (is (true? (sut/phrase-value? "Entschuldigung dass ich zu spät komme" []))))
+    (is (true? (sut/phrase-value? "auf jeden Fall" nil)))
+    (is (true? (sut/phrase-value? "Entschuldigung dass ich zu spät komme" nil))))
   (testing "article plus one word stays a word"
-    (is (false? (sut/phrase-value? "der Tisch" [])))
-    (is (false? (sut/phrase-value? "eine Frau" []))))
+    (is (false? (sut/phrase-value? "der Tisch" nil)))
+    (is (false? (sut/phrase-value? "eine Frau" nil))))
   (testing "sich plus one word stays a word"
-    (is (false? (sut/phrase-value? "sich freuen" []))))
+    (is (false? (sut/phrase-value? "sich freuen" nil))))
   (testing "article plus two words is a phrase"
-    (is (true? (sut/phrase-value? "der frühe Vogel" []))))
-  (testing "a non-phrase dictionary lemma among completions keeps word mode"
-    (is (false? (sut/phrase-value? "Guten Morgen"
-                                   [{:lemma "guten Morgen" :pos "noun"}]))))
-  (testing "a pos=phrase completion does not veto phrase mode"
-    (is (true? (sut/phrase-value? "auf jeden Fall"
-                                  [{:lemma "auf jeden Fall" :pos "phrase"}]))))
-  (testing "a pos=phrase lemma beats the article exception"
-    (is (true? (sut/phrase-value? "das heißt"
-                                  [{:lemma "das heißt" :pos "phrase"}])))
-    (is (true? (sut/phrase-value? "ein paar"
-                                  [{:lemma "ein paar" :pos "phrase"}]))))
-  (testing "a phrase lemma that is not the value itself decides nothing"
-    (is (false? (sut/phrase-value? "der Tisch"
-                                   [{:lemma "der Tisch ist rund" :pos "phrase"}])))))
+    (is (true? (sut/phrase-value? "der frühe Vogel" nil))))
+  (testing "a non-phrase part of speech keeps a word"
+    (is (false? (sut/phrase-value? "Guten Morgen" "noun"))))
+  (testing "pos=phrase does not veto a phrase"
+    (is (true? (sut/phrase-value? "auf jeden Fall" "phrase"))))
+  (testing "pos=phrase beats the article exception"
+    (is (true? (sut/phrase-value? "das heißt" "phrase")))
+    (is (true? (sut/phrase-value? "ein paar" "phrase")))))
+
+
+(deftest the-dictionary-gives-a-value-the-part-of-speech-of-its-own-lemma
+  (testing "a shown completion whose lemma is the value"
+    (is (= "noun" (sut/dictionary-pos "Guten Morgen" nil [{:lemma "guten Morgen" :pos "noun"}]))))
+  (testing "a completion whose lemma is not the value decides nothing"
+    (is (nil? (sut/dictionary-pos "der Tisch" nil [{:lemma "der Tisch ist rund" :pos "phrase"}]))))
+  (testing "the picked suggestion while the value is its lemma"
+    (is (= "phrase" (sut/dictionary-pos "das heißt" {:lemma "das heißt" :pos "phrase"} []))))
+  (testing "a pick the value has typed on from decides nothing"
+    (is (nil? (sut/dictionary-pos "das heißt so" {:lemma "das heißt" :pos "phrase"} [])))))
 
 
 (deftest only-a-multi-word-phrase-lemma-is-a-phrase-suggestion

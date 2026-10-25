@@ -13,15 +13,10 @@
 
 
 (defn phrase-value?
-  "True when the entered value reads as a phrase. A dictionary lemma equal to the value settles it; otherwise a
-   space makes it a phrase, except for an article/`sich` pair. Typing `das heißt` and picking it must agree."
-  [value completions]
-  (let [tokens (str/split (vocabulary/collapsed value) #" ")
-        ;; The part of speech the dictionary gives this exact value, when a completion on screen is the value itself.
-        pos    (some #(when (= (vocabulary/normalize-value (:lemma %))
-                               (vocabulary/normalize-value value))
-                        (:pos %))
-                     completions)]
+  "True when `value` reads as a phrase. The dictionary's part of speech `pos` of the value settles it; without one
+   a space makes it a phrase, except for an article/`sich` pair. Typing `das heißt` and picking it must agree."
+  [value pos]
+  (let [tokens (str/split (vocabulary/collapsed value) #" ")]
     (and (> (count tokens) 1)
          (case pos
            "phrase" true
@@ -39,20 +34,11 @@
        (str/includes? (str lemma) " ")))
 
 
-(defn current-pick
-  "The picked suggestion `{:mode :pos :value}` while `value` still is the lemma it was picked for, else nil:
-   typing on makes it something nobody picked. The same lemma is the same normalized value, one document."
-  [value pick]
-  (when (and pick
-             (= (vocabulary/normalize-value value)
-                (vocabulary/normalize-value (:value pick))))
-    pick))
-
-
-(defn add-mode
-  "The add form's mode. A picked suggestion settles it for the lemma picked (`das heißt` is a phrase the
-   article exception would call a word, and its suggestions are gone by then: `current-pick`); otherwise
-   the value decides against the completions on screen."
-  [value completions mode-override]
-  (or (:mode (current-pick value mode-override))
-      (if (phrase-value? value completions) :phrase :word)))
+(defn dictionary-pos
+  "The part of speech the dictionary gives `value`: the picked suggestion's while `value` is its lemma (its
+   suggestions are gone by then; typing on makes it something nobody picked), else a shown completion's whose
+   lemma `value` is, else nil. The same lemma is the same normalized value, one document."
+  [value pick completions]
+  (let [normalized (vocabulary/normalize-value value)]
+    (:pos (some #(when (= normalized (vocabulary/normalize-value (:lemma %))) %)
+                (cons pick completions)))))

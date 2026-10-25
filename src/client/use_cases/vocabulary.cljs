@@ -34,25 +34,26 @@
 
 
 (defn ^:async add!
-  "Adds an entry of `kind` (`:word` or `:phrase`) to the vocabulary and the active collection; a new word
-   gets an initial review unless memory holds its history, and a duplicate value merges translations.
-   Resolves with `{:word-id :created?}` or `{:error :failure/empty-translations}`."
-  ;; `kind` has no default: optional, `:static-fns` compiles call sites to an arity property a plain test stub lacks.
-  [learner world value translation kind pos]
+  "Adds `value` with `translation` to the vocabulary and the active collection: a phrase or a word by the
+   dictionary's part of speech `pos` (none: by the value alone), a word keeping `pos`; a new word gets an initial
+   review unless memory holds its history, and a duplicate value merges translations. Resolves with
+   `{:word-id :created?}` or `{:error :failure/empty-translations}`."
+  [learner world {:keys [value translation pos]}]
   (let [now   (world/clock world :now-iso)
+        kind  (if (phrase/phrase-value? value pos) :phrase :word)
         entry (domain/entered-entry kind value translation pos now)]
     (if-not entry
       {:error :failure/empty-translations}
       (let [collection (learner/active-collection learner)
             created?   (volatile! false)
-            _          (await (learner/change! learner
-                                               [[:entity/word
-                                                 (:id entry)
-                                                 (fn [stored]
-                                                   (vreset! created? (nil? stored))
-                                                   (if stored
-                                                     (domain/merged-entry stored entry now)
-                                                     entry))]]))
+            _ (await (learner/change! learner
+                                      [[:entity/word
+                                        (:id entry)
+                                        (fn [stored]
+                                          (vreset! created? (nil? stored))
+                                          (if stored
+                                            (domain/merged-entry stored entry now)
+                                            entry))]]))
             created?   @created?
             history    (learner/review-history learner (:id entry))]
         (when (and created? (zero? (count (:ids history))))
@@ -117,18 +118,19 @@
    old word gone. A new word gets an initial review unless memory holds its history. Resolves with whether
    memory took the change."
   [learner world word-id value translation]
-  (let [kind  (if (phrase/phrase-value? value []) :phrase :word)
+  (let [kind  (if (phrase/phrase-value? value nil) :phrase :word)
         entry (domain/entered-entry kind (str/trim value) translation nil (world/clock world :now-iso))
-        _     (await (learner/fresh-memory learner))]
+        _ (await (learner/fresh-memory learner))]
     (if (or (nil? entry) (nil? (learner/word learner word-id)))
       false
       (let [written (await (learner/change! learner
                                             (-> [[:entity/word (:id entry) #(or % entry)]
                                                  [:entity/word word-id (constantly :entity/deleted)]]
-                                                (into (map (fn [{:keys [id]}]
-                                                             [:entity/collection
-                                                              id
-                                                              #(some-> % (collections/replace-word word-id (:id entry)))]))
+                                                (into (map
+                                                       (fn [{:keys [id]}]
+                                                         [:entity/collection
+                                                          id
+                                                          #(some-> % (collections/replace-word word-id (:id entry)))]))
                                                       (learner/collections-of learner word-id)))))]
         (when (and written (zero? (count (:ids (learner/review-history learner (:id entry))))))
           (await (add-review learner world (:id entry) true translation)))

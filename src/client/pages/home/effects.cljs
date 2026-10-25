@@ -64,9 +64,9 @@
 
 (nxr/register-effect! :effect/add-word
   (fn ^:async add-word
-    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ {:keys [value translation focus-id mode pos]}]
+    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ {:keys [focus-id] :as entered}]
     (try
-      (let [result (await (vocabulary/add! learner world value translation (or mode :word) pos))]
+      (let [result (await (vocabulary/add! learner world entered))]
         (if (:error result)
           (dispatch [[:action/show-word-error (:error result)]])
           (dispatch (cond-> [[:action/word-added]]
