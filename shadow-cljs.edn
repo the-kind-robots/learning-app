@@ -1,13 +1,13 @@
 {:dependencies
  [[binaryage/devtools "1.0.7"]
   [cheshire/cheshire "6.2.0"]
-  [cider/cider-nrepl "0.62.2"]
+  [cider/cider-nrepl "0.63.1"]
   ;; The snapshot of memory (`adapters.learner.snapshot`).
   [com.cognitect/transit-cljs "0.8.280"]
   [com.lambdaisland/glogi "1.4.177"]
-  [metosin/reitit "0.10.1"]
+  [metosin/reitit "0.11.0"]
   [no.cjohansen/dataspex "2026.06.3"]
-  [no.cjohansen/nexus "2026.07.1"]
+  [no.cjohansen/nexus "2026.08.1"]
   [no.cjohansen/replicant "2026.07.1"]
   ;; Tests only: property tests (`client.memory-test`). Nothing the app
   ;; requires, so no build but node-test compiles it.
