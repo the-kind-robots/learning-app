@@ -4,7 +4,7 @@
    walks memory and asks for them is tested in
    `client.example-backfill-process-test`."
   (:require
-   [cljs.test :refer-macros [deftest is testing]]
+   [cljs.test :refer-macros [are deftest is testing]]
    [domain.examples :as sut]
    [domain.vocabulary :as vocabulary]))
 
@@ -40,12 +40,24 @@
   (let [untethered {:word-id "vocab:hund" :collection-id nil}
         themed     {:word-id "vocab:hund" :collection-id "coll-1"}
         examples   [untethered themed]]
-    (is (= [themed] (sut/visible-in "coll-1" examples))
+    (is (= [themed] (sut/visible-in [tiere] examples))
         "a theme sees what was generated in it, and nothing else")
     (is (= examples (sut/visible-in nil examples))
         "a read outside every theme sees all of them")
-    (is (empty? (sut/visible-in "coll-2" [untethered]))
+    (is (empty? (sut/visible-in [{:id "coll-2"}] [untethered]))
         "and a theme that generated none of them sees none")))
+
+
+(deftest a-parent-sees-its-own-example-of-a-word-and-otherwise-its-childrens
+  (let [parent   {:id "coll-parent"}
+        child    {:id "coll-1"}
+        own      {:word-id "vocab:hund" :collection-id "coll-parent"}
+        of-child {:word-id "vocab:hund" :collection-id "coll-1"}
+        katze    {:word-id "vocab:katze" :collection-id "coll-1"}]
+    (are [examples seen] (= seen (set (sut/visible-in [parent child] examples)))
+     [of-child katze]     #{of-child katze}
+     [own of-child katze] #{own katze}
+     [{:word-id "vocab:hund" :collection-id "coll-other"}] #{})))
 
 
 (deftest a-phrase-is-missing-its-example-like-a-word

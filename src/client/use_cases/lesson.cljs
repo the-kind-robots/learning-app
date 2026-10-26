@@ -1,5 +1,6 @@
 (ns use-cases.lesson
   (:require
+   [domain.collections :as collections]
    [domain.examples :as examples]
    [domain.lesson :as domain]
    [domain.retention :as retention]
@@ -31,7 +32,8 @@
         {:lesson-state (domain/initial-state
                         vocab
                         (->> (learner/examples-of learner word-ids)
-                             (examples/visible-in (:id collection)))
+                             (examples/visible-in (collections/family (learner/collections learner)
+                                                                      (:id collection))))
                         (if (= :first trial-selector)
                           first
                           (partial domain/random-trial random)))}))))
