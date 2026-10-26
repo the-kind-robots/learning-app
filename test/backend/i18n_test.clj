@@ -15,5 +15,6 @@
   (are [language] (= #{}
                      (set/difference (set (keys (dictionary "ru")))
                                      (set (keys (dictionary language)))))
+   "en"
    "tr"
    "fr"))
