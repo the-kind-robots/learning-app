@@ -1,0 +1,103 @@
+;; The interface in Turkish, key for key with `ru.edn`. It speaks to the user as «sen», the way Turkish
+;; apps do. Turkish nouns take no plural after a number, so no text needs a plural form.
+{:collections/all             "Tümü"
+ :collections/delete          [:fn/str "“{{:name}}” setini sil"]
+ :collections/deleted         [:fn/str "“{{:name}}” seti silindi"]
+ :collections/new             "Yeni set"
+ :collections/new-name        "Yeni setin adı:"
+ :collections/title           "Setler"
+
+ :dialog/close                "Kapat"
+
+ :example/failed              "Olmadı. ↻ simgesine tekrar dokun."
+ :example/no-theme            "Konusuz"
+ :example/regenerate          "Başka örnek"
+ :example/regenerating        "Örnek arıyorum…"
+ :example/sentence            "Örnek"
+ :example/translation         "Örneğin çevirisi"
+
+ :home/add                    "EKLE"
+ :home/empty-translations     "Bir çeviri ekle."
+ :home/phrase-badge           "ifade"
+ :home/phrase-label           "İfade (Almanca)"
+ :home/phrase-placeholder     "Yeni ifade"
+ :home/phrase-save-failed     "İfade kaydedilmedi: uygulamada bir hata oluştu, senin hatan değil."
+ :home/subtitle               "Kelimeleri hızla ekle, Almancayı internetsiz bile öğren."
+ :home/title                  "Ana sayfa"
+ :home/translation-label      "Çeviri (Türkçe)"
+ :home/translation-placeholder "Çeviri"
+ :home/word-label             "Kelime (Almanca)"
+ :home/word-placeholder       "Yeni kelime"
+ :home/word-save-failed       "Kelime kaydedilmedi: uygulamada bir hata oluştu, senin hatan değil."
+ :home/words                  "Kelime listesi"
+
+ :install-guide/add           ([:strong "Ekle"] " ile onayla")
+ :install-guide/add-to-home   ([:strong "Ana Ekrana Ekle"] " seçeneğine dokun")
+ :install-guide/close         "Kapat"
+ :install-guide/share         ("Araç çubuğunda " [:strong "Paylaş"] " düğmesine dokun")
+ :install-guide/title         "Sprecha’yı yükle"
+
+ :lesson/add-to-dictionary    "+ SÖZLÜĞE"
+ :lesson/add-translation      "+ ÇEVİRİ EKLE"
+ :lesson/add-words            "Kelime ekle"
+ :lesson/answer               "Almanca cevap"
+ :lesson/answer-placeholder   "Çeviriyi yaz..."
+ :lesson/check                "KONTROL ET"
+ :lesson/correct              "Doğru!"
+ :lesson/correct-answer       "Doğrusu:"
+ :lesson/empty                "Ders için kelime yok"
+ :lesson/empty-hint           "Öğrenmeye başlamak için kelime ekle"
+ :lesson/finish               "BİTİR"
+ :lesson/in-dictionary        "✓ Sözlükte"
+ :lesson/next                 "DEVAM"
+ :lesson/progress             "Ders ilerlemesi"
+ :lesson/start                "DERSE BAŞLA"
+ :lesson/tiles                "Parçalar"
+ :lesson/tiles-hint           "İpucu: parçalardan oluştur"
+ :lesson/title                "Ders"
+ :lesson/translate-phrase     "İfadeyi Almancaya çevir"
+ :lesson/translate-sentence   "Cümleyi Almancaya çevir"
+ :lesson/translate-word       "Kelimeyi Almancaya çevir"
+ :lesson/tray                 "Cevabın"
+ :lesson/your-answer          "Cevabın:"
+
+ :phrase/add                  "İfade ekle"
+
+ :shell/export-trace          "İzi dışa aktar"
+ :shell/install               "Uygulamayı yükle"
+ :shell/loading               "Yükleniyor..."
+ :shell/open-collections      "Setleri aç"
+ :shell/read-error            "Cihazdaki veriler okunamıyor. Sayfayı yenile."
+ :shell/reload-build          "Derlemeyi yeniden yükle"
+
+ :sync/cancel                 "İptal"
+ :sync/connect-device         "Cihaz bağla"
+ :sync/qr                     "Cihaz bağlamak için QR kod"
+ :sync/recovery-link          "Kurtarma bağlantısı"
+ :sync/recovery-link-copied   "Bağlantı panoya kopyalandı"
+ :sync/recovery-link-title    "Sprecha: erişimi kurtarma"
+ :sync/scan-qr                "QR kodu yeni cihazda tara"
+ :sync/title                  "Senkronizasyon"
+
+ :word/add                    "Kelime ekle"
+
+ :word-edit/delete            "Kelimeyi sil"
+ :word-edit/delete-confirm    [:fn/str "“{{:word}}” kalıcı olarak silinsin mi?"]
+ :word-edit/remove-confirm    [:fn/str "“{{:word}}” setten çıkarılsın mı?"]
+ :word-edit/replaces          [:fn/str "Aynı konularda yeni kelime olarak kaydedilecek. “{{:word}}”, ilerlemesi ve örnekleriyle birlikte silinecek."]
+ :word-edit/reset             "Sıfırla"
+ :word-edit/save              "Kaydet"
+ :word-edit/taken             "Bu kelime zaten var"
+ :word-edit/translations      "Çeviriler, her satıra bir tane"
+ :word-edit/word              "Kelime"
+
+ :words/empty                 "Henüz kelime yok"
+ :words/empty-hint            "İlk kelimeni ana sayfadan ekle"
+ :words/no-matches            "Sonuç bulunamadı"
+ :words/no-matches-hint       "Başka bir arama dene"
+ :words/retention-due         [:fn/str "Tekrar zamanı (%{{:percent}})"]
+ :words/retention-excellent   [:fn/str "Çok iyi hatırlanıyor (%{{:percent}})"]
+ :words/retention-good        [:fn/str "İyi öğrenildi (%{{:percent}})"]
+ :words/retention-new         [:fn/str "Yeni kelime (%{{:percent}})"]
+ :words/search                "Ara"
+ :words/title                 "Kelimelerim"}
