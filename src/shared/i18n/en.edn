@@ -5,8 +5,11 @@
  :collections/add             "ADD COLLECTION"
  :collections/all             "Everything"
  :collections/delete          [:fn/str "Delete collection “{{:name}}”"]
+ :collections/delete-confirm  [:fn/str "Delete collection “{{:name}}”? The words stay in the dictionary."]
  :collections/deleted         [:fn/str "Collection “{{:name}}” deleted"]
  :collections/new-name        "Name of the new collection:"
+ :collections/restore         [:fn/str "Bring back collection “{{:name}}”"]
+ :collections/restored        [:fn/str "Collection “{{:name}}” is back"]
  :collections/title           "Collections"
 
  :dialog/close                "Close"
