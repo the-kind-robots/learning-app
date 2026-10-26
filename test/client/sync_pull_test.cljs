@@ -36,9 +36,9 @@
                                            (reset! feed handler)
                                            (fn [] nil))
                   pouch/sync-once!       sync-once!]
-      (let [{:keys [sync!] :as started} (await (sut/start! start))]
+      (let [started (await (sut/start! start))]
         (await (f {:feed!        #(@feed (change %1 %2))
-                   :request!     sync!
+                   :request!     #(sut/sync! started nil)
                    :start-again! #(sut/start! start)
                    :started      started}))))))
 
@@ -117,7 +117,7 @@
           (^:async fn
            [{:keys [request! started]}]
            (let [calls (atom 0)
-                 _ ((:on-device-joined started) "n1" #(swap! calls inc))
+                 _ (sut/on-device-joined started "n1" #(swap! calls inc))
                  pull! (^:async fn
                         []
                         (let [pulling (request!)]
@@ -242,7 +242,7 @@
         sync-once
         (^:async fn
          [{:keys [request! start-again! started]}]
-         (let [first-pass (:first-pass started)]
+         (let [first-pass (sut/first-sync started)]
            (is (= ::unanswered (await (answered first-pass))) "no pass has run")
            (request!)
            (await (settled))
@@ -254,7 +254,7 @@
            (is (nil? (await (answered first-pass))) "the first pass that completes resolves it")
            (sut/stop! started)
            (let [again (await (start-again!))]
-             (is (= ::unanswered (await (answered (:first-pass again))))
+             (is (= ::unanswered (await (answered (sut/first-sync again))))
                  "a start after a stop waits for a pass of its own")))))))))
 
 
@@ -262,5 +262,5 @@
   (async-testing "its first pass is resolved at once"
     (with-redefs [identity/load-identity! (fn [] (js/Promise.resolve nil))]
       (let [started (await (sut/start! {:storage {:databases {}}}))]
-        (is (false? (:exists? started)))
-        (is (nil? (await (answered (:first-pass started)))))))))
+        (is (false? (sut/open? started)))
+        (is (nil? (await (answered (sut/first-sync started)))))))))

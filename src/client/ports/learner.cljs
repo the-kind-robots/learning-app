@@ -109,6 +109,12 @@
   (memory/matching-words (memory learner) coll query))
 
 
+(defn practice-days
+  "On how many days the learner reviewed anything."
+  [learner]
+  (memory/practice-days (memory learner)))
+
+
 (defn review-history
   "The reviews of the word `word-id`."
   [learner word-id]

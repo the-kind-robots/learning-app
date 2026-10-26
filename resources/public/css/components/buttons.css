@@ -74,8 +74,11 @@
   pointer-events: none;
 }
 
+/* Flat: the lip is the colour of an enabled button and would say it can be
+   pressed. */
 .big-button[disabled]::before {
   background-color: var(--__internal__background-color-disabled);
+  box-shadow: none;
 }
 
 .big-button--request-stable {

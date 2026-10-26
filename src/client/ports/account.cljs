@@ -25,22 +25,20 @@
   (on-device-joined
     [a nonce f]
     "Calls `f` once the device that opened the link carrying `nonce` has joined.")
+  (on-status
+    [a f]
+    "Calls `f` with the sync's status now and on every change: `:sync/online`, `:sync/offline`, or
+     `:sync/no-account` once, without an account.")
+  (request-sync!
+    [a request]
+    "Asks us to turn the sync on for a device without an account. `request` is `{:note :words :days}`: what the
+     learner wrote, how many words they have and on how many days they practised. Resolves once it is stored; it
+     is sent and followed in the background, and once granted the account opens in place and `on-status` hears
+     it. A declined one is forgotten, so the next asks anew.")
   (initialized
     [a]
     "A promise that resolves once the learner's memory is loaded and the first replication pass is done, or a
      minute after memory loaded."))
-
-
-(defn as-account
-  "The Account over what the adapter started with (`adapters.account/start!`) and `initialized`, its promise."
-  [sync initialized]
-  (reify Account
-    (exists? [_] (:exists? sync))
-    (sync! [_ reason] ((:sync! sync) reason))
-    (sync-link [_] ((:sync-link sync)))
-    (sync-link [_ nonce] ((:sync-link sync) nonce))
-    (on-device-joined [_ nonce f] ((:on-device-joined sync) nonce f))
-    (initialized [_] initialized)))
 
 
 (defn check-incoming-auth!
@@ -90,40 +88,64 @@
 
 
 (defn- follow-page!
-  "Has the adapter's replication follow the page: no pass while the device is offline, a pass when it comes back,
-   and the poke socket open while the page is shown and online."
-  [page {:keys [connect-push! disconnect-push! pause! resume! sync!]}]
-  (let [connect! (fn []
-                   (when (page/active? page)
-                     (connect-push!)))]
-    (if (page/online? page)
-      (resume!)
-      (pause!))
-    (page/on-online page
-                    (fn []
-                      (resume!)
-                      (sync! nil)
-                      ;; A socket that survived a network change may be a zombie; recycling is free, the reconnect pulls anyway.
-                      (disconnect-push!)
-                      (connect!)))
-    (page/on-offline page
-                     (fn []
-                       (pause!)
-                       (disconnect-push!)))
-    (page/on-visibility-change page
-                               (fn []
-                                 (if (page/visible? page)
-                                   (connect!)
-                                   (disconnect-push!))))
-    (connect!)))
+  "Tells the account whether the device is online and the page visible, now and on every change."
+  [page account]
+  (let [tell! #(adapter/page-changed! account
+                                      {:online?  (page/online? page)
+                                       :visible? (page/visible? page)})]
+    (page/on-online page tell!)
+    (page/on-offline page tell!)
+    (page/on-visibility-change page tell!)
+    (tell!)))
+
+
+(def ^:private request-check-ms
+  "How often a device without an account asks what became of its request, while the page is active."
+  60000)
 
 
 (defn ^:async start!
   "Starts the account over the learner's storage (`adapters.account/start!`) and resolves with its Account. The
-   adapter replicates when the device has an account; `page` tells it when."
+   adapter replicates when the device has an account; `page` tells it when. Without one, a stored request is
+   followed: the account asks what became of it when the page is active and then every `request-check-ms`. A
+   granted one starts the account in place, and `on-status` hears it; a declined one ends the asking until the
+   next request."
   [{:keys [learner page world]}]
-  (let [sync (await (adapter/start! {:after-pull #(learner/resolve-conflicts! learner (:pulled-ids %))
-                                     :storage    (learner/storage learner)}))]
-    (when (:exists? sync)
-      (follow-page! page sync))
-    (as-account sync (initialization learner world (:first-pass sync)))))
+  (let [account (await (adapter/start! {:after-pull #(learner/resolve-conflicts! learner (:pulled-ids %))
+                                        :storage    (learner/storage learner)}))
+        following? (atom false)
+        follow-request!
+        (fn ^:async follow-request! []
+          (when (compare-and-set! following? false true)
+            (loop []
+              (await (page/until-active page nil))
+              (case (await (adapter/check-request! account))
+                :request/granted
+                (when (await (adapter/open! account))
+                  (follow-page! page account))
+
+                (nil :request/declined)
+                nil
+
+                (do (await (world/clock world :sleep request-check-ms nil))
+                    (recur))))
+            (reset! following? false)))]
+    (if (adapter/open? account)
+      (follow-page! page account)
+      ;; Not awaited: it lasts until a stored request is decided, and ends at once without one.
+      (follow-request!))
+    (reify Account
+      (exists? [_] (adapter/open? account))
+      (sync! [_ reason] (adapter/sync! account reason))
+      (sync-link [_] (adapter/link account))
+      (sync-link [_ nonce] (adapter/link account nonce))
+      (on-device-joined [_ nonce f] (adapter/on-device-joined account nonce f))
+      (on-status [_ f] (adapter/on-status account f))
+      ;; Resolves once the request is stored; the following lasts until it is decided, so it is not waited for.
+      (request-sync! [_ request]
+        (.then (adapter/save-request! account request)
+               (fn []
+                 (follow-request!)
+                 nil)))
+      ;; The first sync since the account opened, so after a granted request the wait is for its own.
+      (initialized [_] (initialization learner world (adapter/first-sync account))))))

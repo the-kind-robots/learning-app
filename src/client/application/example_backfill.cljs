@@ -233,27 +233,33 @@
 
 
 (defn start!
-  "Starts fetching and returns the function that stops it. A device without an
-   account fetches nothing."
+  "Starts fetching once the device has an account, at once or when a request for one is granted, and returns the
+   function that stops it. A device without an account fetches nothing."
   [{:keys [account examples-generator learner page world]}]
-  (if-not (account/exists? account)
-    (do (log/info :examples/no-account {})
-        (fn stop []))
-    (let [controller (atom nil)
-          closing    (js/AbortController.)
-          backfill   {:account    account
-                      :controller controller
-                      :examples-generator examples-generator
-                      :learner    learner
-                      :page       page
-                      :signal     (.-signal closing)
-                      :state      (atom initial-state)
-                      :world      world}]
-      (page/on-inactive page #(some-> @controller .abort) (.-signal closing))
-      (-> (fetch-loop backfill)
-          (.catch (fn [err]
-                    (log/error :examples/backfill-failed {:error (ex-message err)}))))
-      (fn stop
-        []
-        (some-> @controller .abort)
-        (.abort closing)))))
+  (let [controller (atom nil)
+        closing    (js/AbortController.)
+        started?   (atom false)
+        backfill   {:account    account
+                    :controller controller
+                    :examples-generator examples-generator
+                    :learner    learner
+                    :page       page
+                    :signal     (.-signal closing)
+                    :state      (atom initial-state)
+                    :world      world}]
+    (account/on-status account
+                       (fn [_]
+                         (cond
+                           (not (account/exists? account))
+                           (log/info :examples/no-account {})
+
+                           (and (not (.-aborted (.-signal closing)))
+                                (compare-and-set! started? false true))
+                           (do (page/on-inactive page #(some-> @controller .abort) (.-signal closing))
+                               (-> (fetch-loop backfill)
+                                   (.catch (fn [err]
+                                             (log/error :examples/backfill-failed {:error (ex-message err)}))))))))
+    (fn stop
+      []
+      (some-> @controller .abort)
+      (.abort closing))))

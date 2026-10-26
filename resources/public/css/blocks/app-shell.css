@@ -80,8 +80,10 @@
    the newest one. Quiet — the small grey line it reads as, with no button
    chrome — and it shrinks and ellipsises rather than pushing either neighbour.
    `touch-action: manipulation` because a hold on text this small otherwise
-   starts a selection instead of a tap. */
+   starts a selection instead of a tap. Positioned, so it lies over the unseen
+   tap area of the sync on its left and keeps its own taps. */
 .app-shell__build-mark {
+  position: relative;
   background: none;
   border: 0;
   color: rgb(var(--color-hare));
@@ -123,10 +125,13 @@
   z-index: 20;
 }
 
+/* Never narrower than the word mark and the sync: on a narrow phone the info
+   bar gives way instead, so nothing lies over it. */
 .app-shell__bar-slot {
   display: flex;
   flex: 1 1 0;
-  min-width: 0;
+  gap: 6px;
+  min-width: max-content;
 }
 
 /* The middle of the bar, kept for what the learner should see at a glance on
@@ -163,18 +168,62 @@
   white-space: nowrap;
 }
 
+/* The sync beside the word mark, a lamp like the lesson's light bulb: grey
+   without an account, lit green with a soft glow while the device with one is
+   online, orange and unlit while it is offline. Only colour and glow change,
+   so nothing around it moves. */
+.app-shell__sync {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: rgb(var(--color-hare));
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0 2px;
+  position: relative;
+  transition: color 0.3s, filter 0.3s;
+}
+
+/* A 44px target around the 24x28 button, unseen. It reaches only half the
+   gap towards the word mark, so a tap beside the word still opens the
+   settings. */
+.app-shell__sync::before {
+  bottom: -8px;
+  content: "";
+  left: -3px;
+  position: absolute;
+  right: -17px;
+  top: -8px;
+}
+
+.app-shell__sync--online {
+  color: rgb(var(--color-owl));
+  filter: drop-shadow(0 0 3px rgba(var(--color-owl), 0.55));
+}
+
+.app-shell__sync--offline {
+  color: rgb(var(--color-fox));
+}
+
+.app-shell__sync:active {
+  transform: scale(0.92);
+}
+
 
 /* Shell actions sit in one row so any of them can be absent without leaving a
    hole: the trace export in a development build, install only when
-   installable, sync only on home with an account, the grid icon on
-   home and the close mark on every other page. */
+   installable, the grid icon on home and the close mark on every other
+   page. */
 .app-shell__actions {
   align-items: center;
   display: flex;
   flex: 1 1 0;
   gap: 4px;
   justify-content: flex-end;
-  min-width: 0;
+  /* Like the word mark's slot: the info bar gives way, not the buttons. */
+  min-width: max-content;
 }
 
 /* The grid and the close mark, both buttons: the

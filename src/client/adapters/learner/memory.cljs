@@ -320,6 +320,16 @@
   (count (:words memory)))
 
 
+(defn practice-days
+  "On how many days, counted in UTC, the learner reviewed anything."
+  [memory]
+  (->> (:cards memory)
+       (mapcat #(array-seq (:reviewed-at (:reviews %))))
+       (map #(js/Math.floor (/ % 86400)))
+       distinct
+       count))
+
+
 (defn review-history
   "The review history of `word-id` (`domain.retention/Reviews`); an empty
    one when memory has no review of it."

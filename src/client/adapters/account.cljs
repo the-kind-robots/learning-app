@@ -29,30 +29,84 @@
 (defn stop!
   "Stops pushing on local writes. A pass already in flight finishes on its own."
   [{:keys [unwatch]}]
-  (when unwatch
-    (unwatch)))
+  (some-> @unwatch (apply [])))
 
 
-(def no-account
-  "What `start!` returns for a device without an account. Such a device runs
-   no pass, so its sync is inert, there is no first pass to wait for, and no
-   device can join."
-  {:connect-push! (constantly nil)
-   :disconnect-push! (constantly nil)
-   :exists?       false
-   :first-pass    (js/Promise.resolve nil)
-   :on-device-joined (fn [_ _] nil)
-   :pause!        (constantly nil)
-   :resume!       (constantly nil)
-   :sync!         (constantly nil)
-   :sync-link     (fn [& _] (js/Promise.resolve nil))})
+(def ^:private unsent-retry-ms
+  "The shortest wait before a request the server did not take is sent again."
+  60000)
 
 
-(defn- ^:async sync-link
+(def ^:private request-retry-max-ms
+  "The longest wait before a request the server did not take is sent again, whatever `Retry-After` asks."
+  3600000)
+
+
+(defn ^:async check-request!
+  "Acts on what became of this device's request and resolves with it. `:request/granted` once the device has an
+   account, opened here or in another window; a declined one is forgotten, so the next gets a new secret; an
+   expired one, or one the server does not have, is sent again (#689), and one it refuses outright is forgotten
+   too, while a limit, a mail that did not go or no answer at all holds the next try for as long as
+   `Retry-After` asks, between `unsent-retry-ms` and `request-retry-max-ms`; `:request/unanswered` when the
+   server could not be asked. Nil without a request. The request is the device's, in device-db, so `_account`
+   gives it nothing more."
+  [_account]
+  (try
+    (if (await (identity/load-identity!))
+      :request/granted
+      (when-let [{:keys [secret] :as request} (await (identity/load-request))]
+        (let [status (-> (identity/request-status secret) await (or :request/unanswered))]
+          (case status
+            :request/granted
+            (try
+              (await (identity/save-identity! (await (identity/provision! secret))))
+              (await (identity/drop-request!))
+              (log/info :sync/request-granted {})
+              status
+              (catch js/Error err
+                (if-let [refused (:status (ex-data err))]
+                  ;; The invite is spent, perhaps by a try whose answer was lost: only a new request helps.
+                  (do (log/warn :sync/request-grant-refused {:status refused})
+                      (await (identity/drop-request!))
+                      nil)
+                  (do (log/warn :sync/request-grant-failed {:error (ex-message err)})
+                      :request/unanswered))))
+
+            :request/declined
+            (do (await (identity/drop-request!))
+                status)
+
+            (:request/expired :request/missing)
+            (let [{:keys [retry-after-ms] sent :status} (await (identity/send-request! request))]
+              (cond
+                (#{200 201} sent)
+                nil
+
+                (and sent (<= 400 sent 499) (not= 429 sent))
+                (do (log/warn :sync/request-refused {:status sent})
+                    (await (identity/drop-request!)))
+
+                :else
+                (await (js/Promise.
+                        (fn [resolve]
+                          (js/setTimeout resolve
+                                         (-> (or retry-after-ms unsent-retry-ms)
+                                             (max unsent-retry-ms)
+                                             (min request-retry-max-ms)))))))
+              status)
+
+            status))))
+    (catch js/Error err
+      (log/warn :sync/request-follow-failed {:error (ex-message err)})
+      :request/unanswered)))
+
+
+(defn ^:async link
   "The link another device opens to join this device's account, or to recover it
    (ADR-0006). With a `nonce` the opener echoes it back, so whoever showed the link can
-   tell it joined. Resolves nil without a stored identity."
-  [& [nonce]]
+   tell it joined. Resolves nil without a stored identity; the link is the identity's, so `_account` gives it
+   nothing more."
+  [_account & [nonce]]
   (when-let [{:keys [token]} (await (identity/load-identity!))]
     (cond-> (str (.. js/window -location -origin) "/#key=" token)
       nonce (str "&pair=" nonce))))
@@ -91,38 +145,137 @@
       false)))
 
 
-(defonce ^:private push-socket (atom nil))
+(defn open?
+  "Whether this device has an account open."
+  [{:keys [user-id]}]
+  (some? @user-id))
 
 
-(defonce ^:private push-retry (atom nil))
+(defn- local-writes?
+  "Whether the change feed reported a write the passes did not pull. What it reported is forgotten."
+  [{:keys [pulled written]}]
+  (let [[seen _] (reset-vals! written #{})
+        theirs   (filter @pulled seen)]
+    (swap! pulled #(reduce disj % theirs))
+    (< (count theirs) (count seen))))
 
 
-(defn connect-push!
-  "Opens the poke WebSocket (ADR-0009) unless it is open. `on-poke` runs on a poke and on every (re)connect,
-   which covers what was missed. A socket the server closed is opened again after a flat 5 s, a poke socket
+(defn- run-passes!
+  "Runs passes while one is wanted, and resolves with them told as one over `done` (`merged-passes`)."
+  [{:keys [after-pull databases passed! passes-wait-for pulled running user-id wanted] :as account} done]
+  (if-not @wanted
+    (do (reset! running nil)
+        (js/Promise.resolve done))
+    ;; `wanted` is cleared a microtask later, so requests of the same turn are in this pass.
+    (-> (js/Promise.resolve passes-wait-for)
+        (.then (fn []
+                 (reset! wanted false)
+                 (sync-once! databases @user-id after-pull)))
+        (.catch (fn [err]
+                  (log/warn :sync/pass-failed {:error (ex-message err)})
+                  nil))
+        (.then (fn [result]
+                 (when result
+                   (@passed! nil))
+                 (swap! pulled into (:pulled-revs result))
+                 (when (local-writes? account)
+                   (reset! wanted true))
+                 (run-passes! account (merged-passes done result)))))))
+
+
+(defn sync!
+  "Syncs now, if the account is open and the device online. Syncs run one at a time: asking during one gets one
+   more. Resolves with what they did, told as one; nil when none ran."
+  [{:keys [online pulled-hooks running wanted] :as account} _reason]
+  (when (and (open? account) @online)
+    (reset! wanted true)
+    (or @running
+        (reset! running
+          (.then (run-passes! account nil)
+                 (fn [result]
+                   (when (pos? (:pulled result 0))
+                     (doseq [f @pulled-hooks]
+                       (f)))
+                   result))))))
+
+
+(defn first-sync
+  "A promise that resolves once the first sync since the account opened has completed; at once without one."
+  [account]
+  @(:first-pass account))
+
+
+(defn on-status
+  "Calls `f` with the sync's status now and whenever it changes: `:sync/online` or `:sync/offline` while the
+   device has an account, `:sync/no-account` without one."
+  [{:keys [online user-id] :as account} f]
+  (let [told (volatile! nil)
+        tell (fn [& _]
+               (let [now (cond
+                           (not (open? account)) :sync/no-account
+                           @online :sync/online
+                           :else :sync/offline)]
+                 (when (not= now @told)
+                   (vreset! told now)
+                   (f now))))]
+    (add-watch online f tell)
+    (add-watch user-id f tell)
+    (tell)))
+
+
+(defn on-device-joined
+  "Calls `f` once the device that opened the link carrying `nonce` has joined: the proof it echoes arrives with a
+   pull. The hook forgets itself then."
+  [{:keys [databases pulled-hooks]} nonce f]
+  (let [done (volatile! false)]
+    (swap! pulled-hooks
+      conj
+      (fn hook []
+        (-> (joined? databases nonce)
+            (.then (fn [joined]
+                     (when (and joined (not @done))
+                       (vreset! done true)
+                       (swap! pulled-hooks (fn [hooks] (filterv #(not (identical? hook %)) hooks)))
+                       (f)))))))
+    nil))
+
+
+(defn ^:async save-request!
+  "Stores `request` to turn the sync on, unless the account is open: `check-request!` then follows it."
+  [account request]
+  (when-not (open? account)
+    (await (identity/save-request! request))))
+
+
+(defn- connect-push!
+  "Opens the poke WebSocket (ADR-0009) unless it is open. A poke, and every (re)connect, which covers what was
+   missed, asks `account` for a pass. A socket the server closed is opened again after a flat 5 s, a poke socket
    being cheap, until `disconnect-push!`."
-  [on-poke]
-  (letfn [(url []
-            (str (if (= "https:" (.. js/location -protocol)) "wss://" "ws://")
-                 (.. js/location -host)
-                 "/api/sync/updates"))
-          (connect! []
-            (when (nil? @push-socket)
-              (let [socket (js/WebSocket. (url))]
-                (reset! push-socket socket)
-                (set! (.-onopen socket) (fn [_] (on-poke)))
-                (set! (.-onmessage socket) (fn [_] (on-poke)))
-                (set! (.-onclose socket)
-                      (fn [_]
-                        (when (identical? socket @push-socket)
-                          (reset! push-socket nil)
-                          (reset! push-retry (js/setTimeout connect! 5000))))))))]
+  [{:keys [push-retry push-socket] :as account}]
+  (letfn
+    [(on-poke []
+       (sync! account nil))
+     (url []
+       (str (if (= "https:" (.. js/location -protocol)) "wss://" "ws://")
+            (.. js/location -host)
+            "/api/sync/updates"))
+     (connect! []
+       (when (nil? @push-socket)
+         (let [socket (js/WebSocket. (url))]
+           (reset! push-socket socket)
+           (set! (.-onopen socket) (fn [_] (on-poke)))
+           (set! (.-onmessage socket) (fn [_] (on-poke)))
+           (set! (.-onclose socket)
+                 (fn [_]
+                   (when (identical? socket @push-socket)
+                     (reset! push-socket nil)
+                     (reset! push-retry (js/setTimeout connect! 5000))))))))]
     (connect!)))
 
 
-(defn disconnect-push!
+(defn- disconnect-push!
   "Closes the poke WebSocket, and calls off a retry waiting to open it again."
-  []
+  [{:keys [push-retry push-socket]}]
   (js/clearTimeout @push-retry)
   (reset! push-retry nil)
   (when-some [socket @push-socket]
@@ -130,117 +283,75 @@
     (.close socket)))
 
 
-(defn ^:async start!
-  "Drives replication when the device has an account: requests during a pass share one more pass, and what
-   a pass pulled is not a local write (ADR-0006). `storage` is the learner's, opaque but for the
-   `:databases` to replicate and `:passes-wait-for`, a promise that holds every pass until the snapshot check is
-   done (ADR-0018); `after-pull` takes the result of a pass that pulled and resolves once the conflicts it brought
-   are resolved. Resolves with the verbs of the account: `:sync!`, `:pause!` and `:resume!` (no pass while the
-   device is offline), `:connect-push!` and `:disconnect-push!`, `:sync-link`, `:on-device-joined`, `:exists?`,
-   and `:first-pass`, which resolves when the first pass of this start has completed."
-  [{:keys [after-pull storage]}]
+(defn page-changed!
+  "Tells the account whether the device is online and the page visible. Offline, no sync runs; back online, it
+   syncs; the server's pokes are listened to while the page is visible and online."
+  [{:keys [online] :as account} {:keys [online? visible?]}]
+  (let [back-online? (and online? (not @online))]
+    (reset! online online?)
+    (when back-online?
+      (sync! account nil)
+      ;; A socket that survived a network change may be a zombie; recycling is free, the reconnect syncs anyway.
+      (disconnect-push! account))
+    (if (and online? visible?)
+      (connect-push! account)
+      (disconnect-push! account))))
+
+
+(defn ^:async open!
+  "Opens the account this device holds, unless it is open or the device holds none: from here passes run, local
+   writes ask for them, and the status says so. Resolves with whether the device has an account open."
+  [{:keys [databases first-pass passed! running unwatch user-id written] :as account}]
   (try
-    (if-let [{:keys [id] :as device-identity} (await (identity/load-identity!))]
-      (do
+    (when-not (open? account)
+      (when-let [{:keys [id] :as device-identity} (await (identity/load-identity!))]
         (identity/use-identity! device-identity)
-        (let [{:keys [databases passes-wait-for]} storage
-              online (atom true)
-              wanted (atom false)
-              running (atom nil)
-              pulled-hooks (atom [])
-              on-pulled
-              (fn on-pulled
-                [f]
-                (swap! pulled-hooks conj f)
-                (fn unsubscribe
-                  []
-                  (swap! pulled-hooks (fn [fs] (filterv #(not (identical? f %)) fs)))))
-              passed! (atom nil)
-              first-pass (js/Promise. (fn [resolve] (reset! passed! resolve)))
-              ;; `[id rev]` the passes pulled / the change feed reported.
-              pulled (atom #{})
-              written (atom #{})
-              local-writes?
-              (fn []
-                (let [[seen _] (reset-vals! written #{})
-                      theirs   (filter @pulled seen)]
-                  (swap! pulled #(reduce disj % theirs))
-                  (< (count theirs) (count seen))))
-              run!
-              (fn run!
-                [done]
-                (if-not @wanted
-                  (do (reset! running nil)
-                      (js/Promise.resolve done))
-                  ;; `wanted` is cleared a microtask later, so requests of the same turn are in this pass.
-                  (-> (js/Promise.resolve passes-wait-for)
-                      (.then (fn []
-                               (reset! wanted false)
-                               (sync-once! databases id after-pull)))
-                      (.catch (fn [err]
-                                (log/warn :sync/pass-failed {:error (ex-message err)})
-                                nil))
-                      (.then (fn [result]
-                               (when result
-                                 (@passed! nil))
-                               (swap! pulled into (:pulled-revs result))
-                               (when (local-writes?)
-                                 (reset! wanted true))
-                               (run! (merged-passes done result)))))))
-              request!
-              (fn [& _]
-                (when @online
-                  (reset! wanted true)
-                  (or @running
-                      (reset! running
-                        (.then (run! nil)
-                               (fn [result]
-                                 (when (pos? (:pulled result 0))
-                                   (doseq [f @pulled-hooks]
-                                     (f)))
-                                 result))))))
-              ;; A pass's end judges the feed, because only then it knows what it pulled.
-              push! (gfn/throttle #(when (and (nil? @running) (local-writes?))
-                                     (request!))
-                                  ;; A burst of writes (a lesson's reviews) goes out in a few passes, not one per write.
-                                  3000)
-              unwatch (pouch/on-change databases
-                                       :user/db
-                                       (fn [change]
-                                         (swap! written conj (pouch/change-revision change))
-                                         (push!)))]
-          (log/info :sync/ready {:user-id id})
-          {:exists?          true
-           ;; `f` is called once the device that opened the link carrying `nonce` has joined; the proof
-           ;; it echoes arrives with a pull. The hook forgets itself then.
-           :on-device-joined (fn on-device-joined
-                               [nonce f]
-                               (let [done        (volatile! false)
-                                     unsubscribe (volatile! nil)]
-                                 (vreset! unsubscribe
-                                          (on-pulled (fn []
-                                                       (-> (joined? databases nonce)
-                                                           (.then (fn [joined]
-                                                                    (when (and joined (not @done))
-                                                                      (vreset! done true)
-                                                                      (@unsubscribe)
-                                                                      (f))))))))
-                                 nil))
-           :sync-link        sync-link
-           :sync!            request!
-           ;; Push channel (ADR-0009): a poke pulls through the normal path.
-           :connect-push!    #(connect-push! request!)
-           :disconnect-push! disconnect-push!
-           :pause!           #(reset! online false)
-           :resume!          #(reset! online true)
-           :first-pass       first-pass
-           :unwatch          unwatch}))
-      (do
-        (log/info :sync/local-only {})
-        no-account))
+        (reset! first-pass (js/Promise. (fn [resolve] (reset! passed! resolve))))
+        ;; A pass's end judges the feed, because only then it knows what it pulled. A burst of writes (a lesson's
+        ;; reviews) goes out in a few passes, not one per write.
+        (let [push! (gfn/throttle #(when (and (nil? @running) (local-writes? account))
+                                     (sync! account nil))
+                                  3000)]
+          (reset! unwatch
+            (pouch/on-change databases
+                             :user/db
+                             (fn [change]
+                               (swap! written conj (pouch/change-revision change))
+                               (push!)))))
+        (reset! user-id id)
+        (log/info :sync/ready {:user-id id})))
     (catch js/Error err
-      (log/warn :sync/start-failed {:error (ex-message err)})
-      no-account)))
+      (log/warn :sync/start-failed {:error (ex-message err)})))
+  (open? account))
+
+
+(defn ^:async start!
+  "The learner's account over their `storage`, open if the device holds one. What it can do, each a function
+   here that takes it: open (`open!`, `open?`), sync (`sync!`), follow the page (`page-changed!`), tell about
+   itself (`on-status`, `first-sync`), join another device (`link`, `on-device-joined`) and ask to turn the
+   sync on (`save-request!`, `check-request!`). `after-pull` resolves the conflicts a sync brought home."
+  [{:keys [after-pull storage]}]
+  (let [{:keys [databases passes-wait-for]} storage
+        account {:after-pull      after-pull
+                 :databases       databases
+                 :first-pass      (atom (js/Promise.resolve nil))
+                 :online          (atom true)
+                 :passed!         (atom (fn [_]))
+                 :passes-wait-for passes-wait-for
+                 ;; `[id rev]` the passes pulled / the change feed reported.
+                 :pulled          (atom #{})
+                 :pulled-hooks    (atom [])
+                 ;; The poke socket (ADR-0009), and the retry waiting to open it again.
+                 :push-retry      (atom nil)
+                 :push-socket     (atom nil)
+                 :running         (atom nil)
+                 :unwatch         (atom nil)
+                 :user-id         (atom nil)
+                 :wanted          (atom false)
+                 :written         (atom #{})}]
+    (when-not (await (open! account))
+      (log/info :sync/local-only {}))
+    account))
 
 
 (defn ^:async check-incoming-auth!
