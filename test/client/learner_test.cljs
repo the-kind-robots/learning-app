@@ -266,9 +266,9 @@
       (is (nil? (get-in @store [:learner/memory :collections "coll-tiere"])))
       (is (= 1 (count (await (db-queries/fetch-by-type (:user/db dbs) "vocab")))))
       (is (= #{"example-1" "example-2"} (set (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "example"))))))
-      (let [{:keys [id]} (await (collections/create! (active learner nil) time/world "Tiere"))
-            memory       (:learner/memory @store)]
-        (is (empty? (examples/visible-in id (memory/examples-of memory ["vocab:der hund"])))
+      (let [made-again (await (collections/create! (active learner nil) time/world "Tiere"))
+            memory     (:learner/memory @store)]
+        (is (empty? (examples/visible-in [made-again] (memory/examples-of memory ["vocab:der hund"])))
             "the made-again collection has a new id, and the old examples do not show in it")
         (is (= #{"example-1" "example-2"}
                (set (map :id (examples/visible-in nil (memory/examples-of memory ["vocab:der hund"])))))

@@ -7,10 +7,18 @@
 
 
 (defn visible-in
-  "The `examples` a read in `collection-id` sees. A named collection sees
-   only the examples made for it; nil, outside every collection, sees all."
-  [collection-id examples]
-  (filterv #(or (nil? collection-id) (= collection-id (:collection-id %))) examples))
+  "The `examples` a read in `family`, a collection and then its children (`domain.collections/family`), sees:
+   of each word's, those made for the collection, otherwise those made for its children. nil, outside every
+   collection, sees all."
+  [family examples]
+  (if-let [[{own-id :id} & children] (seq family)]
+    (let [child-ids (set (map :id children))]
+      (into []
+            (mapcat (fn [word-examples]
+                      (or (not-empty (filterv #(= own-id (:collection-id %)) word-examples))
+                          (filter #(child-ids (:collection-id %)) word-examples))))
+            (vals (group-by :word-id examples))))
+    examples))
 
 
 (defn missing-pairs
@@ -19,7 +27,8 @@
   [entry collections examples]
   (if (seq collections)
     (into []
-          (comp (filter #(empty? (visible-in (:id %) examples)))
+          (comp (filter (fn [{:keys [id]}]
+                          (not-any? #(= id (:collection-id %)) examples)))
                 (map (fn [{:keys [id name]}]
                        {:collection-id id :collection-name name :word entry})))
           collections)
