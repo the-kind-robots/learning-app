@@ -92,3 +92,59 @@
 .pairing-dialog__close:active {
   background: rgb(var(--color-swan));
 }
+
+
+/* Invite form — a warm ask over a note on paper: the field is a sheet of
+   pale yellow, the one green button sends, the cancel is plain text. */
+
+.invite-dialog__content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px 24px 20px;
+}
+
+.invite-dialog__title {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.invite-dialog__ask {
+  color: rgb(var(--color-wolf));
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.invite-dialog__note {
+  background: rgb(var(--color-canary));
+  border: 2px solid rgba(var(--color-duck), 0.6);
+  border-radius: 14px;
+  color: rgb(var(--color-black-text));
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.65;
+  padding: 16px;
+  resize: none;
+}
+
+.invite-dialog__note:focus {
+  border-color: rgb(var(--color-duck));
+  outline: none;
+}
+
+.invite-dialog__send {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.invite-dialog__cancel {
+  background: none;
+  border: 0;
+  color: rgb(var(--color-wolf));
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  height: 44px;
+}

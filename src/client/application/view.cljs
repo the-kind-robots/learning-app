@@ -82,8 +82,9 @@
         (presenter/shell-props state)
         sync (sync-presenter/props state)]
     (list
-     ;; One fixed bar holds the three slots: word mark, build mark, actions. The side slots share the free
-     ;; space equally, which centres the build mark in the bar rather than between its neighbours.
+     ;; One fixed bar holds the three slots: word mark with the sync beside it, build mark, actions. The side
+     ;; slots share the free space equally, which centres the build mark in the bar rather than between its
+     ;; neighbours.
      [:div.app-shell__bar
       [:div.app-shell__bar-slot
        [:button.app-shell__logo
@@ -97,7 +98,8 @@
         ;; A development build's word mark ends in a red D; the ^boolean on the flag lets Closure drop it,
         ;; and the build mark below, from a release.
         (when ^boolean goog/DEBUG
-          [:span.app-shell__dev-mark "D"])]]
+          [:span.app-shell__dev-mark "D"])]
+       (sync-view/sync-button sync)]
       ;; Which bundle the page loaded, and the tap that reloads onto the newest one.
       (when ^boolean goog/DEBUG
         [:button.app-shell__build-mark
@@ -123,7 +125,6 @@
            :aria-label [:i18n :shell/install]
            :on         {:click [[:action/pwa-install-requested]]}}
           (install-icon)])
-       (sync-view/sync-button sync)
        (case corner
          :collections (collections-icon)
          :close       (close-icon)

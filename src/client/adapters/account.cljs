@@ -37,15 +37,16 @@
   "What `start!` returns for a device without an account. Such a device runs
    no pass, so its sync is inert, there is no first pass to wait for, and no
    device can join."
-  {:connect-push! (constantly nil)
+  {:connect-push!    (constantly nil)
    :disconnect-push! (constantly nil)
-   :exists?       false
-   :first-pass    (js/Promise.resolve nil)
+   :exists?          false
+   :first-pass       (js/Promise.resolve nil)
    :on-device-joined (fn [_ _] nil)
-   :pause!        (constantly nil)
-   :resume!       (constantly nil)
-   :sync!         (constantly nil)
-   :sync-link     (fn [& _] (js/Promise.resolve nil))})
+   :on-status        (fn [f] (f :sync/no-account))
+   :pause!           (constantly nil)
+   :resume!          (constantly nil)
+   :sync!            (constantly nil)
+   :sync-link        (fn [& _] (js/Promise.resolve nil))})
 
 
 (defn- ^:async sync-link
@@ -136,8 +137,8 @@
    `:databases` to replicate and `:passes-wait-for`, a promise that holds every pass until the snapshot check is
    done (ADR-0018); `after-pull` takes the result of a pass that pulled and resolves once the conflicts it brought
    are resolved. Resolves with the verbs of the account: `:sync!`, `:pause!` and `:resume!` (no pass while the
-   device is offline), `:connect-push!` and `:disconnect-push!`, `:sync-link`, `:on-device-joined`, `:exists?`,
-   and `:first-pass`, which resolves when the first pass of this start has completed."
+   device is offline), `:connect-push!` and `:disconnect-push!`, `:sync-link`, `:on-device-joined`, `:on-status`,
+   `:exists?`, and `:first-pass`, which resolves when the first pass of this start has completed."
   [{:keys [after-pull storage]}]
   (try
     (if-let [{:keys [id] :as device-identity} (await (identity/load-identity!))]
@@ -233,6 +234,13 @@
            :disconnect-push! disconnect-push!
            :pause!           #(reset! online false)
            :resume!          #(reset! online true)
+           ;; `f` gets the status now and again whenever the device goes offline or online.
+           :on-status        (fn on-status
+                               [f]
+                               (let [tell (fn [& _]
+                                            (f (if @online :sync/online :sync/offline)))]
+                                 (add-watch online f tell)
+                                 (tell)))
            :first-pass       first-pass
            :unwatch          unwatch}))
       (do

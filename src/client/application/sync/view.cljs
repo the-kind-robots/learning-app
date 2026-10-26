@@ -25,7 +25,7 @@
     :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
          :close [[:action/close-sync-menu]]}}
    [:div.sync-menu-dialog__content
-    (when show-account-actions?
+    (if show-account-actions?
       (list
        [:button.sync-menu-dialog__item
         {:type "button"
@@ -36,7 +36,11 @@
          :on   {:click [[:effect/share-sync-link
                          {:copied-message [:i18n :sync/recovery-link-copied]
                           :title [:i18n :sync/recovery-link-title]}]]}}
-        [:i18n :sync/recovery-link]]))
+        [:i18n :sync/recovery-link]])
+      [:button.sync-menu-dialog__item
+       {:type "button"
+        :on   {:click [[:action/open-invite-request]]}}
+       [:i18n :sync/keep-words]])
     [:button.sync-menu-dialog__item.sync-menu-dialog__item--cancel
      {:type "button"
       :on   {:click [[:action/close-sync-menu]]}}
@@ -59,12 +63,40 @@
      [:i18n :dialog/close]]]])
 
 
+(defn- invite-request-dialog
+  "A note on paper: a warm ask and an empty field. An empty field does not send; the browser holds it."
+  []
+  [:dialog.invite-dialog.modal
+   {:aria-labelledby "invite-dialog-title"
+    :replicant/on-mount [[:action/open-dialog]]
+    :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
+         :close [[:action/close-invite-request]]}}
+   [:form.invite-dialog__content
+    {:on {:submit [[:effect/prevent-default]
+                   [:action/request-invite [:event.form.field/value "request"]]]}}
+    [:h2#invite-dialog-title.invite-dialog__title [:i18n :sync/keep-words-title]]
+    [:label.invite-dialog__ask {:for "invite-request"} [:i18n :sync/keep-words-ask]]
+    [:textarea#invite-request.invite-dialog__note
+     {:name     "request"
+      :required true
+      :rows     6}]
+    [:button.invite-dialog__send.big-button.green-button {:type "submit"} [:i18n :sync/send]]
+    [:button.invite-dialog__cancel
+     {:type "button"
+      :on   {:click [[:action/close-invite-request]]}}
+     [:i18n :sync/cancel]]]])
+
+
 (defn sync-button
-  "The bar's button that opens the sync menu, when the device can use it."
-  [{:keys [show-sync?]}]
+  "The bar's button that opens the sync menu: grey without an account, lit green while online, faded offline."
+  [{:keys [show-sync? status]}]
   (when show-sync?
-    [:button.app-shell__icon-button
+    [:button.app-shell__sync
      {:type       "button"
+      :class      (case status
+                    :sync/online  "app-shell__sync--online"
+                    :sync/offline "app-shell__sync--offline"
+                    nil)
       :title      [:i18n :sync/title]
       :aria-label [:i18n :sync/title]
       :on         {:click [[:action/open-sync-menu]]}}
@@ -72,10 +104,12 @@
 
 
 (defn dialogs
-  "The sync menu and the QR dialog, whichever is open."
-  [{:keys [menu-open? sync-qr] :as props}]
+  "The sync menu, the QR dialog and the invite form, whichever is open."
+  [{:keys [invite-request-open? menu-open? sync-qr] :as props}]
   (list
    (when menu-open?
      (sync-menu-dialog props))
+   (when invite-request-open?
+     (invite-request-dialog))
    (when sync-qr
      (sync-qr-dialog sync-qr))))
