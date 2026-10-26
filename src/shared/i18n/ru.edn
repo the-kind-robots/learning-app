@@ -1,6 +1,8 @@
 ;; The interface in Russian. A key names what the text says, `{{:param}}` takes a value from the markup's
 ;; `[:i18n :key {:param …}]`. The install guide is in English, as it was before the dictionary.
-{:collections/all             "Всё подряд"
+{:language/name               "Русский"
+
+ :collections/all            "Всё подряд"
  :collections/delete          [:fn/str "Удалить набор «{{:name}}»"]
  :collections/deleted         [:fn/str "Набор «{{:name}}» удалён"]
  :collections/new             "Новый набор"
@@ -62,6 +64,10 @@
  :lesson/your-answer          "Ваш ответ:"
 
  :phrase/add                  "Добавить фразу"
+
+ :settings/language           "Язык"
+ :settings/open               "Sprecha, настройки"
+ :settings/title              "Настройки"
 
  :shell/export-trace          "Экспортировать трассу"
  :shell/install               "Установить приложение"

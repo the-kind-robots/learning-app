@@ -1,6 +1,8 @@
 ;; The interface in French, key for key with `ru.edn`. French typography puts a no-break space, ` `,
 ;; before `:`, `?`, `!`, `%` and inside « », so a line never starts with the mark.
-{:collections/all             "Tous les mots"
+{:language/name               "Français"
+
+ :collections/all             "Tous les mots"
  :collections/delete          [:fn/str "Supprimer la collection « {{:name}} »"]
  :collections/deleted         [:fn/str "Collection « {{:name}} » supprimée"]
  :collections/new             "Nouvelle collection"
@@ -62,6 +64,10 @@
  :lesson/your-answer          "Votre réponse :"
 
  :phrase/add                  "Ajouter une expression"
+
+ :settings/language           "Langue"
+ :settings/open               "Sprecha, paramètres"
+ :settings/title              "Paramètres"
 
  :shell/export-trace          "Exporter la trace"
  :shell/install               "Installer l’application"

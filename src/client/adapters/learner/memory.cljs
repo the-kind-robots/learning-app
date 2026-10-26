@@ -160,6 +160,8 @@
                                         :kind   :example}
    (:type documents/review-schema)     {:entity documents/doc->review
                                         :kind   :review}
+   (:type documents/settings-schema)   {:entity documents/entity
+                                        :kind   :settings}
    (:type documents/vocab-schema)      {:entity documents/doc->word
                                         :kind   :word}})
 
@@ -180,11 +182,12 @@
 
 (defn- old-version
   "The version of `doc` memory holds now, `{:kind :entity}`, or nil. It is a
-   collection, an example or a word, found by the id; a review is never
-   removed."
+   collection, an example, the settings or a word, found by the id; a review
+   is never removed."
   [memory {id :_id}]
   (or (some->> (get-in memory [:collections id]) (hash-map :kind :collection :entity))
       (some->> (get-in memory [:examples id]) (hash-map :kind :example :entity))
+      (when (= id (get-in memory [:settings :id])) {:kind :settings :entity (:settings memory)})
       (some->> (card memory id) :word (hash-map :kind :word :entity))))
 
 
@@ -197,6 +200,7 @@
       :collection (add-collection memory entity)
       :example    (add-example memory entity)
       :review     (add-review memory entity)
+      :settings   (assoc memory :settings entity)
       :word       (add-word memory entity))))
 
 
@@ -208,6 +212,7 @@
     (case kind
       :collection (remove-collection memory entity)
       :example    (remove-example memory entity)
+      :settings   (dissoc memory :settings)
       :word       (remove-word memory entity))))
 
 
@@ -288,6 +293,12 @@
 ;; Reads. Outside the learner's adapter memory is read through these functions only,
 ;; which `ports.learner` passes on; the keys above belong to this namespace.
 ;;
+
+
+(defn language
+  "The language the learner picked, or nil when none was picked."
+  [memory]
+  (get-in memory [:settings :language]))
 
 
 (defn word

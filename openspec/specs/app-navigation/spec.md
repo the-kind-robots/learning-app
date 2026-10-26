@@ -40,7 +40,7 @@ The words screen SHALL show neither a back button nor a visible heading; the row
 - **AND** «Начать урок» stays at the bottom of the screen, behind the keyboard
 
 ### Requirement: Home has no in-app screen behind it
-The browser history SHALL hold the home screen and at most one other app screen above it. A screen opened from home SHALL add one entry; a screen opened from another screen SHALL take that screen's entry; reaching home by any in-app way — closing a screen, finishing a lesson, choosing a collection, the word mark — SHALL return to the home entry beneath. A screen the app is opened on directly SHALL get a home entry beneath it. Back SHALL therefore take a screen to home, and Back on home SHALL leave the app rather than show another app screen.
+The browser history SHALL hold the home screen and at most one other app screen above it. A screen opened from home SHALL add one entry; a screen opened from another screen SHALL take that screen's entry; reaching home by any in-app way — closing a screen, finishing a lesson, choosing a collection — SHALL return to the home entry beneath. A screen the app is opened on directly SHALL get a home entry beneath it. Back SHALL therefore take a screen to home, and Back on home SHALL leave the app rather than show another app screen. The word mark opens the settings (interface-language, Requirement: The learner picks the interface language) and changes no screen.
 
 #### Scenario: Back from a screen
 - **WHEN** the user opens the words screen from home and presses the browser's Back

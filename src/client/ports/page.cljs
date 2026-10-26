@@ -15,6 +15,9 @@
   (visible?
     [p]
     "Whether the page is shown.")
+  (system-language
+    [p]
+    "The language tag of the system, `de-DE` say.")
   (on-inactive
     [p f signal]
     "Calls `f` when the page stops being active, until `signal` aborts. Returns a function that stops it sooner.")
@@ -47,6 +50,7 @@
       (active? [_] (adapter/active?))
       (online? [_] (adapter/online?))
       (visible? [_] (adapter/visible?))
+      (system-language [_] (adapter/system-language))
       (on-inactive [_ f signal] (adapter/on-inactive f signal))
       (on-offline [_ f] (adapter/on-offline f))
       (on-online [_ f] (adapter/on-online f))

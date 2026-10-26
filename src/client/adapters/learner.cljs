@@ -66,6 +66,8 @@
                        :schema   documents/collection-schema}
    :entity/example    {:from-doc documents/doc->example
                        :schema   documents/example-schema}
+   :entity/settings   {:from-doc documents/entity
+                       :schema   documents/settings-schema}
    :entity/word       {:from-doc documents/doc->word
                        :schema   documents/vocab-schema}})
 

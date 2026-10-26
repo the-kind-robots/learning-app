@@ -17,6 +17,12 @@
   (.-onLine js/navigator))
 
 
+(defn system-language
+  "The language tag of the system, `de-DE` say."
+  []
+  (.-language js/navigator))
+
+
 (defn active?
   "Whether the page is visible and the device is online."
   []
