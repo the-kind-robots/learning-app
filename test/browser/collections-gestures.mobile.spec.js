@@ -261,8 +261,8 @@ test.describe('Темы на телефоне: касания', () => {
   }
 
   // The keyboard's reveal is `:focus-visible`: the focus a touch delete hands
-  // to the neighbour shows no ✕ of its own.
-  test('пользователь нажимает на ✕ → тема удалена, других ✕ не появилось', async ({ page }) => {
+  // to «Вернуть» shows no ✕ anywhere.
+  test('пользователь нажимает на ✕ и соглашается → тема удалена, других ✕ не появилось', async ({ page }) => {
     const button = page.getByRole('button', { name: 'Alltag 0', exact: true });
     const close = page.getByRole('button', { name: 'Удалить набор «Alltag»' });
 
@@ -271,21 +271,57 @@ test.describe('Темы на телефоне: касания', () => {
       await longPress(page, button, close);
     });
 
-    await test.step('Когда он касается ✕', async () => {
+    await test.step('Когда он касается ✕ и соглашается', async () => {
+      page.once('dialog', (dialog) => dialog.accept());
       const finger = await touch(page);
       const { x, y } = await centre(close);
       await finger.down(x, y);
       await finger.up();
     });
 
-    await test.step('Тогда плитки «Alltag» нет, фокус у соседа, ни одного ✕ не видно', async () => {
+    await test.step('Тогда плитки «Alltag» нет, фокус на «Вернуть», ни одного ✕ не видно', async () => {
       await expect(button).toHaveCount(0);
-      await expect(page.locator('.masonry [data-collection-id]:focus')).toHaveCount(1);
+      await expect(page.getByRole('button', { name: 'Вернуть набор «Alltag»' })).toBeFocused();
       const shown = await page.locator('.tile__close').evaluateAll(
         (els) => els.filter((el) => getComputedStyle(el).opacity !== '0').length);
       expect(shown).toBe(0);
     });
   });
+
+  for (const { kind, name } of [
+    { kind: 'строку папки с длинным именем', name: 'Meetings und Besprechungen mit Kollegen' },
+    { kind: 'плитку с длинным словом', name: 'Zusammenarbeitsvereinbarungen' },
+  ]) {
+    test(`пользователь удаляет ${kind} → след на её месте, ни одна другая тема не сдвинулась`, async ({ page }) => {
+      const places = () => page.locator('.masonry [data-collection-id]').evaluateAll((els) =>
+        Object.fromEntries(els.map((el) => {
+          const r = el.getBoundingClientRect();
+          // In the document: focus on a trace far down scrolls the page.
+          return [el.getAttribute('data-collection-id'), [Math.round(r.x), Math.round(r.y + window.scrollY)]];
+        })));
+      let before;
+
+      await test.step('Дано экран тем', async () => {
+        await openCollections(page);
+        before = await places();
+      });
+
+      await test.step('Когда он удаляет её и соглашается', async () => {
+        page.once('dialog', (dialog) => dialog.accept());
+        await page.getByRole('button', { name: `Удалить набор «${name}»` }).focus();
+        await page.keyboard.press('Enter');
+      });
+
+      await test.step('Тогда на её месте след, остальные темы где были', async () => {
+        await expect(page.getByRole('button', { name: `Вернуть набор «${name}»` })).toBeVisible();
+        const after = await places();
+        const deleted = Object.keys(before).find((id) => !(id in after));
+        expect(deleted).toBeDefined();
+        delete before[deleted];
+        expect(after).toEqual(before);
+      });
+    });
+  }
 
   test('пользователь открывает темы с длинными немецкими названиями → названия помещаются в плитки, длинные слова переносятся по слогам', async ({ page, baseURL }) => {
     await test.step('Дано экран тем с длинными названиями', async () => {

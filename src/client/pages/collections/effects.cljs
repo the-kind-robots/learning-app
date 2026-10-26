@@ -4,8 +4,7 @@
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
-   [use-cases.collections :as collections]
-   [view-transition]))
+   [use-cases.collections :as collections]))
 
 
 (def ^:private long-press-delay-ms 500)
@@ -62,9 +61,10 @@
     (js/window.addEventListener
      "click"
      (fn [^js click]
-       (when (= card-id (some-> ^js (.-target click)
-                                (.closest "[data-collection-id]")
-                                (.getAttribute "data-collection-id")))
+       (when (= card-id
+                (some-> ^js (.-target click)
+                        (.closest "[data-collection-id]")
+                        (.getAttribute "data-collection-id")))
          (.abort listener)
          (.stopPropagation click)
          (.preventDefault click)))
@@ -152,42 +152,41 @@
         (log/error :effect/prompt-create-collection {:error (str err)})))))
 
 
-(defn neighbour
-  "The target that takes focus once `deleted` is gone, from the targets' ids
-   in keyboard order: the one after it, else the one before. A deleted
-   folder parent leaves a label, and its first row follows it."
-  [ids deleted]
-  (let [[before [_ & after]] (split-with #(not= deleted %) ids)]
-    (or (first after) (last before))))
-
-
 (nxr/register-effect! :effect/delete-collection
   (fn ^:async delete-collection!
-    [{{:keys [learner]} :capabilities :keys [dispatch]} _ {:keys [deleted-message id status-region]}]
-    ;; Picked before the delete: afterwards the deleted target is gone.
-    (let [focus-id (neighbour (->> (js/Array.from (js/document.querySelectorAll ".masonry [data-collection-id]"))
-                                   (map #(.getAttribute ^js % "data-collection-id")))
-                              id)]
+    [{{:keys [learner]} :capabilities :keys [dispatch]} _ {:keys [confirm-message deleted-message id status-region]}]
+    (when (js/confirm confirm-message)
       (try
-        ;; The tiles without it are shown once memory took the deletion, so the transition runs around both.
-        (await (view-transition/change!
-                :transition/close-gap
-                (fn ^:async delete-and-show! []
-                  (await (collections/delete! learner id))
-                  (dispatch [[:effect/enter :action/show-deleted
-                              {:deleted-message deleted-message
-                               :focus-id        focus-id
-                               :status-region   status-region}]]))))
+        (let [deleted (await (collections/delete! learner id))]
+          (dispatch [[:effect/enter :action/show-deleted
+                      {:deleted         deleted
+                       :deleted-message deleted-message
+                       :status-region   status-region}]]))
         (catch js/Error err
           (log/error :effect/delete-collection {:error (str err)}))))))
 
 
+(nxr/register-effect! :effect/restore-collection
+  (fn ^:async restore-collection!
+    [{{:keys [learner]} :capabilities :keys [dispatch]} _ {:keys [collection restored-message status-region]}]
+    (try
+      (await (collections/restore! learner collection))
+      (dispatch [[:effect/enter :action/show-restored
+                  {:id (:id collection)
+                   :restored-message restored-message
+                   :status-region status-region}]])
+      (catch js/Error err
+        (log/error :effect/restore-collection {:error (str err)})))))
+
+
 (nxr/register-effect! :effect/focus-collection
-  ;; The render after a save is synchronous, so the target is on the page.
+  ;; The render after a save is synchronous, so the target is on the page. A deleted collection has no
+  ;; target, only its trace's «Вернуть».
   (fn focus-collection [_ _ id]
-    (some-> (js/document.querySelector
-             (str ".masonry [data-collection-id=\"" (js/CSS.escape id) "\"]"))
-            .focus)))
+    (let [id (js/CSS.escape id)]
+      (some-> (js/document.querySelector
+               (str ".masonry [data-collection-id=\"" id "\"], .masonry [data-restore-id=\"" id "\"]"))
+              .focus))))
 
 
 (def ^:private typing-listener

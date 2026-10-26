@@ -14,10 +14,11 @@
 
 
 (nxr/register-action! :action/open-collections
-  ;; The screen and its tiles in one write, in the task of the tap.
+  ;; The screen and its tiles in one write, in the task of the tap; the traces of the last visit go.
   (fn open-collections [state context]
     [[:effect/save
-      (merge {:page/current :page/collections
+      (merge {:page/current        :page/collections
+              :collections/deleted []
               :collections/editing-id nil}
              (content state context))]]))
 
@@ -29,13 +30,36 @@
 
 
 (nxr/register-action! :action/show-deleted
-  ;; The tiles without the deleted collection, from memory once it took the deletion, with the stored
-  ;; pointer as it is now (deleting the active collection clears it); focus and the status line go to
-  ;; the neighbour picked before the delete.
-  (fn show-deleted [state context {:keys [deleted-message focus-id status-region]}]
-    [[:effect/save (assoc (content state context) :collections/editing-id nil)]
-     [:effect/focus-collection focus-id]
+  ;; The tiles from memory once it took the deletion, with the stored pointer as it is now (deleting the
+  ;; active collection clears it), and the deleted collection's trace in its place; focus goes to the
+  ;; trace's «Вернуть».
+  (fn show-deleted [state context {:keys [deleted deleted-message status-region]}]
+    [[:effect/save
+      (assoc (content state context)
+             :collections/deleted    (conj (:collections/deleted state) deleted)
+             :collections/editing-id nil)]
+     [:effect/focus-collection (:id deleted)]
      [:effect/announce status-region deleted-message]]))
+
+
+(nxr/register-action! :action/restore-collection
+  ;; The collection as it was deleted on this visit, written back.
+  (fn restore-collection [state {:keys [id restored-message status-region]}]
+    [[:effect/restore-collection
+      {:collection       (some #(when (= id (:id %)) %) (:collections/deleted state))
+       :restored-message restored-message
+       :status-region    status-region}]]))
+
+
+(nxr/register-action! :action/show-restored
+  ;; The tiles from memory once it took the collection back, its trace gone; focus goes to its target.
+  (fn show-restored [state context {:keys [id restored-message status-region]}]
+    [[:effect/save
+      (assoc (content state context)
+             :collections/deleted
+             (filterv #(not= id (:id %)) (:collections/deleted state)))]
+     [:effect/focus-collection id]
+     [:effect/announce status-region restored-message]]))
 
 
 (nxr/register-action! :action/exit-editing-on-background

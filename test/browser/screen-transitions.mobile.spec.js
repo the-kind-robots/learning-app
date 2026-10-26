@@ -167,29 +167,6 @@ test.describe('Переходы между экранами на телефон�
     });
   });
 
-  test('ученик удаляет набор → его плитка сжимается, остальные встают на её место', async ({ page }) => {
-    await test.step('Дано открытые наборы', async () => {
-      await openHome(page);
-      await page.getByRole('button', { name: 'Открыть наборы' }).click();
-      await expect(page.getByRole('button', { name: /^Arbeit/ })).toBeVisible();
-      await expect.poll(() => transitions(page)).toEqual(DEEPER);
-      await forgetTransitions(page);
-    });
-
-    await test.step('Когда он удаляет «Arbeit»', async () => {
-      const close = page.getByRole('button', { name: 'Удалить набор «Arbeit»' });
-      await close.focus();
-      await close.press('Enter');
-    });
-
-    await test.step('Тогда сжимается одна плитка — удалённая', async () => {
-      await expect(page.getByRole('button', { name: /^Arbeit/ })).toHaveCount(0);
-      await expect.poll(async () => (await transitions(page))
-        .map(({ kind, animations }) => [kind, animations.filter((a) => a.endsWith(' tile-shrink')).length]))
-        .toEqual([['close-gap', 1]]);
-    });
-  });
-
   test('при «уменьшить движение» ученик открывает список слов → экран сменяется сразу', async ({ page }) => {
     await test.step('Дано главная и просьба системы уменьшить движение', async () => {
       await page.emulateMedia({ reducedMotion: 'reduce' });

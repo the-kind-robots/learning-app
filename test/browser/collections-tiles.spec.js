@@ -141,30 +141,121 @@ test.describe('Плитки тем', () => {
       await expect(tile.locator('.tile__count')).toHaveCSS('opacity', '0');
     });
 
-    await test.step('Когда он жмёт Tab и Enter', async () => {
+    await test.step('Когда он жмёт Tab и Enter и соглашается', async () => {
       await page.keyboard.press('Tab');
       await expect(close).toBeFocused();
+      page.once('dialog', (dialog) => dialog.accept());
       await page.keyboard.press('Enter');
     });
 
-    await test.step('Тогда «Solo» удалена, фокус у предыдущей плитки, это объявлено, «Всё подряд» активна', async () => {
+    await test.step('Тогда «Solo» удалена, фокус на «Вернуть» на её месте, это объявлено, «Всё подряд» активна', async () => {
       await expect(tile).toHaveCount(0);
-      await expect(page.getByRole('button', { name: 'Kapitel 2 1', exact: true })).toBeFocused();
+      await expect(page.getByRole('button', { name: 'Вернуть набор «Solo»' })).toBeFocused();
       await expect(page.getByRole('status')).toHaveText('Набор «Solo» удалён');
       expect(await collectionNames(page)).not.toContain('Solo');
       await expect(page.getByRole('button', { name: 'Всё подряд 0', exact: true })).toHaveAttribute('aria-current', 'true');
     });
 
-    await test.step('Когда он идёт Shift+Tab до ✕ папки «Kurs» и жмёт Enter', async () => {
+    await test.step('Когда он идёт Shift+Tab до ✕ папки «Kurs», жмёт Enter и соглашается', async () => {
       await tabUntil(page, page.getByRole('button', { name: 'Удалить набор «Kurs»' }), 'Shift+Tab');
+      page.once('dialog', (dialog) => dialog.accept());
       await page.keyboard.press('Enter');
     });
 
-    await test.step('Тогда от «Kurs» остаётся надпись, фокус у первой главы', async () => {
+    await test.step('Тогда на месте заголовка «Kurs» след с «Вернуть», главы на месте', async () => {
       await expect(page.getByRole('button', { name: 'Kurs 4', exact: true })).toHaveCount(0);
-      await expect(page.getByRole('heading', { name: 'Kurs 3', exact: true })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toBeFocused();
+      await expect(page.getByRole('button', { name: 'Вернуть набор «Kurs»' })).toBeFocused();
+      await expect(page.getByRole('button', { name: 'Kapitel 1 2', exact: true })).toBeVisible();
       await expect(page.getByRole('status')).toHaveText('Набор «Kurs» удалён');
+    });
+  });
+
+  test('пользователь нажимает ✕ и отказывается → тема остаётся', async ({ page }) => {
+    let question = null;
+
+    await test.step('Дано экран тем', async () => {
+      await page.goto('/');
+      await seedCollections(page, [['solo', 'Solo', ['vocab:a']]]);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    });
+
+    await test.step('Когда он нажимает ✕ у «Solo» и отказывается', async () => {
+      page.once('dialog', (dialog) => { question = dialog.message(); dialog.dismiss(); });
+      await page.getByRole('button', { name: 'Удалить набор «Solo»' }).focus();
+      await page.keyboard.press('Enter');
+    });
+
+    await test.step('Тогда вопрос назвал тему, а она на месте', async () => {
+      await expect.poll(() => question).toBe('Удалить набор «Solo»? Слова останутся в словаре.');
+      await expect(page.getByRole('button', { name: 'Solo 1', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Вернуть/ })).toHaveCount(0);
+      expect(await collectionNames(page)).toContain('Solo');
+    });
+  });
+
+  test('пользователь удаляет главу и жмёт «Вернуть» → глава снова на месте со своими словами', async ({ page }) => {
+    const row = page.getByRole('button', { name: 'Kapitel 1 2', exact: true });
+    const restore = page.getByRole('button', { name: 'Вернуть набор «Kapitel 1»' });
+    let before;
+
+    await test.step('Дано экран тем с папкой «Kurs»', async () => {
+      await page.goto('/');
+      await seedCollections(page, course);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      before = await page.getByRole('button', { name: 'Kapitel 2 1', exact: true }).boundingBox();
+    });
+
+    await test.step('Когда он удаляет «Kapitel 1»', async () => {
+      page.once('dialog', (dialog) => dialog.accept());
+      await page.getByRole('button', { name: 'Удалить набор «Kapitel 1»' }).focus();
+      await page.keyboard.press('Enter');
+    });
+
+    await test.step('Тогда на месте строки зачёркнутое имя и «Вернуть», соседи не сдвинулись', async () => {
+      await expect(row).toHaveCount(0);
+      await expect(restore).toBeFocused();
+      await expect(page.getByText('Kapitel 1', { exact: true })).toHaveCSS('text-decoration-line', 'line-through');
+      expect(await collectionNames(page)).not.toContain('Kurs / Kapitel 1');
+      const after = await page.getByRole('button', { name: 'Kapitel 2 1', exact: true }).boundingBox();
+      expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+    });
+
+    await test.step('Когда он жмёт «Вернуть»', async () => {
+      await restore.press('Enter');
+    });
+
+    await test.step('Тогда глава на месте со своими словами, в фокусе, это объявлено', async () => {
+      await expect(row).toBeFocused();
+      await expect(restore).toHaveCount(0);
+      await expect(page.getByRole('status')).toHaveText('Набор «Kapitel 1» возвращён');
+      const docs = await docsOfType(page, 'user-db', 'collection');
+      const chapter = docs.find((d) => d._id === 'collection:k1');
+      expect(chapter.name).toBe('Kurs / Kapitel 1');
+      // Read back through the app's own reader, which names `word_ids` as `word-ids`.
+      expect(chapter['word-ids']).toEqual(['vocab:b', 'vocab:c']);
+    });
+  });
+
+  test('пользователь удаляет тему и заново открывает экран тем → следа нет', async ({ page }) => {
+    await test.step('Дано тема «Solo» удалена', async () => {
+      await page.goto('/');
+      await seedCollections(page, [['solo', 'Solo', ['vocab:a']], ['duo', 'Duo', []]]);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      page.once('dialog', (dialog) => dialog.accept());
+      await page.getByRole('button', { name: 'Удалить набор «Solo»' }).focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('button', { name: 'Вернуть набор «Solo»' })).toBeVisible();
+    });
+
+    await test.step('Когда он открывает «Duo» и снова экран тем', async () => {
+      await page.getByRole('button', { name: 'Duo 0', exact: true }).click();
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    });
+
+    await test.step('Тогда ни «Solo», ни следа', async () => {
+      await expect(page.getByRole('button', { name: 'Duo 0', exact: true })).toBeVisible();
+      await expect(page.getByText('Solo', { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /^Вернуть/ })).toHaveCount(0);
     });
   });
 

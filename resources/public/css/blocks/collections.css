@@ -283,7 +283,8 @@ body:has(.switcher) {
 }
 
 .tile__row--editing .tile__row-target,
-.tile__row:has(:focus-visible) .tile__row-target {
+.tile__row:has(:focus-visible) .tile__row-target,
+.tile__row:has(:focus-visible) .tile__row-trace {
   padding-inline: 22px 12px;
 }
 
@@ -430,6 +431,103 @@ body:has(.switcher) {
 .tile__close-icon {
   height: 14px;
   width: 14px;
+}
+
+
+/*
+ * The trace of a collection deleted on this visit: one button padded as the
+ * target it replaces, the name struck through where the name stood and an
+ * undo mark the count's size where the count stood, so the name wraps as it
+ * did and nothing around it moves.
+ */
+.tile--trace,
+.tile--trace:hover {
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
+  cursor: default;
+  transform: none;
+}
+
+.tile__trace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.tile__head-trace {
+  align-items: baseline;
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+}
+
+.tile__row-trace {
+  display: flex;
+  flex: 1;
+  font-size: 15px;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: space-between;
+  line-height: 1.15;
+  padding: 8px 0 8px 10px;
+}
+
+.tile__row:has(.tile__row-trace)::before {
+  background: rgb(var(--color-swan));
+}
+
+.tile__gone {
+  color: rgb(var(--color-hare));
+  hyphens: auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tile__trace .tile__gone,
+.tile__head-trace .tile__gone {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
+}
+
+.tile__restore {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+/* The count's box: 24 px wide on a header and a row, one line tall. */
+.tile__restore-icon {
+  color: rgb(var(--color-whale));
+  flex-shrink: 0;
+  height: 16px;
+  width: 24px;
+}
+
+.tile__head-trace .tile__restore-icon,
+.tile__row-trace .tile__restore-icon {
+  align-self: flex-start;
+}
+
+.tile__trace .tile__restore-icon {
+  width: 16px;
+}
+
+.tile__restore:focus-visible {
+  border-radius: 10px;
+  outline: 2px solid rgb(var(--color-eel));
+  outline-offset: -3px;
 }
 
 

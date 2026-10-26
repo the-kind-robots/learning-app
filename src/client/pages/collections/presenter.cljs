@@ -32,16 +32,28 @@
    :tap        tap})
 
 
+(defn- deleted?
+  "Whether `collection` was deleted on this visit and stands as its trace."
+  [state collection]
+  (some #(= (:id collection) (:id %)) (:collections/deleted state)))
+
+
 (defn- collection-target
-  [state {:keys [id name word-ids]} shown-name]
-  (target state
-          {:id         id
-           :name       shown-name
-           :lang       name-lang
-           :count      (count word-ids)
-           :active?    (= id (:collections/active-id state))
-           :deletable? true
-           :tap        [[:action/handle-tab-click id]]}))
+  "The target of a collection, or its trace when it was deleted on this visit."
+  [state {:keys [id name word-ids] :as collection} shown-name]
+  (if (deleted? state collection)
+    {:id     id
+     :name   shown-name
+     :lang   name-lang
+     :trace? true}
+    (target state
+            {:id         id
+             :name       shown-name
+             :lang       name-lang
+             :count      (count word-ids)
+             :active?    (= id (:collections/active-id state))
+             :deletable? true
+             :tap        [[:action/handle-tab-click id]]})))
 
 
 (defn- main-tile
@@ -65,8 +77,12 @@
 
 
 (defn- union-count
-  [collections]
-  (count (distinct (mapcat :word-ids collections))))
+  [state collections]
+  (->> collections
+       (remove #(deleted? state %))
+       (mapcat :word-ids)
+       distinct
+       count))
 
 
 (defn- folder-tile
@@ -75,11 +91,11 @@
   [state {:keys [name parent children]}]
   (let [head (if parent
                (assoc (collection-target state parent name)
-                      :count     (union-count (cons parent children))
+                      :count     (union-count state (cons parent children))
                       :tappable? true)
                {:name      name
                 :lang      name-lang
-                :count     (union-count children)
+                :count     (union-count state children)
                 :tappable? false})]
     {:key     (str "folder:" (collections/canonical name))
      :folder? true
@@ -91,12 +107,14 @@
 
 
 (defn tiles
-  "Every tile in reading order: «Всё подряд», then collections and folders alphabetically, each with its colour."
+  "Every tile in reading order: «Всё подряд», then collections and folders alphabetically, each with its colour.
+   A collection deleted on this visit keeps its place and colour as its trace."
   [state]
-  (->> (colours/reading-order (:collections/items state))
+  (->> (colours/reading-order (concat (:collections/items state) (:collections/deleted state)))
        (map-indexed (fn [position {:keys [folder? collection] :as entry}]
                       (assoc (if folder? (folder-tile state entry) (plain-tile state collection))
-                             :accent (colours/accent-at (inc position)))))
+                             :accent
+                             (colours/accent-at (inc position)))))
        (cons (assoc (main-tile state) :accent (colours/accent-at 0)))
        vec))
 

@@ -60,12 +60,20 @@
               {:ok :created :id id}))))
 
 
-(defn delete!
-  "Deletes a collection; its words and the examples made for it stay.
-   Deleted while active, it is simply gone from memory, and «Всё подряд» is
-   active."
+(defn ^:async delete!
+  "Deletes a collection and resolves with it as it was, so it can be brought
+   back (`restore!`); its words and the examples made for it stay. Deleted
+   while active, it is simply gone from memory, and «Всё подряд» is active."
   [learner coll-id]
-  (learner/change! learner [[:entity/collection coll-id (constantly :entity/deleted)]]))
+  (let [collection (learner/collection learner coll-id)]
+    (await (learner/change! learner [[:entity/collection coll-id (constantly :entity/deleted)]]))
+    collection))
+
+
+(defn restore!
+  "Writes a deleted `collection` back, with its id, name and words."
+  [learner collection]
+  (learner/change! learner [[:entity/collection (:id collection) (constantly collection)]]))
 
 
 (defn switch-active!
@@ -88,7 +96,9 @@
                                                     active-id
                                                     (fn [collection]
                                                       (some-> collection
-                                                              (collections/renamed-collection trimmed (world/clock world :now-iso))))]]))
+                                                              (collections/renamed-collection
+                                                               trimmed
+                                                               (world/clock world :now-iso))))]]))
                       (learner/collection learner active-id)))]
       (cond-> {:name (if renamed (:name renamed) current)}
         renamed (assoc :renamed? true)

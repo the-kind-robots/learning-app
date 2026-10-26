@@ -1,7 +1,7 @@
 # screen-transitions Specification
 
 ## Purpose
-How a screen change moves on a phone: depth slides, the lesson fades through, the next trial slides, a deleted collection closes its gap (ADR-0024).
+How a screen change moves on a phone: depth slides, the lesson fades through, the next trial slides (ADR-0024).
 
 ## Requirements
 
@@ -65,15 +65,6 @@ On a phone, «ДАЛЕЕ» SHALL move the current task out to the left and bring
 
 - **WHEN** the user taps «ДАЛЕЕ» after an answer on a phone
 - **THEN** the task leaves to the left and the next one enters from the right
-
-### Requirement: A deleted collection's neighbours close the gap
-
-On a phone, deleting a collection SHALL shrink its tile away while the tiles after it glide into its place over 200 ms.
-
-#### Scenario: Deleting a collection
-
-- **WHEN** the user deletes a collection on the collections screen on a phone
-- **THEN** its tile shrinks away and the tiles after it glide into the gap
 
 ### Requirement: Screens change at once where motion is not wanted
 

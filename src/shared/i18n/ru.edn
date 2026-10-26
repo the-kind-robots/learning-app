@@ -2,9 +2,12 @@
 ;; `[:i18n :key {:param …}]`. The install guide is in English, as it was before the dictionary.
 {:collections/all             "Всё подряд"
  :collections/delete          [:fn/str "Удалить набор «{{:name}}»"]
+ :collections/delete-confirm  [:fn/str "Удалить набор «{{:name}}»? Слова останутся в словаре."]
  :collections/deleted         [:fn/str "Набор «{{:name}}» удалён"]
  :collections/new             "Новый набор"
  :collections/new-name        "Название нового набора:"
+ :collections/restore         [:fn/str "Вернуть набор «{{:name}}»"]
+ :collections/restored        [:fn/str "Набор «{{:name}}» возвращён"]
  :collections/title           "Наборы"
 
  :dialog/close                "Закрыть"

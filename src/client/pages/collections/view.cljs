@@ -25,10 +25,37 @@
     :on         {:pointerdown [[:effect/stop-propagation]]
                  :click       [[:effect/stop-propagation]
                                [:effect/delete-collection
-                                {:deleted-message [:i18n :collections/deleted {:name name}]
+                                {:confirm-message [:i18n :collections/delete-confirm {:name name}]
+                                 :deleted-message [:i18n :collections/deleted {:name name}]
                                  :id id
                                  :status-region shell/status-region-id}]]}}
    (close-icon)])
+
+
+(defn- trace
+  "What stays of a collection deleted on this visit: one button that brings it back, its name struck through
+   and an undo mark where its count stood. The mark is as wide as the count, so the name wraps as it did and
+   nothing around it moves."
+  [{:keys [id name lang]} class]
+  [:button.tile__restore
+   {:class      class
+    :type       "button"
+    :aria-label [:i18n :collections/restore {:name name}]
+    :data-restore-id id
+    :on         {:click [[:effect/stop-propagation]
+                         [:action/restore-collection
+                          {:id id
+                           :restored-message [:i18n :collections/restored {:name name}]
+                           :status-region shell/status-region-id}]]}}
+   [:s.tile__gone {:lang lang} name]
+   [:svg.tile__restore-icon
+    {:viewBox "0 0 20 20" :aria-hidden "true" :fill "none"}
+    [:path
+     {:d "M7 4 L3 8 L7 12 M3 8 H12 A5 5 0 0 1 12 18 H9"
+      :stroke "currentColor"
+      :stroke-width 2.25
+      :stroke-linecap "round"
+      :stroke-linejoin "round"}]]])
 
 
 (defn- target-attrs
@@ -70,43 +97,55 @@
   "The box carries the colour and the states; the button inside it fills the
    box and takes the tap. The close button is that button's sibling, because
    a button holds no button."
-  [{:keys [accent key active? editing? deletable?] :as tile}]
+  [{:keys [accent key active? editing? deletable? trace?] :as tile}]
   [:div.tile
    {:replicant/key key
     :class [(accent-class accent)
             (when active? "tile--active")
-            (when editing? "tile--editing")]}
-   [:button.tile__target (target-attrs tile)
-    (name-and-count tile)]
+            (when editing? "tile--editing")
+            (when trace? "tile--trace")]}
+   (if trace?
+     (trace tile "tile__trace")
+     [:button.tile__target (target-attrs tile)
+      (name-and-count tile)])
    (when deletable? (close-button tile))])
 
 
 (defn- folder-row
   "A list item holding the row's own button. The `<ul>` keeps its items and
    the tap target is an element that already is one."
-  [{:keys [id active? editing?] :as row}]
+  [{:keys [id active? editing? trace?] :as row}]
   [:li.tile__row
    {:replicant/key id
     :class [(when active? "tile__row--active")
             (when editing? "tile__row--editing")]}
-   [:button.tile__row-target (target-attrs row)
-    [:span.tile__row-name {:lang (:lang row)} (:name row)]
-    [:span.tile__count (:count row)]]
-   (close-button row)])
+   (if trace?
+     (trace row "tile__row-trace")
+     (list
+      [:button.tile__row-target (target-attrs row)
+       [:span.tile__row-name {:lang (:lang row)} (:name row)]
+       [:span.tile__count (:count row)]]
+      (close-button row)))])
 
 
 (defn- folder-head
-  "The parent collection when it has a document; a plain label with the
-   count otherwise. Tappable means a button, so a label stays a heading and
-   a target never is one."
-  [{:keys [tappable? name lang count] :as head}]
-  (if tappable?
+  "The parent collection when it has a document, its trace when it was
+   deleted on this visit; a plain label with the count otherwise. Tappable
+   means a button, so a label stays a heading and a target never is one."
+  [{:keys [tappable? trace? name lang count] :as head}]
+  (cond
+    trace?
+    [:div.tile__head (trace head "tile__head-trace")]
+
+    tappable?
     [:div.tile__head
      {:class [(when (:active? head) "tile__head--active")
               (when (:editing? head) "tile__head--editing")]}
      [:button.tile__head-target (target-attrs head)
       (name-and-count head)]
      (when (:deletable? head) (close-button head))]
+
+    :else
     [:h2.tile__label
      [:span.tile__label-text {:lang lang} name]
      [:span.tile__count count]]))

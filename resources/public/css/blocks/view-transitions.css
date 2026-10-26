@@ -80,24 +80,11 @@ html:active-view-transition-type(next-trial)::view-transition-new(lesson-trial) 
   animation: trial-enter-from-right 180ms var(--screen-easing) both;
 }
 
-/* A deleted collection: its tile shrinks away, the tiles after it glide into the gap. */
-
-html:active-view-transition-type(close-gap) :is(.tile, .tile__row) {
-  view-transition-name: match-element;
-  view-transition-class: tile;
-}
-
-html:active-view-transition-type(close-gap)::view-transition-old(.tile):only-child {
-  animation: tile-shrink 200ms var(--screen-easing) both;
-}
-
-html:active-view-transition-type(next-trial)::view-transition-old(root),
-html:active-view-transition-type(close-gap)::view-transition-old(root) {
+html:active-view-transition-type(next-trial)::view-transition-old(root) {
   display: none;
 }
 
-html:active-view-transition-type(next-trial)::view-transition-new(root),
-html:active-view-transition-type(close-gap)::view-transition-new(root) {
+html:active-view-transition-type(next-trial)::view-transition-new(root) {
   animation: none;
 }
 
@@ -139,8 +126,4 @@ html:active-view-transition-type(close-gap)::view-transition-new(root) {
 
 @keyframes trial-enter-from-right {
   from { opacity: 0; transform: translateX(72px); }
-}
-
-@keyframes tile-shrink {
-  to { opacity: 0; transform: scale(.85); }
 }
