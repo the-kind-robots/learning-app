@@ -21,4 +21,3 @@
     (.then (js/navigator.storage.persist)
            #(log/info :storage/persisted {:granted %})))
   nil)
-

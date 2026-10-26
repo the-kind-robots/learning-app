@@ -6,7 +6,9 @@
 
 
 (defprotocol World
-  (clock [w effect] [w effect a] [w effect a b]
+  (clock [w effect]
+    [w effect a]
+    [w effect a b]
     "The clock, by what is asked of it. `(clock w :now-ms)` and `(clock w :now-iso)` tell the time, in milliseconds
      and as an ISO 8601 string. `(clock w :after ms f)` calls `f` once `ms` have passed and returns a function that
      cancels the call. `(clock w :sleep ms signal)` is a promise that resolves with nil after `ms`, or at once when

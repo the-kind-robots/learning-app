@@ -14,13 +14,13 @@
 
 
 (def ^:private limits
-  {:backoff-ms         5000
-   :chunk-size         200
-   :max-backoff-ms     300000
-   :max-pause-ms       3600000
-   :spacing-ms         2000
+  {:backoff-ms     5000
+   :chunk-size     200
+   :max-backoff-ms 300000
+   :max-pause-ms   3600000
+   :spacing-ms     2000
    ;; Longer than nginx's 100 s, so the proxy ends a long generation.
-   :timeout-ms         110000})
+   :timeout-ms     110000})
 
 
 (def initial-state
@@ -28,8 +28,8 @@
    a page reload runs it again). Stopping it closes it by aborting its signal,
    not through the status."
   {:failed-subjects #{}
-   :outages         0
-   :status          :status/running})
+   :outages 0
+   :status  :status/running})
 
 
 (defn- backoff-ms
@@ -183,10 +183,10 @@
    and the watch is gone."
   [{:keys [learner]} seen signal]
   (let [{:keys [collections words]} seen
-        differs?                    (fn []
-                                      (let [now (learner/memory learner)]
-                                        (not (and (identical? words (:words now))
-                                                  (identical? collections (:collections now))))))]
+        differs? (fn []
+                   (let [now (learner/memory learner)]
+                     (not (and (identical? words (:words now))
+                               (identical? collections (:collections now))))))]
     (js/Promise.
      (fn [resolve]
        (if (differs?)
@@ -239,14 +239,14 @@
         (fn stop []))
     (let [controller (atom nil)
           closing    (js/AbortController.)
-          backfill   {:account            account
-                      :controller         controller
+          backfill   {:account    account
+                      :controller controller
                       :examples-generator examples-generator
-                      :learner            learner
-                      :page               page
-                      :signal             (.-signal closing)
-                      :state              (atom initial-state)
-                      :world              world}]
+                      :learner    learner
+                      :page       page
+                      :signal     (.-signal closing)
+                      :state      (atom initial-state)
+                      :world      world}]
       (page/on-inactive page #(some-> @controller .abort) (.-signal closing))
       (-> (fetch-loop backfill)
           (.catch (fn [err]

@@ -63,7 +63,9 @@
   [dbs]
   (let [memory (await (db-seed/memory-of (:user/db dbs)))
         now    (time/now-ms)
-        levels (into {} (map (juxt :id :retention-level)) (:words (vocabulary/rows (test-learner/of-memory memory) {} now)))]
+        levels (into {}
+                     (map (juxt :id :retention-level))
+                     (:words (vocabulary/rows (test-learner/of-memory memory) {} now)))]
     {:words (mapv (fn [{:keys [word] :as card}]
                     {:id      (:id word)
                      :retention-level (levels (:id word))
@@ -84,7 +86,7 @@
          (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
          (let [lesson  (await (started dbs {:trial-selector :first}))
                before  (set (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review"))))
-               _       (await (sut/record-review! (::learner dbs) time/world (domain/check-answer lesson answer)))
+               _ (await (sut/record-review! (::learner dbs) time/world (domain/check-answer lesson answer)))
                written (remove (comp before :_id) (await (db-queries/fetch-by-type (:user/db dbs) "review")))]
            (is (= [["word-1" retained?]] (map (juxt :word-id :retained) written)) answer))))))))
 
@@ -177,5 +179,3 @@
                               :created-at  time/test-now-iso
                               :modified-at time/test-now-iso}))
                 values)))))
-
-

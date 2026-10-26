@@ -116,7 +116,10 @@
   (let [word {:value "für" :translation [{:lang "ru" :value "для"}]}
         text (sut/search-text word)]
     (are [typed] (sut/matches? text (sut/query typed))
-      "für" "fuer" "fur" "для")
+     "für"
+     "fuer"
+     "fur"
+     "для")
     (is (not (sut/matches? text (sut/query "fir"))))))
 
 
@@ -178,31 +181,38 @@
 (deftest a-word-that-is-written-is-stamped-by-the-function-that-builds-it
   (testing "an entry made from what was typed is created and modified now"
     (are [kind value translation pos expected]
-         (= expected (select-keys (sut/entered-entry kind value translation pos "2026-02-02T00:00:00.000Z")
-                                  [:created-at :modified-at :pos]))
-      :word "der Hund" "пёс" nil
-      {:created-at "2026-02-02T00:00:00.000Z" :modified-at "2026-02-02T00:00:00.000Z"}
+     (= expected
+        (select-keys (sut/entered-entry kind value translation pos "2026-02-02T00:00:00.000Z")
+                     [:created-at :modified-at :pos]))
+     :word   "der Hund"       "пёс" nil
+                                           {:created-at  "2026-02-02T00:00:00.000Z"
+                                            :modified-at "2026-02-02T00:00:00.000Z"}
 
-      :word "der Hund" "пёс" "noun"
-      {:created-at "2026-02-02T00:00:00.000Z" :modified-at "2026-02-02T00:00:00.000Z" :pos "noun"}
+     :word   "der Hund"       "пёс" "noun"
+                                           {:created-at  "2026-02-02T00:00:00.000Z"
+                                            :modified-at "2026-02-02T00:00:00.000Z"
+                                            :pos         "noun"}
 
-      :phrase "auf jeden Fall" "в любом случае" nil
-      {:created-at "2026-02-02T00:00:00.000Z" :modified-at "2026-02-02T00:00:00.000Z"}))
+     :phrase "auf jeden Fall" "в любом случае" nil
+                                           {:created-at  "2026-02-02T00:00:00.000Z"
+                                            :modified-at "2026-02-02T00:00:00.000Z"}))
   (testing "no translation makes no entry to stamp"
     (is (nil? (sut/entered-entry :word "der Hund" "  " nil "2026-02-02T00:00:00.000Z"))))
   (testing "a word merged or edited is modified now; its creation time stays, and is set when there was none"
     (are [stamped-word expected] (= expected (select-keys stamped-word [:created-at :modified-at]))
-      (sut/merged-entry {:created-at "2026-01-01T00:00:00.000Z" :modified-at "2026-01-05T00:00:00.000Z" :translation []}
-                        {:translation [{:lang "ru" :value "собака"}]}
-                        "2026-02-02T00:00:00.000Z")
+     (sut/merged-entry {:created-at "2026-01-01T00:00:00.000Z" :modified-at "2026-01-05T00:00:00.000Z" :translation []}
+                       {:translation [{:lang "ru" :value "собака"}]}
+                       "2026-02-02T00:00:00.000Z")
       {:created-at "2026-01-01T00:00:00.000Z" :modified-at "2026-02-02T00:00:00.000Z"}
 
-      (sut/merged-entry {:translation []} {:translation []} "2026-02-02T00:00:00.000Z")
+     (sut/merged-entry {:translation []} {:translation []} "2026-02-02T00:00:00.000Z")
       {:created-at "2026-02-02T00:00:00.000Z" :modified-at "2026-02-02T00:00:00.000Z"}
 
-      (sut/edited-word {:created-at "2026-01-01T00:00:00.000Z" :modified-at "2026-01-05T00:00:00.000Z" :translation []}
-                       "der Hund" "пёс" "2026-02-02T00:00:00.000Z")
+     (sut/edited-word {:created-at "2026-01-01T00:00:00.000Z" :modified-at "2026-01-05T00:00:00.000Z" :translation []}
+                      "der Hund"
+                      "пёс"
+                      "2026-02-02T00:00:00.000Z")
       {:created-at "2026-01-01T00:00:00.000Z" :modified-at "2026-02-02T00:00:00.000Z"}
 
-      (sut/edited-word {:translation []} "der Hund" "пёс" "2026-02-02T00:00:00.000Z")
+     (sut/edited-word {:translation []} "der Hund" "пёс" "2026-02-02T00:00:00.000Z")
       {:created-at "2026-02-02T00:00:00.000Z" :modified-at "2026-02-02T00:00:00.000Z"})))

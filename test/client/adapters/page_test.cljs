@@ -21,7 +21,8 @@
         nav    (js/Object.getOwnPropertyDescriptor js/globalThis "navigator")]
     (set! (.-document js/globalThis) (target "hidden"))
     (set! (.-window js/globalThis) (target nil))
-    (js/Object.defineProperty js/globalThis "navigator"
+    (js/Object.defineProperty js/globalThis
+                              "navigator"
                               #js {:value #js {:onLine true} :configurable true :writable true})
     (try
       (await (f live))

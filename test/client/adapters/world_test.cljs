@@ -38,15 +38,16 @@
     (try
       (await (f controller signal live timers))
       (finally
-        (set! js/setTimeout set-t)
-        (set! js/clearTimeout clear-t)))))
+       (set! js/setTimeout set-t)
+       (set! js/clearTimeout clear-t)))))
 
 
 (deftest sleep-resolves-after-ms-and-leaves-no-listener
   (async-testing "the timer fires: the promise resolves with nil and the abort listener is gone"
     (await
      (watching
-      (^:async fn [_ signal live timers]
+      (^:async fn
+       [_ signal live timers]
        (let [p (sleep 5 signal)]
          (is (= 1 @live) "listening while it waits")
          (is (= 1 @timers) "timing while it waits")
@@ -59,7 +60,8 @@
   (async-testing "aborting resolves at once and clears the timer and the listener"
     (await
      (watching
-      (^:async fn [controller signal live timers]
+      (^:async fn
+       [controller signal live timers]
        (let [p (sleep 60000 signal)]
          (is (= 1 @timers))
          (.abort controller)

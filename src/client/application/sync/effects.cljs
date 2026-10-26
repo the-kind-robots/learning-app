@@ -26,7 +26,7 @@
     [{:keys [capabilities dispatch]} _]
     (try
       ;; The nonce tags one round: the QR carries it out, the opener echoes it back, and only that echo closes the dialog.
-      (let [nonce (js/crypto.randomUUID)
+      (let [nonce   (js/crypto.randomUUID)
             account (:account capabilities)]
         (when-let [link (await (account/sync-link account nonce))]
           (let [qr-url (await (.toDataURL QRCode link))]

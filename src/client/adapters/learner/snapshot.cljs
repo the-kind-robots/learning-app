@@ -51,22 +51,25 @@
 
 (def ^:private body-writer
   "The transit writer of the body: a review history is three columns. The columns go as one JSON string, which transit skips whole and `JSON.parse` reads natively."
-  (transit/writer :json {:handlers {retention/Reviews
-                                    (transit/write-handler
-                                     (constantly "reviews")
-                                     (fn [{:keys [ids retained seconds]}]
-                                       (js/JSON.stringify #js [(js/Array.from seconds)
-                                                               (.join (js/Array.from retained) "")
-                                                               ids])))}}))
+  (transit/writer :json
+                  {:handlers {retention/Reviews
+                              (transit/write-handler
+                               (constantly "reviews")
+                               (fn [{:keys [ids retained seconds]}]
+                                 (js/JSON.stringify #js [(js/Array.from seconds)
+                                                         (.join (js/Array.from retained) "")
+                                                         ids])))}}))
 
 
 (def ^:private body-reader
   "The transit reader of the body."
-  (transit/reader :json {:handlers {"reviews" (fn [text]
-                                                (let [columns (js/JSON.parse text)]
-                                                  (retention/->Reviews (js/Float64Array.from (aget columns 0))
-                                                                       (js/Uint8Array.from (.split ^string (aget columns 1) ""))
-                                                                       (aget columns 2))))}}))
+  (transit/reader :json
+                  {:handlers {"reviews" (fn [text]
+                                          (let [columns (js/JSON.parse text)]
+                                            (retention/->Reviews (js/Float64Array.from (aget columns 0))
+                                                                 (js/Uint8Array.from (.split ^string (aget columns 1)
+                                                                                             ""))
+                                                                 (aget columns 2))))}}))
 
 
 (defn- checksum

@@ -7,10 +7,12 @@
    [java.security MessageDigest]
    [java.io FileInputStream]))
 
+
 (defn lemma->json-line
   "Transform kebab-case keys to snake_case, serialize as JSON string."
   [lemma]
   (json/generate-string (utils/transform-keys lemma)))
+
 
 (defn write-jsonl!
   "Write seq of lemmas as JSONL to path. Returns {:count n :bytes b}."
@@ -29,6 +31,7 @@
             (recur (rest lemmas) (inc n) (+ b line-bytes)))
           {:count n :bytes b})))))
 
+
 (defn sha256
   "Compute SHA-256 hex digest of a file."
   [path]
@@ -42,6 +45,7 @@
             (recur)))))
     (let [hash-bytes (.digest digest)]
       (apply str (map #(format "%02x" %) hash-bytes)))))
+
 
 (defn write-manifest!
   "Write manifest.edn with counts, byte sizes, and SHA-256 hashes."

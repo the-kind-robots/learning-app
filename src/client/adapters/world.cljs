@@ -38,10 +38,13 @@
    (fn [resolve]
      ;; Each end of the wait undoes the other, so one needs the other's handle.
      (let [unlisten (volatile! (fn []))
-           cancel   (after ms (fn []
-                                (@unlisten)
-                                (resolve nil)))]
-       (vreset! unlisten (abort/on-abort signal (fn []
-                                                  (cancel)
-                                                  (@unlisten)
-                                                  (resolve nil))))))))
+           cancel   (after ms
+                           (fn []
+                             (@unlisten)
+                             (resolve nil)))]
+       (vreset! unlisten
+                (abort/on-abort signal
+                                (fn []
+                                  (cancel)
+                                  (@unlisten)
+                                  (resolve nil))))))))

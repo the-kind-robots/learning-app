@@ -175,19 +175,19 @@
                          correct? (remove-trial current-trial)
                          unlock?  (unlock-example-trials (:word-id current-trial)))]
     (assoc state
-           :last-result      {:answer answer :correct? correct?}
+           :last-result {:answer answer :correct? correct?}
            :remaining-trials remaining
-           :trials           (cond-> (:trials state)
-                               unlock? (unlock-example-trials (:word-id current-trial))))))
+           :trials      (cond-> (:trials state)
+                          unlock? (unlock-example-trials (:word-id current-trial))))))
 
 
 (defn advance
   [state]
-  (let [select-trial   (-> state :options :trial-selector)
-        unlocked       (filterv (complement locked-trial?) (:remaining-trials state))
-        available      (if (> (count unlocked) 1)
-                         (remove-trial unlocked (:current-trial state))
-                         unlocked)]
+  (let [select-trial (-> state :options :trial-selector)
+        unlocked     (filterv (complement locked-trial?) (:remaining-trials state))
+        available    (if (> (count unlocked) 1)
+                       (remove-trial unlocked (:current-trial state))
+                       unlocked)]
     (when (seq available)
       (assoc state
              :current-trial (select-trial available)

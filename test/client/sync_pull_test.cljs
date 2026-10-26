@@ -99,7 +99,7 @@
 (deftest a-device-that-joined-is-told-once
   (async-testing "the callback runs after a pull that brought the proof for its nonce, and once"
     (let [{:keys [finish! sync-once]} (held-passes)
-          receipts                    (atom [])]
+          receipts (atom [])]
       ;; Multi-arity, as the originals are: a call site names the arity.
       (with-redefs [db/all-docs (fn
                                   ([_]
@@ -116,15 +116,15 @@
           sync-once
           (^:async fn
            [{:keys [request! started]}]
-           (let [calls       (atom 0)
-                 _           ((:on-device-joined started) "n1" #(swap! calls inc))
-                 pull!       (^:async fn
-                              []
-                              (let [pulling (request!)]
-                                (await (settled))
-                                (finish! {:pulled 1 :pulled-ids {} :pulled-revs #{} :pushed 0})
-                                (await (answered pulling))
-                                (await (settled))))]
+           (let [calls (atom 0)
+                 _ ((:on-device-joined started) "n1" #(swap! calls inc))
+                 pull! (^:async fn
+                        []
+                        (let [pulling (request!)]
+                          (await (settled))
+                          (finish! {:pulled 1 :pulled-ids {} :pulled-revs #{} :pushed 0})
+                          (await (answered pulling))
+                          (await (settled))))]
              (await (pull!))
              (is (= 0 @calls) "a pull that brought no proof for the nonce")
              (reset! receipts ["pairing:other"])

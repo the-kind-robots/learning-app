@@ -7,11 +7,11 @@
 
 (defprotocol ExamplesGenerator
   (fetch
-   [g subject signal]
-   "A promise of `{:example example}` for `subject`, or `{:failure kind}`; `signal` aborts the request.")
+    [g subject signal]
+    "A promise of `{:example example}` for `subject`, or `{:failure kind}`; `signal` aborts the request.")
   (regenerate
-   [g subject avoid signal]
-   "A promise of `{:example example}` for `subject` that is none of the sentences in `avoid`, the answer for
+    [g subject avoid signal]
+    "A promise of `{:example example}` for `subject` that is none of the sentences in `avoid`, the answer for
      this learner alone, or `{:failure kind}`; `signal` aborts the request."))
 
 

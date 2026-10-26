@@ -88,7 +88,9 @@
                                                     active-id
                                                     (fn [collection]
                                                       (some-> collection
-                                                              (collections/renamed-collection trimmed (world/clock world :now-iso))))]]))
+                                                              (collections/renamed-collection
+                                                               trimmed
+                                                               (world/clock world :now-iso))))]]))
                       (learner/collection learner active-id)))]
       (cond-> {:name (if renamed (:name renamed) current)}
         renamed (assoc :renamed? true)

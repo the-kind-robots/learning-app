@@ -99,15 +99,15 @@
      :model          model
      :models         (or (models-from-env) [model fallback-model])
      :provider-prefs {:require_parameters true
-                      :sort               {:by "price" :partition "none"}
-                      :data_collection    "deny"}}))
+                      :sort {:by "price" :partition "none"}
+                      :data_collection "deny"}}))
 
 
 (defn request-options
   [payload timeout-ms]
   (let [{:keys [api-url api-key model models provider-prefs]} (config)
         body (cond-> (assoc payload :model model)
-               (seq models)         (assoc :models models)
+               (seq models) (assoc :models models)
                (seq provider-prefs) (assoc :provider provider-prefs))]
     {:url     api-url
      :method  :post

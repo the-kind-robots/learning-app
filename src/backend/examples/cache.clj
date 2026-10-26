@@ -110,12 +110,14 @@
   "Puts the row `id` under `new-key`. When another row is there, the one
    stored first stays. Returns the number of rows dropped."
   [tx {:keys [id created-at]} new-key]
-  (let [other (jdbc/execute-one! tx
-                ["SELECT rowid AS id, COALESCE(created_at, 0) AS created_at
+  (let
+    [other
+     (jdbc/execute-one! tx
+       ["SELECT rowid AS id, COALESCE(created_at, 0) AS created_at
                     FROM example_cache
                    WHERE question_sha256 = ? AND rowid != ?"
-                 new-key id]
-                {:builder-fn result-set/as-unqualified-kebab-maps})]
+        new-key id]
+       {:builder-fn result-set/as-unqualified-kebab-maps})]
     (cond
       (nil? other)
       (do (jdbc/execute! tx
@@ -153,7 +155,8 @@
   (let [started (System/nanoTime)
         report! (fn [outcome]
                   (let [counts (assoc outcome
-                                 :elapsed-ms (quot (- (System/nanoTime) started) 1000000))]
+                                      :elapsed-ms
+                                      (quot (- (System/nanoTime) started) 1000000))]
                     (t/log! {:level :info :id ::rekeyed :data counts}
                             "Example cache re-keyed")
                     counts))]
@@ -165,14 +168,16 @@
         (let [batch (waiting-batch db rowid)]
           (if (empty? batch)
             (report! {:collapsed dropped :moved moved :skipped skipped})
-            (let [keyed   (vec (for [row batch
-                                     :let [subject (row-request row)]
-                                     :when subject]
-                                 [row (subject-key subject)]))
+            (let [keyed (vec (for [row   batch
+                                   :let  [subject (row-request row)]
+                                   :when subject]
+                               [row (subject-key subject)]))
                   dropped-here
                   (jdbc/with-transaction [tx db]
-                    (reduce + 0 (for [[row new-key] keyed]
-                                  (move-row! tx row new-key))))]
+                    (reduce +
+                            0
+                            (for [[row new-key] keyed]
+                              (move-row! tx row new-key))))]
               (recur (long (:id (peek (vec batch))))
                      (long (+ moved (- (count keyed) dropped-here)))
                      (long (+ dropped dropped-here))

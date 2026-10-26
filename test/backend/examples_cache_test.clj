@@ -102,9 +102,10 @@
     (sut/store! db (subject-key subject) subject example)
     (testing "the same subject, glosses in the other order"
       (is (= example
-             (sut/lookup db (key-of {:word        "Hund"
-                                     :translation ["собака" "пёс"]
-                                     :context     "Tiere"})))))
+             (sut/lookup db
+                         (key-of {:word        "Hund"
+                                  :translation ["собака" "пёс"]
+                                  :context     "Tiere"})))))
     (testing "another context is another subject"
       (is (nil? (sut/lookup db (key-of {:word "Hund" :translation ["собака" "пёс"]})))))))
 
@@ -177,7 +178,8 @@
   [db]
   (into #{}
         (map :question_sha256)
-        (jdbc/execute! db ["SELECT question_sha256 FROM example_cache"]
+        (jdbc/execute! db
+          ["SELECT question_sha256 FROM example_cache"]
           {:builder-fn result-set/as-unqualified-maps})))
 
 
@@ -235,7 +237,8 @@
 (deftest a-rekey-runs-through-more-rows-than-a-batch
   (let [db (migrated-db)]
     (doseq [n (range 1203)]
-      (insert-waiting-row! db (str "old-" n)
+      (insert-waiting-row! db
+                           (str "old-" n)
                            (examples/subject {:word (str "Wort" n) :translation ["x"]})
                            n))
     (is (= {:collapsed 0 :moved 1203 :skipped 0} (dissoc (sut/rekey! db row-key) :elapsed-ms)))))
@@ -274,7 +277,8 @@
   [db key translations]
   (jdbc/execute! db
     ["INSERT INTO example_cache (question_sha256, word, translations, context, example)
-      VALUES (?, 'Hund', ?, NULL, '{}')" key translations]))
+      VALUES (?, 'Hund', ?, NULL, '{}')"
+     key translations]))
 
 
 (deftest a-row-with-a-plain-string-gloss-is-found-by-a-request-for-it

@@ -83,7 +83,7 @@
    is public: the protocol table is worth stating in a test on its own."
   [^js data]
   (case (.-type data)
-    "ready"             true
+    "ready" true
     ("loading" "error") false
     nil))
 

@@ -75,16 +75,17 @@
             examples (learner/examples-of learner [word-id])
             ids      (edit/collection-ids word-id active-collection listing examples)
             opened   (edit/opened-examples ids examples)]
-        [[:effect/save {:words/editing {:collection-ids      ids
-                                        :collections         (mapv #(select-keys % [:id :name]) listing)
-                                        :examples            opened
-                                        :id                  word-id
-                                        :opened-examples     opened
-                                        :phrase?             phrase?
-                                        :stored-translations translations
-                                        :stored-word         word
-                                        :translation-lines   translations
-                                        :word                word}}]]))))
+        [[:effect/save
+          {:words/editing {:collection-ids ids
+                           :collections (mapv #(select-keys % [:id :name]) listing)
+                           :examples opened
+                           :id word-id
+                           :opened-examples opened
+                           :phrase? phrase?
+                           :stored-translations translations
+                           :stored-word word
+                           :translation-lines translations
+                           :word word}}]]))))
 
 
 (nxr/register-action! :action/edit-translations
@@ -96,9 +97,10 @@
 (nxr/register-action! :action/edit-example
   ;; The word-by-word breakdown of a generated sentence no longer describes it once it is typed over.
   (fn edit-example [state collection-id field text]
-    [[:effect/save {:words/editing (update-in (:words/editing state)
-                                              [:examples collection-id]
-                                              #(-> % (assoc field text) (dissoc :structure)))}]]))
+    [[:effect/save
+      {:words/editing (update-in (:words/editing state)
+                                 [:examples collection-id]
+                                 #(-> % (assoc field text) (dissoc :structure)))}]]))
 
 
 (nxr/register-action! :action/reset-word-edit
@@ -106,12 +108,13 @@
   (fn reset-word-edit [state]
     (let [editing (:words/editing state)]
       [[:effect/abort-example-request]
-       [:effect/save {:words/editing (assoc editing
-                                            :example-request nil
-                                            :examples (:opened-examples editing)
-                                            :translation-lines (:stored-translations editing)
-                                            :word (:stored-word editing)
-                                            :word-taken? false)}]])))
+       [:effect/save
+        {:words/editing (assoc editing
+                               :example-request nil
+                               :examples    (:opened-examples editing)
+                               :translation-lines (:stored-translations editing)
+                               :word        (:stored-word editing)
+                               :word-taken? false)}]])))
 
 
 (nxr/register-action! :action/regenerate-example
@@ -120,13 +123,15 @@
     (let [{:keys [example-request examples id] :as editing} (:words/editing state)
           sentence (:value (get examples collection-id))]
       (when-not (= :request/pending (:status example-request))
-        [[:effect/save {:words/editing (assoc editing
-                                              :example-request {:collection-id collection-id
-                                                                :status        :request/pending})}]
+        [[:effect/save
+          {:words/editing (assoc editing
+                                 :example-request
+                                 {:collection-id collection-id
+                                  :status        :request/pending})}]
          [:effect/request-another-example
           {:avoid   (if (str/blank? sentence) [] [sentence])
            :subject (examples/subject {:collection-name (:name (learner/collection learner collection-id))
-                                       :word            (learner/word learner id)})
+                                       :word (learner/word learner id)})
            :word-id id}]]))))
 
 
@@ -135,12 +140,13 @@
   (fn example-arrived [state word-id {:keys [example]}]
     (let [{:keys [example-request id] :as editing} (:words/editing state)]
       (when (and (= word-id id) (= :request/pending (:status example-request)))
-        [[:effect/save {:words/editing (if example
-                                         (-> editing
-                                             (assoc-in [:examples (:collection-id example-request)]
-                                                       (select-keys example [:structure :translation :value]))
-                                             (assoc :example-request nil))
-                                         (assoc editing :example-request (assoc example-request :status :request/failed)))}]]))))
+        [[:effect/save
+          {:words/editing (if example
+                            (-> editing
+                                (assoc-in [:examples (:collection-id example-request)]
+                                 (select-keys example [:structure :translation :value]))
+                                (assoc :example-request nil))
+                            (assoc editing :example-request (assoc example-request :status :request/failed)))}]]))))
 
 
 (nxr/register-action! :action/edit-spelling
@@ -154,7 +160,7 @@
     (let [{:keys [id] :as editing} (:words/editing state)]
       [[:effect/save
         {:words/editing (assoc editing
-                               :word text
+                               :word        text
                                :word-taken? (vocabulary/spelling-taken? learner id text))}]])))
 
 

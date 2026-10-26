@@ -102,30 +102,32 @@
    version carries, as the sync adapter does."
   [a b]
   (collections/merged-collection (fn [version]
-                                       (let [[generation hash] (str/split (:_rev version) #"-" 2)]
-                                         [(js/parseInt generation 10) hash]))
-                                     a
-                                     b))
+                                   (let [[generation hash] (str/split (:_rev version) #"-" 2)]
+                                     [(js/parseInt generation 10) hash]))
+                                 a
+                                 b))
 
 
 (deftest two-versions-of-a-collection-reconcile-into-the-one-renamed-last-with-every-word
-  (let [phone  {:_id "c" :_rev "2-a" :name "Kurs" :word-ids ["a" "b"] :created-at "2026-01-01" :renamed-at "2026-03-01"}
-        laptop {:_id "c" :_rev "2-b" :name "Kurs 2" :word-ids ["b" "c"] :created-at "2026-01-01" :renamed-at "2026-05-01"}]
-    (is (= {:_id "c" :_rev "2-b" :name "Kurs 2" :word-ids ["a" "b" "c"] :created-at "2026-01-01" :renamed-at "2026-05-01"}
-           (reconciled phone laptop))
+  (let [phone {:_id "c" :_rev "2-a" :name "Kurs" :word-ids ["a" "b"] :created-at "2026-01-01" :renamed-at "2026-03-01"}
+        laptop
+        {:_id "c" :_rev "2-b" :name "Kurs 2" :word-ids ["b" "c"] :created-at "2026-01-01" :renamed-at "2026-05-01"}]
+    (is (=
+         {:_id "c" :_rev "2-b" :name "Kurs 2" :word-ids ["a" "b" "c"] :created-at "2026-01-01" :renamed-at "2026-05-01"}
+         (reconciled phone laptop))
         "the name and the revision are the last renamed version's; the words of both are listed once, sorted")))
 
 
 (deftest a-version-never-renamed-counts-from-its-creation
   (are [expected-name a b] (= expected-name (:name (reconciled a b)))
-    "Neu"  {:_rev "1-a" :name "Alt" :created-at "2026-01-01"}
-    {:_rev "1-b" :name "Neu" :created-at "2026-02-01"}
-    "Neu"  {:_rev "2-a" :name "Alt" :created-at "2026-01-01" :renamed-at "2026-01-02"}
-    {:_rev "1-b" :name "Neu" :created-at "2026-02-01"}
-    "Zwei" {:_rev "1-a" :name "Eins" :created-at "2026-01-01"}
-    {:_rev "1-b" :name "Zwei" :created-at "2026-01-01"}
-    "Zehn" {:_rev "9-z" :name "Neun" :created-at "2026-01-01"}
-    {:_rev "10-a" :name "Zehn" :created-at "2026-01-01"}))
+   "Neu"  {:_rev "1-a" :name "Alt" :created-at "2026-01-01"}
+                                                              {:_rev "1-b" :name "Neu" :created-at "2026-02-01"}
+   "Neu"  {:_rev "2-a" :name "Alt" :created-at "2026-01-01" :renamed-at "2026-01-02"}
+                                                              {:_rev "1-b" :name "Neu" :created-at "2026-02-01"}
+   "Zwei" {:_rev "1-a" :name "Eins" :created-at "2026-01-01"}
+                                                              {:_rev "1-b" :name "Zwei" :created-at "2026-01-01"}
+   "Zehn" {:_rev "9-z" :name "Neun" :created-at "2026-01-01"}
+                                                              {:_rev "10-a" :name "Zehn" :created-at "2026-01-01"}))
 
 
 (def ^:private gen-version
@@ -133,7 +135,9 @@
             hash       (gen/fmap str gen/uuid)
             renamed-at (gen/elements [nil "2026-01-01" "2026-02-01" "2026-03-01"])
             name       (gen/elements ["Kurs" "Haus" "Tiere"])
-            word-ids   (gen/fmap (comp vec sort) (gen/vector-distinct (gen/elements (mapv #(str "vocab:w" %) (range 12))) {:max-elements 8}))]
+            word-ids   (gen/fmap (comp vec sort)
+                                 (gen/vector-distinct (gen/elements (mapv #(str "vocab:w" %) (range 12)))
+                                                      {:max-elements 8}))]
     (cond-> {:_id "c" :_rev (str generation "-" hash) :name name :word-ids word-ids :created-at "2026-01-01"}
       renamed-at (assoc :renamed-at renamed-at))))
 
@@ -141,20 +145,20 @@
 (def ^:private reconcile-order-changes-nothing
   (prop/for-all [a gen-version
                  b gen-version]
-    (= (reconciled a b) (reconciled b a))))
+                (= (reconciled a b) (reconciled b a))))
 
 
 (def ^:private reconcile-grouping-changes-nothing
   (prop/for-all [a gen-version
                  b gen-version
                  c gen-version]
-    (= (reconciled (reconciled a b) c)
-       (reconciled a (reconciled b c)))))
+                (= (reconciled (reconciled a b) c)
+                   (reconciled a (reconciled b c)))))
 
 
 (def ^:private reconciling-a-version-with-itself-changes-nothing
   (prop/for-all [a gen-version]
-    (= a (reconciled a a))))
+                (= a (reconciled a a))))
 
 
 (deftest reconciling-versions-does-not-depend-on-their-order-or-grouping
@@ -167,6 +171,6 @@
 
 (deftest a-replaced-word-keeps-its-place-in-the-collection
   (are [word-ids expected] (= expected (:word-ids (collections/replace-word {:word-ids word-ids} "a" "z")))
-    ["x" "a" "y"] ["x" "z" "y"]
-    ["x" "a" "z"] ["x" "z"]
-    ["x" "y"]     ["x" "y"]))
+   ["x" "a" "y"] ["x" "z" "y"]
+   ["x" "a" "z"] ["x" "z"]
+   ["x" "y"]     ["x" "y"]))

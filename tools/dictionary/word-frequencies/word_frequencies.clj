@@ -170,13 +170,17 @@
             (vreset! row {})
 
             (start-element? reader "c")
-            (vreset! cell {:index (column-letter->index (.getAttributeValue reader nil "r"))
-                           :type  (.getAttributeValue reader nil "t")})
+            (vreset! cell
+                     {:index (column-letter->index (.getAttributeValue reader nil "r"))
+                      :type  (.getAttributeValue reader nil "t")})
 
             (and (start-element? reader "v") @cell)
-            (vswap! cell assoc :value (cell-value shared-strings
-                                                  (:type @cell)
-                                                  (.getElementText reader)))
+            (vswap! cell
+                    assoc
+                    :value
+                    (cell-value shared-strings
+                                (:type @cell)
+                                (.getElementText reader)))
 
             (and (end-element? reader "c") @cell)
             (do
@@ -200,7 +204,7 @@
   [path]
   (with-open [zip-file (ZipFile. (io/file path))]
     (let [shared-strings (read-shared-strings zip-file)
-          rows           (read-frequency-rows zip-file shared-strings)]
+          rows (read-frequency-rows zip-file shared-strings)]
       (->> rows
            (sort-by (juxt (comp - :count) :word))
            vec))))

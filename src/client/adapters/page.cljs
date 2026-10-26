@@ -86,8 +86,9 @@
                          (release)
                          (resolve nil)))]
          ;; The listeners are recorded before the abort listener: an already aborted signal calls `release` back at once.
-         (vreset! stops [(on-visibility-change check)
-                         (on-online check)])
+         (vreset! stops
+                  [(on-visibility-change check)
+                   (on-online check)])
          (vswap! stops conj (abort/on-abort signal release)))))))
 
 
@@ -95,7 +96,6 @@
   "A promise that resolves once the page has had a turn to paint."
   []
   (browser/yield))
-
 
 
 (defn overlay-keyboard!

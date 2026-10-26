@@ -42,8 +42,8 @@
 (defn changed-examples
   "The examples of `edit` that differ from the ones it opened with, `{:collection-id :example}` each."
   [{:keys [collection-ids examples opened-examples]}]
-  (for [id collection-ids
-        :let [now (get examples id)]
+  (for [id    collection-ids
+        :let  [now (get examples id)]
         :when (not= now (get opened-examples id))]
     {:collection-id id :example now}))
 

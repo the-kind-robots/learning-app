@@ -9,6 +9,7 @@
 (require '[babashka.fs :as fs]
          '[rewrite-clj.zip :as z])
 
+
 (let [roots (or (seq *command-line-args*) ["src"])
       sexpr #(try (z/sexpr %) (catch Exception _ nil))
       lines (for [file  (->> roots
@@ -32,7 +33,15 @@
                   :when (and (keyword? (some-> k sexpr)) (syms (some-> m sexpr)))
                   :let  [[row col] (z/position node)]]
               (format "%s:%d:%d: %s gets %s and (%s %s) — pass %s, read %s inside %s"
-                      file row col f (z/string m) (z/string k) (z/string m)
-                      (z/string m) (z/string k) f))]
+                      file
+                      row
+                      col
+                      f
+                      (z/string m)
+                      (z/string k)
+                      (z/string m)
+                      (z/string m)
+                      (z/string k)
+                      f))]
   (run! println lines)
   (println (count lines) "hits"))

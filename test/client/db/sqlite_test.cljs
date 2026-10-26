@@ -92,5 +92,3 @@
         (reply! 3 {:result [{:lemma "Maus"}]})
         (is (= [{:lemma "Maus"}] (js->clj (await after) :keywordize-keys true))
             "a query sent after the crash is not failed by it")))))
-
-

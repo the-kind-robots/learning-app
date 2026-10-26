@@ -167,7 +167,7 @@
                        (every? (fn [collection]
                                  (= (set (filter (set (map :id (vals (:words incremental))))
                                                  (collections/family-word-ids (vals (:collections incremental))
-                                                                             (:id collection))))
+                                                                              (:id collection))))
                                     (set (map (comp :id :word)
                                               (sut/collection-cards incremental collection)))))
                                (vals (:collections incremental)))))))

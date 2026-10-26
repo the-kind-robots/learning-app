@@ -124,9 +124,9 @@
 
 (defn normalize-translation
   [{:keys [lemma-id rank value labels]}]
-  (let [stored-labels                 (map normalize-label labels)
+  (let [stored-labels (map normalize-label labels)
         [final-value stripped-labels] (or (strip-label-parens value) [value []])
-        all-labels                    (distinct (concat stored-labels stripped-labels))]
+        all-labels    (distinct (concat stored-labels stripped-labels))]
     {:lemma-id lemma-id
      :rank     rank
      :value    final-value
@@ -159,7 +159,7 @@
         lemma-rows        (->> indexed-lemmas
                                (map (fn [[id lemma]]
                                       (-> (assoc lemma
-                                                 :id         id
+                                                 :id id
                                                  :cefr-level (-> lemma :enrichment :cefr-level))
                                           (select-keys [:id :value :pos :rank :cefr-level])))))
         translations      (->> indexed-lemmas

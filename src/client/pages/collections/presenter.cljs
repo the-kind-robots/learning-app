@@ -96,7 +96,8 @@
   (->> (colours/reading-order (:collections/items state))
        (map-indexed (fn [position {:keys [folder? collection] :as entry}]
                       (assoc (if folder? (folder-tile state entry) (plain-tile state collection))
-                             :accent (colours/accent-at (inc position)))))
+                             :accent
+                             (colours/accent-at (inc position)))))
        (cons (assoc (main-tile state) :accent (colours/accent-at 0)))
        vec))
 

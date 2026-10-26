@@ -9,17 +9,17 @@
 
 (defprotocol Install
   (ios?
-   [i]
-   "Whether the device is an iPhone, iPod or iPad.")
+    [i]
+    "Whether the device is an iPhone, iPod or iPad.")
   (listen-for-install!
-   [i on-available on-installed]
-   "Calls `on-available` when installing becomes possible and `on-installed` when it is done.")
+    [i on-available on-installed]
+    "Calls `on-available` when installing becomes possible and `on-installed` when it is done.")
   (prompt-install!
-   [i]
-   "Shows the browser's install prompt, if it offered one.")
+    [i]
+    "Shows the browser's install prompt, if it offered one.")
   (registration
-   [i]
-   "A promise of the service worker's registration, nil where there is none."))
+    [i]
+    "A promise of the service worker's registration, nil where there is none."))
 
 
 (defn start!

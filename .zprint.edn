@@ -63,6 +63,12 @@
                             {:next-inner
                              {:fn-map {:default :arg1-body}
                               :next-inner-restore [[:fn-map :default]]}}]
+           ;; Methods as in reify: the zprint default re-inserts the :interpose
+           ;; blank lines into each signature on every pass
+           "defprotocol"   [:arg1-body
+                            {:next-inner
+                             {:fn-map {:default :arg1-body}
+                              :next-inner-restore [[:fn-map :default]]}}]
            "some->"        :none
            "some->>"       :none
            "with-couch-op" :arg1-body

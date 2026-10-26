@@ -42,6 +42,7 @@ covers it.
 3. **Node.js 18+** — required for shadow-cljs and npm dependencies
 4. **nginx** — `sudo apt-get install -y nginx`
 5. **CouchDB** — below
+6. **zprint 1.3.0** — `zprintl-1.3.0` from [the release](https://github.com/kkinnear/zprint/releases/tag/1.3.0), on PATH as `zprint`. CI and the pre-commit hook check Clojure files with `scripts/zprint_check.sh`; `--write` reformats them.
 
 ### Installing CouchDB
 

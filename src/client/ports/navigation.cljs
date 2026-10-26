@@ -6,11 +6,11 @@
 
 (defprotocol Navigation
   (navigate
-   [n page]
-   "Moves to `page`. A step back enters home first, with the `on-enter` given to `follow!`, so home is on screen in the task of the tap.")
+    [n page]
+    "Moves to `page`. A step back enters home first, with the `on-enter` given to `follow!`, so home is on screen in the task of the tap.")
   (follow!
-   [n on-enter]
-   "Starts the router and calls `on-enter` with the page of every route entered."))
+    [n on-enter]
+    "Starts the router and calls `on-enter` with the page of every route entered."))
 
 
 (defn start!
