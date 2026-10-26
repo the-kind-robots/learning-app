@@ -358,12 +358,12 @@
 (defn collection-cards
   "The cards a lesson draws from: those of the words of `collection`, or of
    every word when `collection` is nil. A card is `{:word :reviews}`. Cards
-   whose word is removed are left out."
+   whose word is removed are left out. Reducible, walked once, never held."
   [memory collection]
   (let [cards (:cards memory)]
     (if collection
-      (into [] (comp (map #(nth cards %)) (filter :word)) (collection-slots memory collection))
-      (into [] (filter :word) cards))))
+      (eduction (map #(nth cards %)) (filter :word) (collection-slots memory collection))
+      (eduction (filter :word) cards))))
 
 
 (defonce ^:private collection-cache

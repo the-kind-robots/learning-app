@@ -176,7 +176,7 @@
   "The memory `stored` returned, with each review history as its three
    columns in vectors."
   [stored]
-  (update stored :cards (partial mapv #(update % :reviews (fn [reviews] (update-vals (into {} reviews) vec))))))
+  (update stored :cards (partial mapv #(update % :reviews (fn [reviews] (update-vals (select-keys reviews [:ids :retained :seconds]) vec))))))
 
 
 (def ^:private format-body

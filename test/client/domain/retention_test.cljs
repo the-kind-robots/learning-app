@@ -1,6 +1,9 @@
 (ns client.domain.retention-test
   (:require
    [cljs.test :refer-macros [deftest is testing]]
+   [clojure.test.check :as tc]
+   [clojure.test.check.generators :as gen]
+   [clojure.test.check.properties :as prop :include-macros true]
    [domain.retention :as sut]
    [utils :as utils]))
 
@@ -116,3 +119,63 @@
     (is (= ["r0" "later"] (vec (:ids later))))
     (is (= ["r0"] (vec (:ids (sut/without-review later "later")))))
     (is (= ["r0" "later"] (vec (:ids later))))))
+
+
+(defn- folded-urgency
+  "The urgency of the reviews `history` holds, folded from its columns in one
+   pass, the way the formula reads, with no rate kept."
+  [history now-ms]
+  (let [seconds  (vec (:seconds history))
+        retained (vec (:retained history))
+        rate     (reduce (fn [rate index]
+                           (if (== 1 (retained index))
+                             (/ rate (inc (* rate (- (seconds index) (seconds (dec index))))))
+                             (* 2 rate)))
+                         0.00231
+                         (range 1 (count seconds)))]
+    (if (empty? seconds)
+      ##Inf
+      (* rate (utils/ms->secs (- now-ms (* 1000 (peek seconds))))))))
+
+
+(def ^:private gen-edits
+  "Adds, mostly later than the one before and sometimes earlier or in the
+   same second, and removals of an earlier add."
+  (gen/vector
+   (gen/frequency
+    [[8 (gen/tuple (gen/return :add) (gen/choose -90000 400000) gen/boolean)]
+     [2 (gen/tuple (gen/return :remove) (gen/choose 0 40))]])
+   0 40))
+
+
+(defn- edited
+  "The history after `edits` in order, as each lands in the reader's hands:
+   with-review or without-review one at a time."
+  [edits]
+  (let [start (utils/iso->secs "2024-01-01T00:00:00.000Z")]
+    (:history
+     (reduce (fn [{:keys [history clock added] :as state} [kind a b]]
+               (case kind
+                 :add (let [clock (+ clock a)
+                            id    (str "r" (count added))]
+                        {:history (sut/with-review history {:id         id
+                                                            :created-at (.toISOString (js/Date. (* 1000 clock)))
+                                                            :retained   b})
+                         :clock   clock
+                         :added   (conj added id)})
+                 :remove (if (seq added)
+                           (assoc state :history (sut/without-review history (nth added (mod a (count added)))))
+                           state)))
+             {:history sut/empty-reviews :clock start :added []}
+             edits))))
+
+
+(deftest a-history-edited-urgency-is-the-same-as-folded-from-scratch
+  (let [now-ms   (utils/iso->ms "2025-06-01T00:00:00.000Z")
+        property (prop/for-all [edits gen-edits]
+                   (let [history (edited edits)]
+                     (= (folded-urgency history now-ms)
+                        (sut/urgency history now-ms)
+                        (sut/urgency (sut/reviews (:seconds history) (:retained history) (:ids history)) now-ms))))
+        result   (tc/quick-check 500 property)]
+    (is (:pass? result) (pr-str (select-keys result [:seed :num-tests :shrunk])))))
