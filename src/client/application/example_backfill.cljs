@@ -10,7 +10,8 @@
    [ports.learner :as learner]
    [ports.page :as page]
    [ports.world :as world]
-   [use-cases.examples :as examples]))
+   [use-cases.examples :as examples]
+   [use-cases.settings :as settings]))
 
 
 (def ^:private limits
@@ -105,7 +106,7 @@
   [{:keys [learner page state]}]
   (loop [chunks (partition-all (:chunk-size limits) (learner/words learner))]
     (when-let [[chunk & more] (seq chunks)]
-      (or (examples/next-pair learner (:failed-subjects @state) chunk)
+      (or (examples/next-pair learner (settings/language learner page) (:failed-subjects @state) chunk)
           (do (await (page/yield page))
               (recur more))))))
 
@@ -146,8 +147,8 @@
 
 (defn- ^:async step
   "Asks for one missing example and saves it. Resolves with what the loop waits for next: `[:wait/pause ms]`,
-   `[:wait/active]`, `[:wait/memory-change memory]` (nothing is missing; `memory` holds its words and
-   collections), or nil when the session was refused and the backfill halts."
+   `[:wait/active]`, `[:wait/memory-change memory]` (nothing is missing; `memory` holds its words,
+   collections and settings), or nil when the session was refused and the backfill halts."
   [{:keys [learner page state] :as backfill}]
   (if-not (page/active? page)
     [:wait/active]
@@ -165,7 +166,7 @@
           (when (= :status/running (:status after))
             ;; Only an outage waits longer than the spacing.
             [:wait/pause (pause-after before (:outages after) (:retry-after-ms response))]))
-        [:wait/memory-change (select-keys memory [:words :collections])]))))
+        [:wait/memory-change (select-keys memory [:collections :settings :words])]))))
 
 
 (defn- ^:async ready
@@ -178,15 +179,16 @@
 
 
 (defn- memory-changed
-  "A promise that resolves when memory's words or collections differ from `seen`, the ones a look read; at
-   once when they already do. Reviews and examples don't count. When `signal` aborts first it stays pending
-   and the watch is gone."
+  "A promise that resolves when memory's words, collections or settings, which hold the learner's language,
+   differ from `seen`, the ones a look read; at once when they already do. Reviews and examples don't count.
+   When `signal` aborts first it stays pending and the watch is gone."
   [{:keys [learner]} seen signal]
-  (let [{:keys [collections words]} seen
+  (let [{:keys [collections settings words]} seen
         differs? (fn []
                    (let [now (learner/memory learner)]
                      (not (and (identical? words (:words now))
-                               (identical? collections (:collections now))))))]
+                               (identical? collections (:collections now))
+                               (identical? settings (:settings now))))))]
     (js/Promise.
      (fn [resolve]
        (if (differs?)

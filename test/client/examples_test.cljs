@@ -143,15 +143,15 @@
 
 
 (deftest the-request-asks-the-question-with-the-session
-  (async-testing "every Russian gloss as a repeated parameter, the collection as the context, the cookie included"
+  (async-testing "the language, every gloss as a repeated parameter, the collection as the context, the cookie included"
     (let [asked (atom nil)]
       (await (answer-with (fn [url options]
                             (reset! asked [url (.-credentials options) (some? (.-signal options))])
                             ((fetch-mocks/mock-fetch-success {:translation "t" :value "v"}) url))
-                          {:collection-name "Park" :translations ["банк" "скамейка"] :word "Bank"}))
+                          {:collection-name "Park" :language "ru" :translations ["банк" "скамейка"] :word "Bank"}))
       (is
        (=
-        ["/api/examples?word=Bank&translation=%D0%B1%D0%B0%D0%BD%D0%BA&translation=%D1%81%D0%BA%D0%B0%D0%BC%D0%B5%D0%B9%D0%BA%D0%B0&context=Park"
+        ["/api/examples?word=Bank&language=ru&translation=%D0%B1%D0%B0%D0%BD%D0%BA&translation=%D1%81%D0%BA%D0%B0%D0%BC%D0%B5%D0%B9%D0%BA%D0%B0&context=Park"
          "include"
          true]
         @asked)))))

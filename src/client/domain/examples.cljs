@@ -21,6 +21,12 @@
     examples))
 
 
+(defn in-language
+  "Those of `examples` translated into `language`. One stored before examples carried a language is Russian."
+  [language examples]
+  (filterv #(= language (:language % "ru")) examples))
+
+
 (defn missing-pairs
   "The pairs of `entry` that have no example, `{:collection-id :collection-name :word}`; an entry in no
    collection misses one only without any example, as `{:word entry}`."

@@ -275,8 +275,8 @@
 
 
 (defn- dictionary-entry-matches-gloss?
-  [entry translation]
-  (some #(and (= "ru" (:lang %))
+  [entry language translation]
+  (some #(and (= language (:lang %))
               (translation-match? translation (:value %)))
         (:translation entry)))
 
@@ -288,13 +288,13 @@
 
 (defn lookup-word-meta
   "Lemma, part of speech and CEFR level of `word`, preferring an entry whose gloss
-   is one of `translations`. With `pos`, only entries of that part of speech
+   is one of `translations`, glosses in `language`. With `pos`, only entries of that part of speech
    compete; none of them means the choice is made as without it. Nil when the
    dictionary has no entry; throws when it cannot be read."
-  [word translations pos]
+  [word language translations pos]
   (let [entries (lookup-dictionary-entries word)
         matches-any-gloss? (fn [entry]
-                             (some #(dictionary-entry-matches-gloss? entry %)
+                             (some #(dictionary-entry-matches-gloss? entry language %)
                                    translations))]
     (when (seq entries)
       (let [of-pos  (filterv #(= pos (:pos %)) entries)

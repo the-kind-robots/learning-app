@@ -42,13 +42,13 @@
 
 (deftest a-generation-that-fails-transiently-is-retried-to-a-valid-example
   (testing "a provider error, then an invalid example, then a valid one: the valid one is the answer"
-    (is (= (#'sut/add-word-indexes good-example)
+    (is (= (#'sut/add-word-indexes "ru" good-example)
            (generating [{:status 500 :body "oops"}
                         (support.generation/example-completion too-short-example)
                         (support.generation/example-completion good-example)]
                        #(generate "Leiter" "лестница" 3)))))
   (testing "a dropped connection is just another failed attempt"
-    (is (= (#'sut/add-word-indexes good-example)
+    (is (= (#'sut/add-word-indexes "ru" good-example)
            (generating [(ex-info "network down" {:status 0})
                         (support.generation/example-completion good-example)]
                        #(generate "Leiter" "лестница" 2)))))
@@ -75,10 +75,8 @@
                                               (#'sut/user-prompt
                                                (nth args 0)
                                                (nth args 1)
-                                               (nth args 2)
-                                               (nth args 3)
                                                nil
-                                               (nth args 4)))
+                                               (nth args 2)))
                                             (apply answer args))
                   dictionary/lookup-dictionary-entries (constantly nil)]
       (f))))
@@ -94,13 +92,49 @@
                                         ["Die Leiter steht neben der Wand."]))
     (is (str/includes? (first @prompts) "\"avoid\":[\"Die Leiter steht neben der Wand.\"]"))
     (is (not (str/includes?
-              (#'sut/user-prompt "Leiter" ["лестница"] nil nil nil nil)
+              (#'sut/user-prompt (sut/subject {:word "Leiter" :translation "лестница"}) nil nil nil)
               "avoid"))
         "a request that avoids nothing says nothing about it")))
 
 
+(def ^:private english-example
+  {:value       "Die Leiter steht neben der Wand."
+   :translation "The ladder stands next to the wall."
+   :structure   [{:usedForm "Leiter" :dictionaryForm "die Leiter" :translation "ladder"}
+                 {:usedForm "steht" :dictionaryForm "stehen" :translation "стоять"}
+                 {:usedForm "Wand" :dictionaryForm "die Wand" :translation "wall"}]})
+
+
+(deftest an-example-is-translated-into-the-asked-language
+  (testing "an English request rejects a Russian translation and takes the English one"
+    (is (= (#'sut/add-word-indexes "en" english-example)
+           (generating [(support.generation/example-completion good-example)
+                        (support.generation/example-completion english-example)]
+                       #(sut/generate-one! (sut/subject {:word "Leiter" :translation "ladder" :language "en"})
+                                           nil
+                                           2
+                                           [])))))
+  (testing "a gloss in another language costs its item alone"
+    (is (= ["Leiter" "Wand"]
+           (mapv :usedForm (:structure (#'sut/add-word-indexes "en" english-example))))))
+  (testing "the translation is in the script of the language"
+    (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                  dictionary/lemma-ids (constantly #{})]
+      (are [language translation issue]
+       (= issue
+          (:issue (#'sut/example-issue language "Leiter" {} nil #{} (assoc english-example :translation translation))))
+       "fr" "L'échelle est contre le mur."          nil
+       "tr" "İki merdiven duvarın yanında duruyor." nil
+       "en" "Лестница стоит рядом со стеной."       :malformed-example
+       "ru" "The ladder stands next to the wall."   :malformed-example)))
+  (testing "the prompt names the language as its dictionary does"
+    (is (str/includes? (sut/system-prompt "tr") "Türkçe (tr)")))
+  (testing "a request that names none is Russian"
+    (is (= "ru" (:language (sut/subject {:word "Hund"}))))))
+
+
 (deftest only-a-retry-is-asked-at-the-retry-temperature
-  (let [temperature #(:temperature (#'sut/request-body "Leiter" ["лестница"] nil nil %))]
+  (let [temperature #(:temperature (#'sut/request-body (sut/subject {:word "Leiter" :translation "лестница"}) nil %))]
     (is (= @#'sut/first-attempt-temperature (temperature {:avoid ["Die Leiter steht neben der Wand."]}))
         "the first attempt avoiding sentences is still a first attempt")
     (is (= @#'sut/retry-temperature
@@ -112,7 +146,7 @@
 (deftest an-avoided-sentence-is-rejected-and-the-generation-retried
   (testing "the same sentence, spelled with other case and spacing, is not the answer"
     (let [prompts (atom [])]
-      (is (= (#'sut/add-word-indexes other-example)
+      (is (= (#'sut/add-word-indexes "ru" other-example)
              (generating-for prompts
                              [(support.generation/example-completion good-example)
                               (support.generation/example-completion other-example)]
@@ -126,7 +160,7 @@
       (is (str/includes? (second @prompts) "\"avoid\":[")
           "and still lists what to avoid")))
   (testing "punctuation does not make a sentence another one"
-    (are [avoided] (= (#'sut/add-word-indexes other-example)
+    (are [avoided] (= (#'sut/add-word-indexes "ru" other-example)
                       (generating [(support.generation/example-completion good-example)
                                    (support.generation/example-completion other-example)]
                                   #(sut/generate-one! (sut/subject {:word "Leiter" :translation "лестница"})
@@ -173,7 +207,7 @@
 
 
 (deftest a-malformed-example-is-rejected-whatever-the-flaw
-  (are [flaw example] (= :malformed-example (:issue (#'sut/example-issue "Hund" {} nil #{} example)))
+  (are [flaw example] (= :malformed-example (:issue (#'sut/example-issue "ru" "Hund" {} nil #{} example)))
    "English mixed into the translation"
     (assoc dog :translation "The dog runs quickly in the park, собака.")
 
@@ -218,7 +252,7 @@
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
                     dictionary/lemma-ids (constantly #{})]
         (is (= :target-lemma-missing
-               (:issue (#'sut/example-issue "Leiter" {} nil #{} example))))))))
+               (:issue (#'sut/example-issue "ru" "Leiter" {} nil #{} example))))))))
 
 
 (deftest structure-items-out-of-sentence-order-are-placed-in-sentence-order
@@ -237,9 +271,9 @@
                      :translation    "душа"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
                     dictionary/lemma-ids (constantly #{})]
-        (is (nil? (:issue (#'sut/example-issue "aufpassen" {} nil #{} example))))
+        (is (nil? (:issue (#'sut/example-issue "ru" "aufpassen" {} nil #{} example))))
         (is (= [0 1 3]
-               (mapv :wordIndex (:structure (#'sut/add-word-indexes example)))))))))
+               (mapv :wordIndex (:structure (#'sut/add-word-indexes "ru" example)))))))))
 
 
 (deftest a-doubled-separable-prefix-is-accepted-and-costs-a-tooltip
@@ -263,10 +297,10 @@
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
                     dictionary/lemma-ids (constantly #{})]
         (is
-         (nil? (:issue (#'sut/example-issue "aufpassen" {} nil #{} example)))
+         (nil? (:issue (#'sut/example-issue "ru" "aufpassen" {} nil #{} example)))
          "the preposition wrongly annotated with the verb's gloss is the cost; rejecting this also rejected every `von Zeit zu Zeit`")
         (is (= [0 1 3 4]
-               (mapv :wordIndex (:structure (#'sut/add-word-indexes example)))))))))
+               (mapv :wordIndex (:structure (#'sut/add-word-indexes "ru" example)))))))))
 
 
 (deftest a-detached-prefix-at-the-sentence-end-is-indexed
@@ -287,7 +321,7 @@
                      :dictionaryForm "aufpassen"
                      :translation    "присматривать"}]}]
       (is (= [0 1 5 6]
-             (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))))))
+             (mapv :wordIndex (:structure (#'sut/add-word-indexes "ru" example))))))))
 
 
 (deftest a-multi-word-target-is-found-in-the-sentence
@@ -305,10 +339,10 @@
                                   :translation    "идти вместе"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
                     dictionary/lemma-ids (constantly #{})]
-        (is (nil? (#'sut/example-issue "auf jeden Fall" {} nil #{} example))
+        (is (nil? (#'sut/example-issue "ru" "auf jeden Fall" {} nil #{} example))
             "auf, jeden and Fall are all words of the sentence")
         (is (= [1 4 5]
-               (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))
+               (mapv :wordIndex (:structure (#'sut/add-word-indexes "ru" example))))
             "nothing in the structure says those words were the target")))))
 
 
@@ -324,7 +358,7 @@
                                   :translation    "голова"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
                     dictionary/lemma-ids (constantly #{})]
-        (is (nil? (#'sut/example-issue "den Kopf verlieren" {} nil #{} example)))))))
+        (is (nil? (#'sut/example-issue "ru" "den Kopf verlieren" {} nil #{} example)))))))
 
 
 (deftest a-word-the-sentence-says-twice-no-longer-costs-the-example
@@ -345,9 +379,9 @@
                                   :translation    "родители"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
                     dictionary/lemma-ids (constantly #{})]
-        (is (nil? (#'sut/example-issue "von Zeit zu Zeit" {} nil #{} example)))
+        (is (nil? (#'sut/example-issue "ru" "von Zeit zu Zeit" {} nil #{} example)))
         (is (= [1 3 4 7]
-               (mapv :wordIndex (:structure (#'sut/add-word-indexes example))))
+               (mapv :wordIndex (:structure (#'sut/add-word-indexes "ru" example))))
             "each occurrence indexes its own position")))))
 
 
@@ -364,7 +398,7 @@
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
                     dictionary/lemma-ids (constantly #{})]
         (is (= :target-lemma-missing
-               (:issue (#'sut/example-issue "von Zeit zu Zeit" {} nil #{} example))))))))
+               (:issue (#'sut/example-issue "ru" "von Zeit zu Zeit" {} nil #{} example))))))))
 
 
 (deftest a-partly-present-construction-is-rejected
@@ -383,7 +417,7 @@
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
                     dictionary/lemma-ids (constantly #{})]
         (is (= :target-lemma-missing
-               (:issue (#'sut/example-issue "auf jeden Fall" {} nil #{} example)))
+               (:issue (#'sut/example-issue "ru" "auf jeden Fall" {} nil #{} example)))
             "`auf` is there, `jeden` and `Fall` are not")))))
 
 
@@ -396,6 +430,7 @@
       (are [issue target value verb-form]
        (= issue
           (:issue (#'sut/example-issue
+                   "ru"
                    target
                    {}
                    nil
@@ -434,7 +469,7 @@
                                   :translation    "дом"}]}]
       (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
                     dictionary/lemma-ids (constantly #{})]
-        (is (nil? (#'sut/example-issue "das heißt" {} nil #{} example)))))))
+        (is (nil? (#'sut/example-issue "ru" "das heißt" {} nil #{} example)))))))
 
 
 (deftest a-reflexive-dictionary-form-matches-its-bare-verb-target
@@ -458,6 +493,7 @@
                     dictionary/lemma-ids (constantly #{})]
         (is (= nil
                (#'sut/example-issue
+                "ru"
                 "vorstellen"
                 {}
                 nil
@@ -645,15 +681,15 @@
    (fn []
      (is (= #{"schon" "schön"}
             (set (map :value (dictionary/lookup-dictionary-entries "schon")))))
-     (is (= "adv" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["уже"] nil)))
+     (is (= "adv" (:partOfSpeech (dictionary/lookup-word-meta "schon" "ru" ["уже"] nil)))
          "the gloss picks the word typed, not its twin")
-     (is (= "adj" (:partOfSpeech (dictionary/lookup-word-meta "schon" ["красивый"] nil)))))))
+     (is (= "adj" (:partOfSpeech (dictionary/lookup-word-meta "schon" "ru" ["красивый"] nil)))))))
 
 
 (deftest a-picked-part-of-speech-decides-the-entry
   (with-dictionary
    (fn []
-     (are [translations pos lemma] (= lemma (:lemma (dictionary/lookup-word-meta "rauch" translations pos)))
+     (are [translations pos lemma] (= lemma (:lemma (dictionary/lookup-word-meta "rauch" "ru" translations pos)))
       []         nil    "der Rauch"
       ["густой"] nil    "rauch"
       []         "adj"  "rauch"
@@ -684,7 +720,7 @@
            noun    (example "Der Rauch der Fabrik ist dicht." "Rauch" "der Rauch")
            adj     (example "Ihre Haare sind sehr rauch." "rauch" "rauch")]
        (are [pos example issue]
-        (= issue (:issue (#'sut/example-issue "rauch" (sut/target-lemma-ids "rauch") pos #{} example)))
+        (= issue (:issue (#'sut/example-issue "ru" "rauch" (sut/target-lemma-ids "rauch") pos #{} example)))
         "adj" noun :wrong-part-of-speech
         "adj" adj  nil
         nil   noun nil))
@@ -693,7 +729,7 @@
             :translation "Взорванная бомба была громкой."
             :structure   [{:usedForm "explodierte" :dictionaryForm "explodieren" :translation "взрываться"}]}]
        (are [target pos issue]
-        (= issue (:issue (#'sut/example-issue target (sut/target-lemma-ids target) pos #{} participle)))
+        (= issue (:issue (#'sut/example-issue "ru" target (sut/target-lemma-ids target) pos #{} participle)))
         "explodiert" "adj"  nil
         "explodiert" "verb" nil
         "explodiert" "noun" :wrong-part-of-speech)))))
@@ -710,7 +746,7 @@
   (with-dictionary
    (fn []
      (is (= [] (dictionary/lookup-dictionary-entries "Quatsch")))
-     (is (nil? (dictionary/lookup-word-meta "Quatsch" ["чушь"] nil))))))
+     (is (nil? (dictionary/lookup-word-meta "Quatsch" "ru" ["чушь"] nil))))))
 
 
 (deftest a-missing-dictionary-file-stops-the-start-naming-the-file
@@ -902,7 +938,7 @@
                 dictionary/lemma-ids (constantly #{})]
     (doseq [[reason [target example]] rejected-before]
       (testing (name reason)
-        (is (nil? (#'sut/example-issue target {} nil #{} example)))))))
+        (is (nil? (#'sut/example-issue "ru" target {} nil #{} example)))))))
 
 
 (deftest a-placeholder-is-a-slot-the-sentence-fills-however-it-likes
@@ -920,7 +956,7 @@
                                  ["stelle" "sich vorstellen" "представляться"]
                                  ["Kollegen" "der Kollege" "коллега"]
                                  ["vor" "sich vorstellen" "представляться"]))]
-      (are [target example] (nil? (#'sut/example-issue target {} nil #{} example))
+      (are [target example] (nil? (#'sut/example-issue "ru" target {} nil #{} example))
        "etwas festlegen"         fixed
        "etw. festlegen"          fixed
        "sich vorstellen"         (reflexive "mich")
@@ -937,7 +973,7 @@
                              ["hat" "haben" "иметь"]
                              ["Anspruch" "der Anspruch" "право"]
                              ["Urlaub" "der Urlaub" "отпуск"])]
-      (are [target] (= :target-lemma-missing (:issue (#'sut/example-issue target {} nil #{} example)))
+      (are [target] (= :target-lemma-missing (:issue (#'sut/example-issue "ru" target {} nil #{} example)))
        "Anspruch auf etwas verlieren"
        "Bezug auf etwas nehmen"
        "etwas zur Folge haben"))))
@@ -952,7 +988,7 @@
                            ["Gericht" "das Gericht" "суд"])]
     (is (= [["Widerstand" 1] ["Regel" 5]]
            (mapv (juxt :usedForm :wordIndex)
-                 (:structure (#'sut/add-word-indexes example)))))))
+                 (:structure (#'sut/add-word-indexes "ru" example)))))))
 
 
 (deftest an-item-of-two-words-is-indexed-word-by-word
@@ -962,7 +998,7 @@
                            ["prägt" "prägen" "формировать"])]
     (is (= [["Genius" 1] ["Loci" 2] ["prägt" 3]]
            (mapv (juxt :usedForm :wordIndex)
-                 (:structure (#'sut/add-word-indexes example)))))))
+                 (:structure (#'sut/add-word-indexes "ru" example)))))))
 
 
 (deftest a-structure-with-no-word-of-the-sentence-is-a-structure-mismatch
@@ -970,6 +1006,7 @@
                 dictionary/lemma-ids (constantly #{})]
     (is (= :structure-mismatch
            (:issue (#'sut/example-issue
+                    "ru"
                     "Leiter"
                     {}
                     nil
@@ -1002,6 +1039,7 @@
    triples."
   [target value & items]
   (:issue (#'sut/example-issue
+           "ru"
            target
            (sut/target-lemma-ids target)
            nil

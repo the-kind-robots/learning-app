@@ -68,11 +68,12 @@
 
 
 (nxr/register-action! :action/open-word-edit
-  ;; `:examples` start as the opened ones, which «Сбросить» brings back.
-  (fn open-word-edit [_ {:keys [active-collection learner]} word-id]
+  ;; `:examples` start as the opened ones, which «Сбросить» brings back; `:language` is theirs, and that of
+  ;; every example the dialog asks for or writes.
+  (fn open-word-edit [_ {:keys [active-collection language learner]} word-id]
     (when-let [{:keys [phrase? translations word]} (vocabulary/editable-word learner word-id)]
       (let [listing  (collections-of/listed learner)
-            examples (learner/examples-of learner [word-id])
+            examples (examples/of-word learner language word-id)
             ids      (edit/collection-ids word-id active-collection listing examples)
             opened   (edit/opened-examples ids examples)]
         [[:effect/save
@@ -80,6 +81,7 @@
                            :collections (mapv #(select-keys % [:id :name]) listing)
                            :examples opened
                            :id word-id
+                           :language language
                            :opened-examples opened
                            :phrase? phrase?
                            :stored-translations translations
@@ -120,7 +122,7 @@
 (nxr/register-action! :action/regenerate-example
   ;; One request at a time; the sentence on the card goes along as the one not to repeat.
   (fn regenerate-example [state {:keys [learner]} collection-id]
-    (let [{:keys [example-request examples id] :as editing} (:words/editing state)
+    (let [{:keys [example-request examples id language] :as editing} (:words/editing state)
           sentence (:value (get examples collection-id))]
       (when-not (= :request/pending (:status example-request))
         [[:effect/save
@@ -131,7 +133,8 @@
          [:effect/request-another-example
           {:avoid   (if (str/blank? sentence) [] [sentence])
            :subject (examples/subject {:collection-name (:name (learner/collection learner collection-id))
-                                       :word (learner/word learner id)})
+                                       :language language
+                                       :word     (learner/word learner id)})
            :word-id id}]]))))
 
 
@@ -214,7 +217,10 @@
           replacements (when-not renamed?
                          (for [{:keys [collection-id example]} (edit/changed-examples editing)]
                            {:collection-id collection-id
-                            :example       (-> example (update :value str/trim) (update :translation str/trim))
+                            :example       (-> example
+                                               (update :value str/trim)
+                                               (update :translation str/trim)
+                                               (assoc :language (:language editing)))
                             :word          value
                             :word-id       id}))
           write        [:effect/write-word {:id id :renamed? renamed? :translation translation :value value}]]

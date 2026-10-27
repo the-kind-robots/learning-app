@@ -19,6 +19,7 @@
    [ports.page :as page]
    [ports.world :as world]
    [replicant.dom :as r]
+   [use-cases.settings :as settings]
    [view-transition]))
 
 
@@ -67,9 +68,10 @@
                       ;; Marked skip-interpolation: Nexus would otherwise walk every word id of a theme
                       ;; for placeholders on each keystroke.
                       (with-meta {:active-collection (learner/active-collection (:learner capabilities))
-                                  :learner (:learner capabilities)
-                                  :now-ms  (world/clock (:world capabilities) :now-ms)
-                                  :random  #(world/random (:world capabilities))}
+                                  :language (settings/language (:learner capabilities) (:page capabilities))
+                                  :learner  (:learner capabilities)
+                                  :now-ms   (world/clock (:world capabilities) :now-ms)
+                                  :random   #(world/random (:world capabilities))}
                                  {:nexus/skip-interpolation true})]
                      args)])))
 

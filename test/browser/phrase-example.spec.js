@@ -81,7 +81,7 @@ test.describe('Пример к фразе', () => {
   test('пользователь добавляет фразу и начинает урок → сначала переводит фразу, и только потом открывается пример', async ({ page }) => {
     await test.step('Когда он добавляет фразу «auf jeden Fall»', async () => {
       const requested = await addPhraseAndAwaitItsExample(page);
-      expect(decodeURIComponent(requested[0])).toContain(`word=${PHRASE}`);
+      expect(new URL(requested[0]).searchParams.get('word')).toBe(PHRASE);
     });
 
     await test.step('Тогда урок открывается заданием перевести фразу, прогресс 0', async () => {

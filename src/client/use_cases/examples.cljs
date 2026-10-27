@@ -9,14 +9,15 @@
 
 (defn subject
   "What a request for `pair` asks the backend about."
-  [{:keys [collection-name word]}]
+  [{:keys [collection-name language word]}]
   (cond-> {:collection-name collection-name
+           :language     language
            :translations (into []
                                (comp (filter #(= "ru" (:lang %)))
                                      (map :value)
                                      (filter utils/non-blank))
                                (:translation word))
-           :word (:value word)}
+           :word         (:value word)}
     (:pos word) (assoc :pos (:pos word))))
 
 
@@ -25,38 +26,46 @@
   #{:failure/invalid-subject :failure/invalid-response :failure/rejected})
 
 
+(defn of-word
+  "The examples of the entry `word-id` translated into `language`."
+  [learner language word-id]
+  (examples/in-language language (learner/examples-of learner [word-id])))
+
+
 (defn next-pair
   "The first pair of `entries`, a chunk of the learner's words, that has
-   no example and whose subject is not in `failed-subjects`, or nil."
-  [learner failed-subjects entries]
+   no example in `language` and whose subject is not in `failed-subjects`, or nil. The pair carries the
+   language."
+  [learner language failed-subjects entries]
   (some (fn [entry]
           (->> (examples/missing-pairs entry
                                        (learner/collections-of learner (:id entry))
-                                       (learner/examples-of learner [(:id entry)]))
+                                       (of-word learner language (:id entry)))
+               (map #(assoc % :language language))
                (remove (comp failed-subjects subject))
                first))
         entries))
 
 
 (defn save-example!
-  "Saves the fetched `example` of `pair`. Resolves with the example's entity, or nil when the learner's data
-   does not hold it afterwards."
+  "Saves the fetched `example` of `pair`, in the pair's language. Resolves with the example's entity, or nil
+   when the learner's data does not hold it afterwards."
   [learner pair example]
   (learner/insert! learner
                    :entity/example
                    {:collection-id (:collection-id pair)
-                    :example       example
+                    :example       (assoc example :language (:language pair))
                     :word          (:value (:word pair))
                     :word-id       (:id (:word pair))}))
 
 
 (defn ^:async replace!
   "Stores the example of `replacement`, `{:collection-id :word-id :word :example}`, and deletes the other
-   examples of its collection and word. Resolves true when only the new one is left, false when it was not
-   stored or the delete was taken back."
+   examples of its collection and word in its language. Resolves true when only the new one is left, false
+   when it was not stored or the delete was taken back."
   [learner {:keys [collection-id word-id] :as replacement}]
   (if-let [stored (await (learner/insert! learner :entity/example replacement))]
-    (let [replaced (->> (learner/examples-of learner [word-id])
+    (let [replaced (->> (of-word learner (:language stored) word-id)
                         (filter #(= collection-id (:collection-id %)))
                         (map :id)
                         (remove #{(:id stored)}))]

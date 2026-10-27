@@ -59,14 +59,16 @@ for anyone still sending the older subject.
 ### Requirement: A generated example is cached under its subject
 
 The server SHALL keep every valid generated example in its own database, under a key derived from
-its subject — the German word, the confirmed Russian glosses, and the collection context — together
-with what the dictionary says about the word and the operator's cache version. The key SHALL
-be built from a normalized form of the subject:
+its subject — the German word, the confirmed glosses, the collection context and the language the
+example is in (`specs/examples/spec.md`, Requirement: An example is generated in the learner's
+language) — together with what the dictionary says about the word and the operator's cache version.
+The key SHALL be built from a normalized form of the subject:
 
 - the word is trimmed and its case kept — German case carries meaning, and `Essen` is not `essen`;
 - the glosses are trimmed, blanks dropped, duplicates dropped, and sorted, so the same set of glosses
   in a different order is the same subject;
-- the context is trimmed, and absent when blank.
+- the context is trimmed, and absent when blank;
+- the language is `ru` when the request names none.
 
 What the dictionary says SHALL be the word's part of speech and level, or that it has no entry for
 the word. It goes into the prompt, so it belongs in the key: the word arriving in the dictionary is
@@ -86,15 +88,16 @@ The key's material SHALL NOT depend on how Clojure prints: under a bound `*print
 `*print-level*` two different subjects would compose the same key.
 
 The stored row SHALL carry both the key's digest and the normalized fields it was built from, so the
-accumulated cache can be read back by word, gloss or context without recomputing digests. The glosses
-SHALL be stored as a JSON array, since a gloss may itself contain a comma. Rows written before this
-keep their glosses joined by `", "`: the column is for reading and is no part of the key.
+accumulated cache can be read back by word, gloss, context or language without recomputing digests.
+The glosses SHALL be stored as a JSON array, since a gloss may itself contain a comma. Rows written
+before this keep their glosses joined by `", "`: the column is for reading and is no part of the
+key. Rows written before the language was part of the subject are Russian.
 
 #### Scenario: A valid example is stored
 
 - **WHEN** a request generates a valid example
 - **THEN** the example is stored under the digest of its normalized subject and dictionary reading
-- **AND** the row also carries the normalized word, glosses and context, the glosses as a JSON array
+- **AND** the row also carries the normalized word, glosses, context and language, the glosses as a JSON array
 
 #### Scenario: The same glosses in another order are the same subject
 
@@ -116,6 +119,12 @@ keep their glosses joined by `", "`: the column is for reading and is no part of
 
 - **WHEN** two requests name the same word and glosses, one with a collection context and one without
 - **THEN** they resolve to different cache keys
+
+#### Scenario: The language is part of the key
+
+- **WHEN** two requests name the same word, glosses and context, one with `language=en` and one with `language=ru`
+- **THEN** they resolve to different cache keys
+- **AND** a request that names no language resolves to the key of `language=ru`
 
 #### Scenario: The prompt is edited
 
@@ -228,7 +237,7 @@ processes, or one finishing while the other was storing — serve the same examp
 ### Requirement: Earlier rows are re-keyed at startup
 
 Once it is listening, the server SHALL, in the background, give every row stored under an earlier key the key the current rule
-computes from the row's own word, glosses and context and the dictionary's present reading of the
+computes from the row's own word, glosses, context and language and the dictionary's present reading of the
 word. When two rows land on one key, the one stored first SHALL be kept and the other removed. A row
 whose key was already computed this way SHALL NOT be computed again. When the dictionary cannot be
 read, the step SHALL stop, leave the remaining rows as they are, and not affect the server; the next
@@ -238,6 +247,11 @@ start continues it.
 
 - **WHEN** the server has started with rows stored under the earlier key and the re-key has finished
 - **THEN** a request for the subject of such a row is served from it, and the provider is not called
+
+#### Scenario: Rows stored before the language was in the key
+
+- **WHEN** the server has started with rows stored before the key carried the language, and the re-key has finished
+- **THEN** a Russian request for the subject of such a row is served from it, and the provider is not called
 
 #### Scenario: A request arrives before its row is re-keyed
 

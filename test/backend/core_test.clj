@@ -459,6 +459,27 @@
             422)))))
 
 
+(deftest an-example-is-asked-in-the-learners-language
+  (let [asked (atom [])]
+    (with-example-server
+     (fn [subject]
+       (swap! asked conj (:language subject))
+       generated)
+     (fn [ask]
+       (testing "a language the interface speaks reaches the generation"
+         (is (= 200 (:status (ask "?word=Hund&language=en")))))
+       (testing "a request that names none is Russian"
+         (is (= 200 (:status (ask "?word=Hund")))))
+       (testing "a language the interface does not speak is refused"
+         (is (= 400 (:status (ask "?word=Hund&language=ja")))))
+       (is (= ["en" "ru"] @asked) "the refused one reached no generation"))))
+  (with-regenerating-server
+   (fn [_subject _avoid] another-example)
+   (fn [_db _get-example regenerate]
+     (is (= 400 (:status (regenerate {:word "Hund" :language "ja" :avoid []})))
+         "a regeneration is refused the same"))))
+
+
 (deftest a-regeneration-avoids-the-cached-example-of-its-part-of-speech
   (let [asked (atom nil)]
     (with-regenerating-server
@@ -467,7 +488,7 @@
        (if (= "adj" (:pos subject)) generated another-example))
      (fn [_db get-example regenerate]
        ;; The dictionary honours the pick, and the part of speech is in the key.
-       (with-redefs [dictionary/lookup-word-meta (fn [_word _translations pos]
+       (with-redefs [dictionary/lookup-word-meta (fn [_word _language _translations pos]
                                                    {:cefrLevel "A1" :lemma "Hund" :partOfSpeech pos})]
          (get-example (query "word" "Hund" "pos" "adj"))
          (get-example (query "word" "Hund" "pos" "noun"))
@@ -481,24 +502,27 @@
 (deftest a-regeneration-request-is-read-from-its-body
   (testing "a good body gives the subject's fields and the sentences to avoid"
     (is (= {:params {:context     "Tiere"
+                     :language    "en"
                      :pos         "adj"
-                     :translation ["собака"]
+                     :translation ["dog"]
                      :word        "Hund"}
             :avoid  ["Der Hund bellt."]}
            (sut/regeneration-request {:word         "Hund"
-                                      :translations ["собака"]
+                                      :translations ["dog"]
                                       :context      "Tiere"
+                                      :language     "en"
                                       :pos          "adj"
                                       :avoid        ["Der Hund bellt."]}))))
   (testing "what is not a string is dropped, and a missing field is nil or empty"
-    (is (= {:params {:context nil :pos nil :translation ["собака"] :word "Hund"}
+    (is (= {:params {:context nil :language nil :pos nil :translation ["собака"] :word "Hund"}
             :avoid  ["Der Hund bellt."]}
            (sut/regeneration-request {:word         "Hund"
                                       :translations [1 {} "собака"]
                                       :context      3
+                                      :language     7
                                       :pos          [:adj]
                                       :avoid        [7 nil "Der Hund bellt."]})))
-    (is (= {:params {:context nil :pos nil :translation [] :word "Hund"}
+    (is (= {:params {:context nil :language nil :pos nil :translation [] :word "Hund"}
             :avoid  []}
            (sut/regeneration-request {:word "Hund" :translations 5 :avoid "x"}))))
   (testing "a body that is not an object, or has no word, is refused"

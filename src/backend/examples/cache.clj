@@ -22,6 +22,7 @@
     [(:word subject)
      (:translations subject)
      (:context subject)
+     (:language subject)
      word-meta
      version])))
 
@@ -62,13 +63,14 @@
     (let
       [written
        (jdbc/execute-one! db
-         ["INSERT INTO example_cache (question_sha256, word, translations, context, example, rekeyed)
-                      VALUES (?, ?, ?, ?, ?, 1)
+         ["INSERT INTO example_cache (question_sha256, word, translations, context, language, example, rekeyed)
+                      VALUES (?, ?, ?, ?, ?, ?, 1)
                       ON CONFLICT (question_sha256) DO NOTHING"
           subject-key
           (:word subject)
           (cheshire/generate-string (:translations subject))
           (:context subject)
+          (:language subject)
           (cheshire/generate-string example)])]
       (= 1 (:next.jdbc/update-count written)))
     (catch Exception error
@@ -82,7 +84,7 @@
   "Up to a batch of rows still waiting for the current key, after `rowid`."
   [db rowid]
   (jdbc/execute! db
-    ["SELECT rowid AS id, word, translations, context, COALESCE(created_at, 0) AS created_at
+    ["SELECT rowid AS id, word, translations, context, language, COALESCE(created_at, 0) AS created_at
         FROM example_cache
        WHERE rekeyed = 0 AND rowid > ?
        ORDER BY rowid
@@ -95,7 +97,7 @@
   "What a stored row was asked for, shaped like a request so the caller
    normalizes it the way a request is: `:translation` is the JSON array of
    glosses, or the plain string older rows hold. Nil when it is neither."
-  [{:keys [context translations word]}]
+  [{:keys [context language translations word]}]
   (let [parsed (try (cheshire/parse-string translations)
                     (catch Exception _ nil))
         gloss  (if (sequential? parsed)
@@ -103,7 +105,7 @@
                  (when (and (string? translations) (not (str/blank? translations)))
                    translations))]
     (when gloss
-      {:context context :translation gloss :word word})))
+      {:context context :language language :translation gloss :word word})))
 
 
 (defn- move-row!
@@ -139,8 +141,8 @@
 
 (defn rekey!
   "Gives every row that still waits the key `subject-key` computes from its
-   own word, glosses and context. `subject-key` takes the row as a request
-   (`:word`, `:translation`, `:context`) and normalizes it as a request is,
+   own word, glosses, context and language. `subject-key` takes the row as a request
+   (`:word`, `:translation`, `:context`, `:language`) and normalizes it as a request is,
    so a row and a fresh request for one word land on one key. When two rows
    land on one key, the one stored first stays. A row whose glosses are
    neither a JSON array nor a non-blank string is skipped and left waiting.

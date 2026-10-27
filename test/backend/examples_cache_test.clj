@@ -138,7 +138,8 @@
   (let [asked    {:word "Hund" :translation ["собака"]}
         original (key-of asked)]
     (testing "an edited prompt"
-      (with-redefs [examples/system-prompt (str examples/system-prompt "\nOne more rule.")]
+      (with-redefs [examples/system-prompt (let [prompt examples/system-prompt]
+                                             #(str (prompt %) "\nOne more rule."))]
         (is (= original (key-of asked)))))
     (testing "another model"
       (with-redefs [provider/config (constantly {:model "another/model"})]
@@ -156,7 +157,8 @@
   (let [db      (migrated-db)
         subject (examples/subject {:word "Hund" :translation ["собака"]})]
     (sut/store! db (subject-key subject) subject example)
-    (with-redefs [examples/system-prompt (str examples/system-prompt "\nOne more rule.")]
+    (with-redefs [examples/system-prompt (let [prompt examples/system-prompt]
+                                           #(str (prompt %) "\nOne more rule."))]
       (is (= example (sut/lookup db (key-of {:word "Hund" :translation ["собака"]})))))))
 
 
@@ -190,6 +192,23 @@
     (is (nil? (sut/lookup db (subject-key subject))))
     (sut/rekey! db row-key)
     (is (= {:value "old-key"} (sut/lookup db (subject-key subject))))))
+
+
+(deftest the-language-is-part-of-the-key
+  (is (not= (key-of {:word "Hund" :translation ["dog"] :language "en"})
+            (key-of {:word "Hund" :translation ["dog"] :language "ru"})))
+  (is (= (key-of {:word "Hund" :translation ["собака"]})
+         (key-of {:word "Hund" :translation ["собака"] :language "ru"}))
+      "a request that names no language is Russian"))
+
+
+(deftest a-row-keeps-its-language-through-the-rekey
+  (let [db      (migrated-db)
+        subject (examples/subject {:word "Hund" :translation ["dog"] :language "en"})]
+    (sut/store! db "old-key" subject example)
+    (jdbc/execute! db ["UPDATE example_cache SET rekeyed = 0"])
+    (sut/rekey! db row-key)
+    (is (= example (sut/lookup db (subject-key subject))))))
 
 
 (deftest rows-that-land-on-one-key-collapse-to-the-oldest

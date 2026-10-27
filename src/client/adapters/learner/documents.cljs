@@ -78,7 +78,7 @@
 
 (defn example-doc
   "The document that stores `example`, a fetched example `{:value
-   :translation :structure}`, for the entry `word-id`, whose text is
+   :translation :structure :language}`, for the entry `word-id`, whose text is
    `word`, in the collection `collection-id`. The collection id is nil for
    an example made outside every collection, and the document then has no
    `:collection-id`.
@@ -91,7 +91,7 @@
    example write the same document, PouchDB gives both the same revision,
    and replication leaves one document without a conflict."
   [word-id word collection-id example]
-  (let [{:keys [translation value]} example
+  (let [{:keys [language translation value]} example
         structure (sorted-keys (:structure example))]
     (cond-> {:_id         (str "example:" (pair-key word-id collection-id)
                                ":"        (content-hash value translation structure))
@@ -101,7 +101,8 @@
              :value       value
              :word        word
              :word-id     word-id}
-      collection-id (assoc :collection-id collection-id))))
+      collection-id (assoc :collection-id collection-id)
+      language      (assoc :language language))))
 
 
 (def schemas
