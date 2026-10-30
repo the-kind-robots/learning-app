@@ -11,6 +11,7 @@ Options:
   --rotate-openrouter    Re-prompt and overwrite example-generation credential
   --rotate-couchdb       Re-prompt and overwrite CouchDB admin credential
   --rotate-borg          Re-prompt and overwrite Borg passphrase
+  --rotate-invite-mail   Re-prompt and overwrite the invite-mail Worker secret
   --deployer-key <key>   Provide deployer SSH public key
   --borg-repo <repo>     Set or replace BORG_REPO
   -h, --help             Show this help
@@ -32,6 +33,7 @@ bootstrap=false
 rotate_openrouter=false
 rotate_couchdb=false
 rotate_borg=false
+rotate_invite_mail=false
 deployer_key=""
 borg_repo=""
 openrouter_changed=false
@@ -60,6 +62,9 @@ while [ $# -gt 0 ]; do
       ;;
     --rotate-borg)
       rotate_borg=true
+      ;;
+    --rotate-invite-mail)
+      rotate_invite_mail=true
       ;;
     --deployer-key)
       shift
@@ -181,6 +186,7 @@ else
   write_credential "couchdb_admin_password" "Enter admin password for CouchDB" "${rotate_couchdb}"
 fi
 write_credential "borg-passphrase" "Enter encryption password for BorgBackup" "${rotate_borg}"
+write_credential "invite_mail_secret" "Enter the invite-mail Worker secret (its INVITE_MAIL_SECRET)" "${rotate_invite_mail}"
 
 # Signs the proxy-auth headers the app hands to CouchDB. Nobody types this one,
 # so it is generated rather than asked for; the app refuses to start without it.

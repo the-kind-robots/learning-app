@@ -1,0 +1,14 @@
+# Deployed by hand with `npx wrangler deploy` from this directory; see README.md.
+name = "sprecha-invite-mail"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# No destination_address: the operator's address is the OPERATOR_ADDRESS
+# secret, not part of a public repository. The binding still reaches only
+# addresses verified in Email Routing.
+send_email = [
+  { name = "MAIL" },
+]
+
+[vars]
+SENDER = "invite@sprecha.de"

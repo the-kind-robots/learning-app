@@ -17,5 +17,6 @@ env_from_file() {
 env_from_file OPENROUTER_API_KEY              "${OPENROUTER_API_KEY_PATH:-}"
 env_from_file LEARNING_APP_DB_AUTH_SECRET     "${LEARNING_APP_DB_AUTH_SECRET_PATH:-}"
 env_from_file LEARNING_APP__COUCHDB_PASSWORD  "${LEARNING_APP__COUCHDB_PASSWORD_PATH:-}"
+env_from_file LEARNING_APP__INVITE_MAIL_SECRET "${LEARNING_APP__INVITE_MAIL_SECRET_PATH:-}"
 
 exec java -jar /opt/learning-app/learning-app.jar
