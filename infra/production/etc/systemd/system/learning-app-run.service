@@ -33,6 +33,10 @@ Environment=LEARNING_APP_DB_AUTH_SECRET_PATH=%d/db_auth_secret
 # password, not the dev fallback (#246).
 LoadCredentialEncrypted=couchdb_admin_password:/etc/credstore.encrypted/couchdb_admin_password
 Environment=LEARNING_APP__COUCHDB_PASSWORD_PATH=%d/couchdb_admin_password
+# The secret the invite-mail Worker checks (#650); its URL is in
+# /etc/learning-app/environment as LEARNING_APP__INVITE_MAIL_URL.
+LoadCredentialEncrypted=invite_mail_secret:/etc/credstore.encrypted/invite_mail_secret
+Environment=LEARNING_APP__INVITE_MAIL_SECRET_PATH=%d/invite_mail_secret
 
 # Security settings
 #

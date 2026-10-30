@@ -63,6 +63,7 @@ sudo -v  # first, or sudo's own prompt fights ask-password for the same terminal
 systemd-ask-password -n "db_auth_secret"          | sudo systemd-creds encrypt --name=db_auth_secret          - /etc/credstore.encrypted/db_auth_secret
 systemd-ask-password -n "openrouter_api_key"      | sudo systemd-creds encrypt --name=openrouter_api_key      - /etc/credstore.encrypted/openrouter_api_key
 systemd-ask-password -n "couchdb_admin_password"  | sudo systemd-creds encrypt --name=couchdb_admin_password  - /etc/credstore.encrypted/couchdb_admin_password
+systemd-ask-password -n "invite_mail_secret"      | sudo systemd-creds encrypt --name=invite_mail_secret      - /etc/credstore.encrypted/invite_mail_secret
 # borg-passphrase is managed by learning-app-admin-setup --rotate-borg (see Borg key)
 ```
 
@@ -71,7 +72,11 @@ systemd-ask-password -n "couchdb_admin_password"  | sudo systemd-creds encrypt -
 | `db_auth_secret` | app (`/auth/check` proxy-auth signing) |
 | `openrouter_api_key` | app (examples generation) |
 | `couchdb_admin_password` | app (server-side CouchDB calls), postinst (CouchDB setup, `_global_changes`) |
+| `invite_mail_secret` | app (mail to the operator through the Worker in `infra/cloudflare/invite-mail/`; the same value as the Worker's `INVITE_MAIL_SECRET`) |
 | `borg-passphrase` | `learning-app-backup-db` |
+
+`learning-app-admin-setup --rotate-invite-mail` rotates `invite_mail_secret`
+and restarts the app; set the Worker's secret to the same value first.
 
 `--name=` must equal the file name — the blob is bound to it. All blobs are
 also bound to this host's `/var/lib/systemd/credential.secret`: they do not
@@ -114,6 +119,8 @@ override anything set here):**
   - To compare candidate models on the production request and validator, run `clojure -M:dev -m example-models` with `OPENROUTER_API_KEY` set (paid; see `dev/example_models.clj`).
 - `EXAMPLE_CACHE_VERSION` — unset in the normal state. Setting or changing it makes every cached example a miss, so all are regenerated on demand; the prompt and the models are not part of the cache key.
 - `BORG_REPO` for backups
+- `LEARNING_APP__INVITE_MAIL_URL` — the invite-mail Worker's URL. Without it a
+  packaged app cannot mail the operator, and invite requests answer 503.
 
 ## CouchDB
 

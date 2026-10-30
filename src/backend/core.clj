@@ -9,9 +9,12 @@
    [db :as db]
    [examples :as examples]
    [examples.dictionary :as dictionary]
+   [grants :as grants]
    [hiccup :as hiccup]
    [i18n :as i18n]
+   [invite-requests :as invite-requests]
    [migrations :as migrations]
+   [muuntaja.core :as muuntaja]
    [next.jdbc :as jdbc]
    [next.jdbc.prepare :as prepare]
    [next.jdbc.result-set :as result-set]
@@ -21,6 +24,7 @@
    [reitit.http :as http]
    [reitit.http.interceptors.exception :as exception]
    [reitit.http.interceptors.keyword-parameters :as keyword-parameters]
+   [reitit.http.interceptors.muuntaja :as interceptors.muuntaja]
    [reitit.http.interceptors.parameters :as parameters]
    [reitit.interceptor.sieppari :as sieppari]
    [reitit.ring :as ring]
@@ -30,7 +34,8 @@
    [userdb :as userdb]
    [utils :as utils])
   (:import
-   [java.security MessageDigest SecureRandom]
+   [java.net URLDecoder]
+   [java.security MessageDigest]
    [java.sql PreparedStatement ResultSetMetaData]
    [java.util HexFormat]
    [javax.crypto Mac]
@@ -215,17 +220,6 @@
 ;;
 
 
-(def ^:private ^SecureRandom secure-random (SecureRandom.))
-
-
-(defn- random-token
-  "A 160-bit URL-safe bearer token (40 hex chars)."
-  []
-  (let [bytes (byte-array 20)]
-    (.nextBytes secure-random bytes)
-    (.formatHex (HexFormat/of) bytes)))
-
-
 (defn create-account!
   "Mints a bearer token, creates the account row holding its sha256, and its
    role-secured CouchDB userdb. Returns {:id int :token str} — the raw token
@@ -241,7 +235,7 @@
    and sync down — the previous owner's data (seen live, #182). Refusal keeps
    the evidence; deleting the stale userdb is the operator's call."
   [db]
-  (let [token (random-token)
+  (let [token (utils/random-token)
         id    (jdbc/with-transaction [tx db]
                 ;; Explicit builder: the id must come back as :id no matter
                 ;; which connection options the caller carries.
@@ -283,12 +277,10 @@
   "Stores the sha256 of a fresh single-use grant token and returns the
    plaintext token — shown once, REPL-only (ADR-0006 phase-1 invites)."
   ([db]
-   (mint-grant! db (* 30 24 60 60 1000)))
+   (mint-grant! db grants/ttl-ms))
   ([db ttl-ms]
-   (let [token (random-token)]
-     (jdbc/execute! db
-       ["INSERT INTO grants (sha256, expires_at) VALUES (?, ?)"
-        (utils/sha256-hex token) (+ (System/currentTimeMillis) ttl-ms)])
+   (let [token (utils/random-token)]
+     (grants/store! db (utils/sha256-hex token) ttl-ms)
      token)))
 
 
@@ -325,6 +317,11 @@
 (comment
   (on-connection [db db-spec]
     (mint-grant! db)))
+
+
+(def ^:private mail-operator!
+  "Mails the operator an invite request's links."
+  (invite-requests/mailer (System/getenv) running-from-source?))
 
 
 ;;
@@ -604,6 +601,22 @@
    :body    (cheshire/generate-string {:error message})})
 
 
+(defn- operator-link
+  "The handlers of the operator's mail link that decides as `decision`. Mail
+   scanners open links, so its GET only shows the button; its POST decides."
+  [decision]
+  (let [page (fn [invite-request]
+               (if invite-request
+                 (invite-requests/page invite-request decision)
+                 {:status 404 :body ""}))]
+    {:get  (fn [{:keys [path-params]}]
+             (page (on-connection [db db-spec]
+                     (invite-requests/token-request db (:token path-params)))))
+     :post (fn [{:keys [path-params]}]
+             (page (on-connection [db db-spec]
+                     (invite-requests/decide! db (:token path-params) decision))))}))
+
+
 (defn- example-response
   "The HTTP answer to what `examples/get!` or `examples/regenerate!` returned."
   [result]
@@ -763,7 +776,10 @@
                    {:status  200
                     :headers {"Content-Type" "application/json"}
                     :body    (cheshire/generate-string {:id id :token token})})
-                 (catch clojure.lang.ExceptionInfo e
+                 (catch Exception e
+                   ;; No account was opened, so the invite is given back: one
+                   ;; granted from a request cannot be granted again.
+                   (jdbc/execute! db ["UPDATE grants SET used_at = NULL WHERE sha256 = ?" (utils/sha256-hex invite)])
                    (if (= ::recycled-id (:type (ex-data e)))
                      (do (t/event! ::recycled-id-refused {:level :error :data (ex-data e)})
                          {:status 503 :body ""})
@@ -782,10 +798,83 @@
                {:status  200
                 :headers {"Content-Type" "application/json"}
                 :body    (cheshire/generate-string {:id user-id})}
-               {:status 401 :body ""}))))}]]
+               {:status 401 :body ""}))))}]
+
+     ;; JSON in and out through muuntaja: bodies arrive as `:body-params` and
+     ;; maps leave encoded.
+     ["/api/invite-requests" {:muuntaja muuntaja/instance}
+      ;; A device without an account asks the operator for an invite. It
+      ;; sends a hash, two counts and a note, and gets no CouchDB database.
+      [""
+       {:post
+        (fn [request]
+          (let [invite-request (invite-requests/from-body (:body-params request))
+                ;; nginx's X-Real-IP replaces whatever the client sent; the
+                ;; socket's peer answers when nothing stands in front.
+                address        (or (utils/non-blank (get-in request [:headers "x-real-ip"]))
+                                   (:remote-addr request))]
+            (cond
+              (nil? invite-request)
+              {:status 400 :body {:error "Expected sha256, words, days and a note"}}
+
+              (not (invite-requests/admits? address (System/currentTimeMillis)))
+              {:status 429 :headers {"Retry-After" "3600"} :body ""}
+
+              :else
+              (let [location (str "/api/invite-requests/" (:sha256 invite-request))
+                    outcome  (on-connection [db db-spec]
+                               (invite-requests/request! db
+                                                         (configured-public-url (System/getenv))
+                                                         mail-operator!
+                                                         address
+                                                         invite-request))]
+                (case outcome
+                  :outcome/created {:status 201 :headers {"Location" location} :body {:status "pending"}}
+                  :failure/full    {:status 429 :headers {"Retry-After" "3600"} :body ""}
+                  :failure/mail    {:status 503 :headers {"Retry-After" "60"} :body ""}
+                  ;; Already requested: the answer points at the request
+                  ;; that exists.
+                  {:status 200 :headers {"Location" location} :body {:status (name outcome)}})))))}]
+
+      ;; A request is read with the secret it was made with, in the header:
+      ;; knowing a request's hash is not owning it, and a header stays out of
+      ;; access logs. The answer links the next step.
+      ["/:sha256"
+       {:get
+        (fn [{:keys [headers path-params]}]
+          (let [secret (some->> (get headers "authorization") (re-matches #"Bearer (\S+)") second)
+                status (when secret
+                         (on-connection [db db-spec]
+                           (invite-requests/secret-status db (:sha256 path-params) secret)))]
+            (if status
+              {:status  200
+               :headers {"Cache-Control" "no-store"}
+               :body    {:links  (case status
+                                   :request/granted {:provision "/api/identity/provision"}
+                                   :request/expired {:request "/api/invite-requests"}
+                                   {})
+                         :status (name status)}}
+              {:status 404 :body ""})))}]
+
+      ;; The operator's links. Under /api/ so the service worker never
+      ;; answers them with the app shell.
+      ["/:token" {:interceptors [(hiccup/interceptor)]}
+       ["/grant" (operator-link :request/granted)]
+       ["/decline" (operator-link :request/declined)]]]]
 
     {:data {:interceptors [(exception/exception-interceptor
-                            {::exception/default log-and-hide-exception})
+                            {::exception/default log-and-hide-exception
+                             ;; A body muuntaja cannot read is the client's
+                             ;; mistake, not the server's.
+                             :muuntaja/decode (fn [_error _request] {:status 400 :body ""})
+                             :muuntaja/request-charset-negotiation
+                             (fn [_error _request] {:status 400 :body ""})
+                             :muuntaja/response-charset-negotiation
+                             (fn [_error _request] {:status 400 :body ""})
+                             :muuntaja/response-format-negotiation
+                             (fn [_error _request] {:status 400 :body ""})})
+                           ;; Mounts only where route data names `:muuntaja`.
+                           (interceptors.muuntaja/format-interceptor)
                            cookie-interceptor
                            (parameters/parameters-interceptor)
                            (keyword-parameters/keyword-parameters-interceptor)]}})
@@ -876,8 +965,25 @@
    {:executor sieppari/executor}))
 
 
+(defn- undecodable-path-handler
+  "Answers 400 to a path that does not percent-decode, such as `/%zz`, and
+   passes every other request on. The router decodes path parameters before
+   any interceptor runs, so such a path would escape the exception handlers
+   as a 500."
+  [{:keys [uri]}]
+  (when-not (try (URLDecoder/decode ^String uri "UTF-8")
+                 (catch IllegalArgumentException _
+                   nil))
+    {:status 400}))
+
+
 (def ring-handler
-  (let [ring-handler #(ring/routes service-worker-handler wasm-handler resource-handler app-handler)]
+  (let [ring-handler #(ring/routes
+                       undecodable-path-handler
+                       service-worker-handler
+                       wasm-handler
+                       resource-handler
+                       app-handler)]
     (if running-from-source?
       (ring/reloading-ring-handler ring-handler)
       (ring-handler))))
@@ -890,7 +996,12 @@
   [app port]
   (ensure-log-handler!)
   (push/start!)
-  (reset! server (server/run-server app {:port port :legacy-return-value? false})))
+  ;; Loopback only: nginx stands in front and writes X-Real-IP, which the
+  ;; invite limit trusts, so nothing may reach the server around it.
+  (reset! server (server/run-server app
+                                    {:ip   "127.0.0.1"
+                                     :legacy-return-value? false
+                                     :port port})))
 
 
 (def ^:private drain-timeout-ms
