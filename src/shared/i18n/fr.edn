@@ -82,6 +82,7 @@
  :sync/recovery-link          "Lien de récupération"
  :sync/recovery-link-copied   "Lien copié dans le presse-papiers"
  :sync/recovery-link-title    "Sprecha : récupération de l’accès"
+ :sync/request-invite         "Demander une invitation"
  :sync/scan-qr                "Scannez le QR code sur le nouvel appareil"
  :sync/title                  "Synchronisation"
 
