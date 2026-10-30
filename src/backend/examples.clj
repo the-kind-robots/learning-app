@@ -6,6 +6,7 @@
    [examples.cache :as cache]
    [examples.dictionary :as dictionary]
    [examples.provider :as provider]
+   [i18n :as i18n]
    [malli.core :as m]
    [malli.error :as me]
    [malli.json-schema :as mjs]
@@ -92,12 +93,12 @@
 
 (defn- cyrillic-text?
   [text]
-  (boolean (re-find #"[А-Яа-яЁё]" (or text ""))))
+  (boolean (re-find #"\p{IsCyrillic}" (or text ""))))
 
 
 (defn- latin-text?
   [text]
-  (boolean (re-find #"[A-Za-zÄÖÜẞäöüß]" (or text ""))))
+  (boolean (re-find #"\p{IsLatin}" (or text ""))))
 
 
 (defn- single-sentence-text?
@@ -122,19 +123,21 @@
        (not (cyrillic-text? text))))
 
 
-(defn- russian-sentence-text?
-  [text]
+(defn- written-in?
+  "Whether `text` is in the script of `language` and in no other: Cyrillic for Russian, Latin for the rest."
+  [language text]
+  (if (= "ru" language)
+    (and (cyrillic-text? text) (not (latin-text? text)))
+    (and (latin-text? text) (not (cyrillic-text? text)))))
+
+
+(defn- translation-sentence-text?
+  [language text]
   (and (single-sentence-text? text)
        (plain-sentence? text)
-       ;; Russian sentences start with a capital Cyrillic letter, optionally preceded by an opening quote/bracket
-       (boolean (re-find #"(?u)^[\"'«„(]*[А-ЯЁ]" (str/trim (or text ""))))
-       (cyrillic-text? text)
-       (not (latin-text? text))))
-
-
-(defn- russian-text?
-  [text]
-  (and (cyrillic-text? text) (not (latin-text? text))))
+       ;; A sentence starts with a capital letter, optionally preceded by an opening quote/bracket
+       (boolean (re-find #"(?u)^[\"'«„(]*\p{Lu}" (str/trim (or text ""))))
+       (written-in? language text)))
 
 
 (defn- with-constraint
@@ -149,7 +152,7 @@
      "A natural German sentence containing the requested target — a lemma, possibly inflected, or a whole phrase."}
     [:string {:min 1}]]
    [:translation
-    {:description "Russian translation of the sentence."}
+    {:description "Translation of the sentence into `language`."}
     [:string {:min 1}]]
    [:structure
     {:description
@@ -163,15 +166,8 @@
        {:description "The dictionary form of the word."}
        [:string {:min 1}]]
       [:translation
-       {:description "Russian translation of the word as used in the sentence."}
+       {:description "Translation of the word as used in the sentence into `language`."}
        [:string {:min 1}]]]]]])
-
-
-(def ^:private valid-generated-example-schema
-  (->
-   generated-example-schema
-   (mu/update :value with-constraint german-sentence-text? "German sentence required")
-   (mu/update :translation with-constraint russian-sentence-text? "Russian translation required")))
 
 
 (defn- normalize-text
@@ -265,10 +261,10 @@
   "The structure items placed on the sentence's words, ordered by `wordIndex`.
    An item takes the first matching word after the previous item's, else the
    first matching word before it; an item no word matches, or whose
-   `translation` is not Russian, is left out. Nil when no item is placed."
-  [sentence structure]
+   `translation` is not written in `language`, is left out. Nil when no item is placed."
+  [language sentence structure]
   (let [words (split-sentence-words sentence)]
-    (loop [items  (seq (mapcat one-word-items (filter #(russian-text? (:translation %)) structure)))
+    (loop [items  (seq (mapcat one-word-items (filter #(written-in? language (:translation %)) structure)))
            from   0
            taken  #{}
            placed []]
@@ -291,11 +287,11 @@
    against annotating that preposition is what carries the second, and when
    the model disobeys it the cost is one wrong tooltip.
    Placement is just as forgiving: an item out of order, spelled as the lemma,
-   naming a word the sentence lacks or glossed in another language costs that
-   item's tooltip, never the example."
-  [example]
+   naming a word the sentence lacks or glossed in another language than
+   `language` costs that item's tooltip, never the example."
+  [language example]
   (let [example (strip-word-indexes example)]
-    (when-let [structure (add-word-indexes-to-structure (:value example) (:structure example))]
+    (when-let [structure (add-word-indexes-to-structure language (:value example) (:structure example))]
       (assoc example :structure structure))))
 
 
@@ -309,7 +305,7 @@
 
 
 (defn- glosses
-  "The Russian glosses of a subject, from a string, a collection of strings or
+  "The glosses of a subject, from a string, a collection of strings or
    nil: trimmed, blanks and duplicates dropped, order kept."
   [translation]
   (->> (cond
@@ -324,11 +320,12 @@
 
 (defn subject
   "What an example is generated for: the trimmed German word, its sorted
-   Russian glosses, the collection context and the part of speech the learner
-   picked, if any. The cache key and the prompt are both built from this one
-   value."
-  [{:keys [context pos translation word]}]
+   glosses, the collection context, the part of speech the learner picked, if
+   any, and the language the example is translated into, Russian when none is
+   asked. The cache key and the prompt are both built from this one value."
+  [{:keys [context language pos translation word]}]
   {:context      (utils/non-blank (some-> context str/trim))
+   :language     (or (utils/non-blank (some-> language str/trim)) "ru")
    :pos          (utils/non-blank (some-> pos str/trim))
    :translations (vec (sort (glosses translation)))
    :word         (utils/non-blank (some-> word str/trim))})
@@ -339,6 +336,7 @@
    a raw request map with `:translation` does not pass for a subject."
   [:map {:closed true}
    [:context [:maybe [:string {:min 1}]]]
+   [:language [:string {:min 1}]]
    [:pos [:maybe [:string {:min 1}]]]
    [:translations [:vector [:string {:min 1}]]]
    [:word [:string {:min 1}]]])
@@ -533,17 +531,24 @@
 
 
 (defn- example-issue
-  "The first rule the generated `example` breaks, or nil. With `pos`, the part
-   of speech the learner picked, an item that names the target only as a lemma
-   of another part of speech (`compatible-pos` aside) breaks one too. A
-   sentence whose `normalize-sentence` is in `avoided` breaks one as well."
-  [target lemma-ids pos avoided example]
+  "The first rule the generated `example`, translated into `language`, breaks,
+   or nil. With `pos`, the part of speech the learner picked, an item that
+   names the target only as a lemma of another part of speech
+   (`compatible-pos` aside) breaks one too. A sentence whose
+   `normalize-sentence` is in `avoided` breaks one as well."
+  [language target lemma-ids pos avoided example]
   (let [raw     (strip-word-indexes example)
-        valid?  (m/validate valid-generated-example-schema raw)
-        indexed (when valid? (add-word-indexes raw))]
+        schema  (-> generated-example-schema
+                    (mu/update :value with-constraint german-sentence-text? "German sentence required")
+                    (mu/update :translation
+                               with-constraint
+                               (partial translation-sentence-text? language)
+                               (str "Translation into " language " required")))
+        valid?  (m/validate schema raw)
+        indexed (when valid? (add-word-indexes language raw))]
     (cond
       (not valid?)
-      (let [explain (me/humanize (m/explain valid-generated-example-schema raw))]
+      (let [explain (me/humanize (m/explain schema raw))]
         (log-generation-failure!
          {:word    target
           :error   "Invalid generated example shape"
@@ -584,100 +589,103 @@
   (= ::generation-failure (::type result)))
 
 
-(def system-prompt
-  "One target concept: the target is a lemma or a phrase, and every rule below
+(defn system-prompt
+  "The instructions for examples translated into `language`, named as its dictionary names itself.
+   One target concept: the target is a lemma or a phrase, and every rule below
    is written for both. `structure` annotates the sentence word by word under
    one set of rules whatever the target is — it never records which words
    belonged to a construction. The few-shot block carries one case per
-   distinct shape, and the retry messages in `issue-messages` repeat these
-   rules word for word."
+   distinct shape, glossed in Russian, and the retry messages in
+   `issue-messages` repeat these rules word for word."
+  [language]
   (str/join
    "\n"
-   [;; What this is
-    "You generate learner-facing German example sentences for a vocabulary app."
-    "Return only JSON that matches the supplied schema."
-    "Input fields: word, translation, part of speech, cefrLevel, context, avoid, previousAttempt, previousIssue."
-    "`avoid`, when present, lists German sentences the learner already has. Write a different sentence: not one of them, and not a light rewording of one."
-    "The target is `word`: either a single lemma (`die Leiter`, `aufpassen`, `sich vorstellen`) or a whole phrase (`auf jeden Fall`, `von Zeit zu Zeit`, `das heißt`). Every rule below applies to both, and `structure` is built the same way for both."
-    "Missing cefrLevel => B2."
-    "`word` is the form the learner saved, and `lemma`, when present, is its dictionary lemma. The sentence may use any form of that lemma, not only `word` itself."
-    ""
-    ;; Sense
-    "SENSE"
-    "- `translation` is one or more Russian glosses the learner has confirmed; any of them is an acceptable sense for the sentence."
-    "- Pick one sense that fits naturally; the structure `translation` of the target must match the gloss you chose."
-    "- Ambiguous noun articles and ambiguous prefixes (`um-`, `über-`, `unter-`, `durch-`, `wieder-`) must follow the supplied Russian gloss."
-    ""
-    ;; Sentence
-    "SENTENCE"
-    "- Produce one natural standard German sentence containing the whole target."
-    "- A lemma may appear as a correct inflected form. A phrase may be inflected and rearranged by German word order, and its words need not be adjacent — `Ich komme auf jeden Fall mit.` is the phrase `auf jeden Fall`."
-    "- A placeholder in a phrase (`etwas`, `jemand`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot, not a word to repeat: fill it with a fitting noun phrase or pronoun, and put `sich` as the reflexive pronoun the subject needs (`mich`, `dich`, `sich`, `uns`, `euch`). Every other word of the phrase is required, inflected as the sentence needs; its article may be any article."
-    "- A phrase that is already a complete sentence is extended or embedded into a turn, never returned unchanged. A phrase that ends in `!` or `?` is used without that mark inside a longer sentence."
-    "- Leave room around the target: roughly the target's own length plus a handful of words, and at least three words in all."
-    "- Use the target in whatever form the sentence needs — participle, finite verb, passive, plural. Do not keep a verb in the infinitive just to match `word`."
-    "- A phrase may change voice and word order: `einen Skonto gewähren` becomes `Ein Skonto wird gewährt.`"
-    "- The verb bracket decides word order, not the order of `word`. In a main clause the infinitive, participle or detached prefix closes the clause, and every object and prepositional phrase, the phrase's own preposition included, stands before it: `Anteil nehmen an` becomes `Sie hat großen Anteil an seinem Schicksal genommen.`, never `Sie hat großen Anteil genommen an seinem Schicksal.` The finite verb closes a subordinate clause the same way, and a `zu`-infinitive its infinitive clause."
-    "- For past events in everyday speech use Perfekt; Präteritum only for `sein`, `haben`, modal verbs and narrative."
-    "- `construction` is the grammar to build the sentence around. Follow it when it fits the word naturally; otherwise pick another natural construction. One main clause plus at most one subordinate clause or connector — never stack more."
-    "- German sentence only: no labels, notes, markdown, or meta commentary."
-    "- `translation` must be one natural Russian sentence, not a calque."
-    ""
-    ;; Structure: what goes in
-    "STRUCTURE — WHAT GOES IN"
-    "- `structure` must include every noun, verb (including auxiliaries and modals), adjective, and adverb in the sentence."
-    "- Exclude articles, pronouns, prepositions, conjunctions, and pure particles like `zu` or `nicht`."
-    "- Detached prefixes of separable verbs are not particles: include them."
-    "- The exclusions hold for a phrase target too: annotate the words of the construction that qualify, and leave its articles, prepositions and conjunctions out like any others."
-    ""
-    ;; Structure: the shape of an item
-    "STRUCTURE — THE SHAPE OF AN ITEM"
-    "- Each item in `structure` must be a JSON object with keys `usedForm`, `dictionaryForm`, and `translation`."
-    "- A `usedForm` is exactly one word of the sentence, spelled as the sentence spells it — the inflected form, never the lemma. An expression of several words is annotated one item per word, each with its own `dictionaryForm`, or left out of `structure` altogether — the sentence is where such an expression lives, not `structure`."
-    "- Never use arrays like `[\"Fenster\", \"das Fenster\", \"окно\"]` inside `structure`."
-    "- Example structure item: `{\"usedForm\":\"Fenster\",\"dictionaryForm\":\"das Fenster\",\"translation\":\"окно\"}`."
-    "- Keep `dictionaryForm` lemma-only unless the lemma inherently includes an article or `sich`."
-    "- For nouns, `dictionaryForm` includes the article."
-    "- Reflexive verb `dictionaryForm` keeps `sich`."
-    "- For separable verbs with detached prefixes, include one item for the verb part and one for the prefix; both use the full infinitive as `dictionaryForm` and the same Russian gloss."
-    "- A word of a phrase target takes its own lemma and its own gloss, like any other word. Never use the whole phrase as a `dictionaryForm`."
-    ""
-    ;; Structure: order and repetition
-    "STRUCTURE — ORDER"
-    "- Order `structure` items strictly left to right as they appear in the German sentence, and each `usedForm` must match the word at its position."
-    "- The backend assigns `wordIndex`; do not return `wordIndex`."
-    "- Separable verbs emit the prefix exactly once. If a preposition shares spelling with the prefix (for example `auf` in `Pass auf deine Sachen auf!`), exclude the preposition — only the detached prefix in the verb frame belongs in `structure`."
-    ""
-    ;; One case per shape
-    "EXAMPLES — one per shape"
-    "Noun with article, subordinate clause. word=das Verstehen gloss=понимание:"
-    "{\"value\":\"Obwohl das Verstehen dieser Regel lange dauert, bleibt er geduldig.\",\"translation\":\"Хотя понимание этого правила занимает много времени, он остаётся терпеливым.\",\"structure\":[{\"usedForm\":\"Verstehen\",\"dictionaryForm\":\"das Verstehen\",\"translation\":\"понимание\"},{\"usedForm\":\"Regel\",\"dictionaryForm\":\"die Regel\",\"translation\":\"правило\"},{\"usedForm\":\"dauert\",\"dictionaryForm\":\"dauern\",\"translation\":\"длиться\"},{\"usedForm\":\"lange\",\"dictionaryForm\":\"lang\",\"translation\":\"долго\"},{\"usedForm\":\"bleibt\",\"dictionaryForm\":\"bleiben\",\"translation\":\"оставаться\"},{\"usedForm\":\"geduldig\",\"dictionaryForm\":\"geduldig\",\"translation\":\"терпеливый\"}]}"
-    "Separable verb in Perfekt. word=aufpassen gloss=следить:"
-    "{\"value\":\"Er hat auf die Kinder gut aufgepasst.\",\"translation\":\"Он хорошо присмотрел за детьми.\",\"structure\":[{\"usedForm\":\"hat\",\"dictionaryForm\":\"haben\",\"translation\":\"иметь\"},{\"usedForm\":\"Kinder\",\"dictionaryForm\":\"das Kind\",\"translation\":\"дети\"},{\"usedForm\":\"gut\",\"dictionaryForm\":\"gut\",\"translation\":\"хорошо\"},{\"usedForm\":\"aufgepasst\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"}]}"
-    "The `auf` before `die Kinder` is a preposition and is excluded; the participle `aufgepasst` is one word and one item, its `dictionaryForm` the infinitive."
-    "Reflexive, connector adverb. word=sich vorstellen gloss=представляться:"
-    "{\"value\":\"Er war neu im Team, deshalb stellte er sich den Kollegen vor.\",\"translation\":\"Он был новым в команде, поэтому представился коллегам.\",\"structure\":[{\"usedForm\":\"war\",\"dictionaryForm\":\"sein\",\"translation\":\"быть\"},{\"usedForm\":\"neu\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Team\",\"dictionaryForm\":\"das Team\",\"translation\":\"команда\"},{\"usedForm\":\"deshalb\",\"dictionaryForm\":\"deshalb\",\"translation\":\"поэтому\"},{\"usedForm\":\"stellte\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"
-    "Homograph, Präteritum of `sein`. word=Leiter gloss=лестница:"
-    "{\"value\":\"Die Leiter war gestern noch in der Garage.\",\"translation\":\"Лестница ещё вчера была в гараже.\",\"structure\":[{\"usedForm\":\"Leiter\",\"dictionaryForm\":\"die Leiter\",\"translation\":\"лестница\"},{\"usedForm\":\"war\",\"dictionaryForm\":\"sein\",\"translation\":\"быть\"},{\"usedForm\":\"gestern\",\"dictionaryForm\":\"gestern\",\"translation\":\"вчера\"},{\"usedForm\":\"noch\",\"dictionaryForm\":\"noch\",\"translation\":\"ещё\"},{\"usedForm\":\"Garage\",\"dictionaryForm\":\"die Garage\",\"translation\":\"гараж\"}]}"
-    "Do not use `der Leiter` for this meaning."
-    "Phrase, passive. word=einen Skonto gewähren gloss=предоставлять скидку:"
-    "{\"value\":\"Bei Zahlung innerhalb von zehn Tagen wird ein Skonto von 2 % gewährt.\",\"translation\":\"При оплате в течение десяти дней предоставляется скидка 2 %.\",\"structure\":[{\"usedForm\":\"Zahlung\",\"dictionaryForm\":\"die Zahlung\",\"translation\":\"оплата\"},{\"usedForm\":\"Tagen\",\"dictionaryForm\":\"der Tag\",\"translation\":\"день\"},{\"usedForm\":\"wird\",\"dictionaryForm\":\"werden\",\"translation\":\"становиться\"},{\"usedForm\":\"Skonto\",\"dictionaryForm\":\"der Skonto\",\"translation\":\"скидка\"},{\"usedForm\":\"gewährt\",\"dictionaryForm\":\"gewähren\",\"translation\":\"предоставлять\"}]}"
-    "The phrase changed voice and word order, and it is in the sentence, not in `structure`: `Bei`, `innerhalb`, `von` and `ein` are excluded as prepositions and articles, and `zehn` and `2 %` are figures, not words to annotate."
-    "Phrase with a verb and its preposition, Perfekt. word=Anteil nehmen an gloss=сочувствовать:"
-    "{\"value\":\"Die Nachbarn haben großen Anteil an seinem Schicksal genommen.\",\"translation\":\"Соседи глубоко сочувствовали его судьбе.\",\"structure\":[{\"usedForm\":\"Nachbarn\",\"dictionaryForm\":\"der Nachbar\",\"translation\":\"сосед\"},{\"usedForm\":\"haben\",\"dictionaryForm\":\"haben\",\"translation\":\"иметь\"},{\"usedForm\":\"großen\",\"dictionaryForm\":\"groß\",\"translation\":\"большой\"},{\"usedForm\":\"Anteil\",\"dictionaryForm\":\"der Anteil\",\"translation\":\"участие\"},{\"usedForm\":\"Schicksal\",\"dictionaryForm\":\"das Schicksal\",\"translation\":\"судьба\"},{\"usedForm\":\"genommen\",\"dictionaryForm\":\"nehmen\",\"translation\":\"брать\"}]}"
-    "The participle `genommen` closes the clause; `an seinem Schicksal` stands before it although `an` comes last in `word`."
-    "Phrase. word=von Zeit zu Zeit gloss=время от времени:"
-    "{\"value\":\"Von Zeit zu Zeit besuche ich meine Eltern.\",\"translation\":\"Время от времени я навещаю своих родителей.\",\"structure\":[{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"die Zeit\",\"translation\":\"время\"},{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"die Zeit\",\"translation\":\"время\"},{\"usedForm\":\"besuche\",\"dictionaryForm\":\"besuchen\",\"translation\":\"навещать\"},{\"usedForm\":\"Eltern\",\"dictionaryForm\":\"die Eltern\",\"translation\":\"родители\"}]}"
-    "The phrase is in the sentence, not in `structure`: `von` and `zu` are excluded as prepositions, and each `Zeit` is annotated as the noun it is."]))
+   (let [learners (str (i18n/language-name language) " (" language ")")]
+     [;; What this is
+      "You generate learner-facing German example sentences for a vocabulary app."
+      "Return only JSON that matches the supplied schema."
+      "Input fields: word, translation, part of speech, cefrLevel, context, avoid, previousAttempt, previousIssue."
+      "`avoid`, when present, lists German sentences the learner already has. Write a different sentence: not one of them, and not a light rewording of one."
+      "The target is `word`: either a single lemma (`die Leiter`, `aufpassen`, `sich vorstellen`) or a whole phrase (`auf jeden Fall`, `von Zeit zu Zeit`, `das heißt`). Every rule below applies to both, and `structure` is built the same way for both."
+      "Missing cefrLevel => B2."
+      "`word` is the form the learner saved, and `lemma`, when present, is its dictionary lemma. The sentence may use any form of that lemma, not only `word` itself."
+      ""
+      ;; Sense
+      "SENSE"
+      "- `translation` is one or more glosses the learner has confirmed; any of them is an acceptable sense for the sentence."
+      "- Pick one sense that fits naturally; the structure `translation` of the target must match the gloss you chose."
+      "- Ambiguous noun articles and ambiguous prefixes (`um-`, `über-`, `unter-`, `durch-`, `wieder-`) must follow the supplied gloss."
+      ""
+      ;; Sentence
+      "SENTENCE"
+      "- Produce one natural standard German sentence containing the whole target."
+      "- A lemma may appear as a correct inflected form. A phrase may be inflected and rearranged by German word order, and its words need not be adjacent — `Ich komme auf jeden Fall mit.` is the phrase `auf jeden Fall`."
+      "- A placeholder in a phrase (`etwas`, `jemand`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot, not a word to repeat: fill it with a fitting noun phrase or pronoun, and put `sich` as the reflexive pronoun the subject needs (`mich`, `dich`, `sich`, `uns`, `euch`). Every other word of the phrase is required, inflected as the sentence needs; its article may be any article."
+      "- A phrase that is already a complete sentence is extended or embedded into a turn, never returned unchanged. A phrase that ends in `!` or `?` is used without that mark inside a longer sentence."
+      "- Leave room around the target: roughly the target's own length plus a handful of words, and at least three words in all."
+      "- Use the target in whatever form the sentence needs — participle, finite verb, passive, plural. Do not keep a verb in the infinitive just to match `word`."
+      "- A phrase may change voice and word order: `einen Skonto gewähren` becomes `Ein Skonto wird gewährt.`"
+      "- The verb bracket decides word order, not the order of `word`. In a main clause the infinitive, participle or detached prefix closes the clause, and every object and prepositional phrase, the phrase's own preposition included, stands before it: `Anteil nehmen an` becomes `Sie hat großen Anteil an seinem Schicksal genommen.`, never `Sie hat großen Anteil genommen an seinem Schicksal.` The finite verb closes a subordinate clause the same way, and a `zu`-infinitive its infinitive clause."
+      "- For past events in everyday speech use Perfekt; Präteritum only for `sein`, `haben`, modal verbs and narrative."
+      "- `construction` is the grammar to build the sentence around. Follow it when it fits the word naturally; otherwise pick another natural construction. One main clause plus at most one subordinate clause or connector — never stack more."
+      "- German sentence only: no labels, notes, markdown, or meta commentary."
+      (str "- `translation` must be one natural sentence in " learners ", not a calque.")
+      ""
+      ;; Structure: what goes in
+      "STRUCTURE — WHAT GOES IN"
+      "- `structure` must include every noun, verb (including auxiliaries and modals), adjective, and adverb in the sentence."
+      "- Exclude articles, pronouns, prepositions, conjunctions, and pure particles like `zu` or `nicht`."
+      "- Detached prefixes of separable verbs are not particles: include them."
+      "- The exclusions hold for a phrase target too: annotate the words of the construction that qualify, and leave its articles, prepositions and conjunctions out like any others."
+      ""
+      ;; Structure: the shape of an item
+      "STRUCTURE — THE SHAPE OF AN ITEM"
+      "- Each item in `structure` must be a JSON object with keys `usedForm`, `dictionaryForm`, and `translation`."
+      "- A `usedForm` is exactly one word of the sentence, spelled as the sentence spells it — the inflected form, never the lemma. An expression of several words is annotated one item per word, each with its own `dictionaryForm`, or left out of `structure` altogether — the sentence is where such an expression lives, not `structure`."
+      "- Never use arrays like `[\"Fenster\", \"das Fenster\", \"окно\"]` inside `structure`."
+      "- Example structure item: `{\"usedForm\":\"Fenster\",\"dictionaryForm\":\"das Fenster\",\"translation\":\"окно\"}`."
+      "- Keep `dictionaryForm` lemma-only unless the lemma inherently includes an article or `sich`."
+      "- For nouns, `dictionaryForm` includes the article."
+      "- Reflexive verb `dictionaryForm` keeps `sich`."
+      "- For separable verbs with detached prefixes, include one item for the verb part and one for the prefix; both use the full infinitive as `dictionaryForm` and the same Russian gloss."
+      "- A word of a phrase target takes its own lemma and its own gloss, like any other word. Never use the whole phrase as a `dictionaryForm`."
+      ""
+      ;; Structure: order and repetition
+      "STRUCTURE — ORDER"
+      "- Order `structure` items strictly left to right as they appear in the German sentence, and each `usedForm` must match the word at its position."
+      "- The backend assigns `wordIndex`; do not return `wordIndex`."
+      "- Separable verbs emit the prefix exactly once. If a preposition shares spelling with the prefix (for example `auf` in `Pass auf deine Sachen auf!`), exclude the preposition — only the detached prefix in the verb frame belongs in `structure`."
+      ""
+      ;; One case per shape
+      (str "EXAMPLES — one per shape. They gloss in Russian; your `translation` and every gloss are in " learners ".")
+      "Noun with article, subordinate clause. word=das Verstehen gloss=понимание:"
+      "{\"value\":\"Obwohl das Verstehen dieser Regel lange dauert, bleibt er geduldig.\",\"translation\":\"Хотя понимание этого правила занимает много времени, он остаётся терпеливым.\",\"structure\":[{\"usedForm\":\"Verstehen\",\"dictionaryForm\":\"das Verstehen\",\"translation\":\"понимание\"},{\"usedForm\":\"Regel\",\"dictionaryForm\":\"die Regel\",\"translation\":\"правило\"},{\"usedForm\":\"dauert\",\"dictionaryForm\":\"dauern\",\"translation\":\"длиться\"},{\"usedForm\":\"lange\",\"dictionaryForm\":\"lang\",\"translation\":\"долго\"},{\"usedForm\":\"bleibt\",\"dictionaryForm\":\"bleiben\",\"translation\":\"оставаться\"},{\"usedForm\":\"geduldig\",\"dictionaryForm\":\"geduldig\",\"translation\":\"терпеливый\"}]}"
+      "Separable verb in Perfekt. word=aufpassen gloss=следить:"
+      "{\"value\":\"Er hat auf die Kinder gut aufgepasst.\",\"translation\":\"Он хорошо присмотрел за детьми.\",\"structure\":[{\"usedForm\":\"hat\",\"dictionaryForm\":\"haben\",\"translation\":\"иметь\"},{\"usedForm\":\"Kinder\",\"dictionaryForm\":\"das Kind\",\"translation\":\"дети\"},{\"usedForm\":\"gut\",\"dictionaryForm\":\"gut\",\"translation\":\"хорошо\"},{\"usedForm\":\"aufgepasst\",\"dictionaryForm\":\"aufpassen\",\"translation\":\"следить\"}]}"
+      "The `auf` before `die Kinder` is a preposition and is excluded; the participle `aufgepasst` is one word and one item, its `dictionaryForm` the infinitive."
+      "Reflexive, connector adverb. word=sich vorstellen gloss=представляться:"
+      "{\"value\":\"Er war neu im Team, deshalb stellte er sich den Kollegen vor.\",\"translation\":\"Он был новым в команде, поэтому представился коллегам.\",\"structure\":[{\"usedForm\":\"war\",\"dictionaryForm\":\"sein\",\"translation\":\"быть\"},{\"usedForm\":\"neu\",\"dictionaryForm\":\"neu\",\"translation\":\"новый\"},{\"usedForm\":\"Team\",\"dictionaryForm\":\"das Team\",\"translation\":\"команда\"},{\"usedForm\":\"deshalb\",\"dictionaryForm\":\"deshalb\",\"translation\":\"поэтому\"},{\"usedForm\":\"stellte\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"},{\"usedForm\":\"Kollegen\",\"dictionaryForm\":\"der Kollege\",\"translation\":\"коллега\"},{\"usedForm\":\"vor\",\"dictionaryForm\":\"sich vorstellen\",\"translation\":\"представляться\"}]}"
+      "Homograph, Präteritum of `sein`. word=Leiter gloss=лестница:"
+      "{\"value\":\"Die Leiter war gestern noch in der Garage.\",\"translation\":\"Лестница ещё вчера была в гараже.\",\"structure\":[{\"usedForm\":\"Leiter\",\"dictionaryForm\":\"die Leiter\",\"translation\":\"лестница\"},{\"usedForm\":\"war\",\"dictionaryForm\":\"sein\",\"translation\":\"быть\"},{\"usedForm\":\"gestern\",\"dictionaryForm\":\"gestern\",\"translation\":\"вчера\"},{\"usedForm\":\"noch\",\"dictionaryForm\":\"noch\",\"translation\":\"ещё\"},{\"usedForm\":\"Garage\",\"dictionaryForm\":\"die Garage\",\"translation\":\"гараж\"}]}"
+      "Do not use `der Leiter` for this meaning."
+      "Phrase, passive. word=einen Skonto gewähren gloss=предоставлять скидку:"
+      "{\"value\":\"Bei Zahlung innerhalb von zehn Tagen wird ein Skonto von 2 % gewährt.\",\"translation\":\"При оплате в течение десяти дней предоставляется скидка 2 %.\",\"structure\":[{\"usedForm\":\"Zahlung\",\"dictionaryForm\":\"die Zahlung\",\"translation\":\"оплата\"},{\"usedForm\":\"Tagen\",\"dictionaryForm\":\"der Tag\",\"translation\":\"день\"},{\"usedForm\":\"wird\",\"dictionaryForm\":\"werden\",\"translation\":\"становиться\"},{\"usedForm\":\"Skonto\",\"dictionaryForm\":\"der Skonto\",\"translation\":\"скидка\"},{\"usedForm\":\"gewährt\",\"dictionaryForm\":\"gewähren\",\"translation\":\"предоставлять\"}]}"
+      "The phrase changed voice and word order, and it is in the sentence, not in `structure`: `Bei`, `innerhalb`, `von` and `ein` are excluded as prepositions and articles, and `zehn` and `2 %` are figures, not words to annotate."
+      "Phrase with a verb and its preposition, Perfekt. word=Anteil nehmen an gloss=сочувствовать:"
+      "{\"value\":\"Die Nachbarn haben großen Anteil an seinem Schicksal genommen.\",\"translation\":\"Соседи глубоко сочувствовали его судьбе.\",\"structure\":[{\"usedForm\":\"Nachbarn\",\"dictionaryForm\":\"der Nachbar\",\"translation\":\"сосед\"},{\"usedForm\":\"haben\",\"dictionaryForm\":\"haben\",\"translation\":\"иметь\"},{\"usedForm\":\"großen\",\"dictionaryForm\":\"groß\",\"translation\":\"большой\"},{\"usedForm\":\"Anteil\",\"dictionaryForm\":\"der Anteil\",\"translation\":\"участие\"},{\"usedForm\":\"Schicksal\",\"dictionaryForm\":\"das Schicksal\",\"translation\":\"судьба\"},{\"usedForm\":\"genommen\",\"dictionaryForm\":\"nehmen\",\"translation\":\"брать\"}]}"
+      "The participle `genommen` closes the clause; `an seinem Schicksal` stands before it although `an` comes last in `word`."
+      "Phrase. word=von Zeit zu Zeit gloss=время от времени:"
+      "{\"value\":\"Von Zeit zu Zeit besuche ich meine Eltern.\",\"translation\":\"Время от времени я навещаю своих родителей.\",\"structure\":[{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"die Zeit\",\"translation\":\"время\"},{\"usedForm\":\"Zeit\",\"dictionaryForm\":\"die Zeit\",\"translation\":\"время\"},{\"usedForm\":\"besuche\",\"dictionaryForm\":\"besuchen\",\"translation\":\"навещать\"},{\"usedForm\":\"Eltern\",\"dictionaryForm\":\"die Eltern\",\"translation\":\"родители\"}]}"
+      "The phrase is in the sentence, not in `structure`: `von` and `zu` are excluded as prepositions, and each `Zeit` is annotated as the noun it is."])))
 
 
 (defn word-meta
   "What the dictionary says about the subject's word: part of speech and
    level, or nil when it has no entry. A dictionary that cannot be read gives
    a generation failure that is not retried."
-  [{:keys [pos translations word]}]
+  [{:keys [language pos translations word]}]
   (try
-    (dictionary/lookup-word-meta word translations pos)
+    (dictionary/lookup-word-meta word language translations pos)
     (catch Exception error
       (let [failure {::type      ::generation-failure
                      :retryable? false
@@ -725,7 +733,7 @@
 
 
 (defn- user-prompt
-  [word translations context word-meta construction retry-context]
+  [{:keys [context translations word]} word-meta construction retry-context]
   (str/join
    "\n"
    ["Generate one example."
@@ -767,12 +775,12 @@
 
 
 (defn- request-body
-  [word translations context word-meta retry-context]
+  [subject word-meta retry-context]
   {:messages        [{:role    "system"
-                      :content system-prompt}
+                      :content (system-prompt (:language subject))}
                      {:role "user"
                       :content
-                      (user-prompt word translations context word-meta (rand-nth constructions) retry-context)}]
+                      (user-prompt subject word-meta (rand-nth constructions) retry-context)}]
    :temperature     (if (:example retry-context) retry-temperature first-attempt-temperature)
    :max_tokens      (example-max-tokens)
    :response_format {:type        "json_schema"
@@ -782,9 +790,9 @@
 
 
 (defn example-api-request
-  [word translations context word-meta retry-context]
+  [subject word-meta retry-context]
   (provider/request
-   (request-body word translations context word-meta retry-context)
+   (request-body subject word-meta retry-context)
    @generation-timeout-ms))
 
 
@@ -904,10 +912,10 @@
 (defn- generate-attempt!
   "One request to the provider, waited for at most the per-attempt timeout.
    An interrupted wait gives a failure that is not retried."
-  [word translations context word-meta retry-context]
+  [{:keys [word] :as subject} word-meta retry-context]
   (let [timeout-ms @generation-timeout-ms]
     (try
-      (-> (example-api-request word translations context word-meta retry-context)
+      (-> (example-api-request subject word-meta retry-context)
           (deref timeout-ms {:error (str "No answer within " timeout-ms " ms")})
           (parse-generated-example word))
       (catch InterruptedException error
@@ -936,7 +944,7 @@
    failure gives a generation failure; a rejected last candidate or a refused
    input gives nil. A candidate whose sentence is one of `avoid`, the sentences
    the answer must not be, counts as rejected."
-  [{:keys [context pos translations word]} word-meta max-attempts avoid]
+  [{:keys [language pos word] :as subject} word-meta max-attempts avoid]
   (let [target-ids (target-lemma-ids word)
         avoided    (set (map normalize-sentence avoid))
         asked      (when (seq avoid) {:avoid (vec avoid)})
@@ -944,10 +952,11 @@
         picked-pos (when (= pos (:partOfSpeech word-meta)) pos)]
     (loop [attempt       1
            retry-context asked]
-      (let [example  (generate-attempt! word translations context word-meta retry-context)
+      (let [example  (generate-attempt! subject word-meta retry-context)
             failure? (generation-failure? example)
             refused? (= ::moderated (::type example))
-            result   (when-not (or failure? refused?) (example-issue word target-ids picked-pos avoided example))
+            result   (when-not (or failure? refused?)
+                       (example-issue language word target-ids picked-pos avoided example))
             issue    (:issue result)]
         (cond
           ;; The same input would be refused again.
@@ -958,7 +967,7 @@
           example
 
           (and (not failure?) (nil? issue))
-          (add-word-indexes example)
+          (add-word-indexes language example)
 
           (< attempt max-attempts)
           (let [retry-ctx (when (and (not failure?) issue)

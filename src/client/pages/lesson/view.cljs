@@ -106,7 +106,7 @@
    (cond-> {}
      data-dismiss (assoc :data-dismiss data-dismiss))
    [:p.token-card__word {:lang "de"} word]
-   [:p.token-card__translation {:lang "ru"} translation]
+   [:p.token-card__translation translation]
    (when (= :word-state/known-with-translation word-state)
      [:p.token-card__state [:i18n :lesson/in-dictionary]])
    (when-let [action-label (case word-state
@@ -153,7 +153,7 @@
   [lesson-state]
   (let [{:keys [kind prompt]} (presenter/challenge-props lesson-state)]
     [:div#lesson-challenge.lesson__challenge
-     [:h2.lesson__prompt {:lang "ru"} prompt]
+     [:h2.lesson__prompt prompt]
      [:p.lesson__instruction
       (case kind
         :trial/example [:i18n :lesson/translate-sentence]

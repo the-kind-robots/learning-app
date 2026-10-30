@@ -48,7 +48,7 @@
   "What entering the lesson does: draw it, from the main card, from memory loaded off `dbs`."
   [dbs opts]
   (let [memory (await (db-seed/memory-of (:user/db dbs)))]
-    (sut/start (test-learner/of-memory memory) nil (merge {:random (constantly 0.5)} opts) (time/now-ms))))
+    (sut/start (test-learner/of-memory memory) "ru" nil (merge {:random (constantly 0.5)} opts) (time/now-ms))))
 
 
 (defn- ^:async started

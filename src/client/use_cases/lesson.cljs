@@ -11,9 +11,9 @@
 
 (defn start
   "A new lesson out of the learner's words: `{:lesson-state ..}` or `{:error :no-words-available}`, over the most due
-   words, ties in random order. opts: `:random`, `:vocab-per-lesson` (default 3), `:trial-selector`
-   (`:first`, otherwise random)."
-  [learner collection
+   words, ties in random order, with the examples in `language`. opts: `:random`, `:vocab-per-lesson` (default 3),
+   `:trial-selector` (`:first`, otherwise random)."
+  [learner language collection
    {:keys [random vocab-per-lesson trial-selector]
     :or   {vocab-per-lesson domain/default-vocab-per-lesson}}
    now-ms]
@@ -32,6 +32,7 @@
         {:lesson-state (domain/initial-state
                         vocab
                         (->> (learner/examples-of learner word-ids)
+                             (examples/in-language language)
                              (examples/visible-in (collections/family (learner/collections learner)
                                                                       (:id collection))))
                         (if (= :first trial-selector)

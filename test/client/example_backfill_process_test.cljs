@@ -192,6 +192,7 @@
        :page    (reify page/Page
                   (active? [_] (active?))
                   (yield [_] (browser/yield))
+                  (system-language [_] "ru-RU")
                   (until-active [_ _]
                     (js/Promise.
                      (fn [resolve]
@@ -303,27 +304,32 @@
         katze  {:id "vocab:katze" :value "Katze" :translation []}
         tiere  (collection-doc "coll-tiere" "Tiere" ["Hund"])
         held   (example-doc "Hund" nil)
-        asking (fn [{:keys [docs failed-subjects]} entries]
+        asking (fn [{:keys [docs failed-subjects language]} entries]
                  (sut/next-pair (test-learner/of-memory (memory-of (or docs [])))
+                                (or language "ru")
                                 (or failed-subjects #{})
                                 entries))]
-    (is (= {:word hund} (asking {} [hund katze])))
-    (is (= {:word katze} (asking {:docs [held]} [hund katze]))
+    (is (= {:language "ru" :word hund} (asking {} [hund katze])))
+    (is (= {:language "ru" :word katze} (asking {:docs [held]} [hund katze]))
         "an entry with an example is passed over")
-    (is (= {:collection-id "coll-tiere" :collection-name "Tiere" :word hund}
+    (is (= {:language "en" :word hund} (asking {:docs [held] :language "en"} [hund katze]))
+        "an example in another language is none")
+    (is (= {:collection-id "coll-tiere" :collection-name "Tiere" :language "ru" :word hund}
            (asking {:docs [tiere]} [hund katze]))
         "an entry in a collection is asked for there")
-    (is (= {:word katze}
-           (asking {:failed-subjects #{{:collection-name nil :translations [] :word "Hund"}}} [hund katze]))
+    (is (= {:language "ru" :word katze}
+           (asking {:failed-subjects #{{:collection-name nil :language "ru" :translations [] :word "Hund"}}}
+                   [hund katze]))
         "an entry whose subject failed is passed over")
     (is (nil? (asking {} [])))))
 
 
 (deftest a-request-asks-about-the-russian-translations-and-the-part-of-speech
-  (is (= {:collection-name nil :pos "noun" :translations ["пёс"] :word "Hund"}
-         (sut/subject {:word {:pos         "noun"
-                              :translation [{:lang "ru" :value "пёс"} {:lang "en" :value "dog"}]
-                              :value       "Hund"}}))))
+  (is (= {:collection-name nil :language "en" :pos "noun" :translations ["пёс"] :word "Hund"}
+         (sut/subject {:language "en"
+                       :word     {:pos         "noun"
+                                  :translation [{:lang "ru" :value "пёс"} {:lang "en" :value "dog"}]
+                                  :value       "Hund"}}))))
 
 
 (defn- answered
@@ -576,7 +582,7 @@
           (^:async fn
            [{:keys [advance! requests]}]
            (await (advance! 0))
-           (is (= [{:collection-name "Tiere" :translations ["Hund-ru"] :word "Hund"}]
+           (is (= [{:collection-name "Tiere" :language "ru" :translations ["Hund-ru"] :word "Hund"}]
                   (mapv :subject @requests))
                "the main card's example does not answer a theme"))))))
 

@@ -584,10 +584,17 @@
 
       :else
       {:params {:context     (when (string? (:context body)) (:context body))
+                :language    (when (string? (:language body)) (:language body))
                 :pos         (when (string? (:pos body)) (:pos body))
                 :translation (vec (strings (:translations body)))
                 :word        word}
        :avoid  avoid})))
+
+
+(defn- unknown-language?
+  "Whether `subject` asks for a language the interface does not speak."
+  [subject]
+  (not (some #{(:language subject)} i18n/languages)))
 
 
 (defn- bad-request
@@ -695,7 +702,7 @@
 
                ;; A repeated parameter arrives as a vector; neither the subject
                ;; nor the prompt can be built from two values.
-               (some vector? [word (get-in request [:params :context]) (get-in request [:params :pos])])
+               (some vector? (map (:params request) [:word :context :language :pos]))
                {:status  400
                 :headers {"Content-Type" "application/json"}
                 :body    (cheshire/generate-string {:error "Parameters take one value each"})}
@@ -707,8 +714,10 @@
 
                :else
                ;; One subject value feeds both the cache key and the prompt.
-               (let [result (examples/get! db (examples/subject (:params request)))]
-                 (example-response result))))))
+               (let [subject (examples/subject (:params request))]
+                 (if (unknown-language? subject)
+                   (bad-request "Unknown 'language'")
+                   (example-response (examples/get! db subject))))))))
 
        ;; A different example for the same subject. The body carries what the
        ;; learner already has; the answer is theirs alone and never cached.
@@ -717,15 +726,16 @@
          (on-connection [db db-spec]
            (if (nil? (authenticated-user-id db (request-token request)))
              {:status 401 :body ""}
-             (let [body (try
-                          (some-> (:body request) io/reader (cheshire/parse-stream true))
-                          (catch Exception _
-                            nil))
-                   {:keys [avoid error params]} (regeneration-request body)]
-               (if error
-                 (bad-request error)
-                 (example-response
-                  (examples/regenerate! db (examples/subject params) avoid)))))))}]
+             (let [body    (try
+                             (some-> (:body request) io/reader (cheshire/parse-stream true))
+                             (catch Exception _
+                               nil))
+                   {:keys [avoid error params]} (regeneration-request body)
+                   subject (examples/subject params)]
+               (cond
+                 error (bad-request error)
+                 (unknown-language? subject) (bad-request "Unknown 'language'")
+                 :else (example-response (examples/regenerate! db subject avoid)))))))}]
 
      ["/api/sync/updates"
       {:get

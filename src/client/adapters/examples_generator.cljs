@@ -7,18 +7,16 @@
 
 
 (defn- url
-  "The address that asks the backend for an example of `subject`. Throws a URIError when a part cannot be
-   encoded, as half of a character written as two UTF-16 units cannot."
-  [{:keys [collection-name pos translations word]}]
-  (cond-> (reduce (fn [url translation]
-                    (str url "&translation=" (js/encodeURIComponent translation)))
-                  (str "/api/examples?word=" (js/encodeURIComponent word))
-                  translations)
-    (utils/non-blank pos)
-    (str "&pos=" (js/encodeURIComponent pos))
-
-    (utils/non-blank collection-name)
-    (str "&context=" (js/encodeURIComponent collection-name))))
+  "The address that asks the backend for an example of `subject`, or nil when a part is not well-formed
+   text, as half of a character written as two UTF-16 units is not: `URLSearchParams` would send another one."
+  [{:keys [collection-name language pos translations word]}]
+  (let [params (cond-> (into [["word" word] ["language" language]]
+                             (map (fn [translation] ["translation" translation]))
+                             translations)
+                 (utils/non-blank pos) (conj ["pos" pos])
+                 (utils/non-blank collection-name) (conj ["context" collection-name]))]
+    (when (every? (fn [[_ value]] (.isWellFormed (str value))) params)
+      (str "/api/examples?" (js/URLSearchParams. (clj->js params))))))
 
 
 (defn- retry-after-ms
@@ -91,7 +89,7 @@
    `{:example example}`, or `{:failure kind}` with `:status`, `:message` and `:retry-after-ms` when the
    backend answered (`:failure/invalid-subject` sends nothing)."
   [subject signal]
-  (if-let [address (try (url subject) (catch js/URIError _ nil))]
+  (if-let [address (url subject)]
     (try
       ;; The endpoint authenticates by the session cookie. "include" keeps it attached if the URL ever gains an
       ;; origin, where the default would stop sending it and every example would come back 401.
@@ -104,12 +102,13 @@
 (defn ^:async request-another
   "Asks the backend for an example of `subject` that is none of the sentences in `avoid`, the answer for this
    learner alone. Never rejects: resolves as `fetch-one` does."
-  [{:keys [collection-name pos translations word]} avoid signal]
+  [{:keys [collection-name language pos translations word]} avoid signal]
   (try
     (await (answer (await (js/fetch "/api/examples"
                                     #js {:body        (js/JSON.stringify
                                                        #js {:avoid        (clj->js avoid)
                                                             :context      (utils/non-blank collection-name)
+                                                            :language     language
                                                             :pos          (utils/non-blank pos)
                                                             :translations (clj->js translations)
                                                             :word         word})

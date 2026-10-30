@@ -73,14 +73,12 @@
      [:div.word-example__translation
       [:p.word-example__text.word-example__text--translation
        {:aria-hidden "true"
-        :class       (when status-shown? "word-example__text--hidden")
-        :lang        "ru"}
+        :class       (when status-shown? "word-example__text--hidden")}
        translation]
       [:textarea.word-example__field.word-example__field--translation
        {:aria-label  [:i18n :example/translation]
         :autocorrect "off"
         :class       (when status-shown? "word-example__field--hidden")
-        :lang        "ru"
         :readonly    regenerate-disabled?
         :rows        1
         :spellcheck  "false"
