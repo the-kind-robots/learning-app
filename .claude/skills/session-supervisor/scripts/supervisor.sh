@@ -41,12 +41,20 @@ launch() {
 }
 
 answer() {
-  local issue=$1 text=$2 s id
+  local issue=$1 text=$2 s id deadline
   s=$(session_of "$issue")
   [ -n "$s" ] || { echo "no session named #$issue"; exit 1; }
   id=$(jq -r .id <<<"$s")
   # A running session would be copied by --resume, so it stops first; its conversation is kept.
-  [ "$(jq -r .state <<<"$s")" = done ] || claude stop "$id" >/dev/null
+  # `claude stop` returns before the session is down: wait for it, or --resume still forks a copy.
+  if [ "$(jq -r .state <<<"$s")" != "done" ]; then
+    claude stop "$id" >/dev/null
+    deadline=$((SECONDS + 30))
+    while sessions | jq -e --arg id "$id" 'select(.id == $id and (.state == "working" or .state == "idle"))' >/dev/null; do
+      [ "$SECONDS" -lt "$deadline" ] || { echo "#$issue did not stop in 30s"; exit 1; }
+      sleep 1
+    done
+  fi
   claude --bg --resume "$(jq -r .sessionId <<<"$s")" "$text"
 }
 
