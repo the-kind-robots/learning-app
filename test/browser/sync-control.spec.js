@@ -445,3 +445,104 @@ test.describe('Сохранить мои слова', () => {
     });
   });
 });
+
+test.describe('Ссылка восстановления', () => {
+  const home = (page) => page.getByRole('heading', { name: 'Главная' });
+  const syncMenu = (page) => page.getByRole('dialog', { name: 'Синхронизация' });
+  const pasteItem = (page) => syncMenu(page).getByRole('button', { name: 'Вставить ссылку восстановления' });
+  const connectItem = (page) => syncMenu(page).getByRole('button', { name: 'Подключить устройство' });
+
+  const answerAccount = async (page) => {
+    await stubAccountCopy(page.context());
+    await page.route('**/api/identity/account', (route) =>
+      route.fulfill({ json: { id: 7 } }));
+  };
+
+  // Pastes `text` into the prompt the paste item asks with.
+  const pasteRecoveryLink = async (page, text) => {
+    page.once('dialog', (dialog) => dialog.accept(text));
+    await syncButton(page).click();
+    await pasteItem(page).click();
+  };
+
+  test('пользователь без аккаунта открывает меню синхронизации → в нём вставка ссылки восстановления, действий аккаунта нет', async ({ page }) => {
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await page.goto('/home');
+      await expect(home(page)).toBeVisible();
+    });
+
+    await test.step('Когда он открывает меню «Синхронизация»', async () => {
+      await syncButton(page).click();
+    });
+
+    await test.step('Тогда в меню есть «Вставить ссылку восстановления» и нет «Подключить устройство»', async () => {
+      await expect(pasteItem(page)).toBeVisible();
+      await expect(connectItem(page)).toHaveCount(0);
+    });
+  });
+
+  test('пользователь без аккаунта вставляет ссылку восстановления → устройство входит в аккаунт', async ({ page }) => {
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await answerAccount(page);
+      await page.goto('/home');
+      await expect(home(page)).toBeVisible();
+    });
+
+    await test.step('Когда он вставляет ссылку восстановления', async () => {
+      await pasteRecoveryLink(page, 'https://sprecha.de/#key=test-token');
+      await expect(syncButton(page)).toHaveCSS('color', GREEN);
+    });
+
+    await test.step('Тогда меню предлагает «Подключить устройство»', async () => {
+      await syncButton(page).click();
+      await expect(connectItem(page)).toBeVisible();
+      await expect(pasteItem(page)).toHaveCount(0);
+    });
+  });
+
+  test('пользователь без аккаунта вставляет ссылку из QR подключения → подключение подтверждено', async ({ page }) => {
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await answerAccount(page);
+      await page.goto('/home');
+      await expect(home(page)).toBeVisible();
+    });
+
+    await test.step('Когда он вставляет ссылку с меткой подключения', async () => {
+      await pasteRecoveryLink(page, 'https://sprecha.de/#key=test-token&pair=nonce-1');
+      await expect(syncButton(page)).toHaveCSS('color', GREEN);
+    });
+
+    await test.step('Тогда на устройстве записана квитанция подключения', async () => {
+      const receipt = await page.evaluate(() =>
+        db.use('user-db').get('pairing:nonce-1').then((doc) => doc.type, () => null));
+      expect(receipt).toBe('pairing');
+    });
+  });
+
+  test('пользователь без аккаунта вставляет не ссылку → сообщение, аккаунта нет', async ({ page }) => {
+    let message;
+
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await page.goto('/home');
+      await expect(home(page)).toBeVisible();
+    });
+
+    await test.step('Когда он вставляет текст, который не ссылка восстановления', async () => {
+      page.once('dialog', (prompt) => {
+        page.once('dialog', (alert) => {
+          message = alert.message();
+          alert.accept();
+        });
+        prompt.accept('привет');
+      });
+      await syncButton(page).click();
+      await pasteItem(page).click();
+    });
+
+    await test.step('Тогда он видит «Это не ссылка восстановления», и меню по-прежнему без аккаунта', async () => {
+      await expect.poll(() => message).toBe('Это не ссылка восстановления');
+      await syncButton(page).click();
+      await expect(pasteItem(page)).toBeVisible();
+    });
+  });
+});

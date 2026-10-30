@@ -33,6 +33,15 @@
           (log/error :effect/request-sync {:error (str err)}))))))
 
 
+(nxr/register-effect! :effect/paste-recovery-link
+  ;; `prompt-message` and `refused-message` are the texts the view wants shown.
+  (fn paste-recovery-link
+    [_ _ {:keys [prompt-message refused-message]}]
+    (when-let [text (js/prompt prompt-message)]
+      (when-not (account/open-recovery-link! text)
+        (js/alert refused-message)))))
+
+
 (nxr/register-effect! :effect/open-sync-qr
   (fn ^:async open-sync-qr
     [{:keys [capabilities dispatch]} _]

@@ -44,12 +44,22 @@
                       {:copied-message [:i18n :sync/recovery-link-copied]
                        :title [:i18n :sync/recovery-link-title]}]]}}
        [:i18n :sync/recovery-link]])
-     [:button.sync-menu__item
-      {:popovertarget "sync-menu"
-       :popovertargetaction "hide"
-       :type "button"
-       :on {:click [[:action/open-sync-dialog]]}}
-      [:i18n :sync/enable]])])
+     (list
+      [:button.sync-menu__item
+       {:popovertarget "sync-menu"
+        :popovertargetaction "hide"
+        :type "button"
+        :on {:click [[:action/open-sync-dialog]]}}
+       [:i18n :sync/enable]]
+      ;; The installed app on iOS opens no link: its storage is apart from the browser's (#683).
+      [:button.sync-menu__item
+       {:popovertarget "sync-menu"
+        :popovertargetaction "hide"
+        :type "button"
+        :on {:click [[:effect/paste-recovery-link
+                      {:prompt-message  [:i18n :sync/paste-prompt]
+                       :refused-message [:i18n :sync/not-a-recovery-link]}]]}}
+       [:i18n :sync/paste-recovery-link]]))])
 
 
 (defn- sync-qr-dialog
