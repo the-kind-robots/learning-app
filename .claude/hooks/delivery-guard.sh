@@ -103,7 +103,32 @@ while IFS= read -r st; do
        done ;;
   esac
 
+  # A background session is found by its issue: the supervisor reads `#<n>` names only,
+  # and 20 sessions launched under free-form names were left for the owner to sort by hand.
   case "$head" in
+    claude|*/claude)
+      bg=; resume=; name=
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --bg|--background) bg=1 ;;
+          --resume|-r|--resume=*) resume=1 ;;
+          --name=*) name=${1#--name=} ;;
+          -n|--name) name=${2:-} ;;
+        esac
+        shift
+      done
+      name=${name//[\"\']/}
+      case "$bg$resume:$name" in
+        1:\#[0-9]*|11:*|:*) ;;
+        *) decide deny "Refused: a background session must be named after its issue, \`-n \"#<n>\"\`, or the supervisor cannot find it and nobody deletes it.
+
+Start it through the supervisor:
+  bash .claude/skills/session-supervisor/scripts/supervisor.sh launch <n> \"<task>\"
+
+No issue yet? File it first:
+  $START --title \"...\" --priority <Urgent|High|Medium|Low> --status \"In progress\" --base master --no-checkout" ;;
+      esac
+      continue ;;
     gh|*/gh) ;;
     *) continue ;;
   esac

@@ -12,7 +12,9 @@
 /target/
 
 # Settings
-**/.clj-kondo/.cache/
+# clj-kondo writes imported library configs here; leftovers block `claude rm` of a worktree
+**/.clj-kondo/*
+!/.clj-kondo/layering/
 **/.lsp/.cache/
 **/.nrepl-port
 

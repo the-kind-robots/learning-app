@@ -108,7 +108,7 @@ In those cases, use the narrower workflow skill directly.
      - ```suggestion blocks may be applied verbatim.
      - The round ends with every thread either resolved-with-commit or answered-and-open; report the split to the owner.
    - Delete branches only after confirming the PR state is MERGED — a failed merge followed by unconditional cleanup deletes the branch and closes the PR unmerged, which has already happened once.
-   - Clean up as part of the merge, not later: a background session first runs `git fetch`, then `git switch --detach origin/master` in its worktree, so the harness sees nothing unpushed and deletes the session on the first ctrl+x; then delete the branch locally and on the remote; the worktree is the harness's to remove.
+   - Clean up as part of the merge, not later: a background session first runs `git fetch`, then `git switch --detach origin/master` in its worktree, so the next `supervisor.sh tick` deletes the session (`session-supervisor` skill); then delete the branch locally and on the remote; the worktree is the harness's to remove.
 
 8. Reset task boundary after delivery.
    - After the issue is closed or the PR is merged, stop assuming follow-up repo work belongs to the same task.
