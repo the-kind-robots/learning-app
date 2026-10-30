@@ -5,11 +5,13 @@
 
 
 (defn content
-  "What the themes screen shows of the learner's data."
+  "What the themes screen shows of the learner's data. The items carry every
+   word id of every collection, and Nexus would otherwise walk them all for
+   placeholders on each write."
   [_ {:keys [active-collection learner]}]
   (let [{:keys [items total-words]} (collections/summary learner)]
     {:collections/active-id   (:id active-collection)
-     :collections/items       items
+     :collections/items       (with-meta items {:nexus/skip-interpolation true})
      :collections/total-words total-words}))
 
 
