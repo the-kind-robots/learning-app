@@ -50,6 +50,13 @@
   (adapter/check-incoming-auth! nil))
 
 
+(defn open-recovery-link!
+  "Joins the account of a pasted recovery link: the app starts again and adopts it as if the link had been
+   opened. Answers false, changing nothing, for a text that is not a recovery link."
+  [text]
+  (adapter/open-recovery-link! text))
+
+
 (def ^:private first-pass-wait-ms
   "How long the first replication pass is waited for once memory is loaded."
   60000)

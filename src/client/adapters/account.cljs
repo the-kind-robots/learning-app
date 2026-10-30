@@ -283,3 +283,19 @@
             (log/info :sync/provisioned {:user-id (:id provisioned)})))
         (catch js/Error err
           (log/warn :sync/provision-failed {:error (ex-message err)}))))))
+
+
+(defn open-recovery-link!
+  "Opens a pasted recovery link as if it had been followed: its fragment goes into the address and the page
+   starts again, so `check-incoming-auth!` adopts the key on boot. Answers false, changing nothing, for a text
+   that is not a link with a `#key=`."
+  [text]
+  (let [fragment (try
+                   (.-hash (js/URL. text))
+                   (catch js/Error _ ""))]
+    (if (.has (js/URLSearchParams. (subs fragment 1)) "key")
+      (do
+        (js/history.replaceState nil "" (str js/location.pathname fragment))
+        (js/location.reload)
+        true)
+      false)))

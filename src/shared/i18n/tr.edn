@@ -78,6 +78,9 @@
 
  :sync/cancel                 "İptal"
  :sync/connect-device         "Cihaz bağla"
+ :sync/not-a-recovery-link    "Bu bir kurtarma bağlantısı değil"
+ :sync/paste-prompt           "Kurtarma bağlantısını yapıştırın"
+ :sync/paste-recovery-link    "Kurtarma bağlantısını yapıştır"
  :sync/qr                     "Cihaz bağlamak için QR kod"
  :sync/recovery-link          "Kurtarma bağlantısı"
  :sync/recovery-link-copied   "Bağlantı panoya kopyalandı"

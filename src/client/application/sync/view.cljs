@@ -25,7 +25,7 @@
     :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
          :close [[:action/close-sync-menu]]}}
    [:div.sync-menu-dialog__content
-    (when show-account-actions?
+    (if show-account-actions?
       (list
        [:button.sync-menu-dialog__item
         {:type "button"
@@ -36,7 +36,15 @@
          :on   {:click [[:effect/share-sync-link
                          {:copied-message [:i18n :sync/recovery-link-copied]
                           :title [:i18n :sync/recovery-link-title]}]]}}
-        [:i18n :sync/recovery-link]]))
+        [:i18n :sync/recovery-link]])
+      ;; The installed app on iOS opens no link: its storage is apart from the browser's (#683).
+      [:button.sync-menu-dialog__item
+       {:type "button"
+        :on   {:click [[:action/close-sync-menu]
+                       [:effect/paste-recovery-link
+                        {:prompt-message  [:i18n :sync/paste-prompt]
+                         :refused-message [:i18n :sync/not-a-recovery-link]}]]}}
+       [:i18n :sync/paste-recovery-link]])
     [:button.sync-menu-dialog__item.sync-menu-dialog__item--cancel
      {:type "button"
       :on   {:click [[:action/close-sync-menu]]}}

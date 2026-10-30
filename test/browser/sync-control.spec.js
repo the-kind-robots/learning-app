@@ -5,13 +5,25 @@ const { addWord } = require('./add-form.shared');
 // `/api/identity/account` which account the token belongs to. A real account
 // needs a burned invite grant, absent in a fresh environment, so that one
 // answer is stubbed; the rest of the boot is the real one.
-const signIn = async (page) => {
-  await page.route('**/api/identity/account', (route) =>
+const answerAccount = (page) =>
+  page.route('**/api/identity/account', (route) =>
     route.fulfill({ json: { id: 7 } }));
+
+const signIn = async (page) => {
+  await answerAccount(page);
   await page.goto('/#key=test-token');
 };
 
 const syncButton = (page) => page.getByRole('button', { name: 'Синхронизация' });
+const pasteItem = (page) => page.getByRole('button', { name: 'Вставить ссылку восстановления' });
+const connectItem = (page) => page.getByRole('button', { name: 'Подключить устройство' });
+
+// Pastes `text` into the prompt the paste item asks with.
+const pasteRecoveryLink = async (page, text) => {
+  page.once('dialog', (dialog) => dialog.accept(text));
+  await syncButton(page).click();
+  await pasteItem(page).click();
+};
 
 // Screens that take the whole page: the button that opens each, and what shows it open.
 const closeButton = (page) => page.getByRole('button', { name: 'Закрыть' });
@@ -36,14 +48,84 @@ test.describe('Кнопка «Синхронизация»', () => {
     });
   });
 
-  test('пользователь без аккаунта открывает главную → кнопки нет', async ({ page }) => {
-    await test.step('Дано пользователь без аккаунта', async () => {
+  test('пользователь без аккаунта открывает меню синхронизации → в нём только вставка ссылки восстановления', async ({ page }) => {
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await page.goto('/home');
+      await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    });
+
+    await test.step('Когда он открывает меню «Синхронизация»', async () => {
+      await syncButton(page).click();
+    });
+
+    await test.step('Тогда в меню есть «Вставить ссылку восстановления» и нет действий аккаунта', async () => {
+      await expect(pasteItem(page)).toBeVisible();
+      await expect(connectItem(page)).toHaveCount(0);
+    });
+  });
+
+  test('пользователь без аккаунта вставляет ссылку восстановления → устройство входит в аккаунт', async ({ page }) => {
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await answerAccount(page);
       await page.goto('/home');
     });
 
-    await test.step('Тогда на главной нет кнопки «Синхронизация»', async () => {
+    await test.step('Когда он вставляет ссылку восстановления', async () => {
+      await pasteRecoveryLink(page, 'https://sprecha.de/#key=test-token');
       await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
-      await expect(syncButton(page)).toHaveCount(0);
+    });
+
+    await test.step('Тогда меню предлагает «Подключить устройство»', async () => {
+      await syncButton(page).click();
+      await expect(connectItem(page)).toBeVisible();
+      await expect(pasteItem(page)).toHaveCount(0);
+    });
+  });
+
+  test('пользователь без аккаунта вставляет ссылку из QR подключения → подключение подтверждено', async ({ page }) => {
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await answerAccount(page);
+      await page.goto('/home');
+    });
+
+    await test.step('Когда он вставляет ссылку с меткой подключения', async () => {
+      await pasteRecoveryLink(page, 'https://sprecha.de/#key=test-token&pair=nonce-1');
+      await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+      await syncButton(page).click();
+      await expect(connectItem(page)).toBeVisible();
+    });
+
+    await test.step('Тогда на устройстве записана квитанция подключения', async () => {
+      const receipt = await page.evaluate(() =>
+        db.use('user-db').get('pairing:nonce-1').then((doc) => doc.type, () => null));
+      expect(receipt).toBe('pairing');
+    });
+  });
+
+  test('пользователь без аккаунта вставляет не ссылку → сообщение, аккаунта нет', async ({ page }) => {
+    let message;
+
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await page.goto('/home');
+      await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    });
+
+    await test.step('Когда он вставляет текст, который не ссылка восстановления', async () => {
+      page.once('dialog', (dialog) => {
+        page.once('dialog', (alert) => {
+          message = alert.message();
+          alert.accept();
+        });
+        dialog.accept('привет');
+      });
+      await syncButton(page).click();
+      await pasteItem(page).click();
+    });
+
+    await test.step('Тогда он видит «Это не ссылка восстановления», и меню по-прежнему без аккаунта', async () => {
+      await expect.poll(() => message).toBe('Это не ссылка восстановления');
+      await syncButton(page).click();
+      await expect(pasteItem(page)).toBeVisible();
     });
   });
 
