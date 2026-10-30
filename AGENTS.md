@@ -31,7 +31,8 @@ A refusal — from a hook or from workspace isolation — stops the work and goe
 
 # Sessions and Worktrees
 
-- One issue, one background session. The interactive session files the issue (`start_issue_flow.sh --no-checkout`), launches `claude --bg -n "#N" "<task>"`, and watches sessions with `claude agents`.
+- One issue, one background session. The interactive session files the issue (`start_issue_flow.sh --no-checkout`), and launches, answers and deletes background sessions through the `session-supervisor` skill. The owner never watches a session; the coordinator brings one digest and starts the supervisor loop at session start on its own. `delivery-guard.sh` refuses a `claude --bg` not named `#N`.
+- A background session never waits inside a turn: a question ends the turn with `needs input:` and two named options.
 - The background session calls `EnterWorktree`, then `git switch <issue branch>`, and does the work itself: edit, verify, PR. The harness refuses its writes to the main checkout.
 - The interactive session works in the main checkout: reading, triage, measuring and full-stand work. Its edits pass through the owner's permission prompts.
 - Full-stand work is a dependency test, not a topic match. Name the shared thing the work needs — a live CouchDB, nginx routing, a migration over real data — and it runs in the main checkout. Cannot name one? It runs in a background session's worktree.
@@ -39,7 +40,7 @@ A refusal — from a hook or from workspace isolation — stops the work and goe
 - Branches come from `gh issue develop` (the start script) only. Never `git checkout -b` or `git switch -c`; a permission rule asks on both.
 - Run git commands plain and single: no pipes, `;` or `&&`.
 - Files change through Edit/Write, never a shell heredoc, `sed` or a script: worktree isolation cannot prove a shell edit stays inside the worktree.
-- Worktrees are the harness's: it removes them with their sessions. A merge deletes the branch; the session then runs `git fetch`, then `git switch --detach origin/master` in its worktree, so deleting the session asks nothing.
+- Worktrees are the harness's: `claude rm` removes them with their sessions. A merge deletes the branch; the session then runs `git fetch`, then `git switch --detach origin/master` in its worktree, so the supervisor's `tick` deletes it without asking.
 - Subagents work inside the caller's worktree: `ops` (Haiku; issue/board scripts, commit of staged work, push, draft PR), `log-reader` (Haiku; digest of logs, CI and test output), `Explore`.
 
 # Issues

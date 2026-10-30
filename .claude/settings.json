@@ -15,6 +15,7 @@
       "Bash(zprint *)",
       "Bash(bash .claude/skills/gh-project-workflow/scripts/*.sh *)",
       "Bash(bash .claude/skills/learning-app-cdp/scripts/*.sh *)",
+      "Bash(bash .claude/skills/session-supervisor/scripts/*.sh *)",
       "Bash(clj-nrepl-eval *)",
       "Bash(mkdir *)",
       "Bash(chmod *)",
@@ -29,6 +30,19 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'g=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/supervisor-start.sh\"; [ -r \"$g\" ] || exit 0; exec bash \"$g\"'",
+            "timeout": 30,
+            "statusMessage": "Collecting background sessions..."
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
