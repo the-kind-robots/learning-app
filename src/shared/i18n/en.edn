@@ -78,6 +78,9 @@
 
  :sync/cancel                 "Cancel"
  :sync/connect-device         "Connect a device"
+ :sync/not-a-recovery-link    "This is not a recovery link"
+ :sync/paste-prompt           "Paste the recovery link"
+ :sync/paste-recovery-link    "Paste a recovery link"
  :sync/qr                     "QR code to connect a device"
  :sync/recovery-link          "Recovery link"
  :sync/recovery-link-copied   "Link copied to clipboard"

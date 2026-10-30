@@ -78,6 +78,9 @@
 
  :sync/cancel                 "Отмена"
  :sync/connect-device         "Подключить устройство"
+ :sync/not-a-recovery-link    "Это не ссылка восстановления"
+ :sync/paste-prompt           "Вставьте ссылку восстановления"
+ :sync/paste-recovery-link    "Вставить ссылку восстановления"
  :sync/qr                     "QR-код для подключения устройства"
  :sync/recovery-link          "Ссылка восстановления"
  :sync/recovery-link-copied   "Ссылка скопирована в буфер обмена"

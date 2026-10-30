@@ -68,7 +68,7 @@ A sync pass SHALL report how many documents it pulled and pushed. The documents 
 - **AND** the next screen opened shows them
 
 ### Requirement: The device-sync control is on the home page only
-The system SHALL offer the device-sync control, named «Синхронизация», in the header of the home page only, and only once the device has an account. The control SHALL draw a laptop beside a phone. Every other page SHALL render no such control.
+The system SHALL offer the device-sync control, named «Синхронизация», in the header of the home page only, with or without an account. The control SHALL draw a laptop beside a phone. Every other page SHALL render no such control.
 
 #### Scenario: Home page with an account
 - **WHEN** a device with an account opens the home page
@@ -80,7 +80,8 @@ The system SHALL offer the device-sync control, named «Синхронизаци
 
 #### Scenario: No account
 - **WHEN** a device without an account opens the home page
-- **THEN** the header shows no «Синхронизация» control
+- **THEN** the header shows the «Синхронизация» control
+- **AND** its menu offers «Вставить ссылку восстановления» and no account action
 
 ### Requirement: Sync passes run one at a time
 The client SHALL run at most one sync pass at a time. A request for a pass while none runs SHALL start one. Requests that arrive while a pass runs SHALL cause exactly one more pass after it, however many arrive. Every requester SHALL be answered when the passes finish, not before. A failed pass SHALL NOT stop the next request from running one. Route entry, a poke, the `online` event and a local write SHALL all request a pass this way.

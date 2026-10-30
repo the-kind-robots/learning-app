@@ -78,6 +78,9 @@
 
  :sync/cancel                 "Annuler"
  :sync/connect-device         "Connecter un appareil"
+ :sync/not-a-recovery-link    "Ce n’est pas un lien de récupération"
+ :sync/paste-prompt           "Collez le lien de récupération"
+ :sync/paste-recovery-link    "Coller un lien de récupération"
  :sync/qr                     "QR code pour connecter un appareil"
  :sync/recovery-link          "Lien de récupération"
  :sync/recovery-link-copied   "Lien copié dans le presse-papiers"
