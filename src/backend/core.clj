@@ -355,7 +355,7 @@
   "The exception goes to the log; the client gets a bare 500."
   [^Throwable e _request]
   (t/log! {:level :error :id ::request-failed :error e} "Request failed")
-  {:status 500 :body ""})
+  {:status 500})
 
 
 (def cookie-interceptor
@@ -404,8 +404,8 @@
             (response/header "Content-Hash" sha256)
             ;; Content-addressed — gzip compression delegated to the reverse proxy.
             (response/header "Cache-Control" "public, max-age=31536000, immutable"))
-        {:status 404 :body ""}))
-    {:status 404 :body ""}))
+        {:status 404}))
+    {:status 404}))
 
 
 (defn- wasm-handler
@@ -634,7 +634,7 @@
   (let [page (fn [invite-request]
                (if invite-request
                  (invite-requests/page invite-request decision)
-                 {:status 404 :body ""}))]
+                 {:status 404}))]
     {:get  (fn [{:keys [path-params]}]
              (page (on-connection [db db-spec]
                      (invite-requests/token-request db (:token path-params)))))
@@ -729,7 +729,7 @@
            (let [{:keys [word]} (:params request)]
              (cond
                (nil? (authenticated-user-id db (request-token request)))
-               {:status 401 :body ""}
+               {:status 401}
 
                ;; A repeated parameter arrives as a vector; neither the subject
                ;; nor the prompt can be built from two values.
@@ -752,7 +752,7 @@
        (fn [request]
          (on-connection [db db-spec]
            (if (nil? (authenticated-user-id db (request-token request)))
-             {:status 401 :body ""}
+             {:status 401}
              (let [body    (try
                              (some-> (:body request) io/reader (cheshire/parse-stream true))
                              (catch Exception _
@@ -777,7 +777,7 @@
              (server/as-channel request
                                 {:on-open  (fn [channel] (push/subscribe! id channel))
                                  :on-close (fn [channel _status] (push/unsubscribe! id channel))})
-             {:status 401 :body ""})))}]
+             {:status 401})))}]
 
      ["/api/identity/provision"
       {:interceptors [json-body]
@@ -794,9 +794,9 @@
                  (jdbc/execute! db ["UPDATE grants SET used_at = NULL WHERE sha256 = ?" (utils/sha256-hex invite)])
                  (if (= ::recycled-id (:type (ex-data e)))
                    (do (t/event! ::recycled-id-refused {:level :error :data (ex-data e)})
-                       {:status 503 :body ""})
+                       {:status 503})
                    (throw e))))
-             {:status 403 :body ""})))}]
+             {:status 403})))}]
 
      ;; Adopting a key means holding a token and nothing else. The token comes
      ;; in the body rather than the cookie so a device can find out whether it
@@ -809,7 +809,7 @@
          (on-connection [db db-spec]
            (if-let [user-id (when (string? token) (authenticated-user-id db token))]
              {:status 200 :body {:id user-id}}
-             {:status 401 :body ""})))}]
+             {:status 401})))}]
 
      ;; JSON in and out through muuntaja for the device's two routes: bodies
      ;; arrive as `:body-params` and maps leave encoded. The operator's links
@@ -832,7 +832,7 @@
               {:status 400 :body {:error "Expected sha256, words, days and a note"}}
 
               (not (invite-requests/admits? address (System/currentTimeMillis)))
-              {:status 429 :headers {"Retry-After" "3600"} :body ""}
+              {:status 429 :headers {"Retry-After" "3600"}}
 
               :else
               (let [location (str "/api/invite-requests/" (:sha256 invite-request))
@@ -844,8 +844,8 @@
                                                          invite-request))]
                 (case outcome
                   :outcome/created {:status 201 :headers {"Location" location} :body {:status "pending"}}
-                  :failure/full    {:status 429 :headers {"Retry-After" "3600"} :body ""}
-                  :failure/mail    {:status 503 :headers {"Retry-After" "60"} :body ""}
+                  :failure/full    {:status 429 :headers {"Retry-After" "3600"}}
+                  :failure/mail    {:status 503 :headers {"Retry-After" "60"}}
                   ;; Already requested: the answer points at the request
                   ;; that exists.
                   {:status 200 :headers {"Location" location} :body {:status (name outcome)}})))))}]
@@ -869,7 +869,7 @@
                                    :request/expired {:request "/api/invite-requests"}
                                    {})
                          :status (name status)}}
-              {:status 404 :body ""})))}]
+              {:status 404})))}]
 
       ;; The operator's links. Under /api/ so the service worker never
       ;; answers them with the app shell.
@@ -880,9 +880,9 @@
     {:data {:interceptors [(exception/exception-interceptor
                             ;; A body muuntaja cannot read, or in a charset it
                             ;; does not know, is the client's mistake.
-                            (let [client-mistake (fn [_error _request] {:status 400 :body ""})]
-                              {::exception/default                   log-and-hide-exception
-                               :muuntaja/decode                      client-mistake
+                            (let [client-mistake (fn [_error _request] {:status 400})]
+                              {::exception/default log-and-hide-exception
+                               :muuntaja/decode    client-mistake
                                :muuntaja/request-charset-negotiation client-mistake}))
                            ;; Mounts only where route data names `:muuntaja`.
                            (interceptors.muuntaja/format-interceptor)
