@@ -33,14 +33,6 @@
   width: 12px;
 }
 
-.settings-menu__label {
-  color: rgb(var(--color-eel));
-  font-size: 13px;
-  font-weight: 700;
-  margin: 6px 10px 4px;
-  padding: 0;
-}
-
 .settings-menu__group {
   border: none;
   display: flex;
@@ -60,6 +52,7 @@
   display: flex;
   font-size: 16px;
   font-weight: 600;
+  gap: 12px;
   justify-content: space-between;
   min-height: 44px;
   padding: 0 10px;
@@ -91,10 +84,24 @@
   }
 }
 
-/* Darker than the leaf green: a state mark keeps 3:1 against the fill. */
-.settings-menu__check {
-  color: rgb(63 122 0);
+/* A round badge where the check was; the faint ring keeps a white stripe from melting into the menu. */
+.settings-menu__flag {
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px rgb(var(--color-swan));
   flex: none;
-  height: 18px;
-  width: 18px;
+  height: 22px;
+  overflow: hidden;
+  width: 22px;
+}
+
+.settings-menu__flag-blue {
+  fill: rgb(var(--color-macaw));
+}
+
+.settings-menu__flag-red {
+  fill: rgb(var(--color-cardinal));
+}
+
+.settings-menu__flag-white {
+  fill: rgb(var(--color-snow));
 }
