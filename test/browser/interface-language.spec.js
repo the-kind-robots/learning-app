@@ -37,7 +37,7 @@ test.describe('Язык интерфейса', () => {
     }
   });
 
-  test('пользователь нажимает «Sprecha» → в настройках четыре языка своими названиями, Русский отмечен', async ({ page }) => {
+  test('пользователь нажимает «Sprecha» → в настройках четыре языка своими названиями без заголовка, Русский отмечен', async ({ page }) => {
     await test.step('Дано открытая главная', async () => {
       await page.goto('/');
       await expect(home(page)).toBeVisible();
@@ -54,6 +54,7 @@ test.describe('Язык интерфейса', () => {
         await expect(language(page, name)).not.toBeChecked();
       }
       await expect(language(page, 'Русский')).toBeChecked();
+      await expect(settings(page).getByText('Язык', { exact: true })).toHaveCount(0);
     });
   });
 
