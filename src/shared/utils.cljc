@@ -197,3 +197,16 @@
       (java.util.HexFormat/of)
       (.digest (doto (java.security.MessageDigest/getInstance "SHA-256")
                  (.update (.getBytes text "UTF-8")))))))
+
+
+#?(:clj
+   (def ^:private ^java.security.SecureRandom secure-random (java.security.SecureRandom.)))
+
+
+#?(:clj
+   (defn random-token
+     "A fresh 160-bit secret as 40 hex characters, safe in a URL."
+     []
+     (let [random (byte-array 20)]
+       (.nextBytes secure-random random)
+       (.formatHex (java.util.HexFormat/of) random))))

@@ -6,6 +6,8 @@ Deployment and local dev environment configs. The app runs on a single Debian se
 
 ```
 infra/
+├── cloudflare/invite-mail/   # Worker that mails the operator invite requests (see its README)
+│
 ├── development/              # Local dev environment
 │   ├── etc/nginx/            # Dev vhost for sprecha.localhost + the snippet it includes
 │   ├── etc/systemd/user/     # systemd user units for the dev stand (see below)

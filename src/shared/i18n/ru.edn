@@ -82,6 +82,7 @@
  :sync/recovery-link          "Ссылка восстановления"
  :sync/recovery-link-copied   "Ссылка скопирована в буфер обмена"
  :sync/recovery-link-title    "Sprecha: восстановление доступа"
+ :sync/request-invite         "Запросить инвайт"
  :sync/scan-qr                "Отсканируйте QR-код на новом устройстве"
  :sync/title                  "Синхронизация"
 

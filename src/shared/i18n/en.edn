@@ -82,6 +82,7 @@
  :sync/recovery-link          "Recovery link"
  :sync/recovery-link-copied   "Link copied to clipboard"
  :sync/recovery-link-title    "Sprecha: restore access"
+ :sync/request-invite         "Request an invite"
  :sync/scan-qr                "Scan the QR code on the new device"
  :sync/title                  "Sync"
 

@@ -82,6 +82,7 @@
  :sync/recovery-link          "Kurtarma bağlantısı"
  :sync/recovery-link-copied   "Bağlantı panoya kopyalandı"
  :sync/recovery-link-title    "Sprecha: erişimi kurtarma"
+ :sync/request-invite         "Davet iste"
  :sync/scan-qr                "QR kodu yeni cihazda tara"
  :sync/title                  "Senkronizasyon"
 

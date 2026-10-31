@@ -93,7 +93,7 @@ echo "ok: no arguments exits non-zero"
 # --- the real production units -----------------------------------------------
 
 check "production units list the expected credentials" \
-    "$(printf 'borg-passphrase\ncouchdb_admin_password\ndb_auth_secret\nopenrouter_api_key')" \
+    "$(printf 'borg-passphrase\ncouchdb_admin_password\ndb_auth_secret\ninvite_mail_secret\nopenrouter_api_key')" \
     "$("${subject}" "${repo_root}"/infra/production/etc/systemd/system/*)"
 
 echo "all tests passed"

@@ -21,6 +21,7 @@ Clojure HTTP server. Serves the SPA, provides API endpoints, and manages the ser
 src/backend/
 ├── core.clj                          # Entry point — starts http-kit, wires routes
 ├── examples.clj                      # Fixture/example data helpers
+├── invite_requests.clj               # Invite requests the operator decides from an email
 ├── examples/
 │   ├── cache.clj                     # Generated examples, keyed by their request
 │   ├── dictionary.clj                # Example dictionary entries
