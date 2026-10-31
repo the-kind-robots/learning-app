@@ -78,11 +78,15 @@
 
  :sync/cancel                 "Annuler"
  :sync/connect-device         "Connecter un appareil"
+ :sync/keep-words             "Garder mes mots"
+ :sync/keep-words-ask         "Nous l’activons à la main. Écrivez-nous quelques mots — pourquoi vous apprenez l’allemand, ou simplement bonjour. Quand tout sera prêt, l’icône à côté du logo deviendra verte."
+ :sync/keep-words-title       "Pour ne jamais perdre vos mots"
  :sync/qr                     "QR code pour connecter un appareil"
  :sync/recovery-link          "Lien de récupération"
  :sync/recovery-link-copied   "Lien copié dans le presse-papiers"
  :sync/recovery-link-title    "Sprecha : récupération de l’accès"
  :sync/scan-qr                "Scannez le QR code sur le nouvel appareil"
+ :sync/send                   "ENVOYER"
  :sync/title                  "Synchronisation"
 
  :word/add                    "Ajouter un mot"

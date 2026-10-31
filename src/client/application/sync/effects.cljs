@@ -21,6 +21,12 @@
         (log/error :effect/share-sync-link {:error (str err)})))))
 
 
+(nxr/register-effect! :effect/request-invite
+  ;; Only the console hears it until the invite service exists (#650).
+  (fn request-invite [_ _ text]
+    (js/console.info "Invite request:" text)))
+
+
 (nxr/register-effect! :effect/open-sync-qr
   (fn ^:async open-sync-qr
     [{:keys [capabilities dispatch]} _]

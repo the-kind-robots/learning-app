@@ -78,11 +78,15 @@
 
  :sync/cancel                 "İptal"
  :sync/connect-device         "Cihaz bağla"
+ :sync/keep-words             "Kelimelerimi sakla"
+ :sync/keep-words-ask         "Bunu elle açıyoruz. Bize birkaç kelime yazın — neden Almanca öğrendiğinizi ya da sadece bir merhaba. Hazır olunca logonun yanındaki simge yeşile döner."
+ :sync/keep-words-title       "Kelimeleriniz hiç kaybolmasın"
  :sync/qr                     "Cihaz bağlamak için QR kod"
  :sync/recovery-link          "Kurtarma bağlantısı"
  :sync/recovery-link-copied   "Bağlantı panoya kopyalandı"
  :sync/recovery-link-title    "Sprecha: erişimi kurtarma"
  :sync/scan-qr                "QR kodu yeni cihazda tara"
+ :sync/send                   "GÖNDER"
  :sync/title                  "Senkronizasyon"
 
  :word/add                    "Kelime ekle"

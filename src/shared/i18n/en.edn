@@ -78,11 +78,15 @@
 
  :sync/cancel                 "Cancel"
  :sync/connect-device         "Connect a device"
+ :sync/keep-words             "Keep my words"
+ :sync/keep-words-ask         "We switch this on by hand. Write us a few words — why you learn German, or just hello. Once it is ready, the icon next to the logo turns green."
+ :sync/keep-words-title       "So your words are never lost"
  :sync/qr                     "QR code to connect a device"
  :sync/recovery-link          "Recovery link"
  :sync/recovery-link-copied   "Link copied to clipboard"
  :sync/recovery-link-title    "Sprecha: restore access"
  :sync/scan-qr                "Scan the QR code on the new device"
+ :sync/send                   "SEND"
  :sync/title                  "Sync"
 
  :word/add                    "Add word"

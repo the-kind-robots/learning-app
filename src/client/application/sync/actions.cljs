@@ -1,7 +1,8 @@
 (ns application.sync.actions
   "Joining another device to this account's sync: the sync menu, the dialog
    that shows the link as a QR code, and closing it when the device that
-   opened the link has joined."
+   opened the link has joined. Without an account, the form that asks for an
+   invite."
   (:require
    [nexus.registry :as nxr]))
 
@@ -14,6 +15,24 @@
 (nxr/register-action! :action/close-sync-menu
   (fn close-sync-menu [_]
     [[:effect/save {:app/sync-menu-open? false}]]))
+
+
+(nxr/register-action! :action/open-invite-request
+  (fn open-invite-request [_]
+    [[:effect/save
+      {:app/invite-request-open? true
+       :app/sync-menu-open?      false}]]))
+
+
+(nxr/register-action! :action/close-invite-request
+  (fn close-invite-request [_]
+    [[:effect/save {:app/invite-request-open? false}]]))
+
+
+(nxr/register-action! :action/request-invite
+  (fn request-invite [_ text]
+    [[:effect/request-invite text]
+     [:effect/save {:app/invite-request-open? false}]]))
 
 
 (nxr/register-action! :action/show-sync-qr

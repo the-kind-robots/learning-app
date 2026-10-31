@@ -71,6 +71,7 @@
      #(swap! app-state assoc :pwa/install-available? true)
      #(swap! app-state assoc :pwa/install-available? false))
     (swap! app-state assoc :app/has-account? (account/exists? account))
+    (account/on-status account #(swap! app-state assoc :sync/status %))
     ;; After render, so the first route has a screen to compute. Starting the router reads the address,
     ;; which `ports.account/check-incoming-auth!` has already handled.
     (navigation/follow! navigation

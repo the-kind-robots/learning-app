@@ -121,12 +121,14 @@
 }
 
 .app-shell__bar-slot {
+  align-items: center;
   display: flex;
   flex: 1 1 0;
+  gap: 6px;
   min-width: 0;
 }
 
-.app-shell__logo,
+.app-shell__bar-slot > *,
 .app-shell__build-mark,
 .app-shell__actions > * {
   pointer-events: auto;
@@ -151,11 +153,42 @@
   white-space: nowrap;
 }
 
+/* The sync beside the word mark, a lamp like the lesson's light bulb: grey
+   without an account, lit green with a soft glow while the device with one is
+   online, the same green faded and unlit while it is offline. Only colour,
+   glow and opacity change, so nothing around it moves. */
+.app-shell__sync {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: rgb(var(--color-hare));
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0 2px;
+  transition: color 0.3s, filter 0.3s, opacity 0.3s;
+}
+
+.app-shell__sync--online {
+  color: rgb(var(--color-owl));
+  filter: drop-shadow(0 0 3px rgba(var(--color-owl), 0.55));
+}
+
+.app-shell__sync--offline {
+  color: rgb(var(--color-owl));
+  opacity: 0.4;
+}
+
+.app-shell__sync:active {
+  transform: scale(0.92);
+}
+
 
 /* Shell actions sit in one row so any of them can be absent without leaving a
    hole: the trace export in a development build, install only when
-   installable, sync only on home with an account, the grid icon on
-   home and the close mark on every other page. */
+   installable, the grid icon on home and the close mark on every other
+   page. */
 .app-shell__actions {
   align-items: center;
   display: flex;

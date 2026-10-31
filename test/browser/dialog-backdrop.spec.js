@@ -1,8 +1,6 @@
 const { test, expect } = require('./fixtures');
 
-// The sync-menu dialog only exists once an account is provisioned, which
-// needs a burned invite grant — absent in a fresh environment. The
-// install guide is the dialog reachable without an account; an iOS user
+// The install guide is a dialog reachable without an account; an iOS user
 // agent makes the install button render and routes its click to the guide
 // instead of the native prompt.
 test.use({
@@ -17,8 +15,6 @@ test.describe('Окно установки приложения', () => {
 
     await test.step('Дано главная без аккаунта, открыта инструкция по установке', async () => {
       await page.goto('/home');
-      // This dialog and not the sync menu: no account, no sync button.
-      await expect(page.getByRole('button', { name: 'Синхронизация' })).toHaveCount(0);
       await page.getByRole('button', { name: 'Установить приложение' }).click();
       await expect(title).toBeVisible();
     });

@@ -25,6 +25,10 @@
   (on-device-joined
     [a nonce f]
     "Calls `f` once the device that opened the link carrying `nonce` has joined.")
+  (on-status
+    [a f]
+    "Calls `f` with the sync's status now and on every change: `:sync/online`, `:sync/offline`, or
+     `:sync/no-account` once, without an account.")
   (initialized
     [a]
     "A promise that resolves once the learner's memory is loaded and the first replication pass is done, or a
@@ -40,6 +44,7 @@
     (sync-link [_] ((:sync-link sync)))
     (sync-link [_ nonce] ((:sync-link sync) nonce))
     (on-device-joined [_ nonce f] ((:on-device-joined sync) nonce f))
+    (on-status [_ f] ((:on-status sync) f))
     (initialized [_] initialized)))
 
 
