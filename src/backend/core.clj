@@ -30,6 +30,7 @@
    [reitit.ring :as ring]
    [ring.middleware.cookies :as cookies]
    [ring.util.response :as response]
+   [sieppari.context :as context]
    [taoensso.telemere :as t]
    [userdb :as userdb]
    [utils :as utils])
@@ -594,11 +595,36 @@
   (not (some #{(:language subject)} i18n/languages)))
 
 
+(def ^:private json-only
+  "Muuntaja for routes that speak JSON alone: a body is read only as JSON, and
+   every answer is UTF-8 JSON whatever Accept and Accept-Charset ask for."
+  (-> muuntaja/default-options
+      (update :formats select-keys ["application/json"])
+      (assoc-in [:http :extract-accept] (constantly nil))
+      (assoc-in [:http :extract-accept-charset] (constantly nil))
+      muuntaja/create))
+
+
+(def ^:private json-body
+  "Refuses with 415 a request whose body is not JSON: a browser sends JSON
+   across origins only after asking, and plain text without asking."
+  {:name  ::json-body
+   :enter (fn [{:keys [request] :as ctx}]
+            (if (get-in request [:muuntaja/request :format])
+              ctx
+              (context/terminate ctx {:status 415})))})
+
+
+(def ^:private json-responses
+  "Route interceptors that send a map body as JSON and leave the request body
+   alone: `/api/examples` checks the session before it reads the body."
+  [(interceptors.muuntaja/format-negotiate-interceptor json-only)
+   (interceptors.muuntaja/format-response-interceptor json-only)])
+
+
 (defn- bad-request
   [message]
-  {:status  400
-   :headers {"Content-Type" "application/json"}
-   :body    (cheshire/generate-string {:error message})})
+  {:status 400 :body {:error message}})
 
 
 (defn- operator-link
@@ -626,36 +652,26 @@
     ;; The cache holds the example as data, so a hit renders here
     ;; exactly as a fresh generation does.
     :outcome/success
-    {:status  200
-     :headers {"Content-Type" "application/json"}
-     :body    (cheshire/generate-string result)}
+    {:status 200 :body result}
 
     ;; The pair's failure: no candidate passed, or the input was
     ;; refused.
     :outcome/rejected
-    {:status  422
-     :headers {"Content-Type" "application/json"}
-     :body    (cheshire/generate-string
-               {:error "No example could be generated for this word"})}
+    {:status 422 :body {:error "No example could be generated for this word"}}
 
     ;; The provider's own delay; no delay sends no header.
     :outcome/throttled
     (let [seconds (some-> (:retry-after-ms result) (/ 1000.0) Math/ceil long)]
-      {:status  429
-       :headers (cond-> {"Content-Type" "application/json"}
-                  (and seconds (pos? seconds))
-                  (assoc "Retry-After" (str seconds)))
-       :body    (cheshire/generate-string
-                 {:error "Examples are temporarily unavailable"})})
+      (cond-> {:status 429 :body {:error "Examples are temporarily unavailable"}}
+        (and seconds (pos? seconds))
+        (assoc :headers {"Retry-After" (str seconds)})))
 
     ;; The service's problem, never the session's: the
     ;; provider's 401 or 403 does not reach the client.
     :outcome/unavailable
     {:status  503
-     :headers {"Content-Type" "application/json"
-               "Retry-After"  "30"}
-     :body    (cheshire/generate-string
-               {:error "Examples are temporarily unavailable"})}))
+     :headers {"Retry-After" "30"}
+     :body    {:error "Examples are temporarily unavailable"}}))
 
 
 (defn- page-language
@@ -672,18 +688,19 @@
   (http/ring-handler
    ;; Main handler
    (http/router
-    [["/dictionary/:filename"
-      {:get (fn [{:keys [path-params] :as req}]
-              (if (= (:filename path-params) "manifest")
+    [;; The manifest is a map and leaves as JSON; the file is no collection,
+     ;; so muuntaja leaves it as it is.
+     ["/dictionary/:filename"
+      {:get (fn [{:keys [path-params] :as request}]
+              (if (= "manifest" (:filename path-params))
                 (if-let [{:keys [sha256]} (get-in @dictionary-manifest [:files "dictionary.sqlite"])]
-                  (let [hash12 (subs sha256 0 12)]
-                    {:status  200
-                     :headers {"Content-Type"  "application/json"
-                               "Cache-Control" "no-cache"}
-                     :body    (cheshire/generate-string {:hash     sha256
-                                                         :filename (str "dict." hash12 ".sqlite")})})
-                  {:status 404 :body ""})
-                (dictionary-handler req)))}]
+                  {:status  200
+                   :headers {"Cache-Control" "no-cache"}
+                   :body    {:filename (str "dict." (subs sha256 0 12) ".sqlite")
+                             :hash     sha256}}
+                  {:status 404})
+                (dictionary-handler request)))
+       :interceptors json-responses}]
 
      ["/auth/check"
       {:get
@@ -701,7 +718,8 @@
      ;; before the parameters are: an anonymous caller does not even get told
      ;; which parameter it forgot.
      ["/api/examples"
-      {:get
+      {:interceptors json-responses
+       :get
        (fn [request]
          ;; One connection for the whole answer — the session, the lookup and
          ;; the write. There is no pool, so each `on-connection` was a file
@@ -716,14 +734,10 @@
                ;; A repeated parameter arrives as a vector; neither the subject
                ;; nor the prompt can be built from two values.
                (some vector? (map (:params request) [:word :context :language :pos]))
-               {:status  400
-                :headers {"Content-Type" "application/json"}
-                :body    (cheshire/generate-string {:error "Parameters take one value each"})}
+               (bad-request "Parameters take one value each")
 
                (str/blank? word)
-               {:status  400
-                :headers {"Content-Type" "application/json"}
-                :body    (cheshire/generate-string {:error "Missing 'word' parameter"})}
+               (bad-request "Missing 'word' parameter")
 
                :else
                ;; One subject value feeds both the cache key and the prompt.
@@ -766,47 +780,47 @@
              {:status 401 :body ""})))}]
 
      ["/api/identity/provision"
-      {:post
-       (fn [request]
+      {:interceptors [json-body]
+       :muuntaja json-only
+       :post
+       (fn [{{:keys [invite]} :body-params}]
          (on-connection [db db-spec]
-           (let [{:keys [invite]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
-             (if (and (utils/non-blank invite) (burn-grant! db invite))
-               (try
-                 (let [{:keys [id token]} (create-account! db)]
-                   {:status  200
-                    :headers {"Content-Type" "application/json"}
-                    :body    (cheshire/generate-string {:id id :token token})})
-                 (catch Exception e
-                   ;; No account was opened, so the invite is given back: one
-                   ;; granted from a request cannot be granted again.
-                   (jdbc/execute! db ["UPDATE grants SET used_at = NULL WHERE sha256 = ?" (utils/sha256-hex invite)])
-                   (if (= ::recycled-id (:type (ex-data e)))
-                     (do (t/event! ::recycled-id-refused {:level :error :data (ex-data e)})
-                         {:status 503 :body ""})
-                     (throw e))))
-               {:status 403 :body ""}))))}]
+           (if (and (string? invite) (utils/non-blank invite) (burn-grant! db invite))
+             (try
+               {:status 200 :body (select-keys (create-account! db) [:id :token])}
+               (catch Exception e
+                 ;; No account was opened, so the invite is given back: one
+                 ;; granted from a request cannot be granted again.
+                 (jdbc/execute! db ["UPDATE grants SET used_at = NULL WHERE sha256 = ?" (utils/sha256-hex invite)])
+                 (if (= ::recycled-id (:type (ex-data e)))
+                   (do (t/event! ::recycled-id-refused {:level :error :data (ex-data e)})
+                       {:status 503 :body ""})
+                   (throw e))))
+             {:status 403 :body ""})))}]
 
      ;; Adopting a key means holding a token and nothing else. The token comes
      ;; in the body rather than the cookie so a device can find out whether it
      ;; is valid, and whose it is, before making it this device's identity.
      ["/api/identity/account"
-      {:post
-       (fn [request]
+      {:interceptors [json-body]
+       :muuntaja json-only
+       :post
+       (fn [{{:keys [token]} :body-params}]
          (on-connection [db db-spec]
-           (let [{:keys [token]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
-             (if-let [user-id (authenticated-user-id db token)]
-               {:status  200
-                :headers {"Content-Type" "application/json"}
-                :body    (cheshire/generate-string {:id user-id})}
-               {:status 401 :body ""}))))}]
+           (if-let [user-id (when (string? token) (authenticated-user-id db token))]
+             {:status 200 :body {:id user-id}}
+             {:status 401 :body ""})))}]
 
-     ;; JSON in and out through muuntaja: bodies arrive as `:body-params` and
-     ;; maps leave encoded.
-     ["/api/invite-requests" {:muuntaja muuntaja/instance}
+     ;; JSON in and out through muuntaja for the device's two routes: bodies
+     ;; arrive as `:body-params` and maps leave encoded. The operator's links
+     ;; are HTML forms and stay clear of it.
+     ["/api/invite-requests"
       ;; A device without an account asks the operator for an invite. It
       ;; sends a hash, two counts and a note, and gets no CouchDB database.
       [""
-       {:post
+       {:interceptors [json-body]
+        :muuntaja json-only
+        :post
         (fn [request]
           (let [invite-request (invite-requests/from-body (:body-params request))
                 ;; nginx's X-Real-IP replaces whatever the client sent; the
@@ -840,7 +854,8 @@
       ;; knowing a request's hash is not owning it, and a header stays out of
       ;; access logs. The answer links the next step.
       ["/:sha256"
-       {:get
+       {:muuntaja json-only
+        :get
         (fn [{:keys [headers path-params]}]
           (let [secret (some->> (get headers "authorization") (re-matches #"Bearer (\S+)") second)
                 status (when secret
@@ -863,16 +878,12 @@
        ["/decline" (operator-link :request/declined)]]]]
 
     {:data {:interceptors [(exception/exception-interceptor
-                            {::exception/default log-and-hide-exception
-                             ;; A body muuntaja cannot read is the client's
-                             ;; mistake, not the server's.
-                             :muuntaja/decode (fn [_error _request] {:status 400 :body ""})
-                             :muuntaja/request-charset-negotiation
-                             (fn [_error _request] {:status 400 :body ""})
-                             :muuntaja/response-charset-negotiation
-                             (fn [_error _request] {:status 400 :body ""})
-                             :muuntaja/response-format-negotiation
-                             (fn [_error _request] {:status 400 :body ""})})
+                            ;; A body muuntaja cannot read, or in a charset it
+                            ;; does not know, is the client's mistake.
+                            (let [client-mistake (fn [_error _request] {:status 400 :body ""})]
+                              {::exception/default                   log-and-hide-exception
+                               :muuntaja/decode                      client-mistake
+                               :muuntaja/request-charset-negotiation client-mistake}))
                            ;; Mounts only where route data names `:muuntaja`.
                            (interceptors.muuntaja/format-interceptor)
                            cookie-interceptor

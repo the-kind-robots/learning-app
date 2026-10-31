@@ -64,7 +64,7 @@
                                        :url     (str "http://localhost:" port path)
                                        :headers (merge {"X-Real-IP" (or address "203.0.113.1")} headers)}
                                 body (-> (assoc :body (if (string? body) body (cheshire/generate-string body)))
-                                         (assoc-in [:headers "Content-Type"] "application/json")))))
+                                         (update :headers #(merge {"Content-Type" "application/json"} %))))))
               :couch      couch
               :couch-up?  couch-up?
               :db         db
@@ -386,12 +386,60 @@
      (is (= 200 (provision! ask secret))))))
 
 
+(deftest a-json-route-takes-only-json-and-answers-utf-8-json
+  (with-server
+   (fn [{:keys [ask db mails]}]
+     (testing "a body that is not JSON is refused, so a browser asks before sending one across origins"
+       (are [path body content-type]
+        (= 415 (:status (ask :post path body nil {"Content-Type" content-type})))
+        "/api/invite-requests" stats "text/plain;charset=UTF-8"
+        "/api/identity/account" {:token "nobody"} "text/plain;charset=UTF-8"
+        "/api/identity/account" "(1 2 3)" "application/edn"
+        "/api/identity/provision" "[\"~#list\",[1,2,3]]" "application/transit+json")
+       (is (= [] @mails)))
+     (is (= 400
+            (:status (core/app-handler
+                      {:request-method :post
+                       :uri     "/api/identity/account"
+                       :headers {"content-type" "application/json; charset=no-such-charset"}
+                       :body    (java.io.ByteArrayInputStream. (.getBytes "{\"token\":\"nobody\"}"))})))
+         "a charset nobody knows is the caller's mistake")
+     (testing "Accept and Accept-Charset change nothing"
+       (let [created (ask :post "/api/invite-requests" stats nil {"Accept" ";;;" "Accept-Charset" "iso-2022-cn"})]
+         (is (= [201 "application/json; charset=utf-8"]
+                [(:status created) (get-in created [:headers :content-type])])))
+       (is (= 1 (count (jdbc/execute! db ["SELECT sha256 FROM invite_requests"]))))))))
+
+
+(deftest the-manifest-names-the-dictionary-file-as-json
+  (with-server
+   (fn [{:keys [ask]}]
+     (with-redefs [core/dictionary-manifest (delay {:files {"dictionary.sqlite" {:sha256 "0123456789abcdef"}}})]
+       (let [manifest (ask :get "/dictionary/manifest" nil nil {"Accept" ";;;"})]
+         (is (= [200 {:filename "dict.0123456789ab.sqlite" :hash "0123456789abcdef"}]
+                [(:status manifest) (cheshire/parse-string (:body manifest) true)])))
+       (is (= 404 (:status (ask :get "/dictionary/dict.ffffffffffff.sqlite"))) "a file of another hash")))))
+
+
 (deftest a-path-that-does-not-decode-is-the-callers-mistake
   ;; The handler itself: an HTTP client will not send such a path.
   (are [path] (= 400 (:status (core/ring-handler {:request-method :get :uri path :headers {}})))
    "/api/invite-requests/%zz"
    "/api/invite-requests/%zz/grant"
    "/dictionary/%zz"))
+
+
+(deftest the-operators-form-decides-whatever-it-sends
+  (with-server
+   (fn [{:keys [ask mails]}]
+     (request-invite! ask stats)
+     (is (str/includes? (:body (ask :post
+                                    (link (first @mails) "Grant")
+                                    "x=1"
+                                    nil
+                                    {"Content-Type" "application/x-www-form-urlencoded"}))
+                        "Granted."))
+     (is (= "granted" (status-of ask secret))))))
 
 
 (deftest a-note-cannot-pass-off-links-of-its-own
