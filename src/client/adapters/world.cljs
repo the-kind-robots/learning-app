@@ -16,6 +16,12 @@
   utils/now-ms)
 
 
+(defn uptime-ms
+  "The milliseconds since the page opened. A change of the device's clock does not move it."
+  []
+  (js/performance.now))
+
+
 (defn random
   "A number in [0, 1)."
   []

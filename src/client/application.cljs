@@ -68,10 +68,12 @@
                       ;; Marked skip-interpolation: Nexus would otherwise walk every word id of a theme
                       ;; for placeholders on each keystroke.
                       (with-meta {:active-collection (learner/active-collection (:learner capabilities))
-                                  :language (settings/language (:learner capabilities) (:page capabilities))
-                                  :learner  (:learner capabilities)
-                                  :now-ms   (world/clock (:world capabilities) :now-ms)
-                                  :random   #(world/random (:world capabilities))}
+                                  :language          (settings/language (:learner capabilities) (:page capabilities))
+                                  :learner           (:learner capabilities)
+                                  :now-ms            (world/clock (:world capabilities) :now-ms)
+                                  :random            #(world/random (:world capabilities))
+                                  :uptime-ms         (world/clock (:world capabilities) :uptime-ms)
+                                  :visibility-changes (page/visibility-changes (:page capabilities))}
                                  {:nexus/skip-interpolation true})]
                      args)])))
 

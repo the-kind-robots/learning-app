@@ -10,7 +10,8 @@
     [w effect a]
     [w effect a b]
     "The clock, by what is asked of it. `(clock w :now-ms)` and `(clock w :now-iso)` tell the time, in milliseconds
-     and as an ISO 8601 string. `(clock w :after ms f)` calls `f` once `ms` have passed and returns a function that
+     and as an ISO 8601 string. `(clock w :uptime-ms)` tells the milliseconds since the page opened, which a change
+     of the device's clock does not move. `(clock w :after ms f)` calls `f` once `ms` have passed and returns a function that
      cancels the call. `(clock w :sleep ms signal)` is a promise that resolves with nil after `ms`, or at once when
      `signal` aborts.")
   (random [w]
@@ -22,8 +23,9 @@
   (reify World
     (clock [_ effect]
       (case effect
-        :now-iso (world/now-iso)
-        :now-ms  (world/now-ms)
+        :now-iso   (world/now-iso)
+        :now-ms    (world/now-ms)
+        :uptime-ms (world/uptime-ms)
         (throw (ex-info "Unknown clock effect" {:effect effect}))))
     (clock [_ effect a b]
       (case effect

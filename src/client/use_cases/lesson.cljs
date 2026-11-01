@@ -6,6 +6,8 @@
    [domain.retention :as retention]
    [domain.vocabulary :as vocabulary-domain]
    [ports.learner :as learner]
+   [ports.page :as page]
+   [ports.world :as world]
    [use-cases.vocabulary :as vocabulary]))
 
 
@@ -47,15 +49,16 @@
 
 
 (defn ^:async record-review!
-  "Writes the review of the answer just checked in `lesson-state`."
-  [learner world lesson-state]
+  "Writes the review of the answer just checked in `lesson-state`, which took `answer-ms` (nil: unknown)."
+  [learner world lesson-state answer-ms]
   (let [trial (domain/current-trial lesson-state)]
     (await (vocabulary/add-review
             learner
             world
             (:word-id trial)
             (-> lesson-state domain/last-result :correct?)
-            (:prompt trial)))))
+            (:prompt trial)
+            answer-ms))))
 
 
 (defn token-info
@@ -70,8 +73,10 @@
 (defn check-answer!
   "Grades `answer` at once: `{:lesson-state .. :answer-hints ..}` for an example, `{:lesson-state .. :review ..}`
    for a word, its review being written (`:review` resolves once it is). Nil once the current trial is answered.
-   The hints are the vocabulary state per annotated word of the answer, `{word-index :word-state/..}`."
-  [learner world lesson-state answer]
+   The hints are the vocabulary state per annotated word of the answer, `{word-index :word-state/..}`.
+   The review's time to answer counts from `answer-started`, `{:uptime-ms :visibility-changes}` as the trial
+   appeared; a page hidden or shown since leaves the time unknown."
+  [learner world page lesson-state answer answer-started]
   (when (nil? (domain/last-result lesson-state))
     (let [checked (domain/check-answer lesson-state answer)
           trial   (domain/current-trial checked)]
@@ -82,5 +87,7 @@
                                    [word-index (:state (token-info learner dictionary-form translation))]))
                             (into {}))
          :lesson-state checked}
-        {:lesson-state checked
-         :review       (record-review! learner world checked)}))))
+        (let [answer-ms (when (= (:visibility-changes answer-started) (page/visibility-changes page))
+                          (js/Math.round (- (world/clock world :uptime-ms) (:uptime-ms answer-started))))]
+          {:lesson-state checked
+           :review       (record-review! learner world checked answer-ms)})))))

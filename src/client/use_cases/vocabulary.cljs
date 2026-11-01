@@ -17,11 +17,11 @@
 
 
 (defn add-review
-  "Writes a review of a word. Resolves once memory has it."
-  [learner world word-id retained translation]
+  "Writes a review of a word; `answer-ms` is nil when the time to answer is unknown. Resolves once memory has it."
+  [learner world word-id retained translation answer-ms]
   (learner/insert! learner
                    :entity/review
-                   (assoc (domain/new-review word-id retained translation)
+                   (assoc (domain/new-review word-id retained translation answer-ms)
                           :created-at
                           (world/clock world :now-iso))))
 
@@ -57,7 +57,7 @@
             created?   @created?
             history    (learner/review-history learner (:id entry))]
         (when (and created? (zero? (count (:ids history))))
-          (await (add-review learner world (:id entry) true translation)))
+          (await (add-review learner world (:id entry) true translation nil)))
         (when collection
           (await (learner/change! learner
                                   [[:entity/collection
@@ -133,7 +133,7 @@
                                                           #(some-> % (collections/replace-word word-id (:id entry)))]))
                                                       (learner/collections-of learner word-id)))))]
         (when (and written (zero? (count (:ids (learner/review-history learner (:id entry))))))
-          (await (add-review learner world (:id entry) true translation)))
+          (await (add-review learner world (:id entry) true translation nil)))
         written))))
 
 

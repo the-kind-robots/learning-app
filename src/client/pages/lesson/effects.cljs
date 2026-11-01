@@ -15,10 +15,10 @@
 (nxr/register-effect! :effect/check-answer
   ;; The answer is graded and shown at once, an example's word hints with it; a word's review is written after.
   (fn ^:async check-answer
-    [{{:keys [learner world]} :capabilities :keys [dispatch]} _ lesson-state answer]
+    [{{:keys [learner page world]} :capabilities :keys [dispatch]} _ lesson-state answer answer-started]
     (try
       (when-let [{checked :lesson-state :keys [answer-hints review]}
-                 (lesson/check-answer! learner world lesson-state answer)]
+                 (lesson/check-answer! learner world page lesson-state answer answer-started)]
         (dispatch [[:action/update-lesson lesson-state checked]])
         (when answer-hints
           (dispatch [[:action/annotate-answer checked answer-hints]]))

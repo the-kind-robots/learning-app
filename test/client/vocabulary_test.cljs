@@ -101,7 +101,7 @@
      (^:async fn
       [dbs]
       (let [{:keys [word-id]} (await (sut/add! (::learner dbs) time/world {:translation "пёс" :value "der Hund"}))]
-        (await (sut/add-review (::learner dbs) time/world word-id true "пёс"))
+        (await (sut/add-review (::learner dbs) time/world word-id true "пёс" nil))
         (await (db/insert (:user/db dbs) {:type "example" :word-id word-id :value "Der Hund läuft"}))
         (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
           (await (sut/delete! (::learner dbs) word-id))
