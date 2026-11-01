@@ -76,6 +76,12 @@
    :autorun   true
    :ns-regexp "-test$"}
 
+  ;; The memory kernels compared on a review log (#513): `dev.kernel-comparison`.
+  :kernel-comparison
+  {:target    :node-script
+   :output-to "target/kernel-comparison.js"
+   :main      dev.kernel-comparison/main}
+
   :browser-test
   {:target    :browser-test
    :test-dir  "target/browser-test"
