@@ -32,11 +32,12 @@
    `client.memory-snapshot-test/a-snapshot-of-this-format-version-holds-exactly-what-memory-takes`
    fails when the format changes.
 
-   Version 5: memory takes the settings document (#473). Version 4: a
+   Version 6: a review history holds each review's time to answer (#692). Version 5: memory takes the
+   settings document (#473). Version 4: a
    word's `:search` also holds its spelling without umlauts (#578). Version
    3: the body is memory itself (ADR-0023). Version 2 held the entries
    memory took from each document."
-  5)
+  6)
 
 
 (def ^:private cache-name
@@ -51,15 +52,17 @@
 
 
 (def ^:private body-writer
-  "The transit writer of the body: a review history is three columns. The columns go as one JSON string, which transit skips whole and `JSON.parse` reads natively."
+  "The transit writer of the body: a review history is four columns. The columns go as one JSON string, which
+   transit skips whole and `JSON.parse` reads natively; an unknown time to answer, NaN, goes as null."
   (transit/writer :json
                   {:handlers {retention/Reviews
                               (transit/write-handler
                                (constantly "reviews")
-                               (fn [{:keys [ids retained seconds]}]
-                                 (js/JSON.stringify #js [(js/Array.from seconds)
+                               (fn [{:keys [answer-ms retained review-ids reviewed-at]}]
+                                 (js/JSON.stringify #js [(js/Array.from reviewed-at)
                                                          (.join (js/Array.from retained) "")
-                                                         ids])))}}))
+                                                         (js/Array.from answer-ms)
+                                                         review-ids])))}}))
 
 
 (def ^:private body-reader
@@ -70,7 +73,9 @@
                                             (retention/->Reviews (js/Float64Array.from (aget columns 0))
                                                                  (js/Uint8Array.from (.split ^string (aget columns 1)
                                                                                              ""))
-                                                                 (aget columns 2))))}}))
+                                                                 (js/Float64Array.from (aget columns 2)
+                                                                                       #(if (nil? %) ##NaN %))
+                                                                 (aget columns 3))))}}))
 
 
 (defn- checksum

@@ -58,18 +58,18 @@
 
 
 (defn- ^:async cached-words
-  "Every word as memory would have `dbs` now, with its retention level and
-   the urgency a lesson ranks it by."
+  "Every word as memory would have `dbs` now, with its recall as the word list reads it and as a lesson
+   ranks it by."
   [dbs]
   (let [memory (await (db-seed/memory-of (:user/db dbs)))
         now    (time/now-ms)
-        levels (into {}
-                     (map (juxt :id :retention-level))
+        listed (into {}
+                     (map (juxt :id :log-recall))
                      (:words (vocabulary/rows (test-learner/of-memory memory) {} now)))]
     {:words (mapv (fn [{:keys [word] :as card}]
-                    {:id      (:id word)
-                     :retention-level (levels (:id word))
-                     :urgency (retention/urgency (:reviews card) now)})
+                    {:id (:id word)
+                     :listed-recall (listed (:id word))
+                     :log-recall (retention/log-recall (:reviews card) now)})
                   (memory/collection-cards memory nil))}))
 
 
@@ -156,8 +156,10 @@
             (await (start! dbs
                            {:vocab-per-lesson 3
                             :trial-selector   :first}))]
-        (is (every? zero? (map :retention-level words))
-            "the premise: retention has underflowed to zero for all six")
+        (is (every? #(zero? (js/Math.exp (:log-recall %))) words)
+            "the premise: recall has underflowed to zero for all six")
+        (is (every? #(= (:listed-recall %) (:log-recall %)) words)
+            "the word list reads the recall the lesson ranks by")
         (is (= #{"vocab:zeit" "vocab:zug" "vocab:zurueck"}
                (set (map :word-id (:trials lesson-state))))
             "the lesson holds the three most due, not the three the alphabet leads with"))))))
@@ -165,7 +167,7 @@
 
 (defn- ^:async seed-unreviewed-vocabulary!
   "Words with no review at all. Every one of them is maximally due, so every
-   one has the same urgency — the tie that is left once the underflow is
+   one has the same, unknown recall — the tie that is left once the underflow is
    gone."
   [db values]
   (await (js/Promise.all

@@ -248,7 +248,7 @@
         (is (true? created?))
         (is (= ["review-1"] (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review"))))
             "no initial review is written")
-        (is (= ["review-1"] (array-seq (:ids (:reviews (first (memory/collection-cards memory nil))))))
+        (is (= ["review-1"] (array-seq (:review-ids (:reviews (first (memory/collection-cards memory nil))))))
             "the card a lesson draws has the old review alone, so retention comes from it")
         (is (empty? (test-learner/missing-in memory))
             "the word has an example in «Всё подряд» already"))))))

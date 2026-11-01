@@ -150,13 +150,13 @@
                                    (let [log (reduce retention/with-review
                                                      retention/empty-reviews
                                                      (map #(assoc % :id (:_id %)) reviews))]
-                                     [word-id (retention/level (retention/urgency log (time/now-ms)))])))
+                                     [word-id (retention/log-recall log (time/now-ms))])))
                             (into {}))
               {:keys [words]} (await (list-of dbs {}))
-              actual   (into {} (map (juxt :id :retention-level)) words)
+              actual   (into {} (map (juxt :id :log-recall)) words)
               {subset :words} (await (list-of dbs {:word-ids (take 2 word-ids)}))]
           (is (= 35 (count reviews)))
           (is (= 5 (count (distinct (vals expected)))))
           (is (= expected actual))
           (is (= (select-keys expected (take 2 word-ids))
-                 (into {} (map (juxt :id :retention-level)) subset)))))))))
+                 (into {} (map (juxt :id :log-recall)) subset)))))))))

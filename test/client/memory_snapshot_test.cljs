@@ -153,6 +153,7 @@
     :value       "der Hund"}
    {:_id         "review-1"
     :_rev        "1-b"
+    :answer-ms   3420
     :created-at  "2026-01-03T00:00:00.000Z"
     :retained    true
     :translation "пёс"
@@ -174,7 +175,7 @@
 
 
 (defn- as-data
-  "The memory `stored` returned, with each review history as its three
+  "The memory `stored` returned, with each review history as its four
    columns in vectors."
   [stored]
   (update stored :cards (partial mapv #(update % :reviews (fn [reviews] (update-vals (into {} reviews) vec))))))
@@ -182,9 +183,10 @@
 
 (def ^:private format-body
   "What a snapshot of `format-docs` holds in this format version."
-  {:cards            [{:reviews {:ids      ["review-1"]
-                                 :retained [1]
-                                 :seconds  [1767398400]}
+  {:cards            [{:reviews {:answer-ms   [3420]
+                                 :retained    [1]
+                                 :review-ids  ["review-1"]
+                                 :reviewed-at [1767398400]}
                        :word    {:id          "vocab:der hund"
                                  :created-at  "2026-01-01T00:00:00.000Z"
                                  :modified-at "2026-01-02T00:00:00.000Z"
@@ -212,9 +214,16 @@
     (is (= format-body (as-data body))
         (str "What the snapshot holds changed. Change adapters.learner.snapshot/format-version, "
              "so that snapshots of the old format are dropped, and update format-body here."))
-    (is (and (instance? js/Float64Array (:seconds (:reviews (first (:cards body)))))
+    (is (and (instance? js/Float64Array (:reviewed-at (:reviews (first (:cards body)))))
              (instance? js/Uint8Array (:retained (:reviews (first (:cards body))))))
         "a review history comes back as typed arrays")))
+
+
+(deftest a-review-without-time-comes-back-from-a-snapshot-without-time
+  (let [docs   [(first format-docs) (dissoc (second format-docs) :answer-ms)]
+        body   (snapshot/decoded (snapshot/parsed (snapshot/encode (memory/with-docs memory/empty-memory docs) nil)))
+        answer (aget (:answer-ms (:reviews (first (:cards body)))) 0)]
+    (is (js/Number.isNaN answer) "unknown, not zero")))
 
 
 (defn- word-docs
@@ -244,16 +253,16 @@
         levels   (fn [m]
                    (into {}
                          (map (fn [{:keys [id]}]
-                                [id (retention/level (retention/urgency (memory/review-history m id) now))]))
+                                [id (retention/log-recall (memory/review-history m id) now)]))
                          (memory/words m)))
         picked   (fn [m]
                    (into #{}
-                         (map (comp :id :word))
-                         (lesson/pick-vocab (memory/collection-cards m nil)
-                                            #(retention/urgency (:reviews %) now)
-                                            2
-                                            (constantly 0.5))))]
-    (is (= (levels rebuilt) (levels restored)) "retention levels")
+                         (map :id)
+                         (lesson/lesson-words (for [card (memory/collection-cards m nil)]
+                                                [(:word card) (retention/log-recall (:reviews card) now)])
+                                              2
+                                              (constantly 0.5))))]
+    (is (= (levels rebuilt) (levels restored)) "recall")
     (is (= (picked rebuilt) (picked restored)) "the words a lesson picks")
     (is (= (map :id (memory/words rebuilt)) (map :id (memory/words restored))) "the word list")
     (is (= (projection/of rebuilt) (projection/of restored)) "everything memory holds")))
