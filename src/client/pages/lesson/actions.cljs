@@ -10,13 +10,14 @@
 
 (defn- shown
   "The lesson screen with `lesson-state` on it, fresh: no answer revealed, no
-   hint open."
+   hint open, no answer started yet."
   [{:keys [lesson-state error]}]
-  {:lesson/answer-hints nil
-   :lesson/empty?       (boolean error)
+  {:lesson/answer-hints   nil
+   :lesson/answer-started nil
+   :lesson/empty?         (boolean error)
    :lesson/open-hint-index nil
-   :lesson/state        lesson-state
-   :page/current        :page/lesson})
+   :lesson/state          lesson-state
+   :page/current          :page/lesson})
 
 
 (nxr/register-action! :action/open-lesson
@@ -41,10 +42,16 @@
       [[:effect/save {:lesson/answer-hints hints}]])))
 
 
+(nxr/register-action! :action/start-answer
+  ;; The trial is on screen: its time to answer counts from here.
+  (fn start-answer [_ context]
+    [[:effect/save {:lesson/answer-started (select-keys context [:uptime-ms :visibility-changes])}]]))
+
+
 (nxr/register-action! :action/check-answer
   (fn check-answer [state answer]
     (if-let [lesson-state (:lesson/state state)]
-      [[:effect/check-answer lesson-state answer]]
+      [[:effect/check-answer lesson-state answer (:lesson/answer-started state)]]
       [[:effect/log-warning :lesson/check-answer-missing {:answer answer}]])))
 
 

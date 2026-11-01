@@ -86,7 +86,7 @@
          (await (db-seed/seed-vocabulary! (:user/db dbs) [{:_id "word-1" :value "der Hund" :translation "пёс"}]))
          (let [lesson  (await (started dbs {:trial-selector :first}))
                before  (set (map :_id (await (db-queries/fetch-by-type (:user/db dbs) "review"))))
-               _ (await (sut/record-review! (::learner dbs) time/world (domain/check-answer lesson answer)))
+               _ (await (sut/record-review! (::learner dbs) time/world (domain/check-answer lesson answer) nil))
                written (remove (comp before :_id) (await (db-queries/fetch-by-type (:user/db dbs) "review")))]
            (is (= [["word-1" retained?]] (map (juxt :word-id :retained) written)) answer))))))))
 
@@ -101,7 +101,7 @@
             checked (domain/check-answer lesson "der Hund")]
         (with-redefs [db/insert (fn [_ _] (js/Promise.reject (ex-info "DB error" {})))]
           (let [error (try
-                        (await (sut/record-review! (::learner dbs) time/world checked))
+                        (await (sut/record-review! (::learner dbs) time/world checked nil))
                         nil
                         (catch js/Error err err))]
             (is (some? error))

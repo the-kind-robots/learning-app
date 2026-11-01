@@ -27,7 +27,8 @@
   [{:keys [correct-answer max-length]}]
   [:footer#lesson-footer
    {:replicant/key      :input
-    :replicant/on-mount [[:action/focus-lesson-input]]}
+    :replicant/on-mount [[:action/focus-lesson-input]
+                         [:effect/after-paint [[:effect/enter :action/start-answer]]]]}
    [:form.lesson__footer.lesson__footer--input.page-footer
     {:autocapitalize "none"
      :autocorrect "off"

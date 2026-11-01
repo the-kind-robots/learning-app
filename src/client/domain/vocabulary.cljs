@@ -190,10 +190,12 @@
 
 
 (defn new-review
-  [word-id retained translation]
-  {:word-id     word-id
-   :retained    retained
-   :translation [{:lang "ru" :value translation}]})
+  "A review of `word-id`; `answer-ms`, the time the answer took, is nil when unknown."
+  [word-id retained translation answer-ms]
+  (cond-> {:word-id     word-id
+           :retained    retained
+           :translation [{:lang "ru" :value translation}]}
+    answer-ms (assoc :answer-ms answer-ms)))
 
 
 (defn edited-word

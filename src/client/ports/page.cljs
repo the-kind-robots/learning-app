@@ -30,6 +30,9 @@
   (on-visibility-change
     [p f]
     "Calls `f` whenever the page is shown or hidden. Returns a function that stops it.")
+  (visibility-changes
+    [p]
+    "How many times the page has been shown or hidden since it opened.")
   (until-active
     [p signal]
     "A promise that resolves once the page is active; it stays pending if `signal` aborts first.")
@@ -44,8 +47,10 @@
 (defn start!
   "The page. A page shown again from the back-forward cache gets the keyboard mode it last had."
   []
-  (let [overlays (atom false)]
+  (let [overlays (atom false)
+        changes  (atom 0)]
     (js/window.addEventListener "pageshow" (fn [_] (adapter/overlay-keyboard! @overlays)))
+    (adapter/on-visibility-change #(swap! changes inc))
     (reify Page
       (active? [_] (adapter/active?))
       (online? [_] (adapter/online?))
@@ -55,6 +60,7 @@
       (on-offline [_ f] (adapter/on-offline f))
       (on-online [_ f] (adapter/on-online f))
       (on-visibility-change [_ f] (adapter/on-visibility-change f))
+      (visibility-changes [_] @changes)
       (until-active [_ signal] (adapter/until-active signal))
       (yield [_] (adapter/yield))
       (overlay-keyboard! [_ overlays?]
