@@ -143,19 +143,20 @@
 
 
 (defn- median
-  [values]
-  (let [sorted (vec (sort values))
-        middle (quot (count sorted) 2)]
-    (if (odd? (count sorted))
-      (sorted middle)
-      (/ (+ (sorted (dec middle)) (sorted middle)) 2))))
+  "The median of `values`, a Float64Array, which it sorts in place."
+  [^js values]
+  (let [sorted (.sort values)
+        size   (.-length sorted)
+        middle (quot size 2)]
+    (if (odd? size)
+      (aget sorted middle)
+      (/ (+ (aget sorted (dec middle)) (aget sorted middle)) 2))))
 
 
 (defn- percentile
-  "The value below which a `share` of `values` lies."
-  [values share]
-  (let [sorted (vec (sort values))]
-    (sorted (min (dec (count sorted)) (js/Math.floor (* share (count sorted)))))))
+  "The value below which a `share` of `sorted`, an ascending Float64Array, lies."
+  [^js sorted share]
+  (aget sorted (min (dec (.-length sorted)) (js/Math.floor (* share (.-length sorted))))))
 
 
 (defn pace
@@ -165,17 +166,28 @@
    actual / expected. Nil while there are fewer than 30."
   [answers]
   (when (>= (count answers) 30)
-    (let [recent (->> answers
-                      (take-last 500)
-                      (mapv #(update % :answer-ms min ceiling-ms)))
+    ;; Typed arrays and a numeric sort: 500 answers make 124 750 slopes, too many for vectors on a lesson's tap.
+    (let [recent      (take-last 500 answers)
+          size        (count recent)
+          answer-ms   (js/Float64Array.from (map #(min (:answer-ms %) ceiling-ms) recent))
+          lengths     (js/Float64Array.from (map :length recent))
           ;; Theil–Sen: the slope is the median of the slopes between every two answers of different lengths.
-          slopes (for [[position one] (map-indexed vector recent)
-                       other (subvec recent (inc position))
-                       :when (not= (:length one) (:length other))]
-                   (/ (- (:answer-ms other) (:answer-ms one)) (- (:length other) (:length one))))
-          b      (if (seq slopes) (max 0 (median slopes)) 0)
-          a      (max 1 (median (map #(- (:answer-ms %) (* b (:length %))) recent)))
-          ratios (map #(/ (:answer-ms %) (+ a (* b (:length %)))) recent)]
+          slopes      (js/Float64Array. (quot (* size (dec size)) 2))
+          slope-count (loop [one    0
+                             other  1
+                             filled 0]
+                        (cond
+                          (>= one size)   filled
+                          (>= other size) (recur (inc one) (+ one 2) filled)
+                          (== (aget lengths one) (aget lengths other)) (recur one (inc other) filled)
+                          :else           (do (aset slopes
+                                                    filled
+                                                    (/ (- (aget answer-ms other) (aget answer-ms one))
+                                                       (- (aget lengths other) (aget lengths one))))
+                                              (recur one (inc other) (inc filled)))))
+          b           (if (pos? slope-count) (max 0 (median (.subarray slopes 0 slope-count))) 0)
+          a           (max 1 (median (.map answer-ms (fn [ms position] (- ms (* b (aget lengths position)))))))
+          ratios      (.sort (.map answer-ms (fn [ms position] (/ ms (+ a (* b (aget lengths position)))))))]
       {:a    a
        :b    b
        :fast (percentile ratios 0.25)
