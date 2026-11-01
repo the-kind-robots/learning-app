@@ -114,23 +114,22 @@
         (recur memory (drop size docs) sizes (conj seen [memory (projection/of memory)]))))))
 
 
-(defn- expected-urgency
-  "The retention formula over a word's reviews as documents: the oracle the
+(defn- expected-log-recall
+  "The recall formula over a word's reviews as documents: the oracle the
    columns are checked against."
   [reviews now-ms]
   (let [reviews (->> reviews
                      (sort-by :_id)
                      (map #(update % :created-at utils/iso->secs))
                      (sort-by :created-at))]
-    (if (empty? reviews)
-      ##Inf
-      (* (reduce (fn [rate [prev curr]]
-                   (if (:retained curr)
-                     (/ rate (inc (* rate (- (:created-at curr) (:created-at prev)))))
-                     (* 2 rate)))
-                 0.00231
-                 (map vector reviews (rest reviews)))
-         (utils/ms->secs (- now-ms (* 1000 (:created-at (last reviews)))))))))
+    (when (seq reviews)
+      (let [rate (reduce (fn [rate [prev curr]]
+                           (if (:retained curr)
+                             (/ rate (inc (* rate (- (:created-at curr) (:created-at prev)))))
+                             (* 2 rate)))
+                         0.00231
+                         (map vector reviews (rest reviews)))]
+        (min 0 (- (* rate (utils/ms->secs (- now-ms (* 1000 (:created-at (last reviews))))))))))))
 
 
 (def ^:private now 1790000000000)
@@ -156,12 +155,12 @@
                                (:slot-of incremental))
                        (= (vocabulary/rows (test-learner/of-memory rebuilt) {} now)
                           (vocabulary/rows (test-learner/of-memory incremental) {} now))
-                       ;; Every word's urgency is the formula over its review documents.
+                       ;; Every word's recall is the formula over its review documents.
                        (= (into {}
-                                (map (fn [w] [(:id w) (expected-urgency (reviews (:id w)) now)]))
+                                (map (fn [w] [(:id w) (expected-log-recall (reviews (:id w)) now)]))
                                 (vals (:words incremental)))
                           (into {}
-                                (map (fn [e] [(:id (:word e)) (retention/urgency (:reviews e) now)]))
+                                (map (fn [e] [(:id (:word e)) (retention/log-recall (:reviews e) now)]))
                                 (sut/collection-cards incremental nil)))
                        ;; A collection's lesson draws from its words and its children's that exist.
                        (every? (fn [collection]

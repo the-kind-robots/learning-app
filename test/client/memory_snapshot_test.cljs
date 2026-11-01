@@ -253,16 +253,16 @@
         levels   (fn [m]
                    (into {}
                          (map (fn [{:keys [id]}]
-                                [id (retention/level (retention/urgency (memory/review-history m id) now))]))
+                                [id (retention/log-recall (memory/review-history m id) now)]))
                          (memory/words m)))
         picked   (fn [m]
                    (into #{}
                          (map (comp :id :word))
                          (lesson/pick-vocab (memory/collection-cards m nil)
-                                            #(retention/urgency (:reviews %) now)
+                                            #(retention/log-recall (:reviews %) now)
                                             2
                                             (constantly 0.5))))]
-    (is (= (levels rebuilt) (levels restored)) "retention levels")
+    (is (= (levels rebuilt) (levels restored)) "recall")
     (is (= (picked rebuilt) (picked restored)) "the words a lesson picks")
     (is (= (map :id (memory/words rebuilt)) (map :id (memory/words restored))) "the word list")
     (is (= (projection/of rebuilt) (projection/of restored)) "everything memory holds")))

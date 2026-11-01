@@ -9,26 +9,35 @@
 
 
 (defn pick-vocab
-  "The `n` most due of `rows`, most due first, ranked by `urgency-of`. Ties are taken in random order (a tie
-   key from `random`, in [0, 1)), so a tied vocabulary is never cut alphabetically. One pass keeps the top `n`;
-   the vocabulary is not sorted. `##Inf` compares, it is never subtracted; a non-number ranks last."
-  [rows urgency-of n random]
+  "The `n` of `rows` least likely recalled, the least first, by `log-recall-of` (`domain.retention/log-recall`).
+   A word whose memory is unknown (nil) has never been reviewed and comes first. Ties are taken in random
+   order (a tie key from `random`, in [0, 1)), so a tied vocabulary is never cut alphabetically. One pass keeps
+   the top `n`; the vocabulary is not sorted. `##Inf` compares, it is never subtracted; NaN ranks last."
+  [rows log-recall-of n random]
   (let [n       (or n 0)
+        ;; How overdue a row is, the larger the more: minus its log-recall; unknown is the most, NaN the least.
+        overdue (fn [row]
+                  (let [log-recall (log-recall-of row)]
+                    (cond
+                      (nil? log-recall) ##Inf
+                      (js/Number.isNaN log-recall) ##-Inf
+                      :else (- log-recall))))
+        ;; The rows kept so far, most overdue first, each as #js [row overdue tie].
         top     #js []
-        before? (fn [u t ^js kept]
-                  (or (> u (aget kept 1))
-                      (and (== u (aget kept 1)) (< t (aget kept 2)))))]
+        before? (fn [overdue tie ^js kept]
+                  (or (> overdue (aget kept 1))
+                      (and (== overdue (aget kept 1)) (< tie (aget kept 2)))))]
     (doseq [row   rows
-            :let  [u (let [u (urgency-of row)] (if (js/Number.isNaN u) ##-Inf u))
-                   t (random)]
+            :let  [due (overdue row)
+                   tie (random)]
             :when (and (pos? n)
                        (or (< (.-length top) n)
-                           (before? u t (aget top (dec (.-length top))))))]
+                           (before? due tie (aget top (dec (.-length top))))))]
       (let [at (loop [i 0]
-                 (if (and (< i (.-length top)) (not (before? u t (aget top i))))
+                 (if (and (< i (.-length top)) (not (before? due tie (aget top i))))
                    (recur (inc i))
                    i))]
-        (.splice top at 0 #js [row u t])
+        (.splice top at 0 #js [row due tie])
         (when (> (.-length top) n)
           (.pop top))))
     (mapv #(aget % 0) top)))

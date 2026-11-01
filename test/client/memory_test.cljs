@@ -81,8 +81,8 @@
            {:_id "r0" :_rev "1-a" :type "review" :word-id "vocab:w" :created-at "2025-12-01T00:00:00Z" :retained true}]
           state (fn [docs]
                   (let [memory (sut/with-docs sut/empty-memory docs)]
-                    (retention/urgency (:reviews (nth (:cards memory) (get-in memory [:slot-of "vocab:w"])))
-                                       1790000000000)))]
+                    (retention/log-recall (:reviews (nth (:cards memory) (get-in memory [:slot-of "vocab:w"])))
+                                          1790000000000)))]
       (is (= (state (cons word reviews))
              (state (cons word (reverse reviews))))))))
 

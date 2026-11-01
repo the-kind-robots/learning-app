@@ -23,7 +23,7 @@
   (let [cards    (learner/collection-cards learner collection)
         selected (map :word
                       (domain/pick-vocab cards
-                                         #(retention/urgency (:reviews %) now-ms)
+                                         #(retention/log-recall (:reviews %) now-ms)
                                          vocab-per-lesson
                                          random))]
     (if-not (seq selected)

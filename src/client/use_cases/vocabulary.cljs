@@ -68,7 +68,7 @@
 
 (defn rows
   "The word list's rows out of memory, paged by `:offset`/`:limit`, narrowed by `:collection` and `:search`,
-   each with its retention level. `:total` counts the words before the search, `:matches` after it."
+   each with its `:log-recall`. `:total` counts the words before the search, `:matches` after it."
   [learner {:keys [collection limit offset search]} now-ms]
   (let [scope   (learner/collection-words learner collection)
         query   (when (utils/non-blank search) (domain/query search))
@@ -78,10 +78,10 @@
                   limit  (take limit))]
     {:matches (count matched)
      :total   (count scope)
-     :words   (mapv #(assoc (select-keys % [:id :kind :translation :value])
-                            :retention-level
-                            (retention/level (retention/urgency (learner/review-history learner (:id %))
-                                                                now-ms)))
+     :words   (mapv (fn [word]
+                      (assoc (select-keys word [:id :kind :translation :value])
+                             :log-recall
+                             (retention/log-recall (learner/review-history learner (:id word)) now-ms)))
                     page)}))
 
 

@@ -1,15 +1,14 @@
 (ns domain.retention
-  "How due a word is, from its reviews.
+  "The memory of a word: how likely the learner recalls it, from its reviews. Nothing here knows of lessons.
 
    A word's review history is four columns — when each review was made, in
    seconds, whether it was retained, how long the answer took in
    milliseconds (NaN when unknown), and its id — ordered by time and,
    within one second, by id, so the result does not depend on the order the
    reviews arrived in. A history is never changed: a review in or out gives
-   a new one. `urgency` walks the columns: a lesson ranks every word in
+   a new one. `log-recall` walks the columns: a lesson ranks every word in
    scope on the tap."
   (:require
-   [clojure.math :as math]
    [goog.array :as garray]
    [utils :as utils]))
 
@@ -71,20 +70,17 @@
                    (doto (.slice (.-ids history)) (.splice at 1)))))))
 
 
-(defn urgency
-  "How overdue a word is: the time since its last review, counted in its own
-   forgetting time-constants. It ranks words as retention does, reversed,
-   but keeps separating them after retention underflows to zero (3.8 days
-   unreviewed at the initial rate). A word with no reviews is as due as a
-   word can be.
+(defn log-recall
+  "The natural log of the probability that the learner recalls the word at `now-ms`, from 0 (certain) down;
+   nil for a word with no reviews, whose memory is unknown. A log, so that words long unreviewed, whose
+   probability underflows to zero (3.8 days at the initial rate), still compare.
 
-   The forgetting rate starts at 0.00231 per second. Each retained review
-   divides it by one plus the rate times the interval; each lapse doubles
-   it."
+   The forgetting rate starts at 0.00231 per second. Each retained review divides it by one plus the rate
+   times the interval; each lapse doubles it. The probability is e to the minus rate times the time since the
+   last review; a clock moved backwards reads as certain."
   [^Reviews history now-ms]
   (let [size (if history (.-length (.-ids history)) 0)]
-    (if (zero? size)
-      ##Inf
+    (when (pos? size)
       (let [seconds  (.-seconds history)
             retained (.-retained history)
             rate     (loop [index 1
@@ -95,11 +91,4 @@
                                   (/ rate (inc (* rate (- (aget seconds index) (aget seconds (dec index))))))
                                   (* 2 rate)))
                          rate))]
-        (* rate (utils/ms->secs (- now-ms (* 1000 (aget seconds (dec size))))))))))
-
-
-(defn level
-  "Retention percentage (0-100) for an urgency. A word never reviewed gets
-   0. When the clock has moved backwards, the cap keeps the level at 100."
-  [urgency]
-  (min 100 (* 100 (math/exp (- urgency)))))
+        (min 0 (- (* rate (utils/ms->secs (- now-ms (* 1000 (aget seconds (dec size))))))))))))

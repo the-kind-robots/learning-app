@@ -173,12 +173,14 @@
 
 
 (defn- rows
-  "Rows as `list` hands them over — ordered most due first, alphabetical by
-   id wherever the urgencies tie, which is the read order `list` leaves."
-  [urgencies]
-  (vec (map-indexed (fn [n urgency]
-                      {:id (str "vocab:wort-" (char (+ 97 n))) :urgency urgency})
-                    urgencies)))
+  "Rows as `list` hands them over, by how overdue each is — the minus log of its recall, `##Inf` for a word
+   never reviewed — ordered most due first, alphabetical by id wherever they tie, which is the read order
+   `list` leaves."
+  [overdue]
+  (vec (map-indexed (fn [n o]
+                      {:id (str "vocab:wort-" (char (+ 97 n)))
+                       :log-recall (when-not (= ##Inf o) (- o))})
+                    overdue)))
 
 
 (defn- random-sequence
@@ -195,27 +197,27 @@
   [rows n times]
   (let [random (random-sequence)]
     (into #{}
-          (map (fn [_] (set (map :id (sut/pick-vocab rows :urgency n random)))))
+          (map (fn [_] (set (map :id (sut/pick-vocab rows :log-recall n random)))))
           (range times))))
 
 
 (deftest a-lesson-takes-the-most-due-words
   (testing "a word just added loses to long-forgotten ones, every time"
     (let [forgotten (rows [30 29 28])
-          fresh     {:id "vocab:neu" :urgency 0.01}]
+          fresh     {:id "vocab:neu" :log-recall -0.01}]
       (is (= #{(set (map :id forgotten))}
              (draws (conj forgotten fresh) 3 50)))))
   (testing "the asked-for count, most due first, nothing twice"
     (is (= ["vocab:wort-a" "vocab:wort-b" "vocab:wort-c"]
-           (map :id (sut/pick-vocab (rows [9 8 7 6 5]) :urgency 3 (random-sequence))))))
+           (map :id (sut/pick-vocab (rows [9 8 7 6 5]) :log-recall 3 (random-sequence))))))
   (testing "a vocabulary smaller than the lesson is taken whole"
-    (is (= 2 (count (sut/pick-vocab (rows [2 1]) :urgency 3 (random-sequence)))))))
+    (is (= 2 (count (sut/pick-vocab (rows [2 1]) :log-recall 3 (random-sequence)))))))
 
 
 (deftest equally-due-words-are-taken-at-random
   (testing "every item never reviewed ties at ##Inf, and the cut is not the alphabet"
     (is (< 1 (count (draws (rows (repeat 10 ##Inf)) 3 50)))))
-  (testing "a batch added within one second ties on urgency too, and is cut the same way"
+  (testing "a batch added within one second ties on recall too, and is cut the same way"
     (is (< 1 (count (draws (rows (repeat 10 0.0231)) 3 50))))))
 
 
@@ -229,9 +231,9 @@
       (is (every? #(contains? % "vocab:wort-a") (draws ranked 3 50))))))
 
 
-(deftest a-row-without-a-number-for-urgency-never-takes-a-place
-  (testing "NaN ranks last, so it never blocks a real urgency out of a full lesson"
-    (let [nan-first (cons {:id "vocab:nan" :urgency ##NaN} (rows [1 2 3 4]))]
+(deftest a-row-without-a-number-for-recall-never-takes-a-place
+  (testing "NaN ranks last, so it never blocks a real recall out of a full lesson"
+    (let [nan-first (cons {:id "vocab:nan" :log-recall ##NaN} (rows [1 2 3 4]))]
       (is (every? #(not (contains? % "vocab:nan")) (draws nan-first 2 30))))))
 
 
