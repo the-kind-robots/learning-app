@@ -7,7 +7,7 @@
    Outward, the entities are:
 
      word        {:id :kind :value :translation :pos :created-at :modified-at}
-     review      {:id :word-id :retained :created-at}
+     review      {:id :word-id :retained :created-at :answer-ms}
      collection  {:id :name :word-ids :created-at}
      example     {:id :word-id :collection-id :word :value :translation
                   :structure}
@@ -141,7 +141,7 @@
 (defn doc->review
   "The part of a review that retention reads."
   [doc]
-  (assoc (select-keys doc [:created-at :retained :word-id]) :id (:_id doc)))
+  (assoc (select-keys doc [:answer-ms :created-at :retained :word-id]) :id (:_id doc)))
 
 
 (defn doc->collection

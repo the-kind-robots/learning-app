@@ -1,8 +1,9 @@
 (ns domain.retention
   "How due a word is, from its reviews.
 
-   A word's review history is three columns — when each review was made, in
-   seconds, whether it was retained, and its id — ordered by time and,
+   A word's review history is four columns — when each review was made, in
+   seconds, whether it was retained, how long the answer took in
+   milliseconds (NaN when unknown), and its id — ordered by time and,
    within one second, by id, so the result does not depend on the order the
    reviews arrived in. A history is never changed: a review in or out gives
    a new one. `urgency` walks the columns: a lesson ranks every word in
@@ -13,11 +14,11 @@
    [utils :as utils]))
 
 
-(defrecord Reviews [seconds retained ids])
+(defrecord Reviews [seconds retained answer-ms ids])
 
 
 (def empty-reviews
-  (->Reviews (js/Float64Array. 0) (js/Uint8Array. 0) #js []))
+  (->Reviews (js/Float64Array. 0) (js/Uint8Array. 0) (js/Float64Array. 0) #js []))
 
 
 (defn- after?
@@ -30,40 +31,44 @@
 
 
 (defn with-review
-  "Returns `history` with `review` — `{:id :created-at :retained}` — in its
+  "Returns `history` with `review` — `{:id :created-at :retained :answer-ms}`, `:answer-ms` optional — in its
    place in time order. Nearly always that place is the end."
-  [^Reviews history {:keys [created-at id retained]}]
-  (let [seconds (utils/iso->secs created-at)
-        size    (.-length (.-ids history))
-        index   (loop [index size]
-                  (if (and (pos? index) (after? history (dec index) seconds id))
-                    (recur (dec index))
-                    index))
-        times   (js/Float64Array. (inc size))
-        flags   (js/Uint8Array. (inc size))]
-    (.set times (.subarray (.-seconds history) 0 index))
-    (.set times (.subarray (.-seconds history) index) (inc index))
-    (aset times index seconds)
-    (.set flags (.subarray (.-retained history) 0 index))
-    (.set flags (.subarray (.-retained history) index) (inc index))
-    (aset flags index (if retained 1 0))
-    (->Reviews times flags (doto (.slice (.-ids history)) (.splice index 0 id)))))
+  [^Reviews history {:keys [answer-ms created-at id retained]}]
+  (let [seconds    (utils/iso->secs created-at)
+        size       (.-length (.-ids history))
+        ;; The review's position: after every review that comes before it, walking back from the end.
+        at         (loop [at size]
+                     (if (and (pos? at) (after? history (dec at) seconds id))
+                       (recur (dec at))
+                       at))
+        ;; A typed array does not grow: `column` is copied into `longer`, one slot longer, with `value` at `at`.
+        spliced-in (fn [^js column ^js longer value]
+                     (.set longer (.subarray column 0 at))
+                     (.set longer (.subarray column at) (inc at))
+                     (aset longer at value)
+                     longer)]
+    (->Reviews (spliced-in (.-seconds history) (js/Float64Array. (inc size)) seconds)
+               (spliced-in (.-retained history) (js/Uint8Array. (inc size)) (if retained 1 0))
+               (spliced-in (.-answer-ms history) (js/Float64Array. (inc size)) (or answer-ms ##NaN))
+               (doto (.slice (.-ids history)) (.splice at 0 id)))))
 
 
 (defn without-review
   "Returns `history` without the review `id`."
   [^Reviews history id]
-  (let [index (.indexOf (.-ids history) id)]
-    (if (neg? index)
+  (let [at (.indexOf (.-ids history) id)]
+    (if (neg? at)
       history
-      (let [size  (.-length (.-ids history))
-            times (js/Float64Array. (dec size))
-            flags (js/Uint8Array. (dec size))]
-        (.set times (.subarray (.-seconds history) 0 index))
-        (.set times (.subarray (.-seconds history) (inc index)) index)
-        (.set flags (.subarray (.-retained history) 0 index))
-        (.set flags (.subarray (.-retained history) (inc index)) index)
-        (->Reviews times flags (doto (.slice (.-ids history)) (.splice index 1)))))))
+      (let [size        (.-length (.-ids history))
+            ;; A typed array does not shrink: `column` is copied into `shorter`, one slot shorter, without `at`.
+            spliced-out (fn [^js column ^js shorter]
+                          (.set shorter (.subarray column 0 at))
+                          (.set shorter (.subarray column (inc at)) at)
+                          shorter)]
+        (->Reviews (spliced-out (.-seconds history) (js/Float64Array. (dec size)))
+                   (spliced-out (.-retained history) (js/Uint8Array. (dec size)))
+                   (spliced-out (.-answer-ms history) (js/Float64Array. (dec size)))
+                   (doto (.slice (.-ids history)) (.splice at 1)))))))
 
 
 (defn urgency
