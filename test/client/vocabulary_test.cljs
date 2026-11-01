@@ -60,8 +60,8 @@
   (count (:words (await (db-seed/memory-of (:user/db dbs))))))
 
 
-(deftest adding-a-word-stores-it-with-a-first-review
-  (async-testing "`add!` creates vocab and initial review"
+(deftest adding-a-word-stores-it-without-a-review
+  (async-testing "`add!` creates vocab and no review: a review records an answer"
     (with-test-dbs
      (^:async fn
       [dbs]
@@ -72,10 +72,8 @@
         (is (string? word-id))
         (is (true? created?))
         (is (= 1 (count vocabs)))
-        (is (= 1 (count reviews)))
-        (is (= "der Hund" (:value (first vocabs))))
-        (is (= word-id (:word-id (first reviews))))
-        (is (true? (:retained (first reviews)))))))))
+        (is (empty? reviews))
+        (is (= "der Hund" (:value (first vocabs)))))))))
 
 
 (deftest a-vocabulary-of-more-than-a-page-is-listed-and-counted-whole
@@ -101,7 +99,8 @@
      (^:async fn
       [dbs]
       (let [{:keys [word-id]} (await (sut/add! (::learner dbs) time/world {:translation "пёс" :value "der Hund"}))]
-        (await (sut/add-review (::learner dbs) time/world word-id true "пёс" nil))
+        (await (db/insert (:user/db dbs)
+                          {:type "review" :word-id word-id :retained true :created-at time/test-now-iso}))
         (await (db/insert (:user/db dbs) {:type "example" :word-id word-id :value "Der Hund läuft"}))
         (let [reviews (await (db-queries/fetch-by-type (:user/db dbs) "review"))]
           (await (sut/delete! (::learner dbs) word-id))
@@ -150,13 +149,20 @@
                                    (let [log (reduce retention/with-review
                                                      retention/empty-reviews
                                                      (map #(assoc % :id (:_id %)) reviews))]
-                                     [word-id (retention/log-recall log (time/now-ms))])))
+                                     [word-id
+                                      (retention/recall
+                                       {:memory  (retention/memory
+                                                  {:history log
+                                                   :weights retention/default-weights
+                                                   :word    {:created-at time/test-now-iso :value (subs word-id 6)}})
+                                        :now-ms  (time/now-ms)
+                                        :weights retention/default-weights})])))
                             (into {}))
               {:keys [words]} (await (list-of dbs {}))
-              actual   (into {} (map (juxt :id :log-recall)) words)
+              actual   (into {} (map (juxt :id :recall)) words)
               {subset :words} (await (list-of dbs {:word-ids (take 2 word-ids)}))]
           (is (= 35 (count reviews)))
           (is (= 5 (count (distinct (vals expected)))))
           (is (= expected actual))
           (is (= (select-keys expected (take 2 word-ids))
-                 (into {} (map (juxt :id :log-recall)) subset)))))))))
+                 (into {} (map (juxt :id :recall)) subset)))))))))

@@ -14,7 +14,7 @@
 ;;
 ;; The engine (db.*, db-migrations) is reached only by adapters.*; its regexes
 ;; are listed twice, in `engine` and in `above-adapters`: keep both in step.
-;; Use cases do not schedule work (browser, abort); only views require
+;; Use cases do not schedule work (browser, abort) nor call one another; only views require
 ;; presenters; actions and effects reach the domain through use cases. The bare `db` is lib/db, the raw Pouch/Couch client, which the
 ;; backend shares; so it is barred from the client's logic layers by name
 ;; (`client-logic`), not from every namespace. `above-adapters` is
@@ -39,7 +39,8 @@
  {above-adapters      {:linters {:discouraged-namespace {engine {:message "Only adapters and the engine require the engine"}}}}
   outside-ports       {:linters {:discouraged-namespace {adapters {:message "Only ports require adapters"}}}}
   client-logic        {:linters {:discouraged-namespace {engine-lib {:message "The raw database client is for adapters and the engine"}}}}
-  use-cases           {:linters {:discouraged-namespace {scheduling {:message "A use case decides; how work is scheduled is an adapter's"}}}}
+  use-cases           {:linters {:discouraged-namespace {scheduling {:message "A use case decides; how work is scheduled is an adapter's"}
+                                                         use-cases  {:message "A use case does not call another use case"}}}}
   presenter-free      {:linters {:discouraged-namespace {presenters {:message "A presenter is for the view only"}}}}
   actions-and-effects {:linters {:discouraged-namespace {domain {:message "Actions and effects reach the domain through use cases"}}}}}
 

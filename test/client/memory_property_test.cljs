@@ -13,7 +13,6 @@
    [client.support.learner :as test-learner]
    [client.support.memory-projection :as projection]
    [domain.collections :as collections]
-   [domain.retention :as retention]
    [use-cases.vocabulary :as vocabulary]
    [utils :as utils]
    [cljs.test :refer-macros [deftest is]]
@@ -114,22 +113,23 @@
         (recur memory (drop size docs) sizes (conj seen [memory (projection/of memory)]))))))
 
 
-(defn- expected-log-recall
-  "The recall formula over a word's reviews as documents: the oracle the
-   columns are checked against."
-  [reviews now-ms]
-  (let [reviews (->> reviews
-                     (sort-by :_id)
-                     (map #(update % :created-at utils/iso->secs))
-                     (sort-by :created-at))]
-    (when (seq reviews)
-      (let [rate (reduce (fn [rate [prev curr]]
-                           (if (:retained curr)
-                             (/ rate (inc (* rate (- (:created-at curr) (:created-at prev)))))
-                             (* 2 rate)))
-                         0.00231
-                         (map vector reviews (rest reviews)))]
-        (min 0 (- (* rate (utils/ms->secs (- now-ms (* 1000 (:created-at (last reviews))))))))))))
+(defn- expected-history
+  "A word's reviews as documents, as the columns of its history should hold them: `[reviewed-at retained id]`
+   each, in time order and by id within a second. The oracle the columns are checked against."
+  [reviews]
+  (->> reviews
+       (sort-by :_id)
+       (sort-by #(utils/iso->secs (:created-at %)))
+       (mapv (fn [review] [(utils/iso->secs (:created-at review)) (if (:retained review) 1 0) (:_id review)]))))
+
+
+(defn- held-history
+  "The columns of a history (`domain.retention/Reviews`) as `[reviewed-at retained id]` each."
+  [^js history]
+  (mapv vector
+        (array-seq (.-reviewed-at history))
+        (array-seq (.-retained history))
+        (array-seq (.-review-ids history))))
 
 
 (def ^:private now 1790000000000)
@@ -155,12 +155,12 @@
                                (:slot-of incremental))
                        (= (vocabulary/rows (test-learner/of-memory rebuilt) {} now)
                           (vocabulary/rows (test-learner/of-memory incremental) {} now))
-                       ;; Every word's recall is the formula over its review documents.
+                       ;; Every word's history holds its review documents, in time order.
                        (= (into {}
-                                (map (fn [w] [(:id w) (expected-log-recall (reviews (:id w)) now)]))
+                                (map (fn [w] [(:id w) (expected-history (reviews (:id w)))]))
                                 (vals (:words incremental)))
                           (into {}
-                                (map (fn [e] [(:id (:word e)) (retention/log-recall (:reviews e) now)]))
+                                (map (fn [e] [(:id (:word e)) (held-history (:reviews e))]))
                                 (sut/collection-cards incremental nil)))
                        ;; A collection's lesson draws from its words and its children's that exist.
                        (every? (fn [collection]

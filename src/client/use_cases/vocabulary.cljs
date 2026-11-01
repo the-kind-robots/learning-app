@@ -10,22 +10,6 @@
    [utils :as utils]))
 
 
-(defn find-duplicate
-  "The word or phrase memory has under the same value, or nil."
-  [learner value]
-  (learner/word learner (vocabulary/vocab-id value)))
-
-
-(defn add-review
-  "Writes a review of a word; `answer-ms` is nil when the time to answer is unknown. Resolves once memory has it."
-  [learner world word-id retained translation answer-ms]
-  (learner/insert! learner
-                   :entity/review
-                   (assoc (vocabulary/new-review word-id retained translation answer-ms)
-                          :created-at
-                          (world/clock world :now-iso))))
-
-
 (defn empty-in?
   "True when `collection` (nil for all) holds no word the learner has. The words in scope are counted as the
    word list and the lesson count them: a collection may still list a word deleted elsewhere."
@@ -35,9 +19,8 @@
 
 (defn ^:async add!
   "Adds `value` with `translation` to the vocabulary and the active collection: a phrase or a word by the
-   dictionary's part of speech `pos` (none: by the value alone), a word keeping `pos`; a new word gets an initial
-   review unless memory holds its history, and a duplicate value merges translations. Resolves with
-   `{:word-id :created?}` or `{:error :failure/empty-translations}`."
+   dictionary's part of speech `pos` (none: by the value alone), a word keeping `pos`; a duplicate value merges
+   translations. Resolves with `{:word-id :created?}` or `{:error :failure/empty-translations}`."
   [learner world {:keys [value translation pos]}]
   (let [now   (world/clock world :now-iso)
         kind  (if (phrase/phrase-value? value pos) :phrase :word)
@@ -54,10 +37,7 @@
                                           (if stored
                                             (vocabulary/merged-entry stored entry now)
                                             entry))]]))
-            created?   @created?
-            history    (learner/review-history learner (:id entry))]
-        (when (and created? (zero? (count (:review-ids history))))
-          (await (add-review learner world (:id entry) true translation nil)))
+            created?   @created?]
         (when collection
           (await (learner/change! learner
                                   [[:entity/collection
@@ -68,9 +48,10 @@
 
 (defn rows
   "The word list's rows out of memory, paged by `:offset`/`:limit`, narrowed by `:collection` and `:search`,
-   each with its `:log-recall`. `:total` counts the words before the search, `:matches` after it."
+   each with its `:recall`, the probability the learner recalls it now (nil for a word never answered). `:total` counts the words before the search, `:matches` after it."
   [learner {:keys [collection limit offset search]} now-ms]
-  (let [scope   (learner/collection-words learner collection)
+  (let [pace    (retention/pace (learner/collection-cards learner nil))
+        scope   (learner/collection-words learner collection)
         query   (when (utils/non-blank search) (vocabulary/query search))
         matched (learner/matching-words learner collection query)
         page    (cond->> matched
@@ -79,9 +60,15 @@
     {:matches (count matched)
      :total   (count scope)
      :words   (mapv (fn [word]
-                      (assoc (select-keys word [:id :kind :translation :value])
-                             :log-recall
-                             (retention/log-recall (learner/review-history learner (:id word)) now-ms)))
+                      (let [memory (retention/memory
+                                    {:history (learner/review-history learner (:id word))
+                                     :pace    pace
+                                     :weights retention/default-weights
+                                     :word    word})
+                            recall (when memory
+                                     (retention/recall
+                                      {:memory memory :now-ms now-ms :weights retention/default-weights}))]
+                        (assoc (select-keys word [:id :kind :translation :value]) :recall recall)))
                     page)}))
 
 
@@ -115,26 +102,20 @@
 
 (defn ^:async rename!
   "Makes a new word of `value` and `translation` in the place of the word `word-id`: the same collections, the
-   old word gone. A new word gets an initial review unless memory holds its history. Resolves with whether
-   memory took the change."
+   old word gone. Resolves with whether memory took the change."
   [learner world word-id value translation]
   (let [kind  (if (phrase/phrase-value? value nil) :phrase :word)
         entry (vocabulary/entered-entry kind (str/trim value) translation nil (world/clock world :now-iso))
         _ (await (learner/fresh-memory learner))]
     (if (or (nil? entry) (nil? (learner/word learner word-id)))
       false
-      (let [written (await (learner/change! learner
-                                            (-> [[:entity/word (:id entry) #(or % entry)]
-                                                 [:entity/word word-id (constantly :entity/deleted)]]
-                                                (into (map
-                                                       (fn [{:keys [id]}]
-                                                         [:entity/collection
-                                                          id
-                                                          #(some-> % (collections/replace-word word-id (:id entry)))]))
-                                                      (learner/collections-of learner word-id)))))]
-        (when (and written (zero? (count (:review-ids (learner/review-history learner (:id entry))))))
-          (await (add-review learner world (:id entry) true translation nil)))
-        written))))
+      ;; The new word in, the old one out, and every collection that listed the old one listing the new.
+      (let [changes (->> (learner/collections-of learner word-id)
+                         (map (fn [{:keys [id]}]
+                                [:entity/collection id #(some-> % (collections/replace-word word-id (:id entry)))]))
+                         (into [[:entity/word (:id entry) #(or % entry)]
+                                [:entity/word word-id (constantly :entity/deleted)]]))]
+        (await (learner/change! learner changes))))))
 
 
 (defn ^:async delete!

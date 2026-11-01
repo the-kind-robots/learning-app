@@ -271,30 +271,6 @@ The check button SHALL be available whatever the number of placed tiles. The ans
 - **WHEN** every tile is placed in the sentence's order and the learner checks
 - **THEN** the lesson shows «Правильно!»
 
-### Requirement: A lesson takes the most due words
-Words and phrases SHALL be selected into the lesson from the most due vocabulary in the active scope: the lesson takes the most due items there are, up to its size.
-
-How due an item is SHALL be measured so that the measure keeps separating items however long they have gone unreviewed: the elapsed time since the last review, counted in that item's forgetting time-constants. An item never reviewed SHALL be the most due there is.
-
-An item that is strictly more due than another SHALL be preferred to it every time. Where more items are equally due than the lesson has room for, which of them the lesson takes SHALL be decided at random, and SHALL NOT follow the order the vocabulary is stored or listed in. A vocabulary smaller than the lesson SHALL be taken whole.
-
-#### Scenario: Two lessons over equally due vocabulary differ
-- **WHEN** lessons start repeatedly over a vocabulary larger than one lesson where every item is equally due
-- **THEN** they do not all serve the same items
-- **AND** they are not the ones the vocabulary happens to be listed first
-
-#### Scenario: Long-unreviewed items still rank against each other
-- **WHEN** two items were last reviewed five days and thirty days ago
-- **THEN** the item last reviewed thirty days ago is the more due of the two
-
-#### Scenario: A lesson takes the most due, not a draw from them
-- **WHEN** the vocabulary holds a word just added and more long-forgotten words than one lesson takes
-- **THEN** every lesson serves the long-forgotten words and never the new one
-
-#### Scenario: A more due item beats a tied field
-- **WHEN** one item is strictly more due than a field of equally due items larger than the lesson
-- **THEN** the more due item is in the lesson every time
-
 ### Requirement: Tiles are placed by typing
 
 While tiles are shown, letters typed on a physical keyboard SHALL accumulate as a prefix, compared without regard to case and as if the words had no umlauts: ä, ö, ü SHALL match a, o, u, and ß SHALL match ss. While a prefix is pending, every bank tile whose word starts with it SHALL show those leading letters in a heavier weight, and no tile SHALL change its size; the highlight SHALL clear with the prefix. As soon as the prefix fits exactly one distinct word among the bank's tiles, the first tile of that word in bank order SHALL move to the end of the tray and the prefix SHALL clear; tiles of the same text count as one word. Space and Enter SHALL act alike: when the pending prefix identifies a bank word, either as the only distinct word it fits or as a whole bank word it spells (such as «die» beside «dieser»), the first tile of that word in bank order SHALL move to the end of the tray; when it identifies none, they SHALL do nothing and the prefix SHALL stay. A letter that would make the prefix fit no bank word SHALL be ignored. Backspace SHALL erase the prefix's last letter, or with no prefix return the last placed tile to the bank. Typing SHALL NOT open an on-screen keyboard, and Enter with no prefix SHALL NOT place or check anything.
@@ -384,7 +360,7 @@ While the answer field shows the textarea, Enter without Alt — including the D
 - **AND** no line break was added to it
 
 ### Requirement: A graded answer records its time
-A review written for a graded word or phrase trial SHALL carry `answer-ms`: the time from the trial appearing on screen with its answer field to the answer being sent, on a monotonic clock, rounded to whole milliseconds. Wrong and blank answers SHALL record it too. When the page was hidden at any moment between the two, the review SHALL carry no `answer-ms`. A review written outside a lesson — the initial review of a new word — SHALL carry none.
+A review written for a graded word or phrase trial SHALL carry `answer-ms`: the time from the trial appearing on screen with its answer field to the answer being sent, on a monotonic clock, rounded to whole milliseconds. Wrong and blank answers SHALL record it too. When the page was hidden at any moment between the two, the review SHALL carry no `answer-ms`. No review SHALL be written outside a lesson: a review records an answer.
 
 #### Scenario: The time of an answer is recorded
 - **WHEN** a learner answers a word trial a few seconds after it appears
@@ -401,3 +377,33 @@ A review written for a graded word or phrase trial SHALL carry `answer-ms`: the 
 #### Scenario: Each trial is timed from its own appearance
 - **WHEN** a learner answers one trial, goes on, and answers the next
 - **THEN** the second review's `answer-ms` counts from the second trial appearing, not from the first
+
+### Requirement: A lesson takes the words a review strengthens most
+Words and phrases SHALL be selected into the lesson from the active scope. How likely the learner recalls an item SHALL be FSRS-34's probability (#692), from the item's answers, each rated from whether it was right and how long it took against the learner's own pace. An item with no answer is new; a review an earlier version wrote when the item was added is no answer.
+
+What a review of a known item gains SHALL be how much it is expected to add to the item's stability, in log: right with the item's probability of recall and rated Good, otherwise rated Again. The lesson aims at learning each item in the fewest reviews (#513).
+
+When the scope holds a new item, one place of the lesson SHALL go to a new item drawn at random. Each other place SHALL go, with probability 0.1, to a known item drawn at random from those not yet in the lesson, and otherwise to the known item not yet in it whose review gains the most. A place no known item is left for SHALL go to a new item drawn at random. A vocabulary smaller than the lesson SHALL be taken whole.
+
+Where items gain equally, which of them the lesson takes SHALL be decided at random, and SHALL NOT follow the order the vocabulary is stored or listed in.
+
+#### Scenario: One new word a lesson
+- **WHEN** the scope holds three new words and three known words, and a lesson of three starts
+- **THEN** it serves exactly one new word
+
+#### Scenario: A beginner's lesson is full
+- **WHEN** the scope holds only new words, more than one lesson takes
+- **THEN** the lesson serves as many words as it has places
+
+#### Scenario: The largest gains come first
+- **WHEN** the scope holds known words only, more than one lesson takes, and no place of the lesson draws a random word
+- **THEN** the lesson serves the words whose review gains the most
+
+#### Scenario: Some places go to a random word
+- **WHEN** lessons start repeatedly over known words, many more than one lesson takes
+- **THEN** some lessons serve a word that is not among those whose review gains the most
+
+#### Scenario: Two lessons over equally gaining vocabulary differ
+- **WHEN** lessons start repeatedly over a vocabulary larger than one lesson where every item gains equally
+- **THEN** they do not all serve the same items
+- **AND** they are not the ones the vocabulary happens to be listed first

@@ -67,8 +67,8 @@
    (fn [] (get-in (learner/memory (::learner dbs)) [:collections active-id]))))
 
 
-(deftest a-new-phrase-is-stored-with-a-first-review-and-is-missing-an-example
-  (async-testing "the phrase, one review of it, and memory missing one example, as for a word"
+(deftest a-new-phrase-is-stored-without-a-review-and-is-missing-an-example
+  (async-testing "the phrase, no review of it, and memory missing one example, as for a word"
     (with-test-dbs
      (^:async fn
       [dbs]
@@ -83,7 +83,7 @@
         (is (empty? more))
         (is (= {:_id word-id :kind "phrase" :value "Entschuldigung, dass ich zu spät komme"}
                (select-keys entry [:_id :kind :value])))
-        (is (= [word-id] (map :word-id reviews)))
+        (is (empty? reviews))
         (is (= ["phrase"] (map (comp :kind :word) (missing learner)))))))))
 
 

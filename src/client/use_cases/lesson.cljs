@@ -4,40 +4,36 @@
    [domain.examples :as examples]
    [domain.lesson :as lesson]
    [domain.retention :as retention]
-   [domain.vocabulary :as vocabulary-domain]
+   [domain.vocabulary :as vocabulary]
    [ports.learner :as learner]
    [ports.page :as page]
-   [ports.world :as world]
-   [use-cases.vocabulary :as vocabulary]))
+   [ports.world :as world]))
 
 
 (defn start
   "A new lesson out of the learner's words: `{:lesson-state ..}` or `{:error :no-words-available}`, over the words
-   least likely recalled, ties broken at random, with the examples in `language`. opts: `:random`,
-   `:vocab-per-lesson` (default 3), `:trial-selector` (`:first`, otherwise random)."
+   `domain.lesson/lesson-words` takes, with the examples in `language`. opts: `:random`, `:vocab-per-lesson`
+   (default 3), `:trial-selector` (`:first`, otherwise random)."
   [learner language collection
    {:keys [random vocab-per-lesson trial-selector]
     :or   {vocab-per-lesson lesson/default-vocab-per-lesson}}
    now-ms]
-  ;; Every word in scope, with its recall: `lesson-words` owns the whole selection policy, ties included.
-  (let [selected (lesson/lesson-words (for [card (learner/collection-cards learner collection)]
-                                        [(:word card) (retention/log-recall (:reviews card) now-ms)])
-                                      vocab-per-lesson
-                                      (fn [_] (random)))]
-    (if-not (seq selected)
+  (let [words (lesson/lesson-words {:cards  (learner/collection-cards learner collection)
+                                    :now-ms now-ms
+                                    :pace   (retention/pace (learner/collection-cards learner nil))
+                                    :random random
+                                    :size   vocab-per-lesson})]
+    (if-not (seq words)
       {:error :no-words-available}
-      (let [vocab    (mapv #(select-keys % [:id :kind :translation :value]) selected)
-            word-ids (set (map :id vocab))]
-        ;; Which examples a read in this collection sees is one rule, in `domain.examples`.
-        {:lesson-state (lesson/initial-state
-                        vocab
-                        (->> (learner/examples-of learner word-ids)
-                             (examples/in-language language)
-                             (examples/visible-in (collections/family (learner/collections learner)
-                                                                      (:id collection))))
-                        (if (= :first trial-selector)
-                          first
-                          (partial lesson/random-trial random)))}))))
+      ;; Which examples a read in this collection sees is one rule, in `domain.examples`.
+      (let [lesson-examples (->> (learner/examples-of learner (set (map :id words)))
+                                 (examples/in-language language)
+                                 (examples/visible-in (collections/family (learner/collections learner)
+                                                                          (:id collection))))
+            select-trial    (if (= :first trial-selector)
+                              first
+                              (partial lesson/random-trial random))]
+        {:lesson-state (lesson/initial-state words lesson-examples select-trial)}))))
 
 
 (defn next-trial
@@ -47,25 +43,26 @@
 
 
 (defn ^:async record-review!
-  "Writes the review of the answer just checked in `lesson-state`, which took `answer-ms` (nil: unknown)."
+  "Writes the review of the answer just checked in `lesson-state`, which took `answer-ms` (nil: unknown). Resolves
+   once memory has it."
   [learner world lesson-state answer-ms]
-  (let [trial (lesson/current-trial lesson-state)]
-    (await (vocabulary/add-review
-            learner
-            world
-            (:word-id trial)
-            (-> lesson-state lesson/last-result :correct?)
-            (:prompt trial)
-            answer-ms))))
+  (let [trial  (lesson/current-trial lesson-state)
+        review (assoc (vocabulary/new-review (:word-id trial)
+                                             (-> lesson-state lesson/last-result :correct?)
+                                             (:prompt trial)
+                                             answer-ms)
+                      :created-at
+                      (world/clock world :now-iso))]
+    (await (learner/insert! learner :entity/review review))))
 
 
 (defn token-info
   "Return token info for lesson answer annotation card."
   [learner dictionary-form translation]
-  (let [existing (vocabulary/find-duplicate learner dictionary-form)]
+  (let [word (learner/word learner (vocabulary/vocab-id dictionary-form))]
     {:dictionary-form dictionary-form
-     :translation translation
-     :state       (vocabulary-domain/translation-state existing translation)}))
+     :state       (vocabulary/translation-state word translation)
+     :translation translation}))
 
 
 (defn check-answer!

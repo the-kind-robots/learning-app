@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as str]
    [domain.examples :as examples]
+   [domain.retention :as retention]
    [utils :as utils]))
 
 
@@ -9,39 +10,50 @@
 
 
 (defn lesson-words
-  "The `size` words a lesson takes from `recalls`, `[word log-recall]` pairs (`domain.retention/log-recall`),
-   the least likely recalled first. A word whose recall is unknown (nil) has never been reviewed and comes
-   first; NaN comes last. Words that tie are ordered by `tie-breaker`, a function of a word to a number,
-   smaller first — random in the app, so a tied vocabulary is never cut alphabetically. One pass keeps the
-   first `size`; the vocabulary is not sorted."
-  [recalls size tie-breaker]
-  (let [;; How overdue a word is, the larger the more: minus its log-recall; unknown is the most, NaN the least.
-        ;; `##Inf` is compared, never subtracted.
-        overdue       (fn [log-recall]
-                        (cond
-                          (nil? log-recall) ##Inf
-                          (js/Number.isNaN log-recall) ##-Inf
-                          :else (- log-recall)))
-        ;; The words kept so far, most overdue first, each as #js [word overdue tie-break].
-        kept          #js []
-        ranks-before? (fn [overdue tie-break ^js other]
-                        (or (> overdue (aget other 1))
-                            (and (== overdue (aget other 1)) (< tie-break (aget other 2)))))]
-    (doseq [[word log-recall] recalls
-            :let  [word-overdue   (overdue log-recall)
-                   word-tie-break (tie-breaker word)]
-            :when (and (pos? size)
-                       (or (< (.-length kept) size)
-                           (ranks-before? word-overdue word-tie-break (aget kept (dec (.-length kept))))))]
-      (let [insert-position (loop [position 0]
-                              (if (and (< position (.-length kept))
-                                       (not (ranks-before? word-overdue word-tie-break (aget kept position))))
-                                (recur (inc position))
-                                position))]
-        (.splice kept insert-position 0 #js [word word-overdue word-tie-break])
-        (when (> (.-length kept) size)
-          (.pop kept))))
-    (mapv #(aget % 0) kept)))
+  "The `size` words a lesson takes from `cards`, `{:word :reviews}` of the words in scope, for a learner of `pace`
+   (`domain.retention/pace`) at `now-ms`. A word with no answer is new; when there is one, one place goes to a new
+   word drawn at random. Each other place goes, with probability 0.1, to a known word drawn at random, and
+   otherwise to the known word a review now strengthens most (`domain.retention/stability-gain`); a place no known
+   word is left for goes to a new word. Equal gains are taken at random, never in the order of `cards`. `random`
+   is a function of nothing that returns a number in [0, 1)."
+  [{:keys [cards now-ms pace random size]}]
+  (let [;; The cards in random order (Fisher–Yates), so neither new words nor ties follow the order of `cards`.
+        shuffled    (let [cards (to-array cards)]
+                      (doseq [position (range (dec (alength cards)) 0 -1)
+                              :let     [other (js/Math.floor (* (random) (inc position)))
+                                        card  (aget cards position)]]
+                        (aset cards position (aget cards other))
+                        (aset cards other card))
+                      cards)
+        ;; Each word with what a review of it gains now; nil for a new word.
+        gains       (for [{:keys [reviews word]} shuffled]
+                      [word
+                       (when-let [memory (retention/memory
+                                          {:history reviews :pace pace :weights retention/default-weights :word word})]
+                         (retention/stability-gain
+                          {:memory memory :now-ms now-ms :weights retention/default-weights}))])
+        new-words   (->> gains (remove second) (mapv first))
+        ;; `sort-by` is stable: equal gains keep their shuffled order.
+        known-words (->> gains (filter second) (sort-by (comp - second)) (mapv first))]
+    ;; The first place goes to a new word, if there is one: the first of them, as they are shuffled.
+    (loop [chosen      (vec (take (min size 1) new-words))
+           known-words known-words
+           new-words   (rest new-words)]
+      (cond
+        ;; The lesson is full, or the vocabulary is used up.
+        (or (>= (count chosen) size) (and (empty? known-words) (empty? new-words)))
+        chosen
+
+        ;; No known word is left: new words fill the lesson.
+        (empty? known-words)
+        (recur (conj chosen (first new-words)) known-words (rest new-words))
+
+        ;; A known word: one drawn at random one time in ten, otherwise the one a review strengthens most.
+        :else
+        (let [position (if (< (random) 0.1) (js/Math.floor (* (random) (count known-words))) 0)]
+          (recur (conj chosen (known-words position))
+                 (into (subvec known-words 0 position) (subvec known-words (inc position)))
+                 new-words))))))
 
 
 (def trial-type-word "word")

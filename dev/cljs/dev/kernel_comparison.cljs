@@ -12,9 +12,31 @@
   (:require
    ["fs" :as fs]
    [clojure.string :as str]
-   [domain.fsrs :as fsrs]
    [domain.retention :as retention]
    [utils :as utils]))
+
+
+(defn- rate-log-recall
+  "The rate model FSRS-34 replaced (#513): the natural log of the probability that the learner recalls the word
+   of `history` at `now-ms`, nil with no review. The forgetting rate starts at 0.00231 per second; each retained
+   review divides it by one plus the rate times the interval, each lapse doubles it; the probability is e to the
+   minus rate times the time since the last review."
+  [^js history now-ms]
+  (let [size (if history (.-length (.-review-ids history)) 0)]
+    (when (pos? size)
+      (let [reviewed-at (.-reviewed-at history)
+            retained    (.-retained history)
+            rate        (loop [position 1
+                               rate     0.00231]
+                          (if (< position size)
+                            (recur (inc position)
+                                   (if (== 1 (aget retained position))
+                                     (/ rate
+                                        (inc (* rate
+                                                (- (aget reviewed-at position) (aget reviewed-at (dec position))))))
+                                     (* 2 rate)))
+                            rate))]
+        (min 0 (- (* rate (utils/ms->secs (- now-ms (* 1000 (aget reviewed-at (dec size))))))))))))
 
 
 (defn- answers
@@ -23,17 +45,17 @@
   [words reviews-by-word pace]
   (for [[word-id reviews] reviews-by-word
         :let  [word (words word-id)]
-        :when word
         [history review] (map vector
                               (reductions retention/with-review retention/empty-reviews reviews)
                               reviews)
         :let  [now-ms         (* 1000 (utils/iso->secs (:created-at review)))
-               recall-fsrs    (fsrs/log-recall fsrs/default-weights history word pace now-ms)
-               recall-current (retention/log-recall history now-ms)]
-        :when (and recall-fsrs recall-current)]
+               memory         (retention/memory
+                               {:history history :pace pace :weights retention/default-weights :word word})
+               recall-current (rate-log-recall history now-ms)]
+        :when (and memory recall-current)]
     {:outcome        (if (:retained review) 1 0)
      :recall-current (js/Math.exp recall-current)
-     :recall-fsrs    (js/Math.exp recall-fsrs)}))
+     :recall-fsrs    (retention/recall {:memory memory :now-ms now-ms :weights retention/default-weights})}))
 
 
 (defn- log-loss
@@ -98,30 +120,39 @@
                   ", recalled " (.toFixed actual 3)))))
 
 
+(defn learner-log
+  "The log at `path`: `{:words :reviews :reviews-by-word :cards}`, words by id, reviews in time order, the
+   cards `{:word :reviews}` of the words that have reviews, as memory holds them."
+  [path]
+  (let [docs    (->> (js/JSON.parse (fs/readFileSync path "utf8"))
+                     .-rows
+                     (keep #(.-doc ^js %))
+                     ;; Stored keys are snake case, `_id` aside.
+                     (map #(update-keys (js->clj %)
+                                        (fn [k]
+                                          (keyword (if (#{"_id" "_rev"} k) k (str/replace k "_" "-")))))))
+        words   (->> docs
+                     (filter #(= "vocab" (:type %)))
+                     (into {} (map (juxt :_id identity))))
+        reviews (->> docs
+                     (filter #(= "review" (:type %)))
+                     (map #(assoc % :id (:_id %)))
+                     (sort-by (juxt #(utils/iso->secs (:created-at %)) :id)))
+        reviews-by-word (into {} (filter #(words (key %))) (group-by :word-id reviews))]
+    {:cards   (for [[word-id word-reviews] reviews-by-word]
+                {:reviews (reduce retention/with-review retention/empty-reviews word-reviews)
+                 :word    (words word-id)})
+     :reviews reviews
+     :reviews-by-word reviews-by-word
+     :words   words}))
+
+
 (defn main
   [path]
-  (let [docs            (->> (js/JSON.parse (fs/readFileSync path "utf8"))
-                             .-rows
-                             (keep #(.-doc ^js %))
-                             ;; Stored keys are snake case, `_id` aside.
-                             (map #(update-keys (js->clj %)
-                                                (fn [k]
-                                                  (keyword (if (#{"_id" "_rev"} k) k (str/replace k "_" "-")))))))
-        words           (->> docs
-                             (filter #(= "vocab" (:type %)))
-                             (into {} (map (juxt :_id identity))))
-        reviews         (->> docs
-                             (filter #(= "review" (:type %)))
-                             (map #(assoc % :id (:_id %)))
-                             (sort-by (juxt #(utils/iso->secs (:created-at %)) :id)))
-        reviews-by-word (group-by :word-id reviews)
-        pace            (fsrs/pace (for [review reviews
-                                         :let   [word (words (:word-id review))]
-                                         :when  (and word (:retained review) (number? (:answer-ms review)))]
-                                     {:answer-ms (:answer-ms review)
-                                      :length    (count (:value word))}))
-        scored          (answers words reviews-by-word pace)
-        outcomes        (map :outcome scored)]
+  (let [{:keys [cards reviews reviews-by-word words]} (learner-log path)
+        pace     (retention/pace cards)
+        scored   (answers words reviews-by-word pace)
+        outcomes (map :outcome scored)]
     (println (str (count words)
                   " words, " (count reviews)
                   " reviews, "

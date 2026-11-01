@@ -12,8 +12,7 @@
    [client.support.memory-projection :as projection]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is testing use-fixtures]]
-   [db :as db]
-   [domain.retention :as retention]))
+   [db :as db]))
 
 
 (def user-db-name (db-fixtures/db-name "client.memory-test.user"))
@@ -72,7 +71,7 @@
         "a deletion")))
 
 
-(deftest reviews-of-the-same-second-give-one-retention-whatever-their-order
+(deftest reviews-of-the-same-second-are-in-id-order-whatever-their-order
   (testing "reviews tied on time are taken in id order, not arrival order"
     (let [word {:_id "vocab:w" :_rev "1-a" :type "vocab" :value "w" :translation []}
           reviews
@@ -81,9 +80,9 @@
            {:_id "r0" :_rev "1-a" :type "review" :word-id "vocab:w" :created-at "2025-12-01T00:00:00Z" :retained true}]
           state (fn [docs]
                   (let [memory (sut/with-docs sut/empty-memory docs)]
-                    (retention/log-recall (:reviews (nth (:cards memory) (get-in memory [:slot-of "vocab:w"])))
-                                          1790000000000)))]
-      (is (= (state (cons word reviews))
+                    (vec (:review-ids (:reviews (nth (:cards memory) (get-in memory [:slot-of "vocab:w"])))))))]
+      (is (= ["r0" "r1" "r2"]
+             (state (cons word reviews))
              (state (cons word (reverse reviews))))))))
 
 

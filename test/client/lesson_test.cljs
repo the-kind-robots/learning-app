@@ -58,18 +58,22 @@
 
 
 (defn- ^:async cached-words
-  "Every word as memory would have `dbs` now, with its recall as the word list reads it and as a lesson
-   ranks it by."
+  "Every word as memory would have `dbs` now: its recall as the word list reads it and as FSRS-34 gives it, and
+   what a review of it gains, which a lesson ranks by."
   [dbs]
   (let [memory (await (db-seed/memory-of (:user/db dbs)))
         now    (time/now-ms)
         listed (into {}
-                     (map (juxt :id :log-recall))
+                     (map (juxt :id :recall))
                      (:words (vocabulary/rows (test-learner/of-memory memory) {} now)))]
-    {:words (mapv (fn [{:keys [word] :as card}]
-                    {:id (:id word)
-                     :listed-recall (listed (:id word))
-                     :log-recall (retention/log-recall (:reviews card) now)})
+    {:words (mapv (fn [{:keys [reviews word]}]
+                    (let [word-memory (retention/memory
+                                       {:history reviews :weights retention/default-weights :word word})
+                          at-now      {:memory word-memory :now-ms now :weights retention/default-weights}]
+                      {:id     (:id word)
+                       :gain   (retention/stability-gain at-now)
+                       :listed-recall (listed (:id word))
+                       :recall (retention/recall at-now)}))
                   (memory/collection-cards memory nil))}))
 
 
@@ -156,13 +160,13 @@
             (await (start! dbs
                            {:vocab-per-lesson 3
                             :trial-selector   :first}))]
-        (is (every? #(zero? (js/Math.exp (:log-recall %))) words)
-            "the premise: recall has underflowed to zero for all six")
-        (is (every? #(= (:listed-recall %) (:log-recall %)) words)
-            "the word list reads the recall the lesson ranks by")
+        (is (< (apply max (map :gain (take 3 words))) (apply min (map :gain (drop 3 words))))
+            "the premise: the three the alphabet leads with gain the least from a review")
+        (is (every? #(= (:listed-recall %) (:recall %)) words)
+            "the word list reads the recall of FSRS-34")
         (is (= #{"vocab:zeit" "vocab:zug" "vocab:zurueck"}
                (set (map :word-id (:trials lesson-state))))
-            "the lesson holds the three most due, not the three the alphabet leads with"))))))
+            "the lesson holds the three that gain the most, not the three the alphabet leads with"))))))
 
 
 (defn- ^:async seed-unreviewed-vocabulary!

@@ -74,10 +74,9 @@ test.describe('Время ответа', () => {
     });
 
     await test.step('Тогда неверный ответ хранит не меньше полутора секунд, а верный — меньше', async () => {
-      await expect.poll(async () => (await reviews(page)).length).toBe(3);
-      const [initial, wrong, right] = (await reviews(page))
+      await expect.poll(async () => (await reviews(page)).length).toBe(2);
+      const [wrong, right] = (await reviews(page))
         .sort((a, b) => a['created-at'].localeCompare(b['created-at']));
-      expect(initial['answer-ms']).toBeUndefined();
       expect(wrong.retained).toBe(false);
       expect(wrong['answer-ms']).toBeGreaterThanOrEqual(1500);
       expect(right.retained).toBe(true);
@@ -101,8 +100,8 @@ test.describe('Время ответа', () => {
     });
 
     await test.step('Тогда его отзыв записан без времени ответа', async () => {
-      await expect.poll(async () => (await reviews(page)).length).toBe(2);
-      expect((await reviews(page)).map((review) => review['answer-ms'])).toEqual([undefined, undefined]);
+      await expect.poll(async () => (await reviews(page)).length).toBe(1);
+      expect((await reviews(page)).map((review) => review['answer-ms'])).toEqual([undefined]);
     });
   });
 });
