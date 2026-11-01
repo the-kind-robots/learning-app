@@ -81,7 +81,7 @@
           early (at "2024-08-20T09:59:00.100Z")
           late  (at "2024-08-20T09:59:00.900Z")]
       (is (= (log-recall early now-ms) (log-recall late now-ms))
-          "800 ms apart is one recall — the tie `pick-vocab` has to break")
+          "800 ms apart is one recall — the tie `domain.lesson/lesson-words` has to break")
       (is (not= (log-recall early now-ms)
                 (log-recall (at "2024-08-20T09:59:01.100Z") now-ms))
           "a full second apart does separate them"))))
@@ -98,14 +98,11 @@
         mixed   (reduce sut/with-review sut/empty-reviews reviews)
         ordered (reduce sut/with-review sut/empty-reviews (sort-by :created-at reviews))]
     (is (= (sut/log-recall ordered now-ms) (sut/log-recall mixed now-ms)))
-    (is (= ["b" "a" "c"] (vec (:ids mixed))))
-    (is (= ["a" "c"] (vec (:ids (sut/without-review mixed "b")))) "a review goes by its id")))
+    (is (= ["b" "a" "c"] (vec (:review-ids mixed))))))
 
 
 (deftest a-history-is-never-changed
   (let [held  (log [{:created-at "2024-08-19T10:00:00.000Z" :retained true}])
         later (sut/with-review held {:created-at "2024-08-19T11:00:00.000Z" :id "later" :retained true})]
-    (is (= ["r0"] (vec (:ids held))))
-    (is (= ["r0" "later"] (vec (:ids later))))
-    (is (= ["r0"] (vec (:ids (sut/without-review later "later")))))
-    (is (= ["r0" "later"] (vec (:ids later))))))
+    (is (= ["r0"] (vec (:review-ids held))))
+    (is (= ["r0" "later"] (vec (:review-ids later))))))

@@ -203,14 +203,14 @@
    reviews. The review written when the word was added — the first, retained, untimed, within two seconds
    of the word's `:created-at` — is no answer, and is skipped."
   [weights ^js history word pace now-ms]
-  (let [size         (if history (.-length (.-ids history)) 0)
-        seconds      (when history (.-seconds history))
+  (let [size         (if history (.-length (.-review-ids history)) 0)
+        reviewed-at  (when history (.-reviewed-at history))
         retained     (when history (.-retained history))
         answer-ms    (when history (.-answer-ms history))
         first-answer (if (and (pos? size)
                               (== 1 (aget retained 0))
                               (js/isNaN (aget answer-ms 0))
-                              (<= (abs (- (aget seconds 0) (utils/iso->secs (:created-at word)))) 2))
+                              (<= (abs (- (aget reviewed-at 0) (utils/iso->secs (:created-at word)))) 2))
                        1
                        0)]
     (when (< first-answer size)
@@ -222,7 +222,7 @@
                           (recur (inc position)
                                  (next-state weights
                                              state
-                                             (/ (- (aget seconds position) (aget seconds (dec position))) 86400)
+                                             (/ (- (aget reviewed-at position) (aget reviewed-at (dec position))) 86400)
                                              (rating-at position)))
                           state))]
-        (js/Math.log (recall weights (/ (- (/ now-ms 1000) (aget seconds (dec size))) 86400) state))))))
+        (js/Math.log (recall weights (/ (- (/ now-ms 1000) (aget reviewed-at (dec size))) 86400) state))))))

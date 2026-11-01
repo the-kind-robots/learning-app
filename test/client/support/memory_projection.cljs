@@ -13,7 +13,7 @@
     {:by-id    (into {}
                      (keep (fn [[id slot]]
                              (let [{:keys [word reviews]} (nth cards slot)]
-                               (when (or word (pos? (count (:ids reviews))))
+                               (when (or word (pos? (count (:review-ids reviews))))
                                  [id [word (plain reviews)]]))))
                      (:slot-of memory))
      :examples [(:examples memory) (:examples-by-word memory)]

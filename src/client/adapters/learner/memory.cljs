@@ -64,7 +64,7 @@
    changes nothing: reviews are never edited."
   [memory {:keys [id word-id] :as review}]
   (let [[memory slot] (card-slot memory word-id)]
-    (if (<= 0 (.indexOf (:ids (get-in memory [:cards slot :reviews])) id))
+    (if (<= 0 (.indexOf (:review-ids (get-in memory [:cards slot :reviews])) id))
       memory
       (update-in memory [:cards slot :reviews] retention/with-review review))))
 

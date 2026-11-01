@@ -1,46 +1,47 @@
 (ns domain.lesson
   (:require
    [clojure.string :as str]
-   [domain.examples :as domain-examples]
+   [domain.examples :as examples]
    [utils :as utils]))
 
 
 (def default-vocab-per-lesson 3)
 
 
-(defn pick-vocab
-  "The `n` of `rows` least likely recalled, the least first, by `log-recall-of` (`domain.retention/log-recall`).
-   A word whose memory is unknown (nil) has never been reviewed and comes first. Ties are taken in random
-   order (a tie key from `random`, in [0, 1)), so a tied vocabulary is never cut alphabetically. One pass keeps
-   the top `n`; the vocabulary is not sorted. `##Inf` compares, it is never subtracted; NaN ranks last."
-  [rows log-recall-of n random]
-  (let [n       (or n 0)
-        ;; How overdue a row is, the larger the more: minus its log-recall; unknown is the most, NaN the least.
-        overdue (fn [row]
-                  (let [log-recall (log-recall-of row)]
-                    (cond
-                      (nil? log-recall) ##Inf
-                      (js/Number.isNaN log-recall) ##-Inf
-                      :else (- log-recall))))
-        ;; The rows kept so far, most overdue first, each as #js [row overdue tie].
-        top     #js []
-        before? (fn [overdue tie ^js kept]
-                  (or (> overdue (aget kept 1))
-                      (and (== overdue (aget kept 1)) (< tie (aget kept 2)))))]
-    (doseq [row   rows
-            :let  [due (overdue row)
-                   tie (random)]
-            :when (and (pos? n)
-                       (or (< (.-length top) n)
-                           (before? due tie (aget top (dec (.-length top))))))]
-      (let [at (loop [i 0]
-                 (if (and (< i (.-length top)) (not (before? due tie (aget top i))))
-                   (recur (inc i))
-                   i))]
-        (.splice top at 0 #js [row due tie])
-        (when (> (.-length top) n)
-          (.pop top))))
-    (mapv #(aget % 0) top)))
+(defn lesson-words
+  "The `size` words a lesson takes from `recalls`, `[word log-recall]` pairs (`domain.retention/log-recall`),
+   the least likely recalled first. A word whose recall is unknown (nil) has never been reviewed and comes
+   first; NaN comes last. Words that tie are ordered by `tie-breaker`, a function of a word to a number,
+   smaller first — random in the app, so a tied vocabulary is never cut alphabetically. One pass keeps the
+   first `size`; the vocabulary is not sorted."
+  [recalls size tie-breaker]
+  (let [;; How overdue a word is, the larger the more: minus its log-recall; unknown is the most, NaN the least.
+        ;; `##Inf` is compared, never subtracted.
+        overdue       (fn [log-recall]
+                        (cond
+                          (nil? log-recall) ##Inf
+                          (js/Number.isNaN log-recall) ##-Inf
+                          :else (- log-recall)))
+        ;; The words kept so far, most overdue first, each as #js [word overdue tie-break].
+        kept          #js []
+        ranks-before? (fn [overdue tie-break ^js other]
+                        (or (> overdue (aget other 1))
+                            (and (== overdue (aget other 1)) (< tie-break (aget other 2)))))]
+    (doseq [[word log-recall] recalls
+            :let  [word-overdue   (overdue log-recall)
+                   word-tie-break (tie-breaker word)]
+            :when (and (pos? size)
+                       (or (< (.-length kept) size)
+                           (ranks-before? word-overdue word-tie-break (aget kept (dec (.-length kept))))))]
+      (let [insert-position (loop [position 0]
+                              (if (and (< position (.-length kept))
+                                       (not (ranks-before? word-overdue word-tie-break (aget kept position))))
+                                (recur (inc position))
+                                position))]
+        (.splice kept insert-position 0 #js [word word-overdue word-tie-break])
+        (when (> (.-length kept) size)
+          (.pop kept))))
+    (mapv #(aget % 0) kept)))
 
 
 (def trial-type-word "word")
@@ -76,11 +77,11 @@
 
 
 (defn generate-trials
-  "The trials of a lesson over `vocab` and `examples` (those a read in the lesson's collection sees): one trial
+  "The trials of a lesson over `vocab` and `lesson-examples` (those a read in the lesson's collection sees): one trial
    per word or phrase, and one example trial per word that has examples. A word with several examples takes
    the one with the smallest id, the same every time."
-  [vocab examples]
-  (let [example-of (update-vals (group-by :word-id examples) domain-examples/lesson-example)]
+  [vocab lesson-examples]
+  (let [example-of (update-vals (group-by :word-id lesson-examples) examples/lesson-example)]
     (into
      ;; A word or a phrase becomes the trial its kind calls for. `:word-id` keeps its name: reviews and examples are stored under it.
      (mapv (fn [entry]
@@ -105,7 +106,7 @@
                    :answer    (:value example)
                    :structure (:structure example)
                    :locked?   true})))
-     examples)))
+     lesson-examples)))
 
 
 (defn- locked-trial?
@@ -129,10 +130,10 @@
 
 
 (defn initial-state
-  "A lesson over `vocab` and `examples`. `select-trial`, a function of the
+  "A lesson over `vocab` and `lesson-examples`. `select-trial`, a function of the
    trials to pick from, chooses the first and every next trial."
-  [vocab examples select-trial]
-  (let [trials (generate-trials vocab examples)]
+  [vocab lesson-examples select-trial]
+  (let [trials (generate-trials vocab lesson-examples)]
     {:options          {:trial-selector select-trial}
      :trials           trials
      :remaining-trials trials

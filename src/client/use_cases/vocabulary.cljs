@@ -4,7 +4,7 @@
    [domain.collections :as collections]
    [domain.phrase :as phrase]
    [domain.retention :as retention]
-   [domain.vocabulary :as domain]
+   [domain.vocabulary :as vocabulary]
    [ports.learner :as learner]
    [ports.world :as world]
    [utils :as utils]))
@@ -13,7 +13,7 @@
 (defn find-duplicate
   "The word or phrase memory has under the same value, or nil."
   [learner value]
-  (learner/word learner (domain/vocab-id value)))
+  (learner/word learner (vocabulary/vocab-id value)))
 
 
 (defn add-review
@@ -21,7 +21,7 @@
   [learner world word-id retained translation answer-ms]
   (learner/insert! learner
                    :entity/review
-                   (assoc (domain/new-review word-id retained translation answer-ms)
+                   (assoc (vocabulary/new-review word-id retained translation answer-ms)
                           :created-at
                           (world/clock world :now-iso))))
 
@@ -41,7 +41,7 @@
   [learner world {:keys [value translation pos]}]
   (let [now   (world/clock world :now-iso)
         kind  (if (phrase/phrase-value? value pos) :phrase :word)
-        entry (domain/entered-entry kind value translation pos now)]
+        entry (vocabulary/entered-entry kind value translation pos now)]
     (if-not entry
       {:error :failure/empty-translations}
       (let [collection (learner/active-collection learner)
@@ -52,11 +52,11 @@
                                         (fn [stored]
                                           (vreset! created? (nil? stored))
                                           (if stored
-                                            (domain/merged-entry stored entry now)
+                                            (vocabulary/merged-entry stored entry now)
                                             entry))]]))
             created?   @created?
             history    (learner/review-history learner (:id entry))]
-        (when (and created? (zero? (count (:ids history))))
+        (when (and created? (zero? (count (:review-ids history))))
           (await (add-review learner world (:id entry) true translation nil)))
         (when collection
           (await (learner/change! learner
@@ -71,7 +71,7 @@
    each with its `:log-recall`. `:total` counts the words before the search, `:matches` after it."
   [learner {:keys [collection limit offset search]} now-ms]
   (let [scope   (learner/collection-words learner collection)
-        query   (when (utils/non-blank search) (domain/query search))
+        query   (when (utils/non-blank search) (vocabulary/query search))
         matched (learner/matching-words learner collection query)
         page    (cond->> matched
                   offset (drop offset)
@@ -88,7 +88,7 @@
 (defn spelling-taken?
   "True when `value` is the spelling of a word other than `word-id`, as the learner has it."
   [learner word-id value]
-  (let [id (domain/vocab-id value)]
+  (let [id (vocabulary/vocab-id value)]
     (and (not= id word-id)
          (some? (learner/word learner id)))))
 
@@ -99,7 +99,7 @@
   [learner word-id]
   (when-let [word (learner/word learner word-id)]
     {:phrase?      (phrase/phrase? word)
-     :translations (domain/russian-translations word)
+     :translations (vocabulary/russian-translations word)
      :word         (:value word)}))
 
 
@@ -110,7 +110,7 @@
   (await (learner/change! learner
                           [[:entity/word
                             word-id
-                            #(some-> % (domain/edited-word value translation (world/clock world :now-iso)))]])))
+                            #(some-> % (vocabulary/edited-word value translation (world/clock world :now-iso)))]])))
 
 
 (defn ^:async rename!
@@ -119,7 +119,7 @@
    memory took the change."
   [learner world word-id value translation]
   (let [kind  (if (phrase/phrase-value? value nil) :phrase :word)
-        entry (domain/entered-entry kind (str/trim value) translation nil (world/clock world :now-iso))
+        entry (vocabulary/entered-entry kind (str/trim value) translation nil (world/clock world :now-iso))
         _ (await (learner/fresh-memory learner))]
     (if (or (nil? entry) (nil? (learner/word learner word-id)))
       false
@@ -132,7 +132,7 @@
                                                           id
                                                           #(some-> % (collections/replace-word word-id (:id entry)))]))
                                                       (learner/collections-of learner word-id)))))]
-        (when (and written (zero? (count (:ids (learner/review-history learner (:id entry))))))
+        (when (and written (zero? (count (:review-ids (learner/review-history learner (:id entry))))))
           (await (add-review learner world (:id entry) true translation nil)))
         written))))
 

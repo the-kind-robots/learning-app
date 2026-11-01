@@ -168,72 +168,76 @@
 
 
 ;; =============================================================================
-;; pick-vocab
+;; lesson-words
 ;; =============================================================================
 
 
-(defn- rows
-  "Rows as `list` hands them over, by how overdue each is — the minus log of its recall, `##Inf` for a word
-   never reviewed — ordered most due first, alphabetical by id wherever they tie, which is the read order
-   `list` leaves."
+(defn- recalls
+  "Words and their log-recalls, by how overdue each is — minus its log-recall, `##Inf` for a word never
+   reviewed — in the order memory hands them over: most due first, alphabetical by id wherever they tie."
   [overdue]
-  (vec (map-indexed (fn [n o]
-                      {:id (str "vocab:wort-" (char (+ 97 n)))
-                       :log-recall (when-not (= ##Inf o) (- o))})
+  (vec (map-indexed (fn [position word-overdue]
+                      [{:id (str "vocab:wort-" (char (+ 97 position)))}
+                       (when-not (= ##Inf word-overdue) (- word-overdue))])
                     overdue)))
 
 
-(defn- random-sequence
-  "A `random` that walks [0, 1) in golden-ratio steps: the same numbers
-   every time, spread like a draw."
+(defn- shuffling-tie-breaker
+  "A tie-breaker that walks [0, 1) in golden-ratio steps: the same numbers every time, spread like a draw."
   []
-  (let [at (atom 0.0)]
-    (fn []
-      (swap! at #(mod (+ % 0.6180339887) 1)))))
+  (let [step (atom 0.0)]
+    (fn [_]
+      (swap! step #(mod (+ % 0.6180339887) 1)))))
 
 
 (defn- draws
-  "`times` runs of `pick-vocab` taking `n` from `rows`, as a set of id sets."
-  [rows n times]
-  (let [random (random-sequence)]
+  "`times` lessons of `size` words out of `recalls`, as a set of id sets."
+  [recalls size times]
+  (let [tie-breaker (shuffling-tie-breaker)]
     (into #{}
-          (map (fn [_] (set (map :id (sut/pick-vocab rows :log-recall n random)))))
+          (map (fn [_] (set (map :id (sut/lesson-words recalls size tie-breaker)))))
           (range times))))
 
 
 (deftest a-lesson-takes-the-most-due-words
   (testing "a word just added loses to long-forgotten ones, every time"
-    (let [forgotten (rows [30 29 28])
-          fresh     {:id "vocab:neu" :log-recall -0.01}]
-      (is (= #{(set (map :id forgotten))}
+    (let [forgotten (recalls [30 29 28])
+          fresh     [{:id "vocab:neu"} -0.01]]
+      (is (= #{(set (map (comp :id first) forgotten))}
              (draws (conj forgotten fresh) 3 50)))))
   (testing "the asked-for count, most due first, nothing twice"
     (is (= ["vocab:wort-a" "vocab:wort-b" "vocab:wort-c"]
-           (map :id (sut/pick-vocab (rows [9 8 7 6 5]) :log-recall 3 (random-sequence))))))
+           (map :id (sut/lesson-words (recalls [9 8 7 6 5]) 3 (shuffling-tie-breaker))))))
   (testing "a vocabulary smaller than the lesson is taken whole"
-    (is (= 2 (count (sut/pick-vocab (rows [2 1]) :log-recall 3 (random-sequence)))))))
+    (is (= 2 (count (sut/lesson-words (recalls [2 1]) 3 (shuffling-tie-breaker)))))))
+
+
+(deftest ties-go-the-way-the-tie-breaker-says
+  (testing "a tie-breaker by id takes the tied words in id order"
+    (is (= ["vocab:wort-a" "vocab:wort-b"]
+           (map :id (sut/lesson-words (recalls (repeat 4 1.0)) 2 #(.charCodeAt (:id %) 11)))))))
 
 
 (deftest equally-due-words-are-taken-at-random
   (testing "every item never reviewed ties at ##Inf, and the cut is not the alphabet"
-    (is (< 1 (count (draws (rows (repeat 10 ##Inf)) 3 50)))))
+    (is (< 1 (count (draws (recalls (repeat 10 ##Inf)) 3 50)))))
   (testing "a batch added within one second ties on recall too, and is cut the same way"
-    (is (< 1 (count (draws (rows (repeat 10 0.0231)) 3 50))))))
+    (is (< 1 (count (draws (recalls (repeat 10 0.0231)) 3 50))))))
 
 
 (deftest a-more-due-word-beats-a-tied-field
   (testing "a more due item outranks a less due one every time, not merely usually"
-    (let [ranked (rows [9 8 7 6 5 4 3 2 1])]
+    (let [ranked (recalls [9 8 7 6 5 4 3 2 1])]
       (is (= #{#{"vocab:wort-a" "vocab:wort-b" "vocab:wort-c"}}
              (draws ranked 3 50)))))
   (testing "one strictly more due item is always taken from a tied field"
-    (let [ranked (rows (cons ##Inf (repeat 9 1.0)))]
+    (let [ranked (recalls (cons ##Inf (repeat 9 1.0)))]
       (is (every? #(contains? % "vocab:wort-a") (draws ranked 3 50))))))
 
 
-(deftest a-row-without-a-number-for-recall-never-takes-a-place
+(deftest a-word-without-a-number-for-recall-never-takes-a-place
   (testing "NaN ranks last, so it never blocks a real recall out of a full lesson"
-    (let [nan-first (cons {:id "vocab:nan" :log-recall ##NaN} (rows [1 2 3 4]))]
+    (let [nan-first (cons [{:id "vocab:nan"} ##NaN] (recalls [1 2 3 4]))]
       (is (every? #(not (contains? % "vocab:nan")) (draws nan-first 2 30))))))
 
 

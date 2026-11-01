@@ -58,11 +58,11 @@
                   {:handlers {retention/Reviews
                               (transit/write-handler
                                (constantly "reviews")
-                               (fn [{:keys [answer-ms ids retained seconds]}]
-                                 (js/JSON.stringify #js [(js/Array.from seconds)
+                               (fn [{:keys [answer-ms retained review-ids reviewed-at]}]
+                                 (js/JSON.stringify #js [(js/Array.from reviewed-at)
                                                          (.join (js/Array.from retained) "")
                                                          (js/Array.from answer-ms)
-                                                         ids])))}}))
+                                                         review-ids])))}}))
 
 
 (def ^:private body-reader

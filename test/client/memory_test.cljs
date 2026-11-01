@@ -42,7 +42,7 @@
 
 (defn- review-ids
   [memory word-id]
-  (some->> (get-in memory [:slot-of word-id]) (nth (:cards memory)) :reviews :ids vec))
+  (some->> (get-in memory [:slot-of word-id]) (nth (:cards memory)) :reviews :review-ids vec))
 
 
 (def ^:private hund
