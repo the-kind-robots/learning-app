@@ -1,6 +1,5 @@
 (ns pages.words.presenter
   (:require
-   [clojure.math :as math]
    [clojure.string :as str]
    [collection-accents :as colours]
    [domain.vocabulary :as vocabulary]
@@ -21,8 +20,8 @@
 
 (defn word-item-props
   "A row of the list; a word never reviewed reads as 0 %."
-  [{:keys [id log-recall value] :as row}]
-  (let [percent (if log-recall (* 100 (math/exp log-recall)) 0)]
+  [{:keys [id recall value] :as row}]
+  (let [percent (if recall (* 100 recall) 0)]
     {:id id
      :retention-band (retention-band percent)
      :retention-color (utils/prozent->color percent)

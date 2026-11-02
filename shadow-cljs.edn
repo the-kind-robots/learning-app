@@ -76,6 +76,18 @@
    :autorun   true
    :ns-regexp "-test$"}
 
+  ;; The memory kernels compared on a review log (#513): `dev.kernel-comparison`.
+  :kernel-comparison
+  {:target    :node-script
+   :output-to "target/kernel-comparison.js"
+   :main      dev.kernel-comparison/main}
+
+  ;; How a lesson ranks its words, simulated over a vocabulary (#513): `dev.lesson-simulation`.
+  :lesson-simulation
+  {:target    :node-script
+   :output-to "target/lesson-simulation.js"
+   :main      dev.lesson-simulation/main}
+
   :browser-test
   {:target    :browser-test
    :test-dir  "target/browser-test"

@@ -252,16 +252,20 @@
         restored (memory/restored (snapshot/decoded (snapshot/parsed (snapshot/encode rebuilt nil))))
         levels   (fn [m]
                    (into {}
-                         (map (fn [{:keys [id]}]
-                                [id (retention/log-recall (memory/review-history m id) now)]))
+                         (map (fn [word]
+                                [(:id word)
+                                 (retention/memory
+                                  {:history (memory/review-history m (:id word))
+                                   :weights retention/default-weights
+                                   :word    word})]))
                          (memory/words m)))
         picked   (fn [m]
                    (into #{}
                          (map :id)
-                         (lesson/lesson-words (for [card (memory/collection-cards m nil)]
-                                                [(:word card) (retention/log-recall (:reviews card) now)])
-                                              2
-                                              (constantly 0.5))))]
+                         (lesson/lesson-words {:cards  (memory/collection-cards m nil)
+                                               :now-ms now
+                                               :random (constantly 0.5)
+                                               :size   2})))]
     (is (= (levels rebuilt) (levels restored)) "recall")
     (is (= (picked rebuilt) (picked restored)) "the words a lesson picks")
     (is (= (map :id (memory/words rebuilt)) (map :id (memory/words restored))) "the word list")
