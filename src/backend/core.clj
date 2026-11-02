@@ -221,47 +221,63 @@
 ;;
 
 
-(defn create-account!
-  "Mints a bearer token, creates the account row holding its sha256, and its
-   role-secured CouchDB userdb. Returns {:id int :token str} — the raw token
-   is the user's key, stored nowhere on the server.
+(defn- burn-grant!
+  "Atomically burns an unused, unexpired grant. Returns true when burned."
+  [db token]
+  (some?
+   (jdbc/execute-one!
+     db
+     ["UPDATE grants SET used_at = UNIXEPOCH()
+      WHERE sha256 = ? AND used_at IS NULL AND expires_at > ?
+      RETURNING sha256"
+      (utils/sha256-hex token) (System/currentTimeMillis)])))
 
-   The CouchDB steps run inside the transaction, like the guard below already
-   does: the row and the secured userdb exist together or not at all (#254).
-   A failed step throws, the insert rolls back, and the id — never handed to
-   anyone — is simply minted again by the next attempt.
+
+(defn create-account!
+  "Spends `invite`, mints a bearer token, creates the account row holding its
+   sha256, and its role-secured CouchDB userdb. Returns {:id int :token str} —
+   the raw token is the user's key, stored nowhere on the server — or nil when
+   `invite` is not a live one.
+
+   The burn and the CouchDB steps run inside one transaction, like the guard
+   below already does: the spent invite, the row and the secured userdb exist
+   together or not at all (#254). A failed step throws, everything rolls back,
+   the invite stays unspent, and the id — never handed to anyone — is simply
+   minted again by the next attempt.
 
    Refuses an id whose userdb already exists. Account ids are row ids and
    CouchDB outlives app.db resets, so a recycled id would silently inherit —
    and sync down — the previous owner's data (seen live, #182). Refusal keeps
    the evidence; deleting the stale userdb is the operator's call."
-  [db]
+  [db invite]
   (let [token (utils/random-token)
         id    (jdbc/with-transaction [tx db]
-                ;; Explicit builder: the id must come back as :id no matter
-                ;; which connection options the caller carries.
-                (let [{:keys [id]} (jdbc/execute-one! tx
-                                     ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
-                                      (utils/sha256-hex token)]
-                                     {:builder-fn result-set/as-unqualified-maps})
-                      dbname       (userdb/db-name id)]
-                  (when (db/exists? dbname)
-                    (throw (ex-info "userdb already exists for a fresh account id"
-                                    {:type ::recycled-id :id id})))
-                  (try
-                    (db/secure (db/use dbname) {:members {:names [] :roles [(str "u:" id)]}})
-                    (catch Exception e
-                      ;; The rollback frees the id for reuse, and the guard
-                      ;; above would refuse it for as long as a leftover
-                      ;; userdb exists — so the userdb this very call created
-                      ;; (the guard just proved the name was free) goes too.
-                      ;; Best effort: if CouchDB is down, the delete fails
-                      ;; like everything else and reconciliation reports the
-                      ;; orphan.
-                      (try @(db/destroy {:name dbname}) (catch Exception _))
-                      (throw e)))
-                  id))]
-    {:id id :token token}))
+                (when (burn-grant! tx invite)
+                  ;; Explicit builder: the id must come back as :id no matter
+                  ;; which connection options the caller carries.
+                  (let [{:keys [id]} (jdbc/execute-one! tx
+                                       ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
+                                        (utils/sha256-hex token)]
+                                       {:builder-fn result-set/as-unqualified-maps})
+                        dbname       (userdb/db-name id)]
+                    (when (db/exists? dbname)
+                      (throw (ex-info "userdb already exists for a fresh account id"
+                                      {:type ::recycled-id :id id})))
+                    (try
+                      (db/secure (db/use dbname) {:members {:names [] :roles [(str "u:" id)]}})
+                      (catch Exception e
+                        ;; The rollback frees the id for reuse, and the guard
+                        ;; above would refuse it for as long as a leftover
+                        ;; userdb exists — so the userdb this very call created
+                        ;; (the guard just proved the name was free) goes too.
+                        ;; Best effort: if CouchDB is down, the delete fails
+                        ;; like everything else and reconciliation reports the
+                        ;; orphan.
+                        (try @(db/destroy {:name dbname}) (catch Exception _))
+                        (throw e)))
+                    id)))]
+    (when id
+      {:id id :token token})))
 
 
 (defn- authenticated-user-id
@@ -301,18 +317,6 @@
    access logs and Referer headers."
   [base-url token]
   (str base-url "/#invite=" token))
-
-
-(defn- burn-grant!
-  "Atomically burns an unused, unexpired grant. Returns true when burned."
-  [db token]
-  (some?
-   (jdbc/execute-one!
-     db
-     ["UPDATE grants SET used_at = UNIXEPOCH()
-      WHERE sha256 = ? AND used_at IS NULL AND expires_at > ?
-      RETURNING sha256"
-      (utils/sha256-hex token) (System/currentTimeMillis)])))
 
 
 (comment
@@ -785,18 +789,16 @@
        :post
        (fn [{{:keys [invite]} :body-params}]
          (on-connection [db db-spec]
-           (if (and (string? invite) (utils/non-blank invite) (burn-grant! db invite))
-             (try
-               {:status 200 :body (select-keys (create-account! db) [:id :token])}
-               (catch Exception e
-                 ;; No account was opened, so the invite is given back: one
-                 ;; granted from a request cannot be granted again.
-                 (jdbc/execute! db ["UPDATE grants SET used_at = NULL WHERE sha256 = ?" (utils/sha256-hex invite)])
-                 (if (= ::recycled-id (:type (ex-data e)))
-                   (do (t/event! ::recycled-id-refused {:level :error :data (ex-data e)})
-                       {:status 503})
-                   (throw e))))
-             {:status 403})))}]
+           (try
+             (if-let [account (when (and (string? invite) (utils/non-blank invite))
+                                (create-account! db invite))]
+               {:status 200 :body account}
+               {:status 403})
+             (catch clojure.lang.ExceptionInfo e
+               (if (= ::recycled-id (:type (ex-data e)))
+                 (do (t/event! ::recycled-id-refused {:level :error :data (ex-data e)})
+                     {:status 503})
+                 (throw e))))))}]
 
      ;; Adopting a key means holding a token and nothing else. The token comes
      ;; in the body rather than the cookie so a device can find out whether it
