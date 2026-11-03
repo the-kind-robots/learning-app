@@ -385,6 +385,33 @@
             "each occurrence indexes its own position")))))
 
 
+(deftest a-sentence-that-says-its-target-twice-is-rejected
+  (testing "the target is said once, not explained by itself"
+    (with-redefs [dictionary/lookup-dictionary-entries (constantly nil)
+                  dictionary/lemma-ids (fn [form]
+                                         (get {"explodiert"  #{7}
+                                               "explodierte" #{7}
+                                               "lebensfähig" #{3}}
+                                              form
+                                              #{}))]
+      (are [issue target value]
+       (= issue
+          (:issue (#'sut/example-issue
+                   "ru"
+                   target
+                   (sut/target-lemma-ids target)
+                   nil
+                   #{}
+                   {:value       value
+                    :translation "Он жизнеспособен."
+                    :structure   [{:usedForm       target
+                                   :dictionaryForm target
+                                   :translation    "жизнеспособный"}]})))
+       :target-repeated "lebensfähig" "Er ist lebensfähig, weil er lebensfähig ist."
+       :target-repeated "explodiert" "Die Bombe explodierte, weil sie explodiert."
+       nil "lebensfähig" "Er ist nach der Operation wieder lebensfähig."))))
+
+
 (deftest a-multi-word-target-missing-from-the-sentence-is-rejected
   (testing "the construction must be in the sentence — every word of it"
     (let [example {:value       "Ich besuche meine Eltern."
