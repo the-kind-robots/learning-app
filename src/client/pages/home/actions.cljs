@@ -8,16 +8,6 @@
 (def ^:private empty-suggestions nil)
 
 
-(defn- prefill-text
-  "The text a completion puts into the translation field: several translations read as
-   `пёс, собака`, each piece trimmed. Whatever the field holds is stored as one translation."
-  [translations]
-  (->> translations
-       (map str/trim)
-       (remove str/blank?)
-       (str/join ", ")))
-
-
 (nxr/register-action! :action/go-to-home
   (fn go-to-home [_]
     [[:effect/navigate :page/home]]))
@@ -80,27 +70,18 @@
 
 
 (defn- suggestions
-  "The index is the only record of which entry is active; a second copy would let the handler
-   and the view disagree."
-  ([completions]
-   (suggestions completions 0))
-  ([completions active-idx]
-   {:suggestions/items      (vec completions)
-    :suggestions/active-idx active-idx}))
+  "The index is the reader's arrow choice, nil until there is one; the presenter marks a row without it."
+  [completions active-idx]
+  {:suggestions/items      (vec completions)
+   :suggestions/active-idx active-idx})
 
 
 (nxr/register-action! :action/update-suggestions
   (fn update-suggestions [state {:keys [completions value]}]
-    ;; Guarded by the value the query was made for: a debounced answer landing after more typing must
-    ;; neither show a stale list nor prefill a stale word.
+    ;; Guarded by the value the query was made for: a debounced answer landing after more typing must not
+    ;; show a stale list. The translation field follows the list in the presenter.
     (when (= value (:home/word state))
-      ;; While no translation is typed the field follows the dictionary's current answer, an empty one
-      ;; included, or the word it was filled for would linger. A typed or picked translation is the user's.
-      (let [{:keys [translations]} (first completions)]
-        [[:effect/save
-          (cond-> {:home/suggestions (suggestions completions)}
-            (not (:home/translation-typed? state))
-            (assoc :home/translation (prefill-text translations)))]]))))
+      [[:effect/save {:home/suggestions (suggestions completions nil)}]])))
 
 
 (nxr/register-action! :action/show-word-error
@@ -116,19 +97,20 @@
 ;; Keeps the shown suggestions, inert where they no longer complete the new value; the next answer replaces them.
 (nxr/register-action! :action/update-word
   (fn update-word [state value]
+    ;; A translation field the user emptied goes back to the dictionary once the word changes.
     [[:effect/save
       (cond-> {:home/word value}
-        (and (str/blank? value) (not (:home/translation-typed? state)))
-        (assoc :home/translation ""))]
+        (str/blank? (:home/translation state)) (assoc :home/translation-typed? false))]
      [:effect/suggest-completions value]]))
 
 
 (nxr/register-action! :action/update-translation
+  ;; Whatever the user types is theirs, an emptied field included, or the dictionary's text would come back
+  ;; under the cursor.
   (fn update-translation [_ value]
-    ;; Clearing the field hands it back to the dictionary: the next answer may prefill it again.
     [[:effect/save
       {:home/translation        value
-       :home/translation-typed? (not (str/blank? value))}]]))
+       :home/translation-typed? true}]]))
 
 
 (nxr/register-action! :action/add-word
@@ -148,7 +130,7 @@
   [[:effect/save
     {:home/pick        {:lemma lemma :pos pos}
      :home/suggestions empty-suggestions
-     :home/translation (prefill-text translations)
+     :home/translation translations
      ;; A deliberate pick owns the field: later dictionary answers must not overwrite it.
      :home/translation-typed? true
      :home/word        lemma}]
@@ -157,15 +139,14 @@
 
 (nxr/register-action! :action/handler-word-keydown
   ;; The marked row and the arrows' targets come with the key, as the screen shows them.
-  (fn handle-word-keydown [state {:keys [key shift? focus-id scroll-selector active-idx next-idx previous-idx]}]
-    (let [items  (:suggestions/items (:home/suggestions state))
-          n      (count items)
-          move   (fn [new-idx]
-                   (when new-idx
-                     [[:effect/prevent-default]
-                      [:effect/save {:home/suggestions (suggestions items new-idx)}]
-                      [:effect/scroll-nearest scroll-selector]]))
-          active (some->> active-idx (get items))]
+  (fn handle-word-keydown [state {:keys [key shift? focus-id scroll-selector marked next-idx previous-idx]}]
+    (let [items (:suggestions/items (:home/suggestions state))
+          n     (count items)
+          move  (fn [new-idx]
+                  (when new-idx
+                    [[:effect/prevent-default]
+                     [:effect/save {:home/suggestions (suggestions items new-idx)}]
+                     [:effect/scroll-nearest scroll-selector]]))]
       (cond
         (and (pos? n) (= key "ArrowDown"))
         (move next-idx)
@@ -173,8 +154,8 @@
         (and (pos? n) (= key "ArrowUp"))
         (move previous-idx)
 
-        (and active (or (= key "Enter") (and (= key "Tab") (not shift?))))
-        (into [[:effect/prevent-default]] (select-item active focus-id))
+        (and marked (or (= key "Enter") (and (= key "Tab") (not shift?))))
+        (into [[:effect/prevent-default]] (select-item marked focus-id))
 
         (and (pos? n) (= key "Escape"))
         [[:effect/prevent-default]

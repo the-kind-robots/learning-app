@@ -66,7 +66,7 @@ The system SHALL render a visible focus indicator on every interactive button re
 - **AND** the focus ring uses the project accent color (or an equally contrasting outline) so it is clearly distinguishable from the unfocused state
 
 ### Requirement: Typing keeps the previous suggestion list until the next answer
-The system SHALL keep the currently displayed suggestion list while the user types in the German word input, replacing it only when the dictionary delivers the answer for the new prefix. A keystroke SHALL NOT blank or shrink the list: every row stays on screen, but a row that no longer completes what the field holds is inert at once and without a query. A row still completes it while the normalised typed text is a prefix of the row's lemma, with or without a leading definite article, or of one of the word's forms that matched the prefix the row was answered for — the answer carries those forms per row, so `das Haus` answered for `Häu` through `Häuser` stays while the field reads `Häus`, and `der Rücken` stays while it reads `rücke`. The comparison SHALL normalise as the dictionary query does (case, umlauts, ß). All rows SHALL keep their order. The marked entry stays when it still completes the field, else it is the first row that does, else there is none. An inert row SHALL be dimmed and marked `aria-disabled`, and SHALL NOT be tappable, picked by Enter or Tab, or counted for add-word or mode detection; with no marked entry Enter moves on to the translation field.
+The system SHALL keep the currently displayed suggestion list while the user types in the German word input, replacing it only when the dictionary delivers the answer for the new prefix. A keystroke SHALL NOT blank or shrink the list: every row stays on screen, but a row that no longer completes what the field holds is inert at once and without a query. A row still completes it while the normalised typed text is a prefix of the row's lemma, with or without a leading definite article, or of one of the word's forms that matched the prefix the row was answered for — the answer carries those forms per row, so `das Haus` answered for `Häu` through `Häuser` stays while the field reads `Häus`, and `der Rücken` stays while it reads `rücke`. The comparison SHALL normalise as the dictionary query does (case, umlauts, ß). All rows SHALL keep their order. The entry the user marked with an arrow stays marked while it still completes the field; otherwise the mark follows the rule of "The suggestion list shows which entry the keyboard is on". An inert row SHALL be dimmed and marked `aria-disabled`, and SHALL NOT be tappable, picked by Enter or Tab, or counted for add-word or mode detection; with no marked entry Enter moves on to the translation field.
 
 #### Scenario: A further keystroke does not blank the list
 - **WHEN** a suggestion list is visible
@@ -284,15 +284,20 @@ empty vocabulary, and on the words screen while the word dialog is open.
 
 ### Requirement: The suggestion list shows which entry the keyboard is on
 
-While the suggestion list is open it SHALL mark exactly one entry as the
+While the suggestion list is open it SHALL mark at most one entry as the
 active one, and that mark SHALL be visible on screen. The marked entry SHALL
 be the entry `Enter` and `Tab` pick, so what the list shows and what a pick
-returns can never disagree. A list that has just appeared SHALL have its first
-entry marked, before any arrow is pressed.
+returns can never disagree. Before any arrow is pressed the mark SHALL be on
+the first entry whose lemma, with or without its article, the typed text
+begins. An entry that completes the field only through one of its word forms
+SHALL NOT be marked until an arrow moves the mark onto it: `Enter` or `Tab`
+then keeps the typed form in the field. With no entry marked, the translation
+field SHALL NOT be filled from the list, and either arrow SHALL mark the first
+entry that completes the field.
 
 #### Scenario: A list opens with its first entry marked
 
-- **WHEN** the dictionary answers a prefix and the suggestion list appears
+- **WHEN** the dictionary answers a prefix that begins the lemma of the first entry
 - **THEN** exactly one entry carries the active mark
 - **AND** it is the first entry in the list
 
@@ -301,6 +306,19 @@ entry marked, before any arrow is pressed.
 - **WHEN** the suggestion list is open with an entry marked active
 - **AND** the user presses `Enter`
 - **THEN** the entry that was marked is the one applied to the form
+
+#### Scenario: A typed word form keeps the typed word
+
+- **WHEN** the user types `gesondert` and the list shows `sondern`, matched only through the form `gesondert`
+- **THEN** no entry carries the active mark
+- **AND** the translation field is not filled from `sondern`
+- **AND** pressing `Enter` or `Tab` leaves `gesondert` in the word field
+
+#### Scenario: An arrow picks the lemma of a typed form
+
+- **WHEN** the user types `gesondert` and the list shows `sondern` with no entry marked
+- **AND** the user presses `ArrowDown`, then `Enter`
+- **THEN** the word field holds `sondern` and the translation field its translation
 
 ### Requirement: The arrows move the visible mark
 

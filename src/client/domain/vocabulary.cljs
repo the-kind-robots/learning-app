@@ -109,14 +109,26 @@
    id])
 
 
-(defn completes?
-  "Whether `typed` is a prefix of the completion's lemma, with or without its article, or of one of its `:matched-forms`.
-   Comparison is on normalised text."
-  [typed {:keys [lemma matched-forms]}]
+(defn begins-lemma?
+  "Whether `typed` begins the completion's lemma, with or without its article. Compared normalised."
+  [typed {:keys [lemma]}]
   (let [typed (normalize-value typed)
         lemma (normalize-value lemma)]
-    (boolean (some #(str/starts-with? % typed)
-                   (into [lemma (str/replace lemma article "")] matched-forms)))))
+    (boolean (some #(str/starts-with? % typed) [lemma (str/replace lemma article "")]))))
+
+
+(defn completes?
+  "Whether `typed` begins the completion's lemma or one of its `:matched-forms`. Compared normalised."
+  [typed {:keys [matched-forms] :as completion}]
+  (or (begins-lemma? typed completion)
+      (boolean (some #(str/starts-with? % (normalize-value typed)) matched-forms))))
+
+
+(defn leading-index
+  "Position of the first row in `completions` whose lemma `typed` begins, nil when none: the row the list marks
+   and the dictionary's translation comes from. A row found only through a word form is not it (#711)."
+  [typed completions]
+  (first (keep-indexed (fn [idx item] (when (begins-lemma? typed item) idx)) completions)))
 
 
 (defn completing-indexes

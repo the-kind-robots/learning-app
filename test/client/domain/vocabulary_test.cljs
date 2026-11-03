@@ -112,6 +112,16 @@
      "rücke"   {:lemma "die Rücksicht"})))
 
 
+(deftest the-leading-row-is-the-first-whose-lemma-the-typed-text-begins
+  (let [sondern {:lemma "sondern" :matched-forms ["gesondert"]}]
+    (are [typed completions leading] (= leading (sut/leading-index typed completions))
+     "rück" [{:lemma "der Rücken"}] 0
+     "der Rück" [{:lemma "der Rücken"}] 0
+     "Häus" [haus] nil ; a word form completes the row, it does not lead
+     "gesondert" [sondern] nil
+     "gesondert" [sondern {:lemma "gesondert"}] 1)))
+
+
 (deftest the-words-filter-finds-a-word-typed-with-or-without-its-umlauts
   (let [word {:value "für" :translation [{:lang "ru" :value "для"}]}
         text (sut/search-text word)]
