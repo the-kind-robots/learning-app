@@ -92,6 +92,32 @@ test.describe('Подсказки слов при вводе', () => {
     });
   });
 
+  // GH-719: the prefill was read off the kept rows, so a keystroke changed or emptied it before any answer.
+  test('пользователь печатает букву после перевода из словаря → перевод меняется только с ответом словаря', async ({ page }) => {
+    const field = valueField(page);
+    let translationAfterKeystroke;
+
+    await test.step('Дано подсказки на «Rücken» и перевод «спина» в поле', async () => {
+      await openHome(page);
+      await field.pressSequentially('Rücken');
+      await expect(options(page)).toHaveText(['der Rücken', 'das Rückenmark']);
+      await expect(translationField(page)).toHaveValue('спина');
+    });
+
+    await test.step('Когда он печатает «m»', async () => {
+      translationAfterKeystroke = await field.evaluate((node) => {
+        node.value += 'm';
+        node.dispatchEvent(new Event('input', { bubbles: true }));
+        return document.getElementById('new-word-translation').value;
+      });
+    });
+
+    await test.step('Тогда в задаче нажатия перевод прежний, а с ответом — «спинной мозг»', async () => {
+      expect(translationAfterKeystroke).toBe('спина');
+      await expect(translationField(page)).toHaveValue('спинной мозг');
+    });
+  });
+
   test('пользователь печатает словоформу, а не лемму → подсказка леммы остаётся, без мигания', async ({ page }) => {
     const field = valueField(page);
     let rowsAfterKeystroke;

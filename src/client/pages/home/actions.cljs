@@ -71,10 +71,15 @@
 
 (nxr/register-action! :action/update-suggestions
   (fn update-suggestions [state {:keys [completions value]}]
-    ;; Guarded by the value the query was made for: a debounced answer landing after more typing must not
-    ;; show a stale list. The translation field follows the list in the presenter.
+    ;; Guarded by the value the query was made for: a debounced answer landing after more typing must
+    ;; neither show a stale list nor prefill a stale word.
     (when (= value (:home/word state))
-      [[:effect/save {:home/suggestions (suggestions completions nil)}]])))
+      ;; While no translation is the user's, the field follows the dictionary's answer, an empty one included,
+      ;; or the word it was filled for would linger. It stays until the next answer: closing the list keeps it.
+      [[:effect/save
+        (cond-> {:home/suggestions (suggestions completions nil)}
+          (not (:home/translation-typed? state))
+          (assoc :home/translation (vocabulary/dictionary-translation value completions)))]])))
 
 
 (nxr/register-action! :action/show-word-error
@@ -90,20 +95,19 @@
 ;; Keeps the shown suggestions, inert where they no longer complete the new value; the next answer replaces them.
 (nxr/register-action! :action/update-word
   (fn update-word [state value]
-    ;; A translation field the user emptied goes back to the dictionary once the word changes.
     [[:effect/save
       (cond-> {:home/word value}
-        (str/blank? (:home/translation state)) (assoc :home/translation-typed? false))]
+        (and (str/blank? value) (not (:home/translation-typed? state)))
+        (assoc :home/translation ""))]
      [:effect/suggest-completions value]]))
 
 
 (nxr/register-action! :action/update-translation
-  ;; Whatever the user types is theirs, an emptied field included, or the dictionary's text would come back
-  ;; under the cursor.
   (fn update-translation [_ value]
+    ;; Clearing the field hands it back to the dictionary: the next answer may prefill it again.
     [[:effect/save
       {:home/translation        value
-       :home/translation-typed? true}]]))
+       :home/translation-typed? (not (str/blank? value))}]]))
 
 
 (nxr/register-action! :action/add-word

@@ -1,6 +1,5 @@
 (ns pages.home.presenter
   (:require
-   [clojure.string :as str]
    [domain.phrase :as phrase]
    [domain.vocabulary :as vocabulary]))
 
@@ -13,12 +12,8 @@
          :active?      (= idx active-idx)
          :completes?   (vocabulary/completes? word item)
          :phrase?      (phrase/phrase-suggestion? item)
-         ;; The text the entry puts into the translation field: one translation a line, as the field is read
-         ;; when the word is added.
-         :translations (->> translations
-                            (map str/trim)
-                            (remove str/blank?)
-                            (str/join "\n"))))
+         ;; The text the entry puts into the translation field.
+         :translations (vocabulary/translations-text translations)))
 
 
 (defn- suggestions-props
@@ -55,15 +50,7 @@
      ;; Only a picked suggestion's part of speech is added with the word; without one the word decides.
      :pos         (phrase/dictionary-pos word pick nil)
      :suggestions suggestions
-     ;; A typed or picked translation is the user's. Until then the field shows the translation of the row
-     ;; whose lemma the word begins, the one the list marks on its own; a row found through a word form is
-     ;; another word (#711).
-     :translation (if (:home/translation-typed? state)
-                    (:home/translation state)
-                    (let [rows (:items suggestions)]
-                      (or (when-not (str/blank? word)
-                            (some->> (vocabulary/leading-index word rows) (get rows) :translations))
-                          "")))
+     :translation (:home/translation state)
      :translation-invalid? (= :failure/empty-translations error)
      :word        (:home/word state)}))
 

@@ -18,6 +18,18 @@
   (empty? (learner/collection-words learner collection)))
 
 
+(defn dictionary-translation
+  "The translation field's text the dictionary offers for `typed` among its `completions`: the translations of
+   the first row whose lemma `typed` begins, \"\" when none does. A row found through a word form is another
+   word (#711)."
+  [typed completions]
+  (or (some->> (vocabulary/leading-index typed completions)
+               (nth completions)
+               :translations
+               vocabulary/translations-text)
+      ""))
+
+
 (defn ^:async add!
   "Adds `value` with `translation` to the vocabulary and the active collection: a phrase or a word by the
    dictionary's part of speech `pos` (none: by the value alone), a word keeping `pos`; a duplicate value merges

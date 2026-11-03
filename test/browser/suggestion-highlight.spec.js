@@ -156,6 +156,59 @@ test.describe('Подсказки слов при вводе', () => {
     });
   });
 
+  // GH-719: the prefill was read off the open list, so closing the list emptied the field.
+  test('пользователь закрывает подсказки Escape или уходит в поле перевода → перевод из словаря остаётся', async ({ page }) => {
+    const field = valueField(page);
+    const translation = page.getByLabel('Перевод (русский)');
+
+    await test.step('Дано подсказка «die Katze» на «Katz» и перевод из словаря', async () => {
+      await openHome(page);
+      await field.pressSequentially('Katz');
+      await expect(options(page)).toHaveText(['die Katze']);
+      await expect(translation).toHaveValue('кошка\nкот');
+    });
+
+    await test.step('Когда он жмёт Escape', async () => {
+      await page.keyboard.press('Escape');
+    });
+
+    await test.step('Тогда подсказок нет, а перевод на месте', async () => {
+      await expect(options(page)).toHaveCount(0);
+      await expect(translation).toHaveValue('кошка\nкот');
+    });
+
+    // The open list covers the translation field, so focus moves there as the phone keyboard's «next» does.
+    await test.step('Когда он печатает дальше и переходит в поле перевода', async () => {
+      await field.pressSequentially('e');
+      await expect(options(page)).toHaveText(['die Katze']);
+      await translation.focus();
+    });
+
+    await test.step('Тогда подсказок нет, а перевод на месте', async () => {
+      await expect(options(page)).toHaveCount(0);
+      await expect(translation).toHaveValue('кошка\nкот');
+    });
+  });
+
+  test('пользователь печатает слово и сразу жмёт «Добавить» → слово добавлено с переводом из словаря', async ({ page }) => {
+    const field = valueField(page);
+
+    await test.step('Дано подсказка «die Katze» на «Katz» и перевод из словаря', async () => {
+      await openHome(page);
+      await field.pressSequentially('Katz');
+      await expect(page.getByLabel('Перевод (русский)')).toHaveValue('кошка\nкот');
+    });
+
+    await test.step('Когда он жмёт «Добавить»', async () => {
+      await page.getByRole('button', { name: 'ДОБАВИТЬ' }).click();
+    });
+
+    await test.step('Тогда форма очищена: слово сохранено', async () => {
+      await expect(field).toHaveValue('');
+      await expect(page.getByRole('alert')).toHaveCount(0);
+    });
+  });
+
   test('пользователь печатает словоформу, жмёт ↓ и Enter → в поле лемма с переводом', async ({ page }) => {
     const field = valueField(page);
 
