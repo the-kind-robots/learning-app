@@ -17,6 +17,16 @@ npx playwright test --debug                     # inspector; trace:
 npx playwright show-trace test-results/<dir>/trace.zip
 ```
 Reporter is `line` locally. Traces `retain-on-failure`. CI: `Browser Tests` job.
+
+## On the release bundle
+`*.release.spec.js` (project `release`) are base scenarios that touch only the screen and the network:
+no `__metrics`, no `db`, an account from `openWithAccountKey`. They run with the rest on the dev build,
+and in the `Release Scenarios` job on the bundle that ships (#701):
+```sh
+npx shadow-cljs release app   # into resources/public/js/app, which the backend serves
+bb scripts/release_renames.clj
+npx playwright test --project=release
+```
 Without `LEARNING_APP__DICTIONARY_DIR`: slow, and `add-form-stability.mobile.spec.js` fails.
 
 ## Conventions

@@ -43,12 +43,12 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.clj-kondo/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$|scripts/release_renames\.clj$|lib/db/)'; then
+          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.clj-kondo/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
           fi
-          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.github/workflows/|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$|test/browser/|test/fixtures/|tools/dictionary/|playwright\.config\.js$)'; then
+          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.github/workflows/|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$|test/browser/|test/fixtures/|tools/dictionary/|playwright\.config\.js$|lib/db/|scripts/release_renames\.clj$)'; then
             echo "browser=true" >> "$GITHUB_OUTPUT"
           else
             echo "browser=false" >> "$GITHUB_OUTPUT"
@@ -117,11 +117,6 @@ jobs:
       # cannot say); see scripts/check_adapter_layering.clj.
       - name: Adapters stand apart
         run: bb scripts/check_adapter_layering.clj
-
-      # The suites run the dev build; only the release build renames a JS name its externs lack (#697).
-      # See docs/dev/cljs-interop-renaming.md.
-      - name: Release build keeps every JS name the client calls
-        run: bb scripts/release_renames.clj
 
       - uses: actions/cache/save@v6.1.0
         if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}
@@ -277,3 +272,81 @@ jobs:
             ~/.gitlibs
             ~/.deps.clj
           key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
+
+  # The bundle that ships (#701). The suites above run the development build, which renames and drops nothing,
+  # so #697 broke in the release build alone. One release build serves both checks below.
+  release-scenarios:
+    name: Release Scenarios
+    runs-on: ubuntu-latest
+    needs: changes
+    timeout-minutes: 20
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.browser == 'true') }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-java@v5.7.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          cli: latest
+          clj-kondo: 2026.05.25
+          bb: 1.12.218
+
+      - id: cache-clojure
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+            ~/.deps.clj
+          key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
+          restore-keys: |
+            clojure-
+
+      - run: npm ci
+      - run: npx shadow-cljs release app
+
+      # Reads the build above; see docs/dev/cljs-interop-renaming.md.
+      - name: Release build keeps every JS name the client calls
+        run: bb scripts/release_renames.clj
+
+      - name: Build the fixture dictionary
+        run: clojure -X:dictionary-fixture
+
+      - name: Start backend
+        run: |
+          LEARNING_APP__PORT=8301 LEARNING_APP__DB_PATH="$PWD/test-app.db" \
+            LEARNING_APP__DICTIONARY_DIR="$PWD/target/test-dictionary" \
+            clojure -M:dev -m core > backend.log 2>&1 &
+
+      - name: Wait for backend
+        run: |
+          for _ in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:8301/ && exit 0
+            sleep 1
+          done
+          echo "backend never answered on 8301"
+          cat backend.log
+          exit 1
+
+      - name: Run the base scenarios on the release bundle
+        run: npx playwright test --project=release
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: failure()
+        with:
+          name: release-scenario-traces
+          path: |
+            test-results/
+            backend.log
+          if-no-files-found: ignore
+          retention-days: 7

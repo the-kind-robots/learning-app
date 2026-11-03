@@ -19,7 +19,13 @@ module.exports = defineConfig({
     // has been running under.
     {
       name: 'desktop',
-      testIgnore: '**/*.mobile.spec.js',
+      testIgnore: ['**/*.mobile.spec.js', '**/*.release.spec.js'],
+    },
+    // The base scenarios that touch only the screen and the network, so they also run on the release bundle
+    // (#701): CI builds it and runs `--project=release`. Under the development build they run with the rest.
+    {
+      name: 'release',
+      testMatch: '**/*.release.spec.js',
     },
     // A phone, for the specs that are about the phone layout. 390 px alone
     // satisfies the `max-width: 600px` arm of the autocomplete media query, so
