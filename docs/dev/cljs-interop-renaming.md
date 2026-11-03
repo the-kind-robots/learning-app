@@ -39,12 +39,15 @@ To call a JS method or read a JS property that Closure's externs may lack, put t
 parameter or local, or use `js-invoke`. A `^js` on the call form is not enough when the form has an
 inferred type.
 
-`bb scripts/release_renames.clj` enforces it, and CI runs it (`Client Tests`). It builds the release
-bundle and reads the map Closure writes of every property it renamed,
-`.shadow-cljs/builds/app/release/closure.property.map` (`isWellFormed:Jl`, a line per name). It fails
+`bb scripts/release_renames.clj` enforces it. CI runs it in `Release Scenarios`, on the one release
+build that job makes for it and for the base scenarios (#701); locally, run `npx shadow-cljs release app`
+first. It reads the map Closure writes of every property it renamed,
+`.shadow-cljs/builds/app/release/closure.property.map` (`isWellFormed:Jl`, a line per name), and fails
 on every interop name of the bundle's sources that the map holds. The sources are the build's own: the
-inputs its `manifest.edn` lists that lie under a `:source-paths` entry of `shadow-cljs.edn`. clj-kondo's analysis (`:instance-invocations`) finds the names in every interop form:
-`(.m x)`, `(.-f x)`, `(. x m)`, `(. x -f)`, the members of `(.. x -a (b))`, threaded ones.
+inputs its `manifest.edn` lists that lie under a `:source-paths` entry of `shadow-cljs.edn`. clj-kondo's
+analysis (`:instance-invocations`) finds the names in every interop form: `(.m x)`, `(.-f x)`,
+`(. x m)`, `(. x -f)`, the members of `(.. x -a (b))`, threaded ones. It refuses a build it cannot
+trust: no release build, a development build since, or a source edited since.
 
 ## Where the lists are
 

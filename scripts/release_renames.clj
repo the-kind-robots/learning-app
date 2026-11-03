@@ -5,11 +5,12 @@
 ;; browser owns then no longer matches, and the call throws only in the release build, which no suite
 ;; runs. docs/dev/cljs-interop-renaming.md says which forms keep a name.
 ;;
-;; It builds `:app` in release into target/release-names and reads the property map Closure writes
-;; (`.shadow-cljs/builds/app/release/closure.property.map`, a line `name:renamed` per renamed property).
-;; It reports each interop name of the sources the map holds; clj-kondo's analysis finds them.
-;; Run from the repository root:
+;; It reads the release build already made (`npx shadow-cljs release app`; CI makes it once for this check
+;; and the release scenarios): the property map Closure writes (`closure.property.map`, a line
+;; `name:renamed` per renamed property) and the build's manifest. It reports each interop name of the
+;; build's sources the map holds; clj-kondo's analysis finds them. Run from the repository root:
 ;;
+;;   npx shadow-cljs release app
 ;;   bb scripts/release_renames.clj
 (require '[babashka.fs :as fs]
          '[babashka.process :as p]
@@ -17,33 +18,41 @@
          '[clojure.string :as str])
 
 
-(def output-dir "target/release-names")
+(def config (edn/read-string (slurp "shadow-cljs.edn")))
 
 
-(def build
-  (p/shell {:out :string :err :string :continue true}
-           "npx"
-           "shadow-cljs"
-           "release"
-           "app"
-           "--config-merge" (str "{:output-dir \"" output-dir "\"}")))
+(def manifest (str (get-in config [:builds :app :output-dir]) "/manifest.edn"))
 
 
-(when-not (zero? (:exit build))
-  (println (:out build) (:err build))
-  (println "The release build failed.")
+(def property-map ".shadow-cljs/builds/app/release/closure.property.map")
+
+
+;; A release writes both in the same second; a development build since then rewrites the manifest only.
+(when-not (and (fs/exists? property-map)
+               (fs/exists? manifest)
+               (<= (- (fs/file-time->millis (fs/last-modified-time manifest))
+                      (fs/file-time->millis (fs/last-modified-time property-map)))
+                   5000))
+  (println "No release build to read: run `npx shadow-cljs release app` first.")
   (System/exit 1))
 
 
 (def sources
   "The project's files the bundle was built from: the inputs the build's manifest lists, found under the
    source paths of shadow-cljs.edn. Libraries and node_modules are under none of them."
-  (let [source-paths (:source-paths (edn/read-string (slurp "shadow-cljs.edn")))]
-    (->> (edn/read-string (slurp (str output-dir "/manifest.edn")))
-         (mapcat :sources)
-         (keep (fn [resource]
-                 (some #(let [file (str % "/" resource)] (when (fs/exists? file) file)) source-paths)))
-         distinct)))
+  (->> (edn/read-string (slurp manifest))
+       (mapcat :sources)
+       (keep (fn [resource]
+               (some #(let [file (str % "/" resource)] (when (fs/exists? file) file)) (:source-paths config))))
+       distinct))
+
+
+;; The names come from the sources as they are now, the map from the build: a source edited since then
+;; would be checked against a map that does not know it.
+(when-let [edited (seq (fs/modified-since property-map sources))]
+  (println "Edited since the release build:" (str/join " " edited))
+  (println "Run `npx shadow-cljs release app` again.")
+  (System/exit 1))
 
 
 (def uses
@@ -72,7 +81,7 @@
   (->> (keys uses)
        (filter (into #{}
                      (map #(first (str/split % #":" 2)))
-                     (str/split-lines (slurp ".shadow-cljs/builds/app/release/closure.property.map"))))
+                     (str/split-lines (slurp property-map))))
        sort))
 
 

@@ -39,4 +39,13 @@ async function becomeAccount(page) {
   await page.reload();
 }
 
-module.exports = { becomeAccount, stubAccountCopy };
+// Opens `path` with an account key in the address, as a pairing link does, so the device adopts the account
+// before it starts. The server's word on the key is stubbed: only the network is touched, no dev global, and
+// the release bundle runs it too (#701).
+async function openWithAccountKey(page, path = '/home') {
+  await stubAccountCopy(page.context());
+  await page.route('**/api/identity/account', (route) => route.fulfill({ json: { id: 1 } }));
+  await page.goto(`${path}#key=stub-token`);
+}
+
+module.exports = { becomeAccount, openWithAccountKey, stubAccountCopy };
