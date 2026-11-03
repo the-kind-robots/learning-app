@@ -37,9 +37,10 @@
   max-width: 600px;
   /* The row under the progress bar is a blank that gives way to a taller
      footer, down to the bar itself. */
-  flex: 0 1 calc(56px + 44px);
-  /* top: clears the fixed app-shell logo (top:16px + height:28px = 44px). */
-  padding: 56px 16px 0;
+  flex: 0 1 calc(var(--app-bar-height) + 12px + 44px);
+  /* top: clears the shell bar; the air under it is part of the blank that
+     gives way. */
+  padding: var(--app-bar-height) 16px 0;
   width: 100%;
 }
 
@@ -117,7 +118,8 @@
  */
 .lesson__challenge::before {
   content: "";
-  flex: 0 1 calc(30dvh - 100px);
+  /* The 12px is the air above the prompt: it gives way with the rest. */
+  flex: 0 1 calc(30dvh - 100px + 12px);
 }
 
 .lesson__prompt {
@@ -130,7 +132,7 @@
   font-weight: var(--text-body-weight-spacious);
   letter-spacing: var(--text-body-letter-spacing-spacious);
   line-height: var(--text-body-line-height-spacious);
-  margin: 12px 0;
+  margin: 0 0 12px;
   padding: 0.625rem 0.875rem;
   /* The prompt is the translation as it was typed, line breaks included
      (GH-365). */
@@ -321,8 +323,8 @@
 
 @media (min-width: 700px) {
   .lesson__header {
-    flex-basis: calc(64px + 44px);
-    padding-top: 64px;
+    flex-basis: calc(var(--app-bar-height) + 20px + 44px);
+    padding-top: var(--app-bar-height);
   }
 
   .lesson__challenge {

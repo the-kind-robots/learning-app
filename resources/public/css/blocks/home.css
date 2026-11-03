@@ -11,7 +11,7 @@
    * which makes centered content "jump" on refresh. `svh` stays consistent.
    */
   min-height: 100svh;
-  padding: 64px 16px 0;
+  padding: calc(var(--app-bar-height) + 20px) 16px 0;
   /* fallback */
   padding-bottom: calc(
       96px +

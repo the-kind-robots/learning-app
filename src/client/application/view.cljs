@@ -82,8 +82,8 @@
         (presenter/shell-props state)
         sync (sync-presenter/props state)]
     (list
-     ;; One fixed bar holds the three slots: word mark, build mark, actions. The side slots share the free
-     ;; space equally, which centres the build mark in the bar rather than between its neighbours.
+     ;; One fixed bar holds the three slots: word mark, info bar, actions. The side slots share the free
+     ;; space equally, which centres the info bar in the bar rather than between its neighbours.
      [:div.app-shell__bar
       [:div.app-shell__bar-slot
        [:button.app-shell__logo
@@ -99,14 +99,16 @@
         ;; and the build mark below, from a release.
         (when ^boolean goog/DEBUG
           [:span.app-shell__dev-mark "D"])]]
-      ;; Which bundle the page loaded, and the tap that reloads onto the newest one.
-      (when ^boolean goog/DEBUG
-        [:button.app-shell__build-mark
-         {:type       "button"
-          :aria-label [:i18n :shell/reload-build]
-          :title      [:i18n :shell/reload-build]
-          :on         {:click [[:effect/get-newest-build]]}}
-         build-mark])
+      ;; The middle of the bar, kept for what the learner should see at a glance: stars, progress, a notice.
+      [:div.app-shell__info-bar
+       ;; Which bundle the page loaded, and the tap that reloads onto the newest one.
+       (when ^boolean goog/DEBUG
+         [:button.app-shell__build-mark
+          {:type       "button"
+           :aria-label [:i18n :shell/reload-build]
+           :title      [:i18n :shell/reload-build]
+           :on         {:click [[:effect/get-newest-build]]}}
+          build-mark])]
       [:div.app-shell__actions
        ;; The trace export leads the row: a development build's control among the shell's own.
        (when ^boolean goog/DEBUG

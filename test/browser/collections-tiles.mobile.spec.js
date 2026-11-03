@@ -42,4 +42,31 @@ test.describe('Плитки тем на телефоне', () => {
       expect(fragments.filter((n) => n !== 1)).toEqual([]);
     });
   });
+
+  test('пользователь листает длинный список тем вниз → плитки уходят под сплошную шапку и сквозь неё не видны', async ({ page }) => {
+    const many = Array.from({ length: 40 }, (_, i) => 'Thema ' + String(i).padStart(2, '0'));
+    // The bar's band: 16px from the top, 28px tall, and some air below it.
+    // At rest the tiles start below it, so it shows the bar alone.
+    const bandShot = () => page.screenshot({ clip: { x: 0, y: 0, width: 384, height: 52 } });
+    let atRest;
+
+    await test.step('Дано сорок тем на открытом экране тем', async () => {
+      await page.goto('/');
+      await seedCollections(page, many);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await expect(page.getByRole('button', { name: 'Thema 00 0', exact: true })).toBeInViewport();
+      // The screen transition still paints the bar's band while it runs.
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      atRest = await bandShot();
+    });
+
+    await test.step('Когда он листает вниз', async () => {
+      await page.mouse.wheel(0, 400);
+      await expect(page.getByRole('button', { name: 'Thema 00 0', exact: true })).not.toBeInViewport();
+    });
+
+    await test.step('Тогда полоса шапки выглядит как до прокрутки — плиток в ней не видно', async () => {
+      expect((await bandShot()).equals(atRest)).toBe(true);
+    });
+  });
 });

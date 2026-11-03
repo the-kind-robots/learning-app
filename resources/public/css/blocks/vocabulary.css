@@ -23,8 +23,8 @@ body:has(.vocabulary) #app {
    instead (`interactive-widget=resizes-content`), and the footer rides up
    under the search bar.
 
-   The top padding is the shell bar (16px from the top, 28px tall) plus 24px
-   of air before the rows; there are no spacing tokens to name it by. */
+   The rows start right under the shell bar, behind a faint line of their
+   own. */
 .vocabulary {
   /* The fixed footer: the button, its padding below, the safe area. */
   --words-footer-height: calc(50px + 16px + env(safe-area-inset-bottom));
@@ -32,7 +32,7 @@ body:has(.vocabulary) #app {
   flex-direction: column;
   inset: 0;
   overflow: hidden;
-  padding-top: calc(16px + 28px + 24px);
+  padding-top: var(--app-bar-height);
   /* fallback */
   padding-bottom: var(--words-footer-height);
   /* when supported: reserve either the footer or the keyboard */
