@@ -353,6 +353,8 @@
    "This sentence is one of `avoid`. Write a different sentence, not a rewording of one in `avoid`."
    :sentence-length-out-of-range
    "The German sentence is outside the accepted length. See `details` for the number of words it must contain."
+   :target-repeated
+   "The sentence says the target more than once. Say it once, in a sentence that gives it a context; never explain the target by itself (`Er ist lebensfähig, weil er lebensfähig ist.`)."
    :wrong-part-of-speech
    "The target is used as a different part of speech. `partOfSpeech` names the one required. A word spelled the same way of another part of speech (here e.g. `der Rauch` for the adjective `rauch`) is a different word and does not count."
    :verb-outside-bracket
@@ -473,6 +475,23 @@
                    (split-sentence-words target)))))))
 
 
+(defn- target-repeated?
+  "Whether the sentence says a word of the target, in any form of its lemma,
+   more often than the target does: `Er ist lebensfähig, weil er lebensfähig
+   ist.` explains nothing, while `von Zeit zu Zeit` says `Zeit` twice.
+   `lemma-ids` is `target-lemma-ids`."
+  [lemma-ids target sentence]
+  (let [sentence-words (keep strip-word-edges (split-sentence-words sentence))]
+    (boolean
+     (some (fn [[target-word target-count]]
+             (< target-count
+                (count (filter #(or (same-word? % target-word)
+                                    (seq (set/intersection (get lemma-ids target-word #{})
+                                                           (dictionary/lemma-ids %))))
+                               sentence-words))))
+           (frequencies (if (several-words? target) (required-words target) [target]))))))
+
+
 (defn- verb-outside-bracket?
   "Whether a target that ends in a verb and its preposition (`Bezug nehmen
    auf`) has the verb's infinitive or participle right before that
@@ -568,6 +587,9 @@
       (not (target-present? lemma-ids target (:value indexed) (:structure indexed)))
       {:issue :target-lemma-missing}
 
+      (target-repeated? lemma-ids target (:value indexed))
+      {:issue :target-repeated}
+
       (and (several-words? target)
            (verb-outside-bracket? target indexed))
       {:issue :verb-outside-bracket}
@@ -622,6 +644,7 @@
       "- A lemma may appear as a correct inflected form. A phrase may be inflected and rearranged by German word order, and its words need not be adjacent — `Ich komme auf jeden Fall mit.` is the phrase `auf jeden Fall`."
       "- A placeholder in a phrase (`etwas`, `jemand`, `jemanden`, `jemandem`, `jemandes`, `sich`, `seine`) is a slot, not a word to repeat: fill it with a fitting noun phrase or pronoun, and put `sich` as the reflexive pronoun the subject needs (`mich`, `dich`, `sich`, `uns`, `euch`). Every other word of the phrase is required, inflected as the sentence needs; its article may be any article."
       "- A phrase that is already a complete sentence is extended or embedded into a turn, never returned unchanged. A phrase that ends in `!` or `?` is used without that mark inside a longer sentence."
+      "- Say the target once, in a sentence that gives it a context; never explain the target by itself (`Er ist lebensfähig, weil er lebensfähig ist.`)."
       "- Leave room around the target: roughly the target's own length plus a handful of words, and at least three words in all."
       "- Use the target in whatever form the sentence needs — participle, finite verb, passive, plural. Do not keep a verb in the infinitive just to match `word`."
       "- A phrase may change voice and word order: `einen Skonto gewähren` becomes `Ein Skonto wird gewährt.`"
