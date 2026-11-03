@@ -13,12 +13,12 @@
          :active?      (= idx active-idx)
          :completes?   (vocabulary/completes? word item)
          :phrase?      (phrase/phrase-suggestion? item)
-         ;; What the entry puts into the translation field: several translations read as `пёс, собака`, each
-         ;; piece trimmed. Whatever the field holds is stored as one translation.
+         ;; The text the entry puts into the translation field: one translation a line, as the field is read
+         ;; when the word is added.
          :translations (->> translations
                             (map str/trim)
                             (remove str/blank?)
-                            (str/join ", "))))
+                            (str/join "\n"))))
 
 
 (defn- suggestions-props

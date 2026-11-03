@@ -157,20 +157,21 @@ The translation field SHALL accept a multi-line translation. A bare `Enter` SHAL
 - **THEN** the existing behaviour applies — the highlighted suggestion is picked, or focus moves to the translation field when there is none
 
 ### Requirement: The prefilled translation is the dictionary's text as stored
-When the dictionary fills the translation field — on a suggestion arriving for an untouched field, or on the user picking a suggestion — the field SHALL receive the dictionary's translation text as the dictionary holds it. The transport splits a lemma's translations on `,` and leaves the following space on the next piece, so the form SHALL trim the pieces before rejoining them on `, `. What the field shows is what gets stored, so the reconstruction SHALL neither drop nor double a space.
+When the dictionary fills the translation field — from the entry the list marks on its own while no translation is the user's, or on the user picking an entry — the field SHALL receive the entry's translations one a line, each trimmed, in the dictionary's order. The field is read one translation a line when the word is added, so each of the dictionary's translations SHALL be stored as a translation of its own, as if typed so. The dictionary carries its translations as discrete elements; a translation containing a comma SHALL stay one line.
 
 #### Scenario: A stored translation containing a comma is prefilled whole
 - **WHEN** the dictionary's translation for a lemma is `без того, чтобы`
 - **AND** that lemma's suggestion fills the translation field
-- **THEN** the field holds `без того, чтобы`, with no doubled space after the comma
+- **THEN** the field holds `без того, чтобы` on one line
 
 #### Scenario: Several translations stay readable
-- **WHEN** a lemma has the translations `пёс` and `собака`
-- **THEN** the field holds `пёс, собака`
+- **WHEN** a lemma has the translations `кошка` and `кот`
+- **THEN** the field holds `кошка` and `кот` on two lines
+- **AND** adding the word stores them as two translations
 
 #### Scenario: Picking a suggestion fills the same text
 - **WHEN** the user picks a suggestion from the list
-- **THEN** the translation field receives that entry's translation text by the same rule
+- **THEN** the translation field receives that entry's translations by the same rule
 
 ### Requirement: The phone suggestion list is as tall as its rows
 
