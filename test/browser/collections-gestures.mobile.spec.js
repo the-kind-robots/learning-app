@@ -84,6 +84,19 @@ async function longPress(page, locator, close) {
   await finger.up();
 }
 
+// A finger carried from `from` to `to` in moves of about 3 px, as a hand does: its first moves stay short
+// of a drag.
+async function slide(finger, from, to) {
+  const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / 3));
+  for (let step = 1; step <= steps; step += 1) {
+    await finger.move(from.x + ((to.x - from.x) * step) / steps, from.y + ((to.y - from.y) * step) / steps);
+  }
+}
+
+// The name each tile shows, in the order the screen reads.
+const tileNames = (page) =>
+  page.locator('.masonry > .tile > :first-child').locator('.tile__name, .tile__label-text');
+
 // The count's digits, not its box: in a row the box is stretched to the
 // row's height, its text on the first line.
 const textRect = (el) => {
@@ -387,6 +400,94 @@ test.describe('Темы на телефоне: касания', () => {
       expect(toSeen.some((c) => c.opacity < 1)).toBe(true);
       for (const c of fromSeen) expect([c.x, c.y]).toEqual([fromRest.x, fromRest.y]);
       for (const c of toSeen) expect([c.x, c.y]).toEqual([toRest.x, toRest.y]);
+    });
+  });
+
+  test('пользователь долго жмёт тему и ведёт палец → тема переезжает, экран не прокручивается', async ({ page }) => {
+    const bahn = page.getByRole('button', { name: 'Bahn 0', exact: true });
+    const alltag = page.getByRole('button', { name: 'Alltag 0', exact: true });
+    let scrolled;
+
+    await test.step('Дано экран тем, «Bahn» стоит после «Alltag» и «Arbeit»', async () => {
+      await openCollections(page);
+      await expect(tileNames(page).nth(1)).toHaveText('Alltag');
+      await expect(tileNames(page).nth(3)).toHaveText('Bahn');
+    });
+
+    await test.step('Когда он держит «Bahn» до ✕ и, не отпуская, ведёт палец выше «Alltag»', async () => {
+      const finger = await touch(page);
+      const from = await centre(bahn);
+      await finger.down(from.x, from.y);
+      await expect(page.getByRole('button', { name: 'Удалить набор «Bahn»' })).toHaveCSS('opacity', '1');
+      scrolled = await page.evaluate(() => document.scrollingElement.scrollTop);
+      const to = await alltag.boundingBox();
+      await slide(finger, from, { x: to.x + to.width / 2, y: to.y + 4 });
+      await finger.up();
+    });
+
+    await test.step('Тогда «Bahn» стоит перед «Alltag», а экран не сдвинулся', async () => {
+      await expect(tileNames(page).nth(1)).toHaveText('Bahn');
+      await expect(tileNames(page).nth(2)).toHaveText('Alltag');
+      expect(await page.evaluate(() => document.scrollingElement.scrollTop)).toBe(scrolled);
+    });
+  });
+
+  test('пользователь подносит плитку к верхнему краю → экран сам прокручивается, тема встаёт наверх', async ({ page }) => {
+    const last = page.getByRole('button', { name: 'Zusammenarbeitsvereinbarungen 2', exact: true });
+    const alltag = page.getByRole('button', { name: 'Alltag 0', exact: true });
+    const finger = await touch(page);
+
+    await test.step('Дано экран тем прокручен вниз до последней темы', async () => {
+      await openCollections(page);
+      await last.scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.scrollingElement.scrollTop)).toBeGreaterThan(0);
+    });
+
+    await test.step('Когда он берёт последнюю тему долгим нажатием и держит палец у верхнего края', async () => {
+      const from = await centre(last);
+      await finger.down(from.x, from.y);
+      await expect(page.getByRole('button', { name: 'Удалить набор «Zusammenarbeitsvereinbarungen»' }))
+        .toHaveCSS('opacity', '1');
+      await slide(finger, from, { x: from.x, y: 10 });
+    });
+
+    await test.step('Тогда экран сам доезжает до начала', async () => {
+      await expect.poll(() => page.evaluate(() => document.scrollingElement.scrollTop)).toBe(0);
+    });
+
+    await test.step('Когда он ведёт палец выше «Alltag» и отпускает', async () => {
+      const to = await alltag.boundingBox();
+      await slide(finger, { x: to.x + to.width / 2, y: 10 }, { x: to.x + to.width / 2, y: to.y + 4 });
+      await finger.up();
+    });
+
+    await test.step('Тогда тема стоит перед «Alltag»', async () => {
+      await expect(tileNames(page).nth(1)).toHaveText('Zusammenarbeitsvereinbarungen');
+      await expect(tileNames(page).nth(2)).toHaveText('Alltag');
+    });
+  });
+
+  test('пользователь тащит плитку с ✕ → тема переезжает', async ({ page }) => {
+    const bahn = page.getByRole('button', { name: 'Bahn 0', exact: true });
+    const alltag = page.getByRole('button', { name: 'Alltag 0', exact: true });
+
+    await test.step('Дано долгое нажатие на «Bahn» показало ✕', async () => {
+      await openCollections(page);
+      await longPress(page, bahn, page.getByRole('button', { name: 'Удалить набор «Bahn»' }));
+    });
+
+    await test.step('Когда он ставит палец на «Bahn» и ведёт его выше «Alltag»', async () => {
+      const finger = await touch(page);
+      const from = await centre(bahn);
+      await finger.down(from.x, from.y);
+      const to = await alltag.boundingBox();
+      await slide(finger, from, { x: to.x + to.width / 2, y: to.y + 4 });
+      await finger.up();
+    });
+
+    await test.step('Тогда «Bahn» стоит перед «Alltag»', async () => {
+      await expect(tileNames(page).nth(1)).toHaveText('Bahn');
+      await expect(tileNames(page).nth(2)).toHaveText('Alltag');
     });
   });
 });

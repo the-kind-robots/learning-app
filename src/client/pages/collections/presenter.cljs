@@ -1,9 +1,8 @@
 (ns pages.collections.presenter
-  "What the themes screen shows, from the collections alone: one alphabetical sequence of tiles, «Всё
+  "What the themes screen shows, from the collections alone: one sequence of tiles in the learner's order, «Всё
    подряд» first, names with a `/` folded into a folder tile (ADR-0013). Every predicate the view needs is
    decided here."
   (:require
-   [clojure.string :as str]
    [collection-accents :as colours]
    [domain.collections :as collections]))
 
@@ -58,10 +57,10 @@
 
 
 (defn- plain-tile
-  [state collection]
-  (assoc (collection-target state collection (str/trim (:name collection)))
-         :key     (:id collection)
-         :folder? false))
+  [state {:keys [collections name]}]
+  (assoc (collection-target state (first collections) name)
+         :folder?
+         false))
 
 
 (defn- union-count
@@ -81,8 +80,7 @@
                 :lang      name-lang
                 :count     (union-count children)
                 :tappable? false})]
-    {:key     (str "folder:" (collections/canonical name))
-     :folder? true
+    {:folder? true
      :head    head
      :rows    (->> children
                    (map #(vector (collections/child-name (:name %)) %))
@@ -91,13 +89,18 @@
 
 
 (defn tiles
-  "Every tile in reading order: «Всё подряд», then collections and folders alphabetically, each with its colour."
+  "Every tile in reading order: «Всё подряд», then collections and folders in the learner's order, each with
+   its colour and its key. A tile but «Всё подряд» can be dragged by its `:sort-key`, by a touch once
+   `:armed?`: when a target of it is in its editing state."
   [state]
   (->> (colours/reading-order (:collections/items state))
-       (map-indexed (fn [position {:keys [folder? collection] :as entry}]
-                      (assoc (if folder? (folder-tile state entry) (plain-tile state collection))
-                             :accent
-                             (colours/accent-at (inc position)))))
+       (map (fn [{:keys [accent folder? key] :as entry}]
+              (let [{:keys [head rows] :as tile} (if folder? (folder-tile state entry) (plain-tile state entry))]
+                (assoc tile
+                       :accent   accent
+                       :armed?   (boolean (some :editing? (if folder? (cons head rows) [tile])))
+                       :key      key
+                       :sort-key key))))
        (cons (assoc (main-tile state) :accent (colours/accent-at 0)))
        vec))
 

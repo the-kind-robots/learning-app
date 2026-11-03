@@ -8,6 +8,7 @@
    [nexus.action-log :as action-log]
    [nexus.registry :as nxr]
    [pages.collections.actions]
+   [pages.collections.arrange-panel]
    [pages.collections.effects]
    [pages.collections.view]
    [pages.home.actions]

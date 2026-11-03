@@ -1,5 +1,6 @@
 (ns pages.collections.actions
   (:require
+   [collection-accents :as colours]
    [nexus.registry :as nxr]
    [use-cases.collections :as collections]))
 
@@ -36,6 +37,17 @@
     [[:effect/save (assoc (content state context) :collections/editing-id nil)]
      [:effect/focus-collection focus-id]
      [:effect/announce status-region deleted-message]]))
+
+
+(nxr/register-action! :action/arrange-collections
+  ;; `order` is the tiles' keys after a drag; each tile stands for the collections it shows. A drag ends
+  ;; the editing.
+  (fn arrange-collections [state order]
+    (let [collections-of (into {}
+                               (map (juxt :key #(mapv :id (:collections %))))
+                               (colours/reading-order (:collections/items state)))]
+      [[:effect/save {:collections/editing-id nil}]
+       [:effect/arrange-collections (mapv collections-of order)]])))
 
 
 (nxr/register-action! :action/exit-editing-on-background

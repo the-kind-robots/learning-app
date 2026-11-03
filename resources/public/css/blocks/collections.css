@@ -1,5 +1,5 @@
 /*
- * Tiles in a masonry: the presenter hands over one alphabetical sequence
+ * Tiles in a masonry: the presenter hands over one sequence in the learner's order
  * and CSS columns pour it — two, four from 700 px — so the order reads
  * down each column in turn. A column box has no `gap` of its own, so the
  * space between tiles is the tile's own bottom margin, which the browser
@@ -28,6 +28,8 @@ body:has(.switcher) {
 /* Masonry */
 
 .masonry {
+  /* An `<arrange-panel>`, inline by default. */
+  display: block;
   column-count: 2;
   column-gap: var(--tile-gap);
   margin-inline: auto;
@@ -482,4 +484,49 @@ body:has(.switcher) {
 .switcher__add:hover {
   box-shadow: 0 10px 20px -6px color-mix(in oklab, rgb(var(--color-owl)) 60%, transparent);
   transform: translateY(-2px);
+}
+
+
+/*
+ * A dragged tile, as `<arrange-panel>` marks it (`lifted`, `caret`): lifted
+ * off its place, which stays empty so nothing moves under the finger; it
+ * follows the pointer by the transform the panel sets, with no transition to
+ * lag behind. The caret, in the dragged tile's colour (`--caret`), stands in
+ * the gap above or below the tile it would land by.
+ */
+
+.tile[lifted] {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent),
+    0 18px 32px -12px rgb(0 0 0 / 28%);
+  cursor: grabbing;
+  transition: none;
+  z-index: 2;
+}
+
+.masonry:has(> .tile--owl[lifted]) { --caret: rgb(var(--color-owl)); }
+.masonry:has(> .tile--macaw[lifted]) { --caret: rgb(var(--color-macaw)); }
+.masonry:has(> .tile--fox[lifted]) { --caret: rgb(var(--color-fox)); }
+.masonry:has(> .tile--starfish[lifted]) { --caret: rgb(var(--color-starfish)); }
+.masonry:has(> .tile--beetle[lifted]) { --caret: rgb(var(--color-beetle)); }
+.masonry:has(> .tile--bee[lifted]) { --caret: rgb(var(--color-bee)); }
+.masonry:has(> .tile--cardinal[lifted]) { --caret: rgb(var(--color-cardinal)); }
+.masonry:has(> .tile--peacock[lifted]) { --caret: rgb(var(--color-peacock)); }
+
+.tile[caret]::after {
+  background: var(--caret);
+  border-radius: 2px;
+  content: "";
+  height: 4px;
+  inset-inline: 10px;
+  pointer-events: none;
+  position: absolute;
+}
+
+.tile[caret="before"]::after {
+  top: calc(-2px - var(--tile-gap) / 2 - 2px);
+}
+
+.tile[caret="after"]::after {
+  bottom: calc(-4px - var(--tile-gap) / 2 - 2px);
 }
