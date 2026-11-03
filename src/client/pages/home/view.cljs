@@ -69,7 +69,7 @@
                                             :shift?   [:event.keyboard/shift?]
                                             :focus-id "new-word-translation"
                                             :scroll-selector ".suggestions [data-active]"}
-                                           (select-keys suggestions [:active-idx :next-idx :previous-idx]))]]}}]
+                                           (select-keys suggestions [:marked :next-idx :previous-idx]))]]}}]
         [:ul.suggestions
          (for [item items]
            (suggestion-item item))]]

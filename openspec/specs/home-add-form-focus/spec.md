@@ -66,7 +66,7 @@ The system SHALL render a visible focus indicator on every interactive button re
 - **AND** the focus ring uses the project accent color (or an equally contrasting outline) so it is clearly distinguishable from the unfocused state
 
 ### Requirement: Typing keeps the previous suggestion list until the next answer
-The system SHALL keep the currently displayed suggestion list while the user types in the German word input, replacing it only when the dictionary delivers the answer for the new prefix. A keystroke SHALL NOT blank or shrink the list: every row stays on screen, but a row that no longer completes what the field holds is inert at once and without a query. A row still completes it while the normalised typed text is a prefix of the row's lemma, with or without a leading definite article, or of one of the word's forms that matched the prefix the row was answered for — the answer carries those forms per row, so `das Haus` answered for `Häu` through `Häuser` stays while the field reads `Häus`, and `der Rücken` stays while it reads `rücke`. The comparison SHALL normalise as the dictionary query does (case, umlauts, ß). All rows SHALL keep their order. The marked entry stays when it still completes the field, else it is the first row that does, else there is none. An inert row SHALL be dimmed and marked `aria-disabled`, and SHALL NOT be tappable, picked by Enter or Tab, or counted for add-word or mode detection; with no marked entry Enter moves on to the translation field.
+The system SHALL keep the currently displayed suggestion list while the user types in the German word input, replacing it only when the dictionary delivers the answer for the new prefix. A keystroke SHALL NOT blank or shrink the list: every row stays on screen, but a row that no longer completes what the field holds is inert at once and without a query. A row still completes it while the normalised typed text is a prefix of the row's lemma, with or without a leading definite article, or of one of the word's forms that matched the prefix the row was answered for — the answer carries those forms per row, so `das Haus` answered for `Häu` through `Häuser` stays while the field reads `Häus`, and `der Rücken` stays while it reads `rücke`. The comparison SHALL normalise as the dictionary query does (case, umlauts, ß). All rows SHALL keep their order. The entry the user marked with an arrow stays marked while it still completes the field; otherwise the mark follows the rule of "The suggestion list shows which entry the keyboard is on". An inert row SHALL be marked `aria-disabled` and SHALL look as a completing row does — it lasts only until the answer, and dimming it made the list flicker on every key. It SHALL NOT be tappable, picked by Enter or Tab, or counted for add-word or mode detection; with no marked entry Enter moves on to the translation field.
 
 #### Scenario: A further keystroke does not blank the list
 - **WHEN** a suggestion list is visible
@@ -79,6 +79,10 @@ The system SHALL keep the currently displayed suggestion list while the user typ
 - **AND** the user types `k`
 - **THEN** both rows are still on screen before the dictionary answers for `Rückenk`
 - **AND** `der Rücken` is inert and `der Rückenkurs` is marked
+
+#### Scenario: An inert row is not dimmed
+- **WHEN** a keystroke makes some rows inert
+- **THEN** in the keystroke's frame they are drawn as before, at full opacity
 
 #### Scenario: An inert row cannot be picked
 - **WHEN** a row has become inert through further typing
@@ -153,20 +157,21 @@ The translation field SHALL accept a multi-line translation. A bare `Enter` SHAL
 - **THEN** the existing behaviour applies — the highlighted suggestion is picked, or focus moves to the translation field when there is none
 
 ### Requirement: The prefilled translation is the dictionary's text as stored
-When the dictionary fills the translation field — on a suggestion arriving for an untouched field, or on the user picking a suggestion — the field SHALL receive the dictionary's translation text as the dictionary holds it. The transport splits a lemma's translations on `,` and leaves the following space on the next piece, so the form SHALL trim the pieces before rejoining them on `, `. What the field shows is what gets stored, so the reconstruction SHALL neither drop nor double a space.
+When the dictionary fills the translation field — from the entry the list marks on its own while no translation is the user's, or on the user picking an entry — the field SHALL receive the entry's translations one a line, each trimmed, in the dictionary's order. The field is read one translation a line when the word is added, so each of the dictionary's translations SHALL be stored as a translation of its own, as if typed so. The dictionary carries its translations as discrete elements; a translation containing a comma SHALL stay one line.
 
 #### Scenario: A stored translation containing a comma is prefilled whole
 - **WHEN** the dictionary's translation for a lemma is `без того, чтобы`
 - **AND** that lemma's suggestion fills the translation field
-- **THEN** the field holds `без того, чтобы`, with no doubled space after the comma
+- **THEN** the field holds `без того, чтобы` on one line
 
 #### Scenario: Several translations stay readable
-- **WHEN** a lemma has the translations `пёс` and `собака`
-- **THEN** the field holds `пёс, собака`
+- **WHEN** a lemma has the translations `кошка` and `кот`
+- **THEN** the field holds `кошка` and `кот` on two lines
+- **AND** adding the word stores them as two translations
 
 #### Scenario: Picking a suggestion fills the same text
 - **WHEN** the user picks a suggestion from the list
-- **THEN** the translation field receives that entry's translation text by the same rule
+- **THEN** the translation field receives that entry's translations by the same rule
 
 ### Requirement: The phone suggestion list is as tall as its rows
 
@@ -284,15 +289,20 @@ empty vocabulary, and on the words screen while the word dialog is open.
 
 ### Requirement: The suggestion list shows which entry the keyboard is on
 
-While the suggestion list is open it SHALL mark exactly one entry as the
+While the suggestion list is open it SHALL mark at most one entry as the
 active one, and that mark SHALL be visible on screen. The marked entry SHALL
 be the entry `Enter` and `Tab` pick, so what the list shows and what a pick
-returns can never disagree. A list that has just appeared SHALL have its first
-entry marked, before any arrow is pressed.
+returns can never disagree. Before any arrow is pressed the mark SHALL be on
+the first entry whose lemma, with or without its article, the typed text
+begins. An entry that completes the field only through one of its word forms
+SHALL NOT be marked until an arrow moves the mark onto it: `Enter` or `Tab`
+then keeps the typed form in the field. With no entry marked, the translation
+field SHALL NOT be filled from the list, and either arrow SHALL mark the first
+entry that completes the field.
 
 #### Scenario: A list opens with its first entry marked
 
-- **WHEN** the dictionary answers a prefix and the suggestion list appears
+- **WHEN** the dictionary answers a prefix that begins the lemma of the first entry
 - **THEN** exactly one entry carries the active mark
 - **AND** it is the first entry in the list
 
@@ -301,6 +311,19 @@ entry marked, before any arrow is pressed.
 - **WHEN** the suggestion list is open with an entry marked active
 - **AND** the user presses `Enter`
 - **THEN** the entry that was marked is the one applied to the form
+
+#### Scenario: A typed word form keeps the typed word
+
+- **WHEN** the user types `gesondert` and the list shows `sondern`, matched only through the form `gesondert`
+- **THEN** no entry carries the active mark
+- **AND** the translation field is not filled from `sondern`
+- **AND** pressing `Enter` or `Tab` leaves `gesondert` in the word field
+
+#### Scenario: An arrow picks the lemma of a typed form
+
+- **WHEN** the user types `gesondert` and the list shows `sondern` with no entry marked
+- **AND** the user presses `ArrowDown`, then `Enter`
+- **THEN** the word field holds `sondern` and the translation field its translation
 
 ### Requirement: The arrows move the visible mark
 

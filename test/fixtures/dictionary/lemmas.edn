@@ -184,4 +184,11 @@
   :pos          "noun"
   :rank         589
   :forms        []
-  :translations [{:lang "ru" :value "пожар в комнате"}]}]
+  :translations [{:lang "ru" :value "пожар в комнате"}]}
+
+ ;; The one lemma with two translations: they fill the field one a line (#711).
+ {:value        "die Katze"
+  :pos          "noun"
+  :rank         700
+  :forms        ["Katzen"]
+  :translations [{:lang "ru" :value "кошка"} {:lang "ru" :value "кот"}]}]

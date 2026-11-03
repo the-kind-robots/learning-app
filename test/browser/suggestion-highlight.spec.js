@@ -100,4 +100,80 @@ test.describe('Подсказки слов при вводе', () => {
       await expect(field).toHaveValue(marked);
     });
   });
+
+  // GH-711: `sondern`, found through `gesondert`, was marked on its own, and Enter
+  // meant only to move on replaced the typed word. The fixture's `Häuser` is a form
+  // of `das Haus`, the same shape.
+  for (const key of ['Enter', 'Tab']) {
+    test(`пользователь печатает словоформу и жмёт ${key} → в поле остаётся словоформа, перевод пуст`, async ({ page }) => {
+      const field = valueField(page);
+      const translation = page.getByLabel('Перевод (русский)');
+
+      await test.step('Дано подсказка «das Haus» на «Häuser»', async () => {
+        await openHome(page);
+        await field.pressSequentially('Häuser');
+        await expect(options(page)).toHaveText(['das Haus']);
+      });
+
+      await test.step('Тогда подсказка не отмечена, перевод не подставлен', async () => {
+        await expect(options(page).first()).not.toHaveAttribute('data-active', '');
+        await expect(translation).toHaveValue('');
+      });
+
+      await test.step(`Когда он жмёт ${key}`, async () => {
+        await page.keyboard.press(key);
+      });
+
+      await test.step('Тогда в поле слова «Häuser», перевод пуст, фокус в переводе', async () => {
+        await expect(field).toHaveValue('Häuser');
+        await expect(translation).toHaveValue('');
+        await expect(translation).toBeFocused();
+      });
+    });
+  }
+
+  // The form stores one translation a line, so the dictionary's several translations come one a line too.
+  test('пользователь печатает слово с двумя переводами в словаре → в поле перевода каждый на своей строке', async ({ page }) => {
+    const field = valueField(page);
+    const translation = page.getByLabel('Перевод (русский)');
+
+    await test.step('Дано подсказка «die Katze» на «Katz»', async () => {
+      await openHome(page);
+      await field.pressSequentially('Katz');
+      await expect(options(page)).toHaveText(['die Katze']);
+    });
+
+    await test.step('Тогда в поле перевода «кошка» и «кот» на разных строках', async () => {
+      await expect(translation).toHaveValue('кошка\nкот');
+    });
+
+    await test.step('Когда он выбирает подсказку Enter', async () => {
+      await page.keyboard.press('Enter');
+    });
+
+    await test.step('Тогда переводы всё так же на разных строках', async () => {
+      await expect(translation).toHaveValue('кошка\nкот');
+    });
+  });
+
+  test('пользователь печатает словоформу, жмёт ↓ и Enter → в поле лемма с переводом', async ({ page }) => {
+    const field = valueField(page);
+
+    await test.step('Дано подсказка «das Haus» на «Häuser»', async () => {
+      await openHome(page);
+      await field.pressSequentially('Häuser');
+      await expect(options(page)).toHaveText(['das Haus']);
+    });
+
+    await test.step('Когда он жмёт ↓ и Enter', async () => {
+      await page.keyboard.press('ArrowDown');
+      await expect(options(page).first()).toHaveAttribute('data-active', '');
+      await page.keyboard.press('Enter');
+    });
+
+    await test.step('Тогда в поле «das Haus», в переводе «дом»', async () => {
+      await expect(field).toHaveValue('das Haus');
+      await expect(page.getByLabel('Перевод (русский)')).toHaveValue('дом');
+    });
+  });
 });
