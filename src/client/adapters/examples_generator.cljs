@@ -15,7 +15,8 @@
                              translations)
                  (utils/non-blank pos) (conj ["pos" pos])
                  (utils/non-blank collection-name) (conj ["context" collection-name]))]
-    (when (every? (fn [[_ value]] (.isWellFormed (str value))) params)
+    ;; Called by name: the release build renames `.isWellFormed`, which its externs lack, and every call threw.
+    (when (every? (fn [[_ value]] (js-invoke (str value) "isWellFormed")) params)
       (str "/api/examples?" (js/URLSearchParams. (clj->js params))))))
 
 
