@@ -9,7 +9,7 @@ const { BARE, card, openWord, seedWord } = require('./word-example.shared');
 // `page.route`.
 
 const settings = (page) => page.getByRole('dialog', { name: /^(Настройки|Settings)$/ });
-const wordMark = (page) => page.getByRole('button', { name: /^Sprecha/ });
+const wordMark = (page) => page.getByRole('button', { name: /^(Шпреха|Sprecha)/ });
 
 async function pickLanguage(page, name) {
   await wordMark(page).click();

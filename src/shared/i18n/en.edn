@@ -75,6 +75,7 @@
  :shell/open-collections      "Open collections"
  :shell/read-error            "Can't read data on this device. Reload the page."
  :shell/reload-build          "Reload build"
+ :shell/word-mark             "Sprecha"
 
  :sync/cancel                 "Cancel"
  :sync/connect-device         "Connect a device"
