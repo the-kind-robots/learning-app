@@ -22,4 +22,6 @@ Follow https://guide.clojure.style/ plus these project rules:
 
 **Top-level forms:** exactly two blank lines between them.
 
+**JS interop:** call a JS method on a `^js` parameter or local, or through `js-invoke` — never on a form of an inferred type (`(str …)`, a literal, a number), where `^js` on the form does not help: the release build renames a name Closure's externs lack, and only there it throws. [docs/dev/cljs-interop-renaming.md](../../docs/dev/cljs-interop-renaming.md); `bb scripts/release_renames.clj` checks it.
+
 **Maps:** keys sorted alphabetically with `:id`/`:_id` first; align values when key length variance ≤ 15 chars; no commas.

@@ -18,6 +18,7 @@ on:
       - 'test/browser/**'
       - 'test/fixtures/**'
       - 'tools/dictionary/**'
+      - 'scripts/release_renames.clj'
       - 'playwright.config.js'
 
 jobs:
@@ -42,7 +43,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.clj-kondo/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$)'; then
+          if git diff --name-only "$BASE" HEAD             | grep -qE '^(src/|resources/|\.clj-kondo/|\.github/workflows/|\.gitignore$|shadow-cljs\.edn$|deps\.edn$|package\.json$|package-lock\.json$|scripts/release_renames\.clj$|lib/db/)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
@@ -116,6 +117,11 @@ jobs:
       # cannot say); see scripts/check_adapter_layering.clj.
       - name: Adapters stand apart
         run: bb scripts/check_adapter_layering.clj
+
+      # The suites run the dev build; only the release build renames a JS name its externs lack (#697).
+      # See docs/dev/cljs-interop-renaming.md.
+      - name: Release build keeps every JS name the client calls
+        run: bb scripts/release_renames.clj
 
       - uses: actions/cache/save@v6.1.0
         if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}
