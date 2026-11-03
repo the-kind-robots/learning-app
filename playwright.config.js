@@ -4,6 +4,9 @@ const { defineConfig } = require('@playwright/test');
 // (see test/browser/README.md); never against the shared dev stand.
 module.exports = defineConfig({
   testDir: './test/browser',
+  // Tests are order-independent (fresh context each), so a long file is spread
+  // over workers instead of being one worker's serial tail.
+  fullyParallel: true,
   // `line` locally keeps agent context small; CI keeps the per-test `list`.
   reporter: process.env.CI ? 'list' : 'line',
   use: {
