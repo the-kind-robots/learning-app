@@ -191,12 +191,19 @@ jobs:
             ~/.deps.clj
           key: clojure-backend-${{ hashFiles('deps.edn') }}
 
-  browser-tests:
-    name: Browser Tests
+  # ~800 test-seconds on one 2-worker runner took 7 minutes; four runners
+  # split it (#717). Each runner is as loaded as the one before, so the
+  # budget specs see the same machine.
+  browser-shards:
+    name: Browser Tests ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
     needs: changes
     timeout-minutes: 20
     if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.browser == 'true') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -251,13 +258,19 @@ jobs:
           cat backend.log
           exit 1
 
+      # A sharded run puts the whole of a dependency project into every shard,
+      # so `mobile` would drag all of `desktop` along. Two steps instead keep
+      # what the dependency is for — phone specs on a quiet machine.
       - name: Run browser tests
-        run: npm run test:browser
+        run: npx playwright test --project=desktop --project=release --shard=${{ matrix.shard }}/4
+
+      - name: Run phone-layout tests
+        run: npx playwright test --project=mobile --no-deps --shard=${{ matrix.shard }}/4
 
       - uses: actions/upload-artifact@v7.0.1
         if: failure()
         with:
-          name: playwright-traces
+          name: playwright-traces-${{ matrix.shard }}
           path: |
             test-results/
             backend.log
@@ -265,13 +278,28 @@ jobs:
           retention-days: 7
 
       - uses: actions/cache/save@v6.1.0
-        if: ${{ always() && steps.cache-clojure.outputs.cache-hit != 'true' }}
+        if: ${{ always() && matrix.shard == 1 && steps.cache-clojure.outputs.cache-hit != 'true' }}
         with:
           path: |
             ~/.m2/repository
             ~/.gitlibs
             ~/.deps.clj
           key: clojure-${{ hashFiles('deps.edn', 'shadow-cljs.edn') }}
+
+  # Branch protection requires one check named "Browser Tests"; the shards
+  # carry their own names. Skipped shards (no browser change) pass.
+  browser-tests:
+    name: Browser Tests
+    runs-on: ubuntu-latest
+    needs: browser-shards
+    if: ${{ always() }}
+    steps:
+      - name: All shards passed or were skipped
+        env:
+          RESULT: ${{ needs.browser-shards.result }}
+        run: |
+          echo "shards: $RESULT"
+          [ "$RESULT" = success ] || [ "$RESULT" = skipped ]
 
   # The bundle that ships (#701). The suites above run the development build, which renames and drops nothing,
   # so #697 broke in the release build alone. One release build serves both checks below.
