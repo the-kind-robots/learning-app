@@ -30,9 +30,9 @@
   padding: 10px 14px;
 }
 
+/* An inert row lasts only until the dictionary answers; dimming it made the list flicker on every key (#711). */
 .suggestions__item[aria-disabled] {
   cursor: default;
-  opacity: 0.45;
 }
 
 .suggestions__item:not([aria-disabled]):hover,

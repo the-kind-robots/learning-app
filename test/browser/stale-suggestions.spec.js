@@ -30,7 +30,36 @@ const rowsAfterEachLetter = (field, letters) => field.evaluate((node, typed) => 
   };
 }), letters);
 
+// Types one keystroke and returns, in the same task, how opaque each inert row is drawn.
+const inertOpacityRightAfterTyping = (field, text) => field.evaluate((node, typed) => {
+  node.value += typed;
+  node.dispatchEvent(new Event('input', { bubbles: true }));
+  return Array.from(document.querySelectorAll('[role="option"][aria-disabled="true"]'),
+    (row) => getComputedStyle(row).opacity);
+}, text);
+
 test.describe('Подсказки слов при вводе', () => {
+  // GH-711: inert rows were drawn at 0.45 for the moment until the answer, so the list flickered on every key.
+  test('пользователь печатает букву, с которой часть подсказок не продолжается → они не тускнеют, список не мигает', async ({ page }) => {
+    const field = valueField(page);
+    let opacities;
+
+    await test.step('Дано четыре подсказки на «Fe»', async () => {
+      await openHome(page);
+      await field.pressSequentially('Fe');
+      await expect(options(page)).toHaveCount(4);
+    });
+
+    await test.step('Когда он печатает «n»', async () => {
+      opacities = await inertOpacityRightAfterTyping(field, 'n');
+    });
+
+    await test.step('Тогда недоступные подсказки нарисованы как прежде', async () => {
+      expect(opacities.length).toBeGreaterThan(0);
+      expect(opacities).toEqual(opacities.map(() => '1'));
+    });
+  });
+
   test('пользователь печатает дальше слова из подсказки → устаревшая подсказка остаётся, но недоступна, и нажать её нельзя', async ({ page }) => {
     const field = valueField(page);
     let lastRow;
