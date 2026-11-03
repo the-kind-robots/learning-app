@@ -20,9 +20,12 @@
                     :pointerdown [[:effect/prevent-default]]}
                    ;; An inert row still swallows the press, or focus would leave the field and :blur clear the list.
                    {:pointerdown [[:effect/prevent-default]]})}
-   [:span {:lang "de"} lemma]
+   [:span
+    {:lang "de"}
+    lemma]
    (when phrase?
-     [:span.suggestions__badge [:i18n :home/phrase-badge]])])
+     [:span.suggestions__badge
+      [:i18n :home/phrase-badge]])])
 
 
 (defn- add-form
@@ -40,11 +43,13 @@
                       :focus-id    "new-word-value"}]]}}
      [:fieldset.home__add-fieldset
       ;; The mode has no control of its own: the legend and the label say which the form is about to save.
-      [:legend.home__add-legend.visually-hidden (if phrase? [:i18n :phrase/add] [:i18n :word/add])]
+      [:legend.home__add-legend.visually-hidden
+       (if phrase? [:i18n :phrase/add] [:i18n :word/add])]
       [:div.home__add-form-row
        [:div.autocomplete
         [:div.home__add-label-row
-         [:label.home__add-form-label.visually-hidden {:for "new-word-value"}
+         [:label.home__add-form-label.visually-hidden
+          {:for "new-word-value"}
           (if phrase? [:i18n :home/phrase-label] [:i18n :home/word-label])]]
         [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-value"
@@ -74,7 +79,9 @@
          (for [item items]
            (suggestion-item item))]]
        [:div.home__add-translation
-        [:label.home__add-form-label.visually-hidden {:for "new-word-translation"} [:i18n :home/translation-label]]
+        [:label.home__add-form-label.visually-hidden
+         {:for "new-word-translation"}
+         [:i18n :home/translation-label]]
         [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-translation"
           :name         "translation"
@@ -103,14 +110,16 @@
       ;; Every add error is said in words; a border alone looked like nothing happened. A failed save
       ;; is the app's fault and nothing the user does fixes it, so the text says only that.
       (when error
-        [:p.home__add-error {:role "alert"}
+        [:p.home__add-error
+         {:role "alert"}
          (case error
            :error/empty-translations [:i18n :home/empty-translations]
            :error/save-failed        (if phrase?
                                        [:i18n :home/phrase-save-failed]
                                        [:i18n :home/word-save-failed]))])
       [:button.home__add-form-submit.big-button.big-button--request-stable
-       {:type "submit"} [:i18n :home/add]]]]))
+       {:type "submit"}
+       [:i18n :home/add]]]]))
 
 
 (defn- collection-heading
@@ -131,7 +140,8 @@
   (let [{:keys [active-collection empty-vocab? form]} (presenter/page-props state)]
     [:div.home
      [:header.home__intro
-      [:h1.home__title.visually-hidden [:i18n :home/title]]
+      [:h1.home__title.visually-hidden
+       [:i18n :home/title]]
       [:p.home__subtitle
        {:style {:visibility (if empty-vocab? "visible" "hidden")}}
        [:i18n :home/subtitle]]]
@@ -144,7 +154,8 @@
       [:section#home-add-panel.home__add
        {:replicant/on-mount [[:action/focus-word-input "new-word-value"]]}
        [:header.home__add-header
-        [:h2.home__panel-title (if (:phrase? form) [:i18n :phrase/add] [:i18n :word/add])]
+        [:h2.home__panel-title
+         (if (:phrase? form) [:i18n :phrase/add] [:i18n :word/add])]
         [:button#home-words-button.home__words-button
          {:type        "button"
           :class       (when empty-vocab? "home__words-button--hidden")
@@ -157,7 +168,8 @@
 
      [:footer#home-lesson-footer.home__footer.page-footer
       {:hidden empty-vocab?}
-      [:h2.home__lesson-title.visually-hidden [:i18n :lesson/title]]
+      [:h2.home__lesson-title.visually-hidden
+       [:i18n :lesson/title]]
       [:div.page-footer__action
        [:button.home__lesson-button.big-button.green-button
         {:on {:click [[:action/go-to-lesson]]}}

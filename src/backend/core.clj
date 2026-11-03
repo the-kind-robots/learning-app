@@ -796,12 +796,17 @@
       {:html/layout
        (fn layout
          [{:html/keys [body]}]
-         [:html {:lang (page-language request)}
+         [:html
+          {:lang (page-language request)}
           [:head
            [:meta {:charset "UTF-8"}]
-           [:meta {:name "viewport" :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
+           [:meta
+            {:name    "viewport"
+             :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
            [:title "Sprecha"]
-           [:link {:rel "icon" :href "/favicon.ico"}]
+           [:link
+            {:rel  "icon"
+             :href "/favicon.ico"}]
            ;; Dev installs carry a red-D-badged icon set so a device can hold
            ;; both the dev and the production PWA without confusing them.
            [:link
@@ -818,8 +823,12 @@
                :type        "font/woff2"
                :crossorigin true
                :href        (str "/fonts/Nunito/" file ".woff2")}])
-           [:link {:rel "stylesheet" :href "/css/styles.css"}]
-           [:script {:src "/js/app/main.js" :defer true}]]
+           [:link
+            {:rel  "stylesheet"
+             :href "/css/styles.css"}]
+           [:script
+            {:src   "/js/app/main.js"
+             :defer true}]]
           [:body
            (i18n/interpolate (page-language request) body)]])
        :html/body
@@ -837,6 +846,7 @@
                   "]
         [:div.splash
          [:div.splash-title "Sprecha"]
+         ;; zprint: as written
          [:svg.splash-face {:viewBox "0 0 156 156" :width "156" :height "156"}
           [:circle.dot {:cx 55 :cy 32 :r 9 :fill "hsl(100 65% 72%)" :style "animation-delay:0s"}]
           [:circle.dot {:cx 101 :cy 32 :r 9 :fill "hsl(89 69% 71%)" :style "animation-delay:.15s"}]
@@ -857,7 +867,8 @@
            {:cx 18 :cy 112 :r 2.5 :fill "hsl(280 50% 65%)" :style "animation-delay:1s;animation-duration:4.5s"}]
           [:circle.sparkle
            {:cx 142 :cy 128 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:4.2s;animation-duration:5s"}]]
-         [:div.splash-sub [:i18n :shell/loading]]]]
+         [:div.splash-sub
+          [:i18n :shell/loading]]]]
        :status 200}
       request))
 

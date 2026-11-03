@@ -45,12 +45,13 @@
 (def ^:private skeleton
   (rs/render
    (list
-    [:div#bank
-     {:role "group"}]
+    [:div#bank {:role "group"}]
     [:div#field
      [:textarea]
      [:div#tray
-      {:autofocus true :role "group" :tabindex "-1"}]]
+      {:autofocus true
+       :role      "group"
+       :tabindex  "-1"}]]
     [:button#hint
      {:type "button"}
      [:svg

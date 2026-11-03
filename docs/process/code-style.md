@@ -189,3 +189,64 @@ Good
 ```clojure
 {:id 1 :name "test" :value 42}
 ```
+
+
+### Hiccup Layout
+
+A hiccup form puts the tag, the attribute map and each child on a line of its own, under the tag, when it has an attribute map and children, when its lone child is a vector or a form, or when it takes more than one line. Otherwise — attributes alone, plain values as children — it stays on one line while it fits. An attribute map of more than one key puts each key on a line of its own, and so takes the form to several lines.
+
+zprint enforces it (`.zprint.edn`, `:vector`). A vector counts as hiccup when its tag has a class or an id (`:div.card`, `:footer#home`) or is a bare HTML or SVG element (`:span`, `:path`). Key paths like `[:cards (get-in …)]`, Malli schemas and `[:i18n …]` do not.
+
+**Example**
+
+Bad — the tag carries the attributes and the first child
+```clojure
+[:button.tile__target {:type "button"} [:span.tile__name name]
+ [:span.tile__count count]]
+```
+
+Bad — attributes and a child on one line
+```clojure
+[:p.home__error {:role "alert"} [:i18n :home/save-failed]]
+```
+
+Bad — attribute keys on one line
+```clojure
+[:line {:x1 "12" :y1 "2" :x2 "12" :y2 "15"}]
+```
+
+Good
+```clojure
+[:line
+ {:x1 "12"
+  :y1 "2"
+  :x2 "12"
+  :y2 "15"}]
+
+[:button.tile__target
+ {:type "button"}
+ [:span.tile__name name]
+ [:span.tile__count count]]
+
+[:p.home__error
+ {:role "alert"}
+ [:i18n :home/save-failed]]
+
+[:li
+ [:i18n :home/words]]
+```
+
+Good — one attribute only, or plain values as children
+```clojure
+[:meta {:charset "UTF-8"}]
+[:span.tile__count count]
+```
+
+A table of shapes reads better a row per element. A `;; zprint: as written` comment right before a form leaves every vector in it as written. A whole top-level form is skipped with zprint's own `;!zprint {:format :skip}`.
+
+```clojure
+;; zprint: as written
+[:svg.splash-face {:viewBox "0 0 156 156" :width "156" :height "156"}
+ [:circle.dot {:cx 55 :cy 32 :r 9 :fill "hsl(100 65% 72%)" :style "animation-delay:0s"}]
+ [:circle.dot {:cx 101 :cy 32 :r 9 :fill "hsl(89 69% 71%)" :style "animation-delay:.15s"}]]
+```

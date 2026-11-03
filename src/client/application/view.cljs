@@ -19,6 +19,7 @@
     :aria-label [:i18n :shell/open-collections]
     :title      [:i18n :collections/title]
     :on         {:click [[:action/go-to-collections]]}}
+   ;; zprint: as written
    [:svg.app-shell__corner-icon-svg
     {:viewBox "0 0 16 16" :aria-hidden "true"}
     [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
@@ -35,7 +36,8 @@
     :title      [:i18n :dialog/close]
     :on         {:click [[:action/close-screen]]}}
    [:svg.app-shell__corner-icon-svg
-    {:viewBox "0 0 16 16" :aria-hidden "true"}
+    {:viewBox     "0 0 16 16"
+     :aria-hidden "true"}
     [:path
      {:d "M4 4 L12 12 M12 4 L4 12"
       :stroke "currentColor"
@@ -45,6 +47,7 @@
 
 (defn- install-icon
   []
+  ;; zprint: as written
   [:svg.app-shell__icon
    {:aria-hidden    "true"
     :fill           "none"
@@ -60,6 +63,7 @@
 
 (defn- trace-export-icon
   []
+  ;; zprint: as written
   [:svg.app-shell__icon
    {:aria-hidden    "true"
     :fill           "none"
@@ -136,7 +140,8 @@
      (if-let [view (:view (pages/table page))]
        (view state)
        (when read-error?
-         [:div.app-shell__read-error [:i18n :shell/read-error]]))
+         [:div.app-shell__read-error
+          [:i18n :shell/read-error]]))
      ;; After the screen: its mount hook runs after the screen's, so the asking settings keep the focus.
      (settings-view/menu (settings-presenter/props state))
      shell/status-region)))

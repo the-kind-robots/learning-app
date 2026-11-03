@@ -7,7 +7,9 @@
 (defn- close-icon
   []
   [:svg.tile__close-icon
-   {:viewBox "0 0 12 12" :aria-hidden "true" :fill "none"}
+   {:viewBox     "0 0 12 12"
+    :aria-hidden "true"
+    :fill        "none"}
    [:path
     {:d "M2 2 L10 10 M10 2 L2 10"
      :stroke "currentColor"
@@ -48,7 +50,9 @@
 (defn- name-and-count
   [{:keys [name lang count main?]}]
   (list
-   [:span.tile__name {:lang lang} (if main? [:i18n :collections/all] name)]
+   [:span.tile__name
+    {:lang lang}
+    (if main? [:i18n :collections/all] name)]
    [:span.tile__count count]))
 
 
@@ -78,7 +82,8 @@
     :class         [(accent-class accent)
                     (when active? "tile--active")
                     (when editing? "tile--editing")]}
-   [:button.tile__target (target-attrs tile)
+   [:button.tile__target
+    (target-attrs tile)
     (name-and-count tile)]
    (when deletable? (close-button tile))])
 
@@ -91,9 +96,13 @@
    {:replicant/key id
     :class [(when active? "tile__row--active")
             (when editing? "tile__row--editing")]}
-   [:button.tile__row-target (target-attrs row)
-    [:span.tile__row-name {:lang (:lang row)} (:name row)]
-    [:span.tile__count (:count row)]]
+   [:button.tile__row-target
+    (target-attrs row)
+    [:span.tile__row-name
+     {:lang (:lang row)}
+     (:name row)]
+    [:span.tile__count
+     (:count row)]]
    (close-button row)])
 
 
@@ -106,11 +115,14 @@
     [:div.tile__head
      {:class [(when (:active? head) "tile__head--active")
               (when (:editing? head) "tile__head--editing")]}
-     [:button.tile__head-target (target-attrs head)
+     [:button.tile__head-target
+      (target-attrs head)
       (name-and-count head)]
      (when (:deletable? head) (close-button head))]
     [:h2.tile__label
-     [:span.tile__label-text {:lang lang} name]
+     [:span.tile__label-text
+      {:lang lang}
+      name]
      [:span.tile__count count]]))
 
 
@@ -134,7 +146,11 @@
     :on         {:click [[:effect/stop-propagation]
                          [:effect/save {:collections/editing-id nil}]
                          [:effect/prompt-create-collection [:i18n :collections/new-name]]]}}
-   [:svg {:viewBox "0 0 40 40" :width 28 :height 28 :aria-hidden "true"}
+   [:svg
+    {:viewBox     "0 0 40 40"
+     :width       28
+     :height      28
+     :aria-hidden "true"}
     [:path
      {:d "M20 8 V32 M8 20 H32"
       :stroke "currentColor"
@@ -152,7 +168,8 @@
       :replicant/key :page/collections
       :replicant/on-mount [[:effect/listen-for-typing]]
       :replicant/on-unmount [[:effect/stop-listening-for-typing]]}
-     [:h1.switcher__title.visually-hidden [:i18n :collections/title]]
+     [:h1.switcher__title.visually-hidden
+      [:i18n :collections/title]]
      [:arrange-panel.masonry
       {:on {:click   [[:action/exit-editing-on-background [:event/self-click?]]]
             :arrange [[:action/arrange-collections [:event/order]]]}}

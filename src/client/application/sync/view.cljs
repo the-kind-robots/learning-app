@@ -4,6 +4,7 @@
 (defn- sync-icon
   "A laptop beside a phone: connecting devices, not reloading the page."
   []
+  ;; zprint: as written
   [:svg.app-shell__icon
    {:aria-hidden    "true"
     :fill           "none"
@@ -50,9 +51,13 @@
     :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
          :close [[:action/close-sync-qr]]}}
    [:div.pairing-dialog__content
-    [:h2.pairing-dialog__title [:i18n :sync/connect-device]]
-    [:p.pairing-dialog__hint [:i18n :sync/scan-qr]]
-    [:img.pairing-dialog__qr {:src qr-url :alt [:i18n :sync/qr]}]
+    [:h2.pairing-dialog__title
+     [:i18n :sync/connect-device]]
+    [:p.pairing-dialog__hint
+     [:i18n :sync/scan-qr]]
+    [:img.pairing-dialog__qr
+     {:src qr-url
+      :alt [:i18n :sync/qr]}]
     [:button.pairing-dialog__close
      {:type "button"
       :on   {:click [[:action/close-sync-qr]]}}
