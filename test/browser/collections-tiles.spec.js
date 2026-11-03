@@ -101,6 +101,51 @@ test.describe('Плитки тем', () => {
     });
   });
 
+  test('пользователь с одной темой открывает темы на десктопе → две плитки рядом посередине страницы', async ({ page }) => {
+    await test.step('Дано одна тема «Solo» на экране 1280 px', async () => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto('/');
+      await seedCollections(page, [['solo', 'Solo', ['vocab:a']]]);
+    });
+
+    await test.step('Когда он открывает экран тем', async () => {
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    });
+
+    await test.step('Тогда «Всё подряд» и «Solo» стоят рядом, слева и справа поровну места', async () => {
+      const all = await page.getByRole('button', { name: 'Всё подряд 0', exact: true }).boundingBox();
+      const solo = await page.getByRole('button', { name: 'Solo 1', exact: true }).boundingBox();
+      expect(Math.abs(all.y - solo.y)).toBeLessThan(1);
+      const pageWidth = await page.evaluate(() => document.documentElement.clientWidth);
+      const left = all.x;
+      const right = pageWidth - (solo.x + solo.width);
+      expect(Math.abs(left - right)).toBeLessThan(2);
+    });
+  });
+
+  test('пользователь с четырьмя темами открывает темы на десктопе → пять плиток в три колонки посередине страницы', async ({ page }) => {
+    await test.step('Дано темы «A», «B», «C», «D» на экране 1280 px', async () => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto('/');
+      await seedCollections(page, [['a', 'A', []], ['b', 'B', []], ['c', 'C', []], ['d', 'D', []]]);
+    });
+
+    await test.step('Когда он открывает экран тем', async () => {
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+    });
+
+    await test.step('Тогда плитки стоят в три колонки, слева и справа поровну места', async () => {
+      const boxes = await Promise.all(['Всё подряд 0', 'A 0', 'B 0', 'C 0', 'D 0'].map((name) =>
+        page.getByRole('button', { name, exact: true }).boundingBox()));
+      const columns = new Set(boxes.map((box) => Math.round(box.x)));
+      expect(columns.size).toBe(3);
+      const pageWidth = await page.evaluate(() => document.documentElement.clientWidth);
+      const left = Math.min(...boxes.map((box) => box.x));
+      const right = pageWidth - Math.max(...boxes.map((box) => box.x + box.width));
+      expect(Math.abs(left - right)).toBeLessThan(2);
+    });
+  });
+
   test('пользователь ходит по темам с клавиатуры → доходит до каждой плитки, видит ✕ при фокусе и удаляет тему Enter', async ({ page }) => {
     const tile = page.getByRole('button', { name: 'Solo 1', exact: true });
     const close = page.getByRole('button', { name: 'Удалить набор «Solo»' });
