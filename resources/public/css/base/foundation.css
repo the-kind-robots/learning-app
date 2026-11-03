@@ -1,4 +1,6 @@
 :root {
+  /* The shell bar's height; a screen starts its content below it. */
+  --app-bar-height: 68px;
   --viewport-height: 100dvh;
   --web-ui_button-border-radius: 16px;
   --web-ui_button-transition-lip: 120ms ease;

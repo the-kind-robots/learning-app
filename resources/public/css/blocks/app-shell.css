@@ -76,13 +76,12 @@
   color: rgb(var(--color-cardinal));
 }
 
-/* Which bundle the page loaded, in the middle slot of the bar, and the tap
-   that reloads onto the newest one. Quiet — the small grey line it reads as,
-   with no button chrome — and it shrinks and ellipsises rather than pushing
-   either neighbour. `touch-action: manipulation` because a hold on text this
-   small otherwise starts a selection instead of a tap. */
+/* Which bundle the page loaded, in the info bar, and the tap that reloads onto
+   the newest one. Quiet — the small grey line it reads as, with no button
+   chrome — and it shrinks and ellipsises rather than pushing either neighbour.
+   `touch-action: manipulation` because a hold on text this small otherwise
+   starts a selection instead of a tap. */
 .app-shell__build-mark {
-  align-self: center;
   background: none;
   border: 0;
   color: rgb(var(--color-hare));
@@ -101,22 +100,26 @@
   white-space: nowrap;
 }
 
-/* The top bar: the word mark, the build mark and the actions in one row, each
-   where it was — fixed, transparent and out of the page's flow, so no page
-   reserves anything for it beyond the top padding it already had. Both side
-   slots grow from a zero basis, so they take the same width and the build
-   mark sits in the middle of the bar, not midway between its neighbours. The
-   bar and the slots span the page, so they pass pointer events through; only
-   the controls themselves take one. */
+/* The top bar, the same on every screen: the word mark, the info bar and the
+   actions in one row. It is solid and light on every screen, across the
+   full width and `--app-bar-height` tall — 16px of air, the 28px row, 24px
+   below — so whatever scrolls goes under it, and a tap on its empty part
+   stays in it rather than reaching what is hidden.
+   Out of the page's flow: a screen starts its content below
+   `--app-bar-height` with its own top padding. Both side slots grow from a
+   zero basis, so they take the same width and the info bar sits in the middle
+   of the bar, not midway between its neighbours. */
 .app-shell__bar {
   align-items: flex-start;
+  background: rgb(var(--color-snow));
+  box-sizing: border-box;
   display: flex;
   gap: 8px;
-  left: 16px;
-  pointer-events: none;
+  height: var(--app-bar-height);
+  inset-inline: 0;
+  padding: 16px 16px 0;
   position: fixed;
-  right: 16px;
-  top: 16px;
+  top: 0;
   z-index: 20;
 }
 
@@ -126,10 +129,19 @@
   min-width: 0;
 }
 
-.app-shell__logo,
-.app-shell__build-mark,
-.app-shell__actions > * {
-  pointer-events: auto;
+/* The middle of the bar, kept for what the learner should see at a glance on
+   any screen: today's stars, the lesson's progress, a short notice. A
+   development build shows its build mark here. The row is 28px tall and
+   clips what does not fit, so nothing put here moves the bar or the screen. */
+.app-shell__info-bar {
+  align-items: center;
+  display: flex;
+  flex: 0 1 auto;
+  gap: 8px;
+  height: 28px;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* A button that reads as the word mark: its background, border and padding

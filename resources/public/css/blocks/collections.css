@@ -20,7 +20,7 @@ body:has(.switcher) {
   flex-direction: column;
   min-height: 100svh;
   /* The bottom inset keeps the floating button off the last row. */
-  padding-block: calc(env(safe-area-inset-top, 0px) + 64px) calc(96px + env(safe-area-inset-bottom, 0px));
+  padding-block: calc(var(--app-bar-height) + 20px) calc(96px + env(safe-area-inset-bottom, 0px));
   padding-inline: 16px;
 }
 
