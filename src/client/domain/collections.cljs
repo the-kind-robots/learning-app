@@ -84,10 +84,11 @@
 
 
 (defn new-collection
-  "A collection called `name`, with no words, made at `now`."
-  [name now]
+  "A collection called `name`, with no words, made at `now`, its tile standing at `position`."
+  [name position now]
   {:created-at now
    :name       name
+   :position   position
    :renamed-at now
    :word-ids   []})
 

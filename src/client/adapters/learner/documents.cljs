@@ -8,7 +8,7 @@
 
      word        {:id :kind :value :translation :pos :created-at :modified-at}
      review      {:id :word-id :retained :created-at :answer-ms}
-     collection  {:id :name :word-ids :created-at}
+     collection  {:id :name :word-ids :created-at :position}
      example     {:id :word-id :collection-id :word :value :translation
                   :structure}
      settings    {:id :language}

@@ -54,10 +54,26 @@
     (cond
       (str/blank? name) {:error :invalid-name}
       (await (name-taken? learner nil name)) {:noop :duplicate}
-      :else (let [{:keys [id]} (await (learner/insert! learner
-                                                       :entity/collection
-                                                       (collections/new-collection name (world/clock world :now-iso))))]
+      :else (let [position     (inc (apply max -1 (keep :position (learner/collections learner))))
+                  {:keys [id]} (await (learner/insert!
+                                       learner
+                                       :entity/collection
+                                       (collections/new-collection name position (world/clock world :now-iso))))]
               {:ok :created :id id}))))
+
+
+(defn arrange!
+  "Puts the tiles of the themes screen in the order of `tiles`, each the ids of the collections it shows:
+   every collection takes its tile's place, 0 first. A collection already there is not written."
+  [learner tiles]
+  (learner/change! learner
+                   (for [[position ids] (map-indexed vector tiles)
+                         id ids]
+                     [:entity/collection
+                      id
+                      (fn [collection]
+                        (when (and collection (not= position (:position collection)))
+                          (assoc collection :position position)))])))
 
 
 (defn delete!

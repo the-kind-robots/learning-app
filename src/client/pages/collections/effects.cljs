@@ -142,6 +142,16 @@
     (track-gesture! ctx card-id tap-actions nil)))
 
 
+(nxr/register-effect! :effect/arrange-collections
+  ;; The tiles shown again once memory took the order.
+  (fn ^:async arrange-collections [{{:keys [learner]} :capabilities :keys [dispatch]} _ tiles]
+    (try
+      (await (collections/arrange! learner tiles))
+      (dispatch [[:effect/enter :action/show-collections]])
+      (catch js/Error err
+        (log/error :effect/arrange-collections {:error (str err)})))))
+
+
 (nxr/register-effect! :effect/prompt-create-collection
   (fn ^:async prompt-create-collection
     [{{:keys [learner world]} :capabilities :keys [dispatch]} _ message]

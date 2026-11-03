@@ -293,6 +293,12 @@
     (some-> (:replicant/dom-event dispatch-data) .-shiftKey)))
 
 
+(nxr/register-placeholder! :event/order
+  ;; The keys an `<arrange-panel>` reports in its `arrange` event.
+  (fn [dispatch-data]
+    (some-> ^js (:replicant/dom-event dispatch-data) .-detail .-order js->clj)))
+
+
 (nxr/register-placeholder! :event/self-click?
   (fn [dispatch-data]
     (let [e (:replicant/dom-event dispatch-data)]

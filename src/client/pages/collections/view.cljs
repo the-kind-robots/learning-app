@@ -70,12 +70,14 @@
   "The box carries the colour and the states; the button inside it fills the
    box and takes the tap. The close button is that button's sibling, because
    a button holds no button."
-  [{:keys [accent key active? editing? deletable?] :as tile}]
+  [{:keys [accent key sort-key armed? active? editing? deletable?] :as tile}]
   [:div.tile
    {:replicant/key key
-    :class [(accent-class accent)
-            (when active? "tile--active")
-            (when editing? "tile--editing")]}
+    :sort-key      sort-key
+    :armed         (when armed? "")
+    :class         [(accent-class accent)
+                    (when active? "tile--active")
+                    (when editing? "tile--editing")]}
    [:button.tile__target (target-attrs tile)
     (name-and-count tile)]
    (when deletable? (close-button tile))])
@@ -113,10 +115,12 @@
 
 
 (defn- folder-tile
-  [{:keys [accent key head rows]}]
+  [{:keys [accent key sort-key armed? head rows]}]
   [:div.tile.tile--folder
    {:replicant/key key
-    :class (accent-class accent)}
+    :sort-key      sort-key
+    :armed         (when armed? "")
+    :class         (accent-class accent)}
    (folder-head head)
    [:ul.tile__rows
     (for [row rows] (folder-row row))]])
@@ -149,8 +153,9 @@
       :replicant/on-mount [[:effect/listen-for-typing]]
       :replicant/on-unmount [[:effect/stop-listening-for-typing]]}
      [:h1.switcher__title.visually-hidden [:i18n :collections/title]]
-     [:div.masonry
-      {:on {:click [[:action/exit-editing-on-background [:event/self-click?]]]}}
+     [:arrange-panel.masonry
+      {:on {:click   [[:action/exit-editing-on-background [:event/self-click?]]]
+            :arrange [[:action/arrange-collections [:event/order]]]}}
       (for [tile tiles]
         (if (:folder? tile)
           (folder-tile tile)
