@@ -10,7 +10,7 @@ const { test, expect } = require('./fixtures');
 const home = (page) => page.getByRole('heading', { name: /^(Главная|Home|Accueil|Ana sayfa)$/ });
 const settings = (page) => page.getByRole('dialog', { name: /^(Настройки|Settings|Paramètres|Ayarlar)$/ });
 const language = (page, name) => settings(page).getByRole('radio', { name });
-const wordMark = (page) => page.getByRole('button', { name: /^Sprecha/ });
+const wordMark = (page) => page.getByRole('button', { name: /^(Шпреха|Sprecha)/ });
 
 const storeSettings = (page, doc) =>
   page.evaluate((doc) => db.use('user-db').put({ _id: 'settings', type: 'settings', ...doc }), doc);
@@ -28,6 +28,28 @@ test.describe('Язык интерфейса', () => {
     });
   });
 
+  test('пользователь выбирает English → в логотипе «Шпреха» сменяется на «Sprecha»', async ({ page }) => {
+    await test.step('Дано открытая главная', async () => {
+      await page.goto('/');
+      await expect(home(page)).toBeVisible();
+    });
+
+    await test.step('Тогда логотип пишется «Шпреха»', async () => {
+      await expect(wordMark(page)).toHaveText(/^Шпреха/);
+      await expect(wordMark(page)).toHaveAccessibleName('Шпреха, настройки');
+    });
+
+    await test.step('Когда он выбирает English', async () => {
+      await wordMark(page).click();
+      await language(page, 'English').click();
+    });
+
+    await test.step('Тогда логотип пишется «Sprecha»', async () => {
+      await expect(wordMark(page)).toHaveText(/^Sprecha/);
+      await expect(wordMark(page)).toHaveAccessibleName('Sprecha, settings');
+    });
+  });
+
   test('браузер просит страницу по-английски или по-японски → сервер объявляет её английской', async ({ request }) => {
     for (const tag of ['en-GB,en;q=0.9', 'ja-JP']) {
       await test.step(`Когда браузер просит страницу с Accept-Language: ${tag}`, async () => {
@@ -37,13 +59,13 @@ test.describe('Язык интерфейса', () => {
     }
   });
 
-  test('пользователь нажимает «Sprecha» → в настройках четыре языка своими названиями, Русский отмечен', async ({ page }) => {
+  test('пользователь нажимает «Шпреха» → в настройках четыре языка своими названиями без заголовка, Русский отмечен', async ({ page }) => {
     await test.step('Дано открытая главная', async () => {
       await page.goto('/');
       await expect(home(page)).toBeVisible();
     });
 
-    await test.step('Когда он нажимает «Sprecha»', async () => {
+    await test.step('Когда он нажимает «Шпреха»', async () => {
       await wordMark(page).click();
     });
 
@@ -54,6 +76,7 @@ test.describe('Язык интерфейса', () => {
         await expect(language(page, name)).not.toBeChecked();
       }
       await expect(language(page, 'Русский')).toBeChecked();
+      await expect(settings(page).getByText('Язык', { exact: true })).toHaveCount(0);
     });
   });
 
@@ -111,14 +134,14 @@ test.describe('Язык интерфейса', () => {
     });
   });
 
-  test('пользователь нажимает «Sprecha» при открытых настройках → настройки закрываются', async ({ page }) => {
+  test('пользователь нажимает «Шпреха» при открытых настройках → настройки закрываются', async ({ page }) => {
     await test.step('Дано открытые настройки', async () => {
       await page.goto('/');
       await wordMark(page).click();
       await expect(settings(page)).toBeVisible();
     });
 
-    await test.step('Когда он снова нажимает «Sprecha»', async () => {
+    await test.step('Когда он снова нажимает «Шпреха»', async () => {
       await wordMark(page).click();
     });
 

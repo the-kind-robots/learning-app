@@ -104,7 +104,7 @@ test.describe('Постраничный список слов', () => {
   test('пользователь листает список на компьютере → полоса прокрутки у края окна, шапка и низ на месте, слова по центру', async ({ page }) => {
     const search = page.getByPlaceholder('Поиск');
     const start = page.getByRole('button', { name: 'НАЧАТЬ УРОК' });
-    const logo = page.getByRole('button', { name: /Sprecha/ });
+    const logo = page.getByRole('button', { name: /Шпреха/ });
     const centre = (box) => box.x + box.width / 2;
     let before;
 

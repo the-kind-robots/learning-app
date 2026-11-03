@@ -75,6 +75,7 @@
  :shell/open-collections      "Setleri aç"
  :shell/read-error            "Cihazdaki veriler okunamıyor. Sayfayı yenile."
  :shell/reload-build          "Derlemeyi yeniden yükle"
+ :shell/word-mark             "Sprecha"
 
  :sync/cancel                 "İptal"
  :sync/connect-device         "Cihaz bağla"

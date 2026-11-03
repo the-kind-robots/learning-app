@@ -93,7 +93,8 @@
          :popovertarget "settings"
          :title         [:i18n :settings/title]
          :type          "button"}
-        "Sprecha"
+        ;; The name as the interface's language spells it: «Шпреха» in Russian.
+        [:i18n :shell/word-mark]
         ;; A development build's word mark ends in a red D; the ^boolean on the flag lets Closure drop it,
         ;; and the build mark below, from a release.
         (when ^boolean goog/DEBUG
