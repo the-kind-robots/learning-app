@@ -24,4 +24,6 @@ Follow https://guide.clojure.style/ plus these project rules:
 
 **JS interop:** call a JS method on a `^js` parameter or local, or through `js-invoke` — never on a form of an inferred type (`(str …)`, a literal, a number), where `^js` on the form does not help: the release build renames a name Closure's externs lack, and only there it throws. [docs/dev/cljs-interop-renaming.md](../../docs/dev/cljs-interop-renaming.md); `bb scripts/release_renames.clj` checks it.
 
+**Hiccup:** attributes and children, a lone child that is a vector or a form, or more than one line → the tag, the attribute map and each child on a line of their own; attributes alone or plain values stay on one line while they fit; an attribute map of several keys has a key per line. zprint enforces it; a `;; zprint: as written` comment before a form exempts it. [docs/process/code-style.md](../../docs/process/code-style.md), "Hiccup Layout".
+
 **Maps:** keys sorted alphabetically with `:id`/`:_id` first; align values when key length variance ≤ 15 chars; no commas.

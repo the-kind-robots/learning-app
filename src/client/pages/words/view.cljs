@@ -12,8 +12,12 @@
     {:type "button"
      :on   {:click [[:effect/enter :action/open-word-edit id]]}}
     [:span.word-item__text
-     [:span.word-item__value {:lang "de"} value]
-     [:span.word-item__translation {:lang "ru"} translation]]
+     [:span.word-item__value
+      {:lang "de"}
+      value]
+     [:span.word-item__translation
+      {:lang "ru"}
+      translation]]
     [:div.word-item__retention
      {:style {:background-color retention-color}
       :title [:i18n
@@ -53,12 +57,17 @@
                :accent/cardinal "word-example--cardinal"
                :accent/peacock  "word-example--peacock"
                nil              "word-example--bare")}
-     [:h3.word-example__title {:id (str "word-example-" collection-id)} (or title [:i18n :example/no-theme])]
+     [:h3.word-example__title
+      {:id (str "word-example-" collection-id)}
+      (or title [:i18n :example/no-theme])]
      [:div.word-example__sentence
       {:class (when regenerating? "word-example__sentence--pending")}
-      [:p.word-example__text {:aria-hidden "true" :lang "de"}
+      [:p.word-example__text
+       {:aria-hidden "true"
+        :lang        "de"}
        (:before sentence)
-       [:strong (:hit sentence)]
+       [:strong
+        (:hit sentence)]
        (:after sentence)]
       [:textarea.word-example__field
        {:aria-label     [:i18n :example/sentence]
@@ -148,7 +157,9 @@
         :value        word
         :on           {:input [[:action/edit-spelling [:event.target/value]]]}}]
       (when word-taken?
-        [:div.word-edit-dialog__error {:role "alert"} [:i18n :word-edit/taken]])
+        [:div.word-edit-dialog__error
+         {:role "alert"}
+         [:i18n :word-edit/taken]])
       ;; One translation a line. Enter belongs to the text; Ctrl/Cmd+Enter and the save button submit.
       [:textarea.word-edit-dialog__translations
        {:aria-label   [:i18n :word-edit/translations]
@@ -167,7 +178,8 @@
                                    :ctrl? [:event.keyboard/ctrl?]
                                    :meta? [:event.keyboard/meta?]}]]}}]
       (when replaces
-        [:div.word-edit-dialog__notice {:role "status"}
+        [:div.word-edit-dialog__notice
+         {:role "status"}
          [:i18n :word-edit/replaces {:word replaces}]])]
      [:div.word-examples
       (map example-card examples)
@@ -203,7 +215,10 @@
        :type     "button"
        :on       {:click [[:action/reset-word-edit]]}}
       [:i18n :word-edit/reset]]
-     [:button.word-edit-dialog__save {:type "submit" :disabled save-disabled?} [:i18n :word-edit/save]]]]])
+     [:button.word-edit-dialog__save
+      {:type     "submit"
+       :disabled save-disabled?}
+      [:i18n :word-edit/save]]]]])
 
 
 (defn- empty-state
@@ -244,12 +259,14 @@
        :else
        (list
         ;; The shell's corner ✕ leaves the screen; the heading stays for assistive technology only.
-        [:h1.vocabulary__title.visually-hidden [:i18n :words/title]]
+        [:h1.vocabulary__title.visually-hidden
+         [:i18n :words/title]]
         [:div.vocabulary__list
          [:ul.word-list
           {:id "word-list"}
           (if placeholder
-            [:li.word-list__empty (empty-state placeholder)]
+            [:li.word-list__empty
+             (empty-state placeholder)]
             (concat (map word-list-item items)
                     (when more? [(sentinel)])))]]
         ;; The search field sits under the thumb. It closes the column rather than joining the footer: the

@@ -31,6 +31,7 @@
        ;; Each language by its own name: a learner finds theirs whatever the interface speaks.
        (:name language)
        ;; The flag adorns the name: the name alone is read out. A small flat stripe in the palette's colours.
+       ;; zprint: as written
        (when-let [flag (get {"en" [[:rect.settings-menu__flag-blue {:height 40 :width 60}]
                                    ;; A wide white edge keeps the red cross off the blue: the two are near in lightness.
                                    [:rect.settings-menu__flag-white {:height 40 :width 15 :x 22.5}]
