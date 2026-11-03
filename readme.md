@@ -34,6 +34,7 @@ Then open http://sprecha.localhost/.
 Full guide: [docs/dev/development-setup.md](docs/dev/development-setup.md).
 Phone testing: [docs/dev/mobile-pwa-testing.md](docs/dev/mobile-pwa-testing.md).
 Implicit awaits in `^:async`: [docs/dev/cljs-async-pitfalls.md](docs/dev/cljs-async-pitfalls.md).
+JS names the release build renames: [docs/dev/cljs-interop-renaming.md](docs/dev/cljs-interop-renaming.md).
 
 ## Dictionary
 

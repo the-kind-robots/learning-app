@@ -118,6 +118,8 @@ Every tab has a worker, but the dictionary belongs to the tab being typed into: 
 
 **Async pitfalls** — `^:async` fns await some forms without an `await`; see [docs/dev/cljs-async-pitfalls.md](../../docs/dev/cljs-async-pitfalls.md).
 
+**Interop names** — the release build renames a JS name Closure's externs lack; call such a method on a `^js` local or through `js-invoke`. See [docs/dev/cljs-interop-renaming.md](../../docs/dev/cljs-interop-renaming.md); `bb scripts/release_renames.clj` checks it in CI.
+
 ## Building
 
 ```bash
