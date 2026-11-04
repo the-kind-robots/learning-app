@@ -42,6 +42,7 @@
  :lesson/add-to-dictionary    "+ ADD TO DICTIONARY"
  :lesson/add-translation      "+ ADD TRANSLATION"
  :lesson/add-words            "Add words"
+ :lesson/again                "ONE MORE LESSON"
  :lesson/answer               "Answer in German"
  :lesson/answer-placeholder   "Type the translation..."
  :lesson/attempts             [:fn/str "Attempts: {{:count}}"]
@@ -73,6 +74,7 @@
 
  :shell/export-trace          "Export trace"
  :shell/install               "Install app"
+ :shell/lessons-today         [:fn/str "Lessons today: {{:count}}"]
  :shell/loading               "Loading..."
  :shell/open-collections      "Open collections"
  :shell/read-error            "Can't read data on this device. Reload the page."

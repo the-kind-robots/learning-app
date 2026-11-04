@@ -68,6 +68,7 @@
 (defn check-answer!
   "Grades `answer` at once: `{:lesson-state .. :answer-hints ..}` for an example, `{:lesson-state .. :review ..}`
    for a word, its review being written (`:review` resolves once it is). Nil once the current trial is answered.
+   The answer that ends the lesson also writes the lesson passed, `:passed` resolving once it is written.
    The hints are the vocabulary state per annotated word of the answer, `{word-index :word-state/..}`.
    The review's time to answer counts from `answer-started`, `{:uptime-ms :visibility-changes}` as the trial
    appeared; a page hidden or shown since leaves the time unknown."
@@ -75,14 +76,16 @@
   (when (nil? (lesson/last-result lesson-state))
     (let [checked (lesson/check-answer lesson-state answer)
           trial   (lesson/current-trial checked)]
-      (if (lesson/example-trial? trial)
-        {:answer-hints (->> (lesson/answer-segments trial)
-                            (filter #(= :annotated-word (:type %)))
-                            (map (fn [{:keys [word-index dictionary-form translation]}]
-                                   [word-index (:state (token-info learner dictionary-form translation))]))
-                            (into {}))
-         :lesson-state checked}
-        (let [answer-ms (when (= (:visibility-changes answer-started) (page/visibility-changes page))
-                          (js/Math.round (- (world/clock world :uptime-ms) (:uptime-ms answer-started))))]
-          {:lesson-state checked
-           :review       (record-review! learner world checked answer-ms)})))))
+      (cond-> (if (lesson/example-trial? trial)
+                {:answer-hints (->> (lesson/answer-segments trial)
+                                    (filter #(= :annotated-word (:type %)))
+                                    (map (fn [{:keys [word-index dictionary-form translation]}]
+                                           [word-index (:state (token-info learner dictionary-form translation))]))
+                                    (into {}))
+                 :lesson-state checked}
+                (let [answer-ms (when (= (:visibility-changes answer-started) (page/visibility-changes page))
+                                  (js/Math.round (- (world/clock world :uptime-ms) (:uptime-ms answer-started))))]
+                  {:lesson-state checked
+                   :review       (record-review! learner world checked answer-ms)}))
+        (lesson/finished? checked)
+        (assoc :passed (learner/insert! learner :entity/lesson {:passed-at (world/clock world :now-iso)}))))))

@@ -42,6 +42,7 @@
  :lesson/add-to-dictionary    "+ SÖZLÜĞE"
  :lesson/add-translation      "+ ÇEVİRİ EKLE"
  :lesson/add-words            "Kelime ekle"
+ :lesson/again                "BİR DERS DAHA"
  :lesson/answer               "Almanca cevap"
  :lesson/answer-placeholder   "Çeviriyi yaz..."
  :lesson/attempts             [:fn/str "Deneme: {{:count}}"]
@@ -73,6 +74,7 @@
 
  :shell/export-trace          "İzi dışa aktar"
  :shell/install               "Uygulamayı yükle"
+ :shell/lessons-today         [:fn/str "Bugünkü dersler: {{:count}}"]
  :shell/loading               "Yükleniyor..."
  :shell/open-collections      "Setleri aç"
  :shell/read-error            "Cihazdaki veriler okunamıyor. Sayfayı yenile."

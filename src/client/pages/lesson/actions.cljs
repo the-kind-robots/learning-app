@@ -41,6 +41,12 @@
                (lesson/start learner language active-collection {:random random} now-ms)))]]))
 
 
+(nxr/register-action! :action/next-lesson
+  ;; A new lesson on the screen already showing one: the route stays, so it is drawn here, not by the route.
+  (fn next-lesson [_]
+    [[:effect/enter :action/open-lesson]]))
+
+
 (nxr/register-action! :action/update-lesson
   (fn update-lesson [state from lesson-state]
     (when (= from (:lesson/state state))

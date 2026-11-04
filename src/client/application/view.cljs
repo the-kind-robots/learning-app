@@ -78,11 +78,46 @@
    [:polyline {:points "9 14 12 17 15 14"}]])
 
 
+(def ^:private star-path
+  "M12 2.5l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.3l-5.8 3.1 1.1-6.5L2.6 9.3l6.5-.9z")
+
+
+(defn- star
+  "A star of today's lessons: gold for a lesson, purple for five. Each lights up once as it mounts."
+  [purple? key]
+  ;; zprint: as written
+  [:svg
+   {:class         (if purple? "app-shell__star app-shell__star--purple" "app-shell__star")
+    :replicant/key key
+    :aria-hidden   "true"
+    :viewBox       (if purple? "-3 -3 30 31" "-2 -2 28 29")}
+   [:path.app-shell__star-lip {:d star-path :transform (if purple? "translate(0 1.4)" "translate(0 1.8)")}]
+   [:path.app-shell__star-body {:d star-path}]
+   (when purple?
+     (list
+      [:path.app-shell__star-core {:d "M12 6.8l1.4 2.9 3.2.4-2.3 2.3.5 3.2L12 14l-2.8 1.6.5-3.2-2.3-2.3 3.2-.4z"}]
+      [:path.app-shell__star-sparkle {:d "M21.5 0.5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"}]))])
+
+
+(defn- stars-row
+  "Today's lessons as stars, from `application.presenter/stars`."
+  [{:keys [gold lessons purple purple-number]}]
+  [:div.app-shell__stars
+   {:role       "img"
+    :aria-label [:i18n :shell/lessons-today {:count lessons}]}
+   (when purple-number
+     [:span.app-shell__star-number purple-number])
+   (for [index (range purple)]
+     (star true [:purple purple-number index]))
+   (for [index (range gold)]
+     (star false [:gold index]))])
+
+
 (defn shell
   "The whole page: the bar across the top, the dialogs, the screen the state
    is on, and the status line."
   [state]
-  (let [{:keys [build-mark corner page read-error? show-install?]}
+  (let [{:keys [build-mark corner page read-error? show-install? stars]}
         (presenter/shell-props state)
         sync (sync-presenter/props state)]
     (list
@@ -107,6 +142,8 @@
        (sync-view/sync-button sync)]
       ;; The middle of the bar, kept for what the learner should see at a glance: stars, progress, a notice.
       [:div.app-shell__info-bar
+       (when stars
+         (stars-row stars))
        ;; Which bundle the page loaded, and the tap that reloads onto the newest one.
        (when ^boolean goog/DEBUG
          [:button.app-shell__build-mark

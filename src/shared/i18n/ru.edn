@@ -42,6 +42,7 @@
  :lesson/add-to-dictionary    "+ В СЛОВАРЬ"
  :lesson/add-translation      "+ ДОБАВИТЬ ПЕРЕВОД"
  :lesson/add-words            "Добавить слова"
+ :lesson/again                "ЕЩЁ УРОК"
  :lesson/answer               "Ответ на немецком"
  :lesson/answer-placeholder   "Введите перевод..."
  :lesson/attempts             [:fn/str "Попыток: {{:count}}"]
@@ -73,6 +74,7 @@
 
  :shell/export-trace          "Экспортировать трассу"
  :shell/install               "Установить приложение"
+ :shell/lessons-today         [:fn/str "Уроков за сегодня: {{:count}}"]
  :shell/loading               "Загружаем..."
  :shell/open-collections      "Открыть наборы"
  :shell/read-error            "Не получается прочитать данные на устройстве. Перезагрузите страницу."

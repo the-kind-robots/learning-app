@@ -42,6 +42,7 @@
  :lesson/add-to-dictionary    "+ AU DICTIONNAIRE"
  :lesson/add-translation      "+ AJOUTER UNE TRADUCTION"
  :lesson/add-words            "Ajouter des mots"
+ :lesson/again                "ENCORE UNE LEÇON"
  :lesson/answer               "Réponse en allemand"
  :lesson/answer-placeholder   "Saisissez la traduction…"
  :lesson/attempts             [:fn/str "Essais : {{:count}}"]
@@ -73,6 +74,7 @@
 
  :shell/export-trace          "Exporter la trace"
  :shell/install               "Installer l’application"
+ :shell/lessons-today         [:fn/str "Leçons aujourd’hui : {{:count}}"]
  :shell/loading               "Chargement…"
  :shell/open-collections      "Ouvrir les collections"
  :shell/read-error            "Impossible de lire les données de l’appareil. Rechargez la page."

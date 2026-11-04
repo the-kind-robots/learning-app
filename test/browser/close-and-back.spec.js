@@ -147,9 +147,10 @@ test.describe('Закрытие экранов и кнопка «Назад»', 
 });
 
 // Leaving a lesson ends it, whatever did the leaving: Back, the corner close,
-// the finish button (#484); entering again starts fresh. The lesson lives in
-// app state only, so no lesson document is ever written — read at the engine
-// level, as test/browser/README.md prescribes.
+// the finish button (#484); entering again starts fresh. The lesson in progress
+// lives in app state only, so device-db never holds one — read at the engine
+// level, as test/browser/README.md prescribes. A lesson passed is a record in
+// user-db (#715), not the lesson itself.
 const storedLessons = async (page) => (await docsOfType(page, 'device-db', 'lesson')).length;
 
 const ANSWERS = { дом: 'Haus', собака: 'Hund' };

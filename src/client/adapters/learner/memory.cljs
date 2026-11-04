@@ -1,6 +1,6 @@
 (ns adapters.learner.memory
   "The learner's data in memory (ADR-0016): cards (word and reviews, in a slot never reused), collections,
-   examples, and `:words` in the word list's order. `::position` is the feed position of the last change
+   examples, the lessons passed, and `:words` in the word list's order. `::position` is the feed position of the last change
    taken, arriving with its batch (`with-changes`); a snapshot stores memory without `:words` and it."
   (:require
    [adapters.learner.documents :as documents]
@@ -16,6 +16,7 @@
    :collections-by-word {}
    :examples         {}
    :examples-by-word {}
+   :lessons-passed   {}
    :slot-of          {}
    :words            (sorted-map)
    ::position        nil})
@@ -160,6 +161,8 @@
                                         :kind   :collection}
    (:type documents/example-schema)    {:entity documents/doc->example
                                         :kind   :example}
+   (:type documents/lesson-schema)     {:entity documents/entity
+                                        :kind   :lesson}
    (:type documents/review-schema)     {:entity documents/doc->review
                                         :kind   :review}
    (:type documents/settings-schema)   {:entity documents/entity
@@ -185,7 +188,7 @@
 (defn- old-version
   "The version of `doc` memory holds now, `{:kind :entity}`, or nil. It is a
    collection, an example, the settings or a word, found by the id; a review
-   is never removed."
+   or a passed lesson is never removed."
   [memory {id :_id}]
   (or (some->> (get-in memory [:collections id]) (hash-map :kind :collection :entity))
       (some->> (get-in memory [:examples id]) (hash-map :kind :example :entity))
@@ -201,6 +204,7 @@
     (case kind
       :collection (add-collection memory entity)
       :example    (add-example memory entity)
+      :lesson     (assoc-in memory [:lessons-passed (:id entity)] (:passed-at entity))
       :review     (add-review memory entity)
       :settings   (assoc memory :settings entity)
       :word       (add-word memory entity))))
@@ -329,6 +333,14 @@
        (mapcat #(array-seq (:reviewed-at (:reviews %))))
        (map #(js/Math.floor (/ % 86400)))
        distinct
+       count))
+
+
+(defn lessons-passed-since
+  "How many lessons were passed at `since-iso`, an ISO time in UTC, or later."
+  [memory since-iso]
+  (->> (vals (:lessons-passed memory))
+       (remove #(neg? (compare % since-iso)))
        count))
 
 

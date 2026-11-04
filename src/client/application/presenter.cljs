@@ -10,10 +10,23 @@
     (:page/current state)))
 
 
+(defn stars
+  "Today's lessons as stars, nil for none: `:lessons` passed, `:gold` stars, and the purple stars five gold make,
+   as `:purple` stars, or from five on as one star after `:purple-number`."
+  [lessons]
+  (when (pos? lessons)
+    (let [purple (quot lessons 5)]
+      (merge {:gold    (rem lessons 5)
+              :lessons lessons}
+             (if (>= purple 5)
+               {:purple 1 :purple-number purple}
+               {:purple purple})))))
+
+
 (defn shell-props
   "What the shell shows: `:corner` (themes icon on home, close mark elsewhere, ADR-0015), `:page` (nil until
    memory is loaded), `:read-error?` (the learner's data could not be read), `:build-mark` (the bundle's,
-   empty in a release build)."
+   empty in a release build), `:stars` (today's lessons, `stars`)."
   [state]
   {:build-mark    build-identity/stamp
    :corner        (case (page state)
@@ -22,7 +35,9 @@
                     nil)
    :page          (page state)
    :read-error?   (= :status/unreadable (:learner/status state))
-   :show-install? (boolean (:pwa/install-available? state))})
+   :show-install? (boolean (:pwa/install-available? state))
+   :stars         (when (page state)
+                    (stars (:learner/lessons-today state 0)))})
 
 
 (defn screen-change

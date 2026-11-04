@@ -32,12 +32,13 @@
    `client.memory-snapshot-test/a-snapshot-of-this-format-version-holds-exactly-what-memory-takes`
    fails when the format changes.
 
-   Version 6: a review history holds each review's time to answer (#692). Version 5: memory takes the
+   Version 7: memory takes the lessons passed (#715). Version 6: a review history holds each review's time to
+   answer (#692). Version 5: memory takes the
    settings document (#473). Version 4: a
    word's `:search` also holds its spelling without umlauts (#578). Version
    3: the body is memory itself (ADR-0023). Version 2 held the entries
    memory took from each document."
-  6)
+  7)
 
 
 (def ^:private cache-name
