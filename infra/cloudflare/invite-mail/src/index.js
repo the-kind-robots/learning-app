@@ -1,4 +1,4 @@
-// Mails the operator an invite request. The backend POSTs {subject, text}
+// Mails the operator an invite request. The backend POSTs {subject, text, html}
 // with the shared secret; the Worker sends it from SENDER to OPERATOR_ADDRESS
 // through the send_email binding.
 const encoder = new TextEncoder();
@@ -24,7 +24,8 @@ export default {
       return new Response(null, { status: 401 });
     }
     const message = await request.json().catch(() => null);
-    if (typeof message?.subject !== "string" || typeof message?.text !== "string") {
+    if (typeof message?.subject !== "string" || typeof message?.text !== "string"
+        || !["string", "undefined"].includes(typeof message.html)) {
       return new Response(null, { status: 400 });
     }
     try {
@@ -33,6 +34,7 @@ export default {
         to: env.OPERATOR_ADDRESS,
         subject: message.subject,
         text: message.text,
+        html: message.html,
       });
     } catch (error) {
       // The backend only needs to know the mail did not go; the code says why.

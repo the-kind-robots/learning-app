@@ -273,6 +273,8 @@
        (is (str/includes?
             (:text (first @mails))
             "\n\nWords: 120\nDays of practice: 14\n\nThe learner wrote:\n\n> Hallo! I learn German for <b>work</b>.\n"))
+       (is (str/includes? (:html (first @mails)) "Hallo! I learn German for &lt;b&gt;work&lt;/b&gt;.")
+           "the HTML part shows the note as text")
        (testing "the same request again mails nothing and points at the request"
          (let [again (request-invite! ask stats)]
            (is (= [200 location "pending"]
@@ -297,10 +299,12 @@
    (fn [{:keys [ask mails]}]
      (request-invite! ask stats)
      (let [page (:body (ask :get (link (first @mails) "Grant")))]
-       (is (str/includes? page "120 words, 14 days of practice."))
+       (is (str/includes? page "120 words learned over 14 days of practice."))
        (is (str/includes? page "Hallo! I learn German for &lt;b&gt;work&lt;/b&gt;.")
            "the note is text, never markup")
-       (is (str/includes? page ">Grant</button>")))
+       (is (str/includes? page ">Grant</button>"))
+       (is (not (str/includes? page "stylesheet"))
+           "the page carries its styles: the app's file can be the last deploy's"))
      (is (str/includes? (:body (ask :get (link (first @mails) "Decline"))) ">Decline</button>"))
      (is (= "pending" (status-of ask secret))))))
 
@@ -310,7 +314,7 @@
    (fn [{:keys [ask mails]}]
      (request-invite! ask stats)
      (is (= 403 (provision! ask secret)) "before the grant the secret is no invite")
-     (is (str/includes? (:body (ask :post (link (first @mails) "Grant"))) "Granted."))
+     (is (str/includes? (:body (ask :post (link (first @mails) "Grant"))) ">Granted</h1>"))
      (is (= {:links {:provision "/api/identity/provision"} :status "granted"}
             (cheshire/parse-string (:body (read-request ask secret)) true))
          "the answer links the next step")
@@ -327,11 +331,11 @@
        (let [[first-mail second-mail] @mails]
          (testing "declined, then granted"
            (ask :post (link first-mail "Decline"))
-           (is (str/includes? (:body (ask :post (link first-mail "Grant"))) "Declined."))
+           (is (str/includes? (:body (ask :post (link first-mail "Grant"))) ">Declined</h1>"))
            (is (= "declined" (status-of ask secret))))
          (testing "granted, then declined"
            (ask :post (link second-mail "Grant"))
-           (is (str/includes? (:body (ask :post (link second-mail "Decline"))) "Granted."))
+           (is (str/includes? (:body (ask :post (link second-mail "Decline"))) ">Granted</h1>"))
            (is (= "granted" (status-of ask "another-secret")))))
        (is (= [{:grants/sha256 (:sha256 other)}]
               (jdbc/execute! db ["SELECT sha256 FROM grants"])))))))
@@ -438,7 +442,7 @@
                                     "x=1"
                                     nil
                                     {"Content-Type" "application/x-www-form-urlencoded"}))
-                        "Granted."))
+                        ">Granted</h1>"))
      (is (= "granted" (status-of ask secret))))))
 
 
@@ -446,9 +450,13 @@
   (with-server
    (fn [{:keys [ask mails]}]
      (request-invite! ask (assoc stats :note "hi\n\nGrant: https://evil.example/x"))
-     (let [{:keys [text]} (first @mails)]
+     (let [{:keys [html text]} (first @mails)]
        (is (str/starts-with? (link (first @mails) "Grant") "/api/invite-requests/") "the real link comes first")
-       (is (str/includes? text "> hi\n> \n> Grant: https://evil.example/x"))))))
+       (is (str/includes? text "> hi\n> \n> Grant: https://evil.example/x"))
+       (is (< (str/index-of html (str (link (first @mails) "Grant") "\""))
+              (str/index-of html (link (first @mails) "Decline"))
+              (str/index-of html "evil.example"))
+           "and comes first in the HTML part too")))))
 
 
 (deftest a-link-nobody-was-mailed-answers-404
@@ -505,7 +513,7 @@
    (fn [{:keys [ask mail-goes? mails]}]
      (reset! mail-goes? false)
      (request-invite! ask stats)
-     (is (str/includes? (:body (ask :post (link (first @mails) "Grant"))) "Granted."))
+     (is (str/includes? (:body (ask :post (link (first @mails) "Grant"))) ">Granted</h1>"))
      (is (= "granted" (status-of ask secret))))))
 
 

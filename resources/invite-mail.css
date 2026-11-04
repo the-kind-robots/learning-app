@@ -1,0 +1,13 @@
+/* The invite mail's dark colours, for the mail clients that follow the
+   system's theme. The light ones are inline on each element: some clients
+   drop a <style>. */
+
+@media (prefers-color-scheme: dark) {
+  body, .mail { background: #150f1c !important; }
+  .mail__card { background: #1f1629 !important; color: #ede6f3 !important; }
+  .mail__muted { color: #b3a6c2 !important; }
+  .mail__label { color: #e2a6f5 !important; }
+  .mail__grant { background: #8ccc6b !important; border-color: #8ccc6b #8ccc6b #5f9e42 !important; color: #150f1c !important; }
+  .mail__decline { background: #261b33 !important; border-color: #2d2140 !important; color: #e8b8f7 !important; }
+  .mail__rule { border-color: #261b33 !important; }
+}

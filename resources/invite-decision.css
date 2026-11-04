@@ -1,0 +1,207 @@
+/* The page an operator's mail link opens: one request and the button that
+   decides it, or how it was decided. Served by the backend outside the app
+   shell, inlined into the page: a file of the app's would come from the
+   service worker's cache, which can still be the last deploy's. */
+
+@font-face {
+  font-display: swap;
+  font-family: Nunito;
+  font-weight: 200 1000;
+  src: url("/fonts/Nunito/nunito-v32-cyrillic-variable.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+  font-display: swap;
+  font-family: Nunito;
+  font-weight: 200 1000;
+  src: url("/fonts/Nunito/nunito-v32-latin-variable.woff2") format("woff2");
+}
+
+:root {
+  color-scheme: light dark;
+  --ground: #ffffff;
+  --text: #3c3c3c;
+  --muted: #6f6f6f;
+  --label: #8a5fc7;
+  --grant: #58cc02;
+  --grant-lip: #58a700;
+  --decline: #9069cd;
+  --decline-lip: #6f4ea1;
+  --button-text: #ffffff;
+  --granted-mark: #d7ffb8;
+  --declined-mark: #eadcff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #150f1c;
+    --text: #ede6f3;
+    --muted: #b3a6c2;
+    --label: #e2a6f5;
+    --grant: #8ccc6b;
+    --grant-lip: #5f9e42;
+    --decline: #c79be6;
+    --decline-lip: #8d62b0;
+    --button-text: #150f1c;
+    --granted-mark: #2d4a22;
+    --declined-mark: #3a2850;
+  }
+}
+
+body {
+  background: var(--ground);
+  color: var(--text);
+  font-family: Nunito, -apple-system, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+}
+
+.invite-decision {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  margin: 0 auto;
+  max-width: 440px;
+  min-height: 100dvh;
+  padding: 48px 24px 32px;
+}
+
+.brand {
+  align-items: center;
+  display: flex;
+  font-size: 15px;
+  font-weight: 800;
+  gap: 3px;
+}
+
+.brand__dot {
+  border-radius: 50%;
+  height: 7px;
+  width: 7px;
+}
+
+.brand__name {
+  margin-left: 5px;
+}
+
+.invite-decision__title {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.invite-decision__outcome {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.invite-decision__mark {
+  align-items: center;
+  border-radius: 50%;
+  display: flex;
+  flex: none;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.invite-decision__mark--granted {
+  background: var(--granted-mark);
+  color: var(--grant-lip);
+}
+
+.invite-decision__mark--declined {
+  background: var(--declined-mark);
+  color: var(--decline-lip);
+}
+
+.invite-decision__quote {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.invite-decision__label {
+  color: var(--label);
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.invite-decision__note {
+  font-size: 19px;
+  line-height: 1.55;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.invite-decision__muted {
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.invite-decision__form {
+  margin: auto 0 0;
+}
+
+.invite-decision__button {
+  background: var(--grant);
+  border: 0;
+  border-bottom: 4px solid var(--grant-lip);
+  border-radius: 16px;
+  color: var(--button-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  height: 54px;
+  width: 100%;
+}
+
+.invite-decision__button--decline {
+  background: var(--decline);
+  border-bottom-color: var(--decline-lip);
+}
+
+.invite-decision__button:hover {
+  filter: brightness(1.05);
+}
+
+.invite-decision__button:active {
+  border-bottom-width: 0;
+  transform: translateY(4px);
+}
+
+.invite-decision__button:focus-visible {
+  outline: 3px solid var(--label);
+  outline-offset: 3px;
+}
+
+@media (min-width: 600px) {
+  .invite-decision {
+    min-height: 0;
+    padding-top: 96px;
+  }
+
+  .invite-decision__title {
+    font-size: 32px;
+  }
+
+  .invite-decision__note {
+    font-size: 20px;
+  }
+
+  .invite-decision__form {
+    margin-top: 8px;
+  }
+
+  .invite-decision__button {
+    width: 220px;
+  }
+}
