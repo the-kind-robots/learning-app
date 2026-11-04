@@ -4,13 +4,13 @@
    [client.support.test :refer [async-testing]])
   (:require
    [cljs.test :refer-macros [deftest is]]
-   [adapters.world :as clock]))
+   [adapters.world :as world]))
 
 
 (defn- sleep
   "Starts a sleep. Plain, so the promise is not awaited on the way out."
   [ms signal]
-  (clock/sleep ms signal))
+  (world/sleep ms signal))
 
 
 (defn- ^:async watching

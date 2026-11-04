@@ -3,7 +3,8 @@
    ["qrcode" :as QRCode]
    [lambdaisland.glogi :as log]
    [nexus.registry :as nxr]
-   [ports.account :as account]))
+   [ports.account :as account]
+   [use-cases.sync :as sync]))
 
 
 (nxr/register-effect! :effect/share-sync-link
@@ -19,6 +20,17 @@
             (js/alert copied-message))))
       (catch js/Error err
         (log/error :effect/share-sync-link {:error (str err)})))))
+
+
+(nxr/register-effect! :effect/request-sync
+  ;; The form closes once the request is stored; one that could not be stored leaves it open, the note in it.
+  (fn ^:async request-sync [{:keys [capabilities dispatch]} _ note]
+    (let [{:keys [account learner]} capabilities]
+      (try
+        (await (sync/request! account learner note))
+        (dispatch [[:action/close-sync-dialog]])
+        (catch js/Error err
+          (log/error :effect/request-sync {:error (str err)}))))))
 
 
 (nxr/register-effect! :effect/open-sync-qr

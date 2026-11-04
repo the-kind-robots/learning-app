@@ -79,12 +79,19 @@
 
  :sync/cancel                 "Отмена"
  :sync/connect-device         "Подключить устройство"
+ :sync/enable                 "Сохранить мои слова"
+ :sync/enable-ask             "Мы подключаем это вручную. Напишите нам пару слов или просто привет. Когда всё будет готово, значок рядом с лого станет зелёным."
+ :sync/enable-title           "Чтобы слова не потерялись"
  :sync/qr                     "QR-код для подключения устройства"
  :sync/recovery-link          "Ссылка восстановления"
  :sync/recovery-link-copied   "Ссылка скопирована в буфер обмена"
  :sync/recovery-link-title    "Sprecha: восстановление доступа"
  :sync/scan-qr                "Отсканируйте QR-код на новом устройстве"
+ :sync/send                   "ОТПРАВИТЬ"
  :sync/title                  "Синхронизация"
+ :sync/title-off              "Синхронизация не включена"
+ :sync/title-offline          "Синхронизация: нет сети"
+ :sync/title-online           "Синхронизация включена"
 
  :word/add                    "Добавить слово"
 

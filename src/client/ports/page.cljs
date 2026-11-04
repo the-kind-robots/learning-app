@@ -2,7 +2,7 @@
   "The page the app runs in, as the application reaches it: whether it is shown and the device online, and when
    that changes. `adapters.page` does the work."
   (:require
-   [adapters.page :as adapter]))
+   [adapters.page :as page]))
 
 
 (defprotocol Page
@@ -49,20 +49,20 @@
   []
   (let [overlays (atom false)
         changes  (atom 0)]
-    (js/window.addEventListener "pageshow" (fn [_] (adapter/overlay-keyboard! @overlays)))
-    (adapter/on-visibility-change #(swap! changes inc))
+    (js/window.addEventListener "pageshow" (fn [_] (page/overlay-keyboard! @overlays)))
+    (page/on-visibility-change #(swap! changes inc))
     (reify Page
-      (active? [_] (adapter/active?))
-      (online? [_] (adapter/online?))
-      (visible? [_] (adapter/visible?))
-      (system-language [_] (adapter/system-language))
-      (on-inactive [_ f signal] (adapter/on-inactive f signal))
-      (on-offline [_ f] (adapter/on-offline f))
-      (on-online [_ f] (adapter/on-online f))
-      (on-visibility-change [_ f] (adapter/on-visibility-change f))
+      (active? [_] (page/active?))
+      (online? [_] (page/online?))
+      (visible? [_] (page/visible?))
+      (system-language [_] (page/system-language))
+      (on-inactive [_ f signal] (page/on-inactive f signal))
+      (on-offline [_ f] (page/on-offline f))
+      (on-online [_ f] (page/on-online f))
+      (on-visibility-change [_ f] (page/on-visibility-change f))
       (visibility-changes [_] @changes)
-      (until-active [_ signal] (adapter/until-active signal))
-      (yield [_] (adapter/yield))
+      (until-active [_ signal] (page/until-active signal))
+      (yield [_] (page/yield))
       (overlay-keyboard! [_ overlays?]
         (reset! overlays overlays?)
-        (adapter/overlay-keyboard! overlays?)))))
+        (page/overlay-keyboard! overlays?)))))

@@ -1,7 +1,7 @@
 (ns ports.navigation
   "Moving between the app's screens: the router and the browser history. `adapters.navigation` does the work."
   (:require
-   [adapters.navigation :as adapter]))
+   [adapters.navigation :as navigation]))
 
 
 (defprotocol Navigation
@@ -17,7 +17,7 @@
   "The navigation over `routes`, a table of paths and page names, and the `home` page the history rests on. The
    router starts later, with `follow!`."
   [routing]
-  (let [navigator (adapter/navigator routing)]
+  (let [navigator (navigation/navigator routing)]
     (reify Navigation
-      (navigate [_ page] (adapter/navigate! navigator page))
-      (follow! [_ on-enter] (adapter/follow! navigator on-enter)))))
+      (navigate [_ page] (navigation/navigate! navigator page))
+      (follow! [_ on-enter] (navigation/follow! navigator on-enter)))))

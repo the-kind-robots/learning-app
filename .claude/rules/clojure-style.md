@@ -10,7 +10,7 @@ paths:
 
 Follow https://guide.clojure.style/ plus these project rules:
 
-**Namespace aliases:** always alias, never `:refer`. The alias is the last segment that names a subject: generic segments are dropped, and the one before is taken — `domain.lesson` → `lesson`, `foo.core` → `foo`, `pages.lesson.effects` → `lesson`. Generic segments: `core`, `domain`, `use-cases`, `ports`, `adapters`, `pages`, `effects`, `actions`, `presenter`, `view`. When two requires land on one alias, the later one takes its last two segments: `[muuntaja.core :as muuntaja]` and `[reitit.http.interceptors.muuntaja :as interceptors.muuntaja]`.
+**Namespace aliases:** always alias, never `:refer`. The alias is the last segment that names a subject: generic segments are dropped, and the one before is taken — `domain.lesson` → `lesson`, `foo.core` → `foo`, `pages.lesson.effects` → `lesson`, `adapters.account` → `account` (in its own port too, never `adapter`; `bb scripts/check_adapter_layering.clj` checks it). Generic segments: `core`, `domain`, `use-cases`, `ports`, `adapters`, `pages`, `effects`, `actions`, `presenter`, `view`. When two requires land on one alias, the later one takes its last two segments: `[muuntaja.core :as muuntaja]` and `[reitit.http.interceptors.muuntaja :as interceptors.muuntaja]`.
 
 **Names:** a thing is called what it is — `reviewed-at` and `review-id`, not `seconds` and `id`; `insert-position`, not `at` or `index`. No one-letter or abbreviated names outside a formula's own notation, and none there when the formula is ported: `weights`, `stability`, not `w`, `s`.
 

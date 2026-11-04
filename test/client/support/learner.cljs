@@ -2,7 +2,6 @@
   "The learner port over test databases, with memory loaded from them and
    following their change feeds, as the app runs it."
   (:require
-   [adapters.learner :as adapter]
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]
    [domain.examples :as examples]
@@ -17,8 +16,7 @@
   [dbs]
   (let [store (atom {:learner/memory memory/empty-memory})
         stop  (await (loader/start! dbs store))]
-    {:learner (learner/as-learner
-               (adapter/new-learner {:databases dbs :store store}))
+    {:learner (learner/as-learner {:databases dbs :store store})
      :stop    stop
      :store   store}))
 

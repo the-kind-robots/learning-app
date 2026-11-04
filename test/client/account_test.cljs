@@ -4,7 +4,6 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.learner :as adapter]
    [adapters.learner.memory :as memory]
    [client.support.wait :as wait]
    [cljs.test :refer-macros [deftest is]]
@@ -17,8 +16,10 @@
   "A Learner over `store`, an atom of the learner's state: it tells its status and calls back on change."
   [store]
   (reify learner/Learner
-    (on-change [_ f] (adapter/on-change {:store store} f))
-    (status [_] (adapter/status {:store store}))))
+    (on-change [_ f]
+      (add-watch store f (fn [_ _ before after] (when-not (identical? before after) (f))))
+      #(remove-watch store f))
+    (status [_] (if (:learner/loaded? @store) :status/loaded :status/loading))))
 
 
 (defn- sleeping

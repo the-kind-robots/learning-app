@@ -113,9 +113,10 @@ jobs:
       - name: Lint (incl. client layering)
         run: clj-kondo --lint src --fail-level error
 
-      # An adapter reaches no adapter of another name (what the ns groups above
-      # cannot say); see scripts/check_adapter_layering.clj.
-      - name: Adapters stand apart
+      # An adapter reaches no adapter of another name, and is required under its
+      # name (what the ns groups above cannot say); see
+      # scripts/check_adapter_layering.clj. It reads src/client and test/client.
+      - name: Adapters stand apart and go by their name
         run: bb scripts/check_adapter_layering.clj
 
       - uses: actions/cache/save@v6.1.0

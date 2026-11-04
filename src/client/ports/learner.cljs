@@ -2,7 +2,7 @@
   "The learner's data, as the app reaches it: memory to read, every write, and the active collection.
    `adapters.learner` does the work."
   (:require
-   [adapters.learner :as adapter]
+   [adapters.learner :as learner]
    [adapters.learner.memory :as memory]))
 
 
@@ -35,25 +35,27 @@
 
 
 (defn as-learner
-  "The Learner over the adapter's `learner`."
-  [learner]
-  (reify Learner
-    (memory [_] (adapter/current-memory learner))
-    (fresh-memory [_] (adapter/fresh-memory learner))
-    (change! [_ ops] (adapter/change! learner ops))
-    (insert! [_ entity value] (adapter/insert! learner entity value))
-    (active-collection [_] (adapter/active-collection learner))
-    (set-active-collection! [_ id] (adapter/set-active-collection! learner id))
-    (on-change [_ f] (adapter/on-change learner f))
-    (status [_] (adapter/status learner))
-    (storage [_] (adapter/storage learner))
-    (resolve-conflicts! [_ pulled-ids] (adapter/resolve-conflicts! learner pulled-ids))))
+  "The Learner over the learner's `:databases` and `:store` (and `:checked`, the snapshot check), as
+   `adapters.learner/new-learner` puts them together."
+  [parts]
+  (let [learner (learner/new-learner parts)]
+    (reify Learner
+      (memory [_] (learner/current-memory learner))
+      (fresh-memory [_] (learner/fresh-memory learner))
+      (change! [_ ops] (learner/change! learner ops))
+      (insert! [_ entity value] (learner/insert! learner entity value))
+      (active-collection [_] (learner/active-collection learner))
+      (set-active-collection! [_ id] (learner/set-active-collection! learner id))
+      (on-change [_ f] (learner/on-change learner f))
+      (status [_] (learner/status learner))
+      (storage [_] (learner/storage learner))
+      (resolve-conflicts! [_ pulled-ids] (learner/resolve-conflicts! learner pulled-ids)))))
 
 
 (defn ^:async start!
   "Starts the learner's data (`adapters.learner/start!`) and resolves with its Learner."
   []
-  (as-learner (await (adapter/start!))))
+  (as-learner (await (learner/start!))))
 
 
 ;;
@@ -107,6 +109,12 @@
   "The words in scope of `coll` that match `query`."
   [learner coll query]
   (memory/matching-words (memory learner) coll query))
+
+
+(defn practice-days
+  "On how many days the learner reviewed anything."
+  [learner]
+  (memory/practice-days (memory learner)))
 
 
 (defn review-history

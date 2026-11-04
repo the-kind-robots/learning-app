@@ -8,7 +8,6 @@
    [client.support.test :refer [async-testing]])
   (:require
    [abort :as abort]
-   [adapters.learner :as learner-adapter]
    [adapters.learner.documents :as documents]
    [adapters.learner.memory :as memory]
    [application.example-backfill :as backfill]
@@ -145,7 +144,7 @@
 (defn- world
   "A backfill's surroundings over `docs`, held in memory. `:initialized` is a
    promise, resolved unless given. The account exists unless `:account-exists?`
-   is false; `:catch-up`, when given, takes the store and answers `fresh-memory`
+   is false, until `grant!` opens one; `:catch-up`, when given, takes the store and answers `fresh-memory`
    with a promise. `:answer`, when given, is
    called with each request's subject and its place in the order of
    requests; what it returns answers the request at once, and nil leaves
@@ -153,21 +152,23 @@
    is visible until `hide!`."
   [docs {:keys [account-exists? answer catch-up initialized]}]
   (let [{world :world :as ticking} (clock)
-        store        (atom {:learner/memory (memory-of docs)})
-        reads        (atom 0)
-        requests     (atom [])
-        saves        (atom [])
-        online       (atom true)
-        visible      (atom true)
-        on-inactive  (atom nil)
-        waiting      (atom [])
-        active?      #(and @visible @online)
-        change-page! (fn []
-                       (if (active?)
-                         (let [resolvers @waiting]
-                           (reset! waiting [])
-                           (run! #(% nil) resolvers))
-                         (some-> @on-inactive (apply []))))]
+        store            (atom {:learner/memory (memory-of docs)})
+        reads            (atom 0)
+        requests         (atom [])
+        saves            (atom [])
+        online           (atom true)
+        has-account?     (atom (not (false? account-exists?)))
+        status-listeners (atom [])
+        visible          (atom true)
+        on-inactive      (atom nil)
+        waiting          (atom [])
+        active?          #(and @visible @online)
+        change-page!     (fn []
+                           (if (active?)
+                             (let [resolvers @waiting]
+                               (reset! waiting [])
+                               (run! #(% nil) resolvers))
+                             (some-> @on-inactive (apply []))))]
     (merge
      ticking
      {:capabilities
@@ -203,7 +204,10 @@
                     (reset! on-inactive f)
                     (.addEventListener signal "abort" #(reset! on-inactive nil))))
        :account (reify account/Account
-                  (exists? [_] (not (false? account-exists?)))
+                  (exists? [_] @has-account?)
+                  (on-status [_ f]
+                    (swap! status-listeners conj f)
+                    (f (if @has-account? :sync/online :sync/no-account)))
                   (initialized [_] (or initialized (js/Promise.resolve nil))))
        :learner (reify learner/Learner
                   (fresh-memory [_]
@@ -211,7 +215,9 @@
                       (catch-up store)
                       (js/Promise.resolve (:learner/memory @store))))
                   (memory [_] (:learner/memory @store))
-                  (on-change [_ f] (learner-adapter/on-change {:store store} f))
+                  (on-change [_ f]
+                    (add-watch store f (fn [_ _ before after] (when-not (identical? before after) (f))))
+                    #(remove-watch store f))
                   (insert! [_ _ example]
                     (swap! saves conj [(:word example)])
                     (swap! store
@@ -226,6 +232,9 @@
                               "1-a")])
                     (js/Promise.resolve {:id "example:stub"})))}
       :change! #(swap! store update :learner/memory memory/with-docs %)
+      :grant! (fn []
+                (reset! has-account? true)
+                (run! #(% :sync/online) @status-listeners))
       :hide! (fn [] (reset! visible false) (change-page!))
       :reads reads
       :store store
@@ -738,6 +747,19 @@
       (try
         (await ((:advance! w) 600000))
         (is (empty? (asked w)))
+        (finally
+         (stop))))))
+
+
+(deftest an-account-opened-later-starts-the-asking
+  (async-testing "a granted request opens the account in place, and the words are asked about without a reload"
+    (let [w    (world three-words {:account-exists? false})
+          stop (start! (:capabilities w))]
+      (try
+        (await ((:advance! w) 60000))
+        ((:grant! w))
+        (await ((:advance! w) 60000))
+        (is (seq (asked w)))
         (finally
          (stop))))))
 

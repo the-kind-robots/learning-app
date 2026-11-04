@@ -5,7 +5,6 @@
   (:require-macros
    [client.support.test :refer [async-testing]])
   (:require
-   [adapters.learner :as adapter]
    [adapters.learner.documents :as documents]
    [adapters.learner.loader :as loader]
    [adapters.learner.memory :as memory]

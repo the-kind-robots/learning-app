@@ -1,6 +1,6 @@
 (ns application.view
-  "The shell's markup: the bar with its icons, the sync menu and the QR
-   dialog, the screen on display, and the status line."
+  "The shell's markup: the bar with its icons and the sync icon, the sync
+   dialogs, the screen on display, and the status line."
   (:require
    [application.pages :as pages]
    [application.presenter :as presenter]
@@ -86,8 +86,9 @@
         (presenter/shell-props state)
         sync (sync-presenter/props state)]
     (list
-     ;; One fixed bar holds the three slots: word mark, info bar, actions. The side slots share the free
-     ;; space equally, which centres the info bar in the bar rather than between its neighbours.
+     ;; One fixed bar holds the three slots: word mark with the sync beside it, info bar, actions. The side
+     ;; slots share the free space equally, which centres the info bar in the bar rather than between its
+     ;; neighbours.
      [:div.app-shell__bar
       [:div.app-shell__bar-slot
        [:button.app-shell__logo
@@ -102,7 +103,8 @@
         ;; A development build's word mark ends in a red D; the ^boolean on the flag lets Closure drop it,
         ;; and the build mark below, from a release.
         (when ^boolean goog/DEBUG
-          [:span.app-shell__dev-mark "D"])]]
+          [:span.app-shell__dev-mark "D"])]
+       (sync-view/sync-button sync)]
       ;; The middle of the bar, kept for what the learner should see at a glance: stars, progress, a notice.
       [:div.app-shell__info-bar
        ;; Which bundle the page loaded, and the tap that reloads onto the newest one.
@@ -130,7 +132,6 @@
            :aria-label [:i18n :shell/install]
            :on         {:click [[:action/pwa-install-requested]]}}
           (install-icon)])
-       (sync-view/sync-button sync)
        (case corner
          :collections (collections-icon)
          :close       (close-icon)
