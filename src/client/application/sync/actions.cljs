@@ -1,9 +1,9 @@
 (ns application.sync.actions
-  "Joining another device to this account's sync: the sync menu, the dialog
-   that shows the link as a QR code, and closing it when the device that
-   opened the link has joined. Without an account, the form that asks us to
-   turn the sync on. One of them is open at a time: `:app/sync-open` says
-   which."
+  "Joining another device to this account's sync: the dialog that shows the
+   link as a QR code, and closing it when the device that opened the link has
+   joined. Without an account, the form that asks us to turn the sync on. One
+   of them is open at a time: `:app/sync-open` says which. The sync menu is
+   the browser's popover and keeps no state."
   (:require
    [clojure.string :as str]
    [nexus.registry :as nxr]))
@@ -14,16 +14,6 @@
   [state open]
   (when (= open (:app/sync-open state))
     [[:effect/save {:app/sync-open nil}]]))
-
-
-(nxr/register-action! :action/open-sync-menu
-  (fn open-sync-menu [_]
-    [[:effect/save {:app/sync-open :sync-open/menu}]]))
-
-
-(nxr/register-action! :action/close-sync-menu
-  (fn close-sync-menu [state]
-    (close state :sync-open/menu)))
 
 
 (nxr/register-action! :action/open-sync-dialog
