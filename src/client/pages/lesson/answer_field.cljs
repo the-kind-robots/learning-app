@@ -347,7 +347,11 @@
                           #(let [[^js other side] (:target @state)]
                              (settle!)
                              (cond
-                               other (.insertBefore tray tile (if (= :after side) (.-nextElementSibling other) other))
+                               other (.insertBefore tray
+                                                    tile
+                                                    (if (= :after side)
+                                                      (.-nextElementSibling other)
+                                                      other))
                                (and banked? dropped?) (.append tray tile))))
                   (.focus tile))
                 (settle!))))

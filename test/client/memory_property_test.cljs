@@ -42,7 +42,11 @@
        :type       "review"
        :word-id    (nth word-ids (mod (* 7 n) (count word-ids)))
        :retained   (even? (quot n 3))
-       :created-at (str "2026-01-" (if (< day 10) (str "0" day) day) "T00:00:00.000Z")})))
+       :created-at (str "2026-01-"
+                        (if (< day 10)
+                          (str "0" day)
+                          day)
+                        "T00:00:00.000Z")})))
 
 
 (def ^:private gen-collection
@@ -85,7 +89,9 @@
     (into []
           (comp (map-indexed (fn [i doc]
                                (let [doc (assoc doc :_rev (str (inc i) "-r"))]
-                                 (if (twice i) [doc doc] [doc]))))
+                                 (if (twice i)
+                                   [doc doc]
+                                   [doc]))))
                 cat)
           changes)))
 

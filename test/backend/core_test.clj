@@ -369,7 +369,10 @@
                         @(client/request
                           (cond-> {:method method
                                    :url    (str "http://localhost:" port url)}
-                            payload (assoc :body (if (string? payload) payload (cheshire/generate-string payload)))
+                            payload (assoc :body
+                                           (if (string? payload)
+                                             payload
+                                             (cheshire/generate-string payload)))
                             cookie  (assoc :headers {"Cookie" (str "auth-token=" cookie)}))))]
           (body db
                 (fn get-example [query]

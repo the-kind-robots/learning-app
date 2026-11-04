@@ -449,7 +449,9 @@
   [target]
   (into {}
         (map (juxt identity dictionary/lemma-ids))
-        (if (several-words? target) (required-words target) [target])))
+        (if (several-words? target)
+          (required-words target)
+          [target])))
 
 
 (defn- target-present?
@@ -489,7 +491,9 @@
                                     (seq (set/intersection (get lemma-ids target-word #{})
                                                            (dictionary/lemma-ids %))))
                                sentence-words))))
-           (frequencies (if (several-words? target) (required-words target) [target]))))))
+           (frequencies (if (several-words? target)
+                          (required-words target)
+                          [target]))))))
 
 
 (defn- verb-outside-bracket?

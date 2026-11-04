@@ -22,7 +22,9 @@
    review divides it by one plus the rate times the interval, each lapse doubles it; the probability is e to the
    minus rate times the time since the last review."
   [^js history now-ms]
-  (let [size (if history (.-length (.-review-ids history)) 0)]
+  (let [size (if history
+               (.-length (.-review-ids history))
+               0)]
     (when (pos? size)
       (let [reviewed-at (.-reviewed-at history)
             retained    (.-retained history)
@@ -63,7 +65,9 @@
   (/ (reduce +
              (map (fn [outcome recall]
                     (let [p (max 1e-6 (min (- 1 1e-6) recall))]
-                      (- (if (== 1 outcome) (js/Math.log p) (js/Math.log (- 1 p))))))
+                      (- (if (== 1 outcome)
+                           (js/Math.log p)
+                           (js/Math.log (- 1 p))))))
                   outcomes
                   recalls))
      (count outcomes)))
@@ -130,7 +134,9 @@
                      ;; Stored keys are snake case, `_id` aside.
                      (map #(update-keys (js->clj %)
                                         (fn [k]
-                                          (keyword (if (#{"_id" "_rev"} k) k (str/replace k "_" "-")))))))
+                                          (keyword (if (#{"_id" "_rev"} k)
+                                                     k
+                                                     (str/replace k "_" "-")))))))
         words   (->> docs
                      (filter #(= "vocab" (:type %)))
                      (into {} (map (juxt :_id identity))))

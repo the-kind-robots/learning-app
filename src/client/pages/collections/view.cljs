@@ -52,7 +52,9 @@
   (list
    [:span.tile__name
     {:lang lang}
-    (if main? [:i18n :collections/all] name)]
+    (if main?
+      [:i18n :collections/all]
+      name)]
    [:span.tile__count count]))
 
 

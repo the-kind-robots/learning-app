@@ -145,7 +145,9 @@
        (mapcat (fn [text]
                  (let [normal (utils/normalize-german text)
                        folded (utils/fold-german text)]
-                   (if (= normal folded) [normal] [normal folded]))))
+                   (if (= normal folded)
+                     [normal]
+                     [normal folded]))))
        (str/join "\n")))
 
 
@@ -217,5 +219,7 @@
   (stamped
    (assoc word
           :translation (parse-translations translation)
-          :value       (if (= "phrase" (:kind word)) (collapsed value) (str/trim value)))
+          :value       (if (= "phrase" (:kind word))
+                         (collapsed value)
+                         (str/trim value)))
    now))

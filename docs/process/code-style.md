@@ -250,3 +250,32 @@ A table of shapes reads better a row per element. A `;; zprint: as written` comm
  [:circle.dot {:cx 55 :cy 32 :r 9 :fill "hsl(100 65% 72%)" :style "animation-delay:0s"}]
  [:circle.dot {:cx 101 :cy 32 :r 9 :fill "hsl(89 69% 71%)" :style "animation-delay:.15s"}]]
 ```
+
+
+### If Layout
+
+The test stays on the `if` line. When a branch is anything other than a plain value — a vector, a map, hiccup, an `[:i18n …]`, a call — each branch goes on a line of its own. Plain values — a string, a number, a keyword, a symbol, `nil`, a boolean, a dereferenced atom (`@store`), an empty collection (`{}`, `[]`, `#{}`) — stay on one line while it fits.
+
+zprint enforces it for `if` and `if-not` (`.zprint.edn`, `:list`). `if-let` and `if-some` put each branch on a line of its own whatever the branches are. A `;; zprint: as written` comment right before a form leaves the `if`s in it as written, as it does with hiccup.
+
+**Example**
+
+Bad
+```clojure
+(if first-try? [:i18n :lesson/correct] [:i18n :lesson/attempts {:count attempts}])
+```
+
+Good
+```clojure
+(if first-try?
+  [:i18n :lesson/correct]
+  [:i18n :lesson/attempts {:count attempts}])
+```
+
+Good — plain values
+```clojure
+(if new? "instant" "smooth")
+(if right? :rating/good :rating/again)
+(if (seq avoid) another-example generated)
+(if (string? params) {} params)
+```

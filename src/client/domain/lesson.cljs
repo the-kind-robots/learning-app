@@ -50,7 +50,9 @@
 
         ;; A known word: one drawn at random one time in ten, otherwise the one a review strengthens most.
         :else
-        (let [position (if (< (random) 0.1) (js/Math.floor (* (random) (count known-words))) 0)]
+        (let [position (if (< (random) 0.1)
+                         (js/Math.floor (* (random) (count known-words)))
+                         0)]
           (recur (conj chosen (known-words position))
                  (into (subvec known-words 0 position) (subvec known-words (inc position)))
                  new-words))))))

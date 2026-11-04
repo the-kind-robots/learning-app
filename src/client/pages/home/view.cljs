@@ -44,13 +44,17 @@
      [:fieldset.home__add-fieldset
       ;; The mode has no control of its own: the legend and the label say which the form is about to save.
       [:legend.home__add-legend.visually-hidden
-       (if phrase? [:i18n :phrase/add] [:i18n :word/add])]
+       (if phrase?
+         [:i18n :phrase/add]
+         [:i18n :word/add])]
       [:div.home__add-form-row
        [:div.autocomplete
         [:div.home__add-label-row
          [:label.home__add-form-label.visually-hidden
           {:for "new-word-value"}
-          (if phrase? [:i18n :home/phrase-label] [:i18n :home/word-label])]]
+          (if phrase?
+            [:i18n :home/phrase-label]
+            [:i18n :home/word-label])]]
         [:textarea.home__add-form-input.home__add-form-textarea
          {:id           "new-word-value"
           :name         "value"
@@ -64,7 +68,9 @@
           :maxlength    200
           :lang         "de"
           :value        word
-          :placeholder  (if phrase? [:i18n :home/phrase-placeholder] [:i18n :home/word-placeholder])
+          :placeholder  (if phrase?
+                          [:i18n :home/phrase-placeholder]
+                          [:i18n :home/word-placeholder])
           :on           {:blur    [[:action/dismiss-suggestions]]
                          :focus   [[:effect/autogrow-target]]
                          :input   [[:action/update-word [:event.target/value]]
@@ -155,7 +161,9 @@
        {:replicant/on-mount [[:action/focus-word-input "new-word-value"]]}
        [:header.home__add-header
         [:h2.home__panel-title
-         (if (:phrase? form) [:i18n :phrase/add] [:i18n :word/add])]
+         (if (:phrase? form)
+           [:i18n :phrase/add]
+           [:i18n :word/add])]
         [:button#home-words-button.home__words-button
          {:type        "button"
           :class       (when empty-vocab? "home__words-button--hidden")

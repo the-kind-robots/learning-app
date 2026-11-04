@@ -63,7 +63,10 @@
                               (cond-> {:method  method
                                        :url     (str "http://localhost:" port path)
                                        :headers (merge {"X-Real-IP" (or address "203.0.113.1")} headers)}
-                                body (-> (assoc :body (if (string? body) body (cheshire/generate-string body)))
+                                body (-> (assoc :body
+                                                (if (string? body)
+                                                  body
+                                                  (cheshire/generate-string body)))
                                          (update :headers #(merge {"Content-Type" "application/json"} %))))))
               :couch      couch
               :couch-up?  couch-up?

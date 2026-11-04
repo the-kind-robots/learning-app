@@ -330,7 +330,9 @@
   ([db doc]
    (insert db doc {}))
   ([db doc params]
-   (let [docid  (if (string? params) params (:_id doc))
+   (let [docid  (if (string? params)
+                  params
+                  (:_id doc))
          params (if (string? params) {} params)]
      (with-couch-op :couch/insert
        (if docid
@@ -586,7 +588,9 @@
                                 :retry retry
                                 :back_off_function
                                 (fn [delay]
-                                  (let [next (if (zero? delay) 1000 (min backoff-ms (* 2 delay)))]
+                                  (let [next (if (zero? delay)
+                                               1000
+                                               (min backoff-ms (* 2 delay)))]
                                     next))}
                      filter (doto (aset "filter" filter)))]
         (PouchDB/sync dbname remote opts)))))
@@ -606,7 +610,9 @@
                                 :retry retry
                                 :back_off_function
                                 (fn [delay]
-                                  (if (zero? delay) 1000 (min backoff-ms (* 2 delay))))}
+                                  (if (zero? delay)
+                                    1000
+                                    (min backoff-ms (* 2 delay))))}
                      batch-size         (doto (aset "batch_size" batch-size))
                      batches-limit      (doto (aset "batches_limit" batches-limit))
                      (some? checkpoint) (doto (aset "checkpoint" checkpoint)))]

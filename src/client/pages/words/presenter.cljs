@@ -21,7 +21,9 @@
 (defn word-item-props
   "A row of the list; a word never reviewed reads as 0 %."
   [{:keys [id recall value] :as row}]
-  (let [percent (if recall (* 100 recall) 0)]
+  (let [percent (if recall
+                  (* 100 recall)
+                  0)]
     {:id id
      :retention-band (retention-band percent)
      :retention-color (utils/prozent->color percent)
@@ -69,7 +71,9 @@
                              (:usedForm item))
                            [(str/replace dictionary #"^(?:der|die|das|ein|eine)\s+" "")])
         [at size]  (some (fn [form]
-                           (let [at (if (str/blank? form) -1 (.indexOf lower (str/lower-case form)))]
+                           (let [at (if (str/blank? form)
+                                      -1
+                                      (.indexOf lower (str/lower-case form)))]
                              (when-not (neg? at) [at (count form)])))
                          forms)]
     (if at

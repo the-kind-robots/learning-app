@@ -481,7 +481,9 @@
       (not (mail-left? (first (swap-vals! mail-budget
                                           (fn [budget]
                                             {:day   day
-                                             :tried (inc (if (= day (:day budget)) (:tried budget) 0))})))
+                                             :tried (inc (if (= day (:day budget))
+                                                           (:tried budget)
+                                                           0))})))
                        day))
       :failure/full
 

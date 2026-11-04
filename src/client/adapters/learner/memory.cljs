@@ -81,7 +81,9 @@
   "The key -> set `index` without `v` in the set of `k`; a key whose set empties is dropped."
   [index k v]
   (let [left (disj (get index k) v)]
-    (if (empty? left) (dissoc index k) (assoc index k left))))
+    (if (empty? left)
+      (dissoc index k)
+      (assoc index k left))))
 
 
 (defn- differing
@@ -412,7 +414,11 @@
     (if (and (identical? cached-words words) (identical? cached-all all) (= cached-id id))
       cached
       (let [ids   (some->> id (domain-collections/family-word-ids (vals all)) set)
-            found (into [] (if ids (filter #(ids (:id %))) identity) (vals words))]
+            found (into []
+                        (if ids
+                          (filter #(ids (:id %)))
+                          identity)
+                        (vals words))]
         (vreset! collection-cache [words all id found])
         found))))
 

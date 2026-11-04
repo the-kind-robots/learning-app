@@ -95,10 +95,15 @@
   [state]
   (->> (colours/reading-order (:collections/items state))
        (map (fn [{:keys [accent folder? key] :as entry}]
-              (let [{:keys [head rows] :as tile} (if folder? (folder-tile state entry) (plain-tile state entry))]
+              (let [{:keys [head rows] :as tile} (if folder?
+                                                   (folder-tile state entry)
+                                                   (plain-tile state entry))]
                 (assoc tile
                        :accent   accent
-                       :armed?   (boolean (some :editing? (if folder? (cons head rows) [tile])))
+                       :armed?   (boolean (some :editing?
+                                                (if folder?
+                                                  (cons head rows)
+                                                  [tile])))
                        :key      key
                        :sort-key key))))
        (cons (assoc (main-tile state) :accent (colours/accent-at 0)))
