@@ -8,17 +8,17 @@
   [{:keys [id retention-band retention-color retention-percent translation value]}]
   [:li.word-item
    {:id (str "word-" id)}
-   [:button.word-item__display
+   [:button.display
     {:type "button"
      :on   {:click [[:effect/enter :action/open-word-edit id]]}}
-    [:span.word-item__text
-     [:span.word-item__value
+    [:span.text
+     [:span.value
       {:lang "de"}
       value]
-     [:span.word-item__translation
+     [:span.translation
       {:lang "ru"}
       translation]]
-    [:div.word-item__retention
+    [:div.retention
      {:style {:background-color retention-color}
       :title [:i18n
               (case retention-band
@@ -33,7 +33,7 @@
   "The end of the loaded rows. It is keyed so appending rows in front of it
    reuses the node, and the observer watching it survives the render."
   []
-  [:li.word-list__sentinel
+  [:li.sentinel
    {:replicant/key        :word-list-sentinel
     :replicant/on-mount   [[:effect/observe-words-sentinel]]
     :replicant/on-unmount [[:effect/unobserve-words-sentinel]]}])
@@ -46,30 +46,21 @@
   (let [text (str (:before sentence) (:hit sentence) (:after sentence))]
     [:section.word-example
      {:aria-labelledby (str "word-example-" collection-id)
-      :replicant/key collection-id
-      :class (case accent
-               :accent/owl      "word-example--owl"
-               :accent/macaw    "word-example--macaw"
-               :accent/fox      "word-example--fox"
-               :accent/starfish "word-example--starfish"
-               :accent/beetle   "word-example--beetle"
-               :accent/bee      "word-example--bee"
-               :accent/cardinal "word-example--cardinal"
-               :accent/peacock  "word-example--peacock"
-               nil              "word-example--bare")}
-     [:h3.word-example__title
+      :replicant/key   collection-id
+      :data-accent     (some-> accent name)}
+     [:h3.title
       {:id (str "word-example-" collection-id)}
       (or title [:i18n :example/no-theme])]
-     [:div.word-example__sentence
-      {:class (when regenerating? "word-example__sentence--pending")}
-      [:p.word-example__text
+     [:div.sentence
+      {:data-pending (when regenerating? true)}
+      [:p.text
        {:aria-hidden "true"
         :lang        "de"}
        (:before sentence)
        [:strong
         (:hit sentence)]
        (:after sentence)]
-      [:textarea.word-example__field
+      [:textarea.field
        {:aria-label     [:i18n :example/sentence]
         :autocapitalize "sentences"
         :autocorrect    "off"
@@ -79,41 +70,41 @@
         :spellcheck     "false"
         :value          text
         :on             {:input [[:action/edit-example collection-id :value [:event.target/value]]]}}]]
-     [:div.word-example__translation
-      [:p.word-example__text.word-example__text--translation
+     [:div.translation
+      [:p.text
        {:aria-hidden "true"
-        :class       (when status-shown? "word-example__text--hidden")}
+        :data-hidden (when status-shown? true)}
        translation]
-      [:textarea.word-example__field.word-example__field--translation
+      [:textarea.field
        {:aria-label  [:i18n :example/translation]
         :autocorrect "off"
-        :class       (when status-shown? "word-example__field--hidden")
+        :data-hidden (when status-shown? true)
         :readonly    regenerate-disabled?
         :rows        1
         :spellcheck  "false"
         :value       translation
         :on          {:input [[:action/edit-example collection-id :translation [:event.target/value]]]}}]
-      [:p.word-example__status
-       {:aria-live "polite"
-        :class     [(when failed? "word-example__status--failed")
-                    (when-not status-shown? "word-example__text--hidden")]}
+      [:p.status
+       {:aria-live   "polite"
+        :data-failed (when failed? true)
+        :data-hidden (when-not status-shown? true)}
        (cond
          regenerating? [:i18n :example/regenerating]
          failed?       [:i18n :example/failed])]]
-     [:div.word-example__spacer]
-     [:button.word-example__regenerate
+     [:div.spacer]
+     [:button.regenerate
       {:disabled regenerate-disabled?
        :type     "button"
        :on       {:click [[:effect/enter :action/regenerate-example collection-id]]}}
-      [:svg.word-example__icon
-       {:aria-hidden    "true"
-        :class          (when regenerating? "word-example__icon--spin")
-        :fill           "none"
-        :stroke         "currentColor"
-        :stroke-linecap "round"
+      [:svg.icon
+       {:aria-hidden     "true"
+        :data-spinning   (when regenerating? true)
+        :fill            "none"
+        :stroke          "currentColor"
+        :stroke-linecap  "round"
         :stroke-linejoin "round"
-        :stroke-width   "3"
-        :viewBox        "0 0 24 24"}
+        :stroke-width    "3"
+        :viewBox         "0 0 24 24"}
        [:path {:d "M19.5 12a7.5 7.5 0 1 1-2.2-5.3"}]
        [:path {:d "M19.5 4.5v4.5H15"}]]
       [:i18n :example/regenerate]]]))
@@ -129,7 +120,7 @@
     :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
          :close [[:action/close-word-edit]]}}
    ;; The form takes the focus the dialog opens with: a field would show its fill and, on a phone, the keyboard.
-   [:form.word-edit-dialog__form
+   [:form.form
     {:autocapitalize "none"
      :autocorrect "off"
      :autofocus   true
@@ -139,12 +130,12 @@
                              {:id          id
                               :translation [:event.form.field/value "translation"]
                               :value       [:event.form.field/value "value"]}]]}}
-    [:div.word-edit-dialog__body
-     [:div.word-edit-dialog__head
+    [:div.body
+     [:div.head
       ;; A textarea where the word may run over several lines, as a phrase does.
       [(if word-multiline?
-         :textarea.word-edit-dialog__word.word-edit-dialog__word--phrase
-         :input.word-edit-dialog__word)
+         :textarea.word
+         :input.word)
        {:aria-invalid (when word-taken? "true")
         :aria-label   [:i18n :word-edit/word]
         :autocapitalize "none"
@@ -157,11 +148,11 @@
         :value        word
         :on           {:input [[:action/edit-spelling [:event.target/value]]]}}]
       (when word-taken?
-        [:div.word-edit-dialog__error
+        [:div.error
          {:role "alert"}
          [:i18n :word-edit/taken]])
       ;; One translation a line. Enter belongs to the text; Ctrl/Cmd+Enter and the save button submit.
-      [:textarea.word-edit-dialog__translations
+      [:textarea.translations
        {:aria-label   [:i18n :word-edit/translations]
         :autocapitalize "none"
         :autocomplete "off"
@@ -178,14 +169,14 @@
                                    :ctrl? [:event.keyboard/ctrl?]
                                    :meta? [:event.keyboard/meta?]}]]}}]
       (when replaces
-        [:div.word-edit-dialog__notice
+        [:div.notice
          {:role "status"}
          [:i18n :word-edit/replaces {:word replaces}]])]
      [:div.word-examples
       (map example-card examples)
-      [:div.word-examples__end {:aria-hidden "true"}]]]
-    [:div.word-edit-dialog__footer
-     [:button.word-edit-dialog__delete
+      [:div.end {:aria-hidden "true"}]]]
+    [:div.footer
+     [:button.delete
       {:aria-label [:i18n :word-edit/delete]
        :type       "button"
        :on         {:click [[:action/remove-word
@@ -209,13 +200,13 @@
        [:path {:d "M14 11v6"}]
        [:path {:d "M6 7l1 13h10l1-13"}]
        [:path {:d "M9 7V4h6v3"}]]]
-     [:div.word-edit-dialog__spacer]
-     [:button.word-edit-dialog__reset
+     [:div.spacer]
+     [:button.reset
       {:disabled reset-disabled?
        :type     "button"
        :on       {:click [[:action/reset-word-edit]]}}
       [:i18n :word-edit/reset]]
-     [:button.word-edit-dialog__save
+     [:button.save
       {:type     "submit"
        :disabled save-disabled?}
       [:i18n :word-edit/save]]]]])
@@ -223,17 +214,17 @@
 
 (defn- empty-state
   [kind]
-  [:div.vocabulary__empty-state
-   [:p.vocabulary__empty-state-text
+  [:div.empty-state
+   [:p.empty-state-text
     (case kind
       :empty/first-run  [:i18n :words/empty]
       :empty/no-matches [:i18n :words/no-matches])]
-   [:p.vocabulary__empty-state-hint
+   [:p.empty-state-hint
     (case kind
       :empty/first-run  [:i18n :words/empty-hint]
       :empty/no-matches [:i18n :words/no-matches-hint])]
    (case kind
-     :empty/first-run  [:button.vocabulary__empty-state-cta
+     :empty/first-run  [:button.empty-state-cta
                         {:on {:click [[:action/go-to-home]]}}
                         [:i18n :word/add]]
      :empty/no-matches nil)])
@@ -250,46 +241,48 @@
        nil
 
        (not vocabulary?)
-       [:div.vocabulary__list.vocabulary__list--empty
+       [:div.list
+        {:data-empty true}
         [:ul.word-list
          {:id "word-list"}
-         [:li.word-list__empty
+         [:li.empty
           (empty-state placeholder)]]]
 
        :else
        (list
         ;; The shell's corner ✕ leaves the screen; the heading stays for assistive technology only.
-        [:h1.vocabulary__title.visually-hidden
+        [:h1.visually-hidden
          [:i18n :words/title]]
-        [:div.vocabulary__list
+        [:div.list
          [:ul.word-list
           {:id "word-list"}
           (if placeholder
-            [:li.word-list__empty
+            [:li.empty
              (empty-state placeholder)]
             (concat (map word-list-item items)
                     (when more? [(sentinel)])))]]
         ;; The search field sits under the thumb. It closes the column rather than joining the footer: the
         ;; footer is fixed and stays behind an open keyboard, the field rides on top of it.
-        [:form.vocabulary__search-bar
+        [:form.search-bar
          {:autocapitalize "none"
           :autocorrect "off"
           :on {:submit [[:effect/prevent-default]]}}
-         [:div.page-footer__action
+         [:div.footer-action
           [:div.input
-           [:span.input__search-icon]
-           [:input#words-search.input__input-area.input__input-area--icon
-            {:replicant/on-mount [[:effect/mobile-autofocus "words-search"]]
-             :autocapitalize "none"
-             :autocomplete   "off"
-             :autocorrect    "off"
-             :enterkeyhint   "search"
-             :placeholder    [:i18n :words/search]
-             :spellcheck     "false"
-             :default-value  search
-             :on             {:input [[:action/search-words [:event.target/value]]]}}]]]]
-        [:footer.vocabulary__footer.page-footer
-         [:div.page-footer__action
-          [:button.vocabulary__start.big-button.green-button
+           [:span.search-icon]
+           [:input#words-search.field
+            {:data-icon          true
+             :replicant/on-mount [[:effect/mobile-autofocus "words-search"]]
+             :autocapitalize     "none"
+             :autocomplete       "off"
+             :autocorrect        "off"
+             :enterkeyhint       "search"
+             :placeholder        [:i18n :words/search]
+             :spellcheck         "false"
+             :default-value      search
+             :on                 {:input [[:action/search-words [:event.target/value]]]}}]]]]
+        [:footer.footer.page-footer
+         [:div.footer-action
+          [:button.start.big-button.green-button
            {:on {:click [[:action/go-to-lesson]]}}
            [:i18n :lesson/start]]]]))]))

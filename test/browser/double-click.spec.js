@@ -42,7 +42,7 @@ test.describe('Двойное нажатие', () => {
       await page.goto('/home');
       await seedWords(page, ['der Hund', 'die Katze', 'das Haus']);
       await page.goto('/lesson');
-      await expect(page.locator('.lesson__prompt')).toBeVisible();
+      await expect(page.locator('.lesson .prompt')).toBeVisible();
       await countNextClicks(page);
       await answerWrong(page);
     });
@@ -132,7 +132,7 @@ test.describe('Двойное нажатие', () => {
     await test.step('Тогда виден правильный ответ, а не «Правильно!»', async () => {
       await expect(page.getByRole('heading', { name: 'Правильно:' })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Ваш ответ:' })).toHaveCount(0);
-      await expect(page.locator('.lesson__answer-body').last()).toHaveText('Haus');
+      await expect(page.locator('.lesson .answer-body').last()).toHaveText('Haus');
       await expect(page.getByRole('heading', { name: 'Правильно!' })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'ДАЛЕЕ' })).toBeVisible();
     });

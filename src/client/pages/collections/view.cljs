@@ -6,7 +6,7 @@
 
 (defn- close-icon
   []
-  [:svg.tile__close-icon
+  [:svg.close-icon
    {:viewBox     "0 0 12 12"
     :aria-hidden "true"
     :fill        "none"}
@@ -21,7 +21,7 @@
   "The delete control. It follows its target in the DOM, so the keyboard reaches it right after that target,
    and is always in the Tab order; the CSS shows it while editing or when focus is on the target or itself."
   [{:keys [id name]}]
-  [:button.tile__close
+  [:button.close
    {:type       "button"
     :aria-label [:i18n :collections/delete {:name name}]
     :on         {:pointerdown [[:effect/stop-propagation]]
@@ -50,24 +50,10 @@
 (defn- name-and-count
   [{:keys [name lang count main?]}]
   (list
-   [:span.tile__name
+   [:span.name
     {:lang lang}
     (if main? [:i18n :collections/all] name)]
-   [:span.tile__count count]))
-
-
-(defn- accent-class
-  "The class of the colour a tile has."
-  [accent]
-  (case accent
-    :accent/owl      "tile--owl"
-    :accent/macaw    "tile--macaw"
-    :accent/fox      "tile--fox"
-    :accent/starfish "tile--starfish"
-    :accent/beetle   "tile--beetle"
-    :accent/bee      "tile--bee"
-    :accent/cardinal "tile--cardinal"
-    :accent/peacock  "tile--peacock"))
+   [:span.count count]))
 
 
 (defn- plain-tile
@@ -79,10 +65,10 @@
    {:replicant/key key
     :sort-key      sort-key
     :armed         (when armed? "")
-    :class         [(accent-class accent)
-                    (when active? "tile--active")
-                    (when editing? "tile--editing")]}
-   [:button.tile__target
+    :data-accent   (name accent)
+    :data-active   (when active? "")
+    :data-editing  (when editing? "")}
+   [:button.target
     (target-attrs tile)
     (name-and-count tile)]
    (when deletable? (close-button tile))])
@@ -92,16 +78,16 @@
   "A list item holding the row's own button. The `<ul>` keeps its items and
    the tap target is an element that already is one."
   [{:keys [id active? editing?] :as row}]
-  [:li.tile__row
+  [:li.row
    {:replicant/key id
-    :class [(when active? "tile__row--active")
-            (when editing? "tile__row--editing")]}
-   [:button.tile__row-target
+    :data-active   (when active? "")
+    :data-editing  (when editing? "")}
+   [:button.row-target
     (target-attrs row)
-    [:span.tile__row-name
+    [:span.row-name
      {:lang (:lang row)}
      (:name row)]
-    [:span.tile__count
+    [:span.count
      (:count row)]]
    (close-button row)])
 
@@ -112,35 +98,36 @@
    a target never is one."
   [{:keys [tappable? name lang count] :as head}]
   (if tappable?
-    [:div.tile__head
-     {:class [(when (:active? head) "tile__head--active")
-              (when (:editing? head) "tile__head--editing")]}
-     [:button.tile__head-target
+    [:div.head
+     {:data-active  (when (:active? head) "")
+      :data-editing (when (:editing? head) "")}
+     [:button.head-target
       (target-attrs head)
       (name-and-count head)]
      (when (:deletable? head) (close-button head))]
-    [:h2.tile__label
-     [:span.tile__label-text
+    [:h2.label
+     [:span.label-text
       {:lang lang}
       name]
-     [:span.tile__count count]]))
+     [:span.count count]]))
 
 
 (defn- folder-tile
   [{:keys [accent key sort-key armed? head rows]}]
-  [:div.tile.tile--folder
+  [:div.tile
    {:replicant/key key
     :sort-key      sort-key
     :armed         (when armed? "")
-    :class         (accent-class accent)}
+    :data-accent   (name accent)
+    :data-folder   ""}
    (folder-head head)
-   [:ul.tile__rows
+   [:ul.rows
     (for [row rows] (folder-row row))]])
 
 
 (defn- add-button
   []
-  [:button.switcher__add
+  [:button.add
    {:type       "button"
     :aria-label [:i18n :collections/new]
     :on         {:click [[:effect/stop-propagation]
@@ -168,7 +155,7 @@
       :replicant/key :page/collections
       :replicant/on-mount [[:effect/listen-for-typing]]
       :replicant/on-unmount [[:effect/stop-listening-for-typing]]}
-     [:h1.switcher__title.visually-hidden
+     [:h1.title.visually-hidden
       [:i18n :collections/title]]
      [:arrange-panel.masonry
       {:on {:click   [[:action/exit-editing-on-background [:event/self-click?]]]

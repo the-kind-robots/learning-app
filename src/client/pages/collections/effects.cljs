@@ -229,7 +229,7 @@
                (some-> (->> (js/document.querySelectorAll ".masonry [data-collection-id]")
                             (js/Array.from)
                             (filter #(str/includes? (str/lower-case (.-textContent
-                                                                     (.querySelector % ".tile__name, .tile__row-name")))
+                                                                     (.querySelector % ".name, .row-name")))
                                                     (str/lower-case text)))
                             first)
                        .focus)))))

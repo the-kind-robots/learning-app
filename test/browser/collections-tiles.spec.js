@@ -183,7 +183,7 @@ test.describe('Плитки тем', () => {
     await test.step('Тогда ✕ плитки виден вместо счётчика', async () => {
       await expect(close).toHaveCSS('opacity', '1');
       await expect(close).toHaveCSS('pointer-events', 'auto');
-      await expect(tile.locator('.tile__count')).toHaveCSS('opacity', '0');
+      await expect(tile.locator('.count')).toHaveCSS('opacity', '0');
     });
 
     await test.step('Когда он жмёт Tab и Enter', async () => {

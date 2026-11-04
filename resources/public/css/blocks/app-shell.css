@@ -1,50 +1,46 @@
-.app-shell__loader {
-  align-items: center;
-  background-color: rgb(var(--color-snow));
-  color: rgb(var(--color-owl));
-  display: flex;
-  font-family: Nunito, sans-serif;
-  font-size: 24;
-  font-weight: 700;
-  inset: 0;
-  justify-content: center;
-  opacity: 0;
-  position: fixed;
-  z-index: -1;
-}
+@scope (.app-loader) {
+  :scope {
+    align-items: center;
+    background-color: rgb(var(--color-snow));
+    color: rgb(var(--color-owl));
+    display: flex;
+    font-family: Nunito, sans-serif;
+    font-size: 24;
+    font-weight: 700;
+    inset: 0;
+    justify-content: center;
+    opacity: 0;
+    position: fixed;
+    z-index: -1;
+  }
 
-/* The message shown in place of a screen when the learner's data could not
-   be read at start: one sentence, centered where a screen would be, in the
-   shell's face and the body text color. The width cap and balanced wrapping
-   keep its lines even and readable on a phone. */
-.app-shell__read-error {
-  align-items: center;
-  color: rgb(var(--color-black-text));
-  display: flex;
-  font-family: Nunito, sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  justify-content: center;
-  line-height: 1.5;
-  margin: 0 auto;
-  max-width: 520px;
-  min-height: 100vh;
-  min-height: 100svh;
-  padding: 64px 16px;
-  text-align: center;
-  text-wrap: balance;
-}
+  .list {
+    align-items: center;
+    animation: 10s steps(var(--items-count)) 0s infinite normal app-shell-loader-slide;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    position: absolute;
+    top: calc(50% - 50vh);
+    width: 100%;
+  }
 
-.app-shell__loader-list {
-  align-items: center;
-  animation: 10s steps(var(--items-count)) 0s infinite normal app-shell-loader-slide;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: center;
-  position: absolute;
-  top: calc(50% - 50vh);
-  width: 100%;
+  .text {
+    align-items: center;
+    display: flex;
+    height: 100vh;
+    justify-content: center;
+    line-height: 1.5;
+    text-align: center;
+    text-wrap: balance;
+    width: 100%;
+  }
+
+  :scope.htmx-request.htmx-indicator {
+    opacity: 0.94;
+    z-index: 1;
+  }
 }
 
 @keyframes app-shell-loader-slide {
@@ -53,51 +49,28 @@
   }
 }
 
-.app-shell__loader-text {
-  align-items: center;
-  display: flex;
-  height: 100vh;
-  justify-content: center;
-  line-height: 1.5;
-  text-align: center;
-  text-wrap: balance;
-  width: 100%;
-}
-
-.app-shell__loader.htmx-request.htmx-indicator {
-  opacity: 0.94;
-  z-index: 1;
-}
-
-/* Development build only: the last letter of the word mark, in red. A letter,
-   not a control — it carries no handler and nothing here makes it a tap
-   target; it inherits the word mark's face and size. */
-.app-shell__dev-mark {
-  color: rgb(var(--color-cardinal));
-}
-
-/* Which bundle the page loaded, in the info bar, and the tap that reloads onto
-   the newest one. Quiet — the small grey line it reads as, with no button
-   chrome — and it shrinks and ellipsises rather than pushing either neighbour.
-   `touch-action: manipulation` because a hold on text this small otherwise
-   starts a selection instead of a tap. */
-.app-shell__build-mark {
-  background: none;
-  border: 0;
-  color: rgb(var(--color-hare));
-  cursor: pointer;
-  flex: 0 1 auto;
-  font-family: Nunito, sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 14px;
-  margin: 0;
-  min-width: 0;
-  overflow: hidden;
-  padding: 0;
-  text-overflow: ellipsis;
-  touch-action: manipulation;
-  white-space: nowrap;
+/* The message shown in place of a screen when the learner's data could not
+   be read at start: one sentence, centered where a screen would be, in the
+   shell's face and the body text color. The width cap and balanced wrapping
+   keep its lines even and readable on a phone. */
+@scope (.read-error) {
+  :scope {
+    align-items: center;
+    color: rgb(var(--color-black-text));
+    display: flex;
+    font-family: Nunito, sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    justify-content: center;
+    line-height: 1.5;
+    margin: 0 auto;
+    max-width: 520px;
+    min-height: 100vh;
+    min-height: 100svh;
+    padding: 64px 16px;
+    text-align: center;
+    text-wrap: balance;
+  }
 }
 
 /* The top bar, the same on every screen: the word mark, the info bar and the
@@ -109,137 +82,168 @@
    `--app-bar-height` with its own top padding. Both side slots grow from a
    zero basis, so they take the same width and the info bar sits in the middle
    of the bar, not midway between its neighbours. */
-.app-shell__bar {
-  align-items: flex-start;
-  background: rgb(var(--color-snow));
-  box-sizing: border-box;
-  display: flex;
-  gap: 8px;
-  height: var(--app-bar-height);
-  inset-inline: 0;
-  padding: 16px 16px 0;
-  position: fixed;
-  top: 0;
-  z-index: 20;
-}
-
-.app-shell__bar-slot {
-  display: flex;
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-/* The middle of the bar, kept for what the learner should see at a glance on
-   any screen: today's stars, the lesson's progress, a short notice. A
-   development build shows its build mark here. The row is 28px tall and
-   clips what does not fit, so nothing put here moves the bar or the screen. */
-.app-shell__info-bar {
-  align-items: center;
-  display: flex;
-  flex: 0 1 auto;
-  gap: 8px;
-  height: 28px;
-  justify-content: center;
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* A button that reads as the word mark: its background, border and padding
-   are cleared. */
-.app-shell__logo {
-  align-items: center;
-  background: none;
-  border: 0;
-  color: rgb(var(--color-black-text));
-  cursor: pointer;
-  display: inline-flex;
-  padding: 0;
-  height: 28px;
-  font-family: Nunito, sans-serif;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-
-/* Shell actions sit in one row so any of them can be absent without leaving a
-   hole: the trace export in a development build, install only when
-   installable, sync only on home with an account, the grid icon on
-   home and the close mark on every other page. */
-.app-shell__actions {
-  align-items: center;
-  display: flex;
-  flex: 1 1 0;
-  gap: 4px;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-/* The grid and the close mark, both buttons: the
-   background, border and padding a button brings are cleared. */
-.app-shell__corner-icon {
-  align-items: center;
-  background: none;
-  border: 0;
-  color: rgb(var(--color-black-text));
-  cursor: pointer;
-  display: inline-flex;
-  height: 28px;
-  justify-content: center;
-  padding: 0;
-  text-decoration: none;
-  transition: opacity 0.15s, transform 0.15s;
-  width: 28px;
-}
-
-@media (hover: hover) {
-  .app-shell__corner-icon:hover {
-    opacity: 0.65;
+@scope (.app-bar) {
+  :scope {
+    align-items: flex-start;
+    background: rgb(var(--color-snow));
+    box-sizing: border-box;
+    display: flex;
+    gap: 8px;
+    height: var(--app-bar-height);
+    inset-inline: 0;
+    padding: 16px 16px 0;
+    position: fixed;
+    top: 0;
+    z-index: 20;
   }
-}
 
-.app-shell__corner-icon:active {
-  transform: scale(0.92);
-}
+  .slot {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+  }
 
-.app-shell__corner-icon-svg {
-  fill: currentcolor;
-  height: 22px;
-  width: 22px;
-}
+  /* A button that reads as the word mark: its background, border and padding
+     are cleared. */
+  .logo {
+    align-items: center;
+    background: none;
+    border: 0;
+    color: rgb(var(--color-black-text));
+    cursor: pointer;
+    display: inline-flex;
+    padding: 0;
+    height: 28px;
+    font-family: Nunito, sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+  }
 
+  /* Development build only: the last letter of the word mark, in red. A letter,
+     not a control — it carries no handler and nothing here makes it a tap
+     target; it inherits the word mark's face and size. */
+  .dev-mark {
+    color: rgb(var(--color-cardinal));
+  }
 
-.app-shell__icon-button {
-  align-items: center;
-  background: none;
-  border: none;
-  border-radius: 8px;
-  color: rgb(var(--color-wolf));
-  cursor: pointer;
-  display: inline-flex;
-  height: 32px;
-  justify-content: center;
-  line-height: 1;
-  min-height: auto;
-  padding: 0 6px;
-  transition: color 0.15s, background-color 0.15s;
-}
+  /* The middle of the bar, kept for what the learner should see at a glance on
+     any screen: today's stars, the lesson's progress, a short notice. A
+     development build shows its build mark here. The row is 28px tall and
+     clips what does not fit, so nothing put here moves the bar or the screen. */
+  .info-bar {
+    align-items: center;
+    display: flex;
+    flex: 0 1 auto;
+    gap: 8px;
+    height: 28px;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+  }
 
-.app-shell__icon {
-  height: 20px;
-  width: 20px;
-}
+  /* Which bundle the page loaded, in the info bar, and the tap that reloads onto
+     the newest one. Quiet — the small grey line it reads as, with no button
+     chrome — and it shrinks and ellipsises rather than pushing either neighbour.
+     `touch-action: manipulation` because a hold on text this small otherwise
+     starts a selection instead of a tap. */
+  .build-mark {
+    background: none;
+    border: 0;
+    color: rgb(var(--color-hare));
+    cursor: pointer;
+    flex: 0 1 auto;
+    font-family: Nunito, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 14px;
+    margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0;
+    text-overflow: ellipsis;
+    touch-action: manipulation;
+    white-space: nowrap;
+  }
 
-@media (hover: hover) {
-  .app-shell__icon-button:hover {
+  /* Shell actions sit in one row so any of them can be absent without leaving a
+     hole: the trace export in a development build, install only when
+     installable, sync only on home with an account, the grid icon on
+     home and the close mark on every other page. */
+  .actions {
+    align-items: center;
+    display: flex;
+    flex: 1 1 0;
+    gap: 4px;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  /* The grid and the close mark, both buttons: the
+     background, border and padding a button brings are cleared. */
+  .corner-icon {
+    align-items: center;
+    background: none;
+    border: 0;
+    color: rgb(var(--color-black-text));
+    cursor: pointer;
+    display: inline-flex;
+    height: 28px;
+    justify-content: center;
+    padding: 0;
+    text-decoration: none;
+    transition: opacity 0.15s, transform 0.15s;
+    width: 28px;
+  }
+
+  @media (hover: hover) {
+    .corner-icon:hover {
+      opacity: 0.65;
+    }
+  }
+
+  .corner-icon:active {
+    transform: scale(0.92);
+  }
+
+  .corner-icon-svg {
+    fill: currentcolor;
+    height: 22px;
+    width: 22px;
+  }
+
+  .icon-button {
+    align-items: center;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: rgb(var(--color-wolf));
+    cursor: pointer;
+    display: inline-flex;
+    height: 32px;
+    justify-content: center;
+    line-height: 1;
+    min-height: auto;
+    padding: 0 6px;
+    transition: color 0.15s, background-color 0.15s;
+  }
+
+  .icon {
+    height: 20px;
+    width: 20px;
+  }
+
+  @media (hover: hover) {
+    .icon-button:hover {
+      background: rgb(var(--color-polar));
+      color: rgb(var(--color-owl));
+    }
+  }
+
+  .icon-button:active {
     background: rgb(var(--color-polar));
     color: rgb(var(--color-owl));
   }
-}
-
-.app-shell__icon-button:active {
-  background: rgb(var(--color-polar));
-  color: rgb(var(--color-owl));
 }

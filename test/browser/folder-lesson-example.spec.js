@@ -21,8 +21,8 @@ test.describe('Пример в уроке папки', () => {
     });
 
     await test.step('Тогда он переводит предложение дочерней темы', async () => {
-      await expect(page.locator('.lesson__instruction')).toContainText('предложение');
-      await expect(page.locator('.lesson__prompt')).toHaveText(EXAMPLES[0].translation);
+      await expect(page.locator('.lesson .instruction')).toContainText('предложение');
+      await expect(page.locator('.lesson .prompt')).toHaveText(EXAMPLES[0].translation);
     });
   });
 });

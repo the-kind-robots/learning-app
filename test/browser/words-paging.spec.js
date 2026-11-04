@@ -4,7 +4,7 @@ const { test, expect, nothingHappensFor } = require('./fixtures');
 // row class rather than a role: `listitem` also matches the end-of-list
 // sentinel and the empty-state row, which are not words.
 const rows = (page) => page.locator('li.word-item');
-const sentinel = (page) => page.locator('li.word-list__sentinel');
+const sentinel = (page) => page.locator('.word-list > .sentinel');
 
 const PAGE_SIZE = 50;
 const SEEDED = 130;
@@ -41,14 +41,14 @@ async function openWords(page) {
 }
 
 // Reaching the bottom is a scroll, not a click: the list scrolls inside
-// `.vocabulary__list`, so scrolling the last row into view is what a reader
+// `.vocabulary .list`, so scrolling the last row into view is what a reader
 // does and what the observer watches for.
 async function scrollToBottom(page) {
   await rows(page).last().scrollIntoViewIfNeeded();
 }
 
 const listScrollTop = (page) =>
-  page.locator('.vocabulary__list').evaluate((node) => node.scrollTop);
+  page.locator('.vocabulary .list').evaluate((node) => node.scrollTop);
 
 // Stops `gap` pixels short of the end of the loaded rows and reports, in the
 // same task, where the sentinel sits relative to the visible bottom of the
@@ -56,9 +56,9 @@ const listScrollTop = (page) =>
 // task — so a positive gap here is the sentinel being off screen at the moment
 // the scroll happened.
 const scrollToWithin = (page, gap) =>
-  page.locator('.vocabulary__list').evaluate((list, gap) => {
+  page.locator('.vocabulary .list').evaluate((list, gap) => {
     list.scrollTop = list.scrollHeight - list.clientHeight - gap;
-    const sentinel = document.querySelector('li.word-list__sentinel');
+    const sentinel = document.querySelector('.word-list > .sentinel');
     return sentinel.getBoundingClientRect().top - list.getBoundingClientRect().bottom;
   }, gap);
 
@@ -124,7 +124,7 @@ test.describe('Постраничный список слов', () => {
     });
 
     await test.step('Тогда прокручиваемая область доходит до края окна, как и низ', async () => {
-      const list = await page.locator('.vocabulary__list').boundingBox();
+      const list = await page.locator('.vocabulary .list').boundingBox();
       const footer = await page.getByRole('contentinfo').boundingBox();
       expect(list.x + list.width).toBe(footer.x + footer.width);
     });

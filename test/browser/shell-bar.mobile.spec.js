@@ -14,7 +14,7 @@ async function seedWords(page, count) {
 test.describe('Шапка на телефоне', () => {
   test('пользователь переходит с экрана на экран → шапка везде одной высоты', async ({ page }) => {
     // The bar's box, its bottom line included.
-    const barHeight = async () => (await page.locator('.app-shell__bar').boundingBox()).height;
+    const barHeight = async () => (await page.locator('.app-bar').boundingBox()).height;
     const heights = {};
 
     await test.step('Дано три слова', async () => {

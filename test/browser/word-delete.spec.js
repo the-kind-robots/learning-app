@@ -36,8 +36,8 @@ test.describe('Удаление слова из списка', () => {
       await page.getByPlaceholder('Поиск').fill('bischer');
       await expect(rows(page)).toHaveCount(1);
       page.once('dialog', (dialog) => dialog.accept());
-      await page.locator('.word-item__display').first().click();
-      await page.locator('.word-edit-dialog__delete').click();
+      await page.locator('.word-item .display').first().click();
+      await page.locator('.word-edit-dialog .delete').click();
     });
 
     await test.step('Тогда в списке нет слов, а «Ничего не найдено»', async () => {
@@ -69,8 +69,8 @@ test.describe('Удаление слова из списка', () => {
       page.once('dialog', (dialog) => dialog.accept());
       await page.getByPlaceholder('Поиск').fill('bischer');
       await expect(rows(page)).toHaveCount(1);
-      await page.locator('.word-item__display').first().click();
-      await page.locator('.word-edit-dialog__delete').click();
+      await page.locator('.word-item .display').first().click();
+      await page.locator('.word-edit-dialog .delete').click();
     });
 
     await test.step('Тогда слово исчезло из списка', async () => {

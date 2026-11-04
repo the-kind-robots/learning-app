@@ -12,7 +12,7 @@ const { addWord } = require('./add-form.shared');
 const watchSwitcher = `
   window.__seen = {};
   new MutationObserver(() => {
-    if (!window.__seen.loading && document.querySelector('.switcher__loading')) {
+    if (!window.__seen.loading && document.querySelector('.switcher .loading')) {
       window.__seen.loading = performance.now();
     }
     if (!window.__seen.tile && document.querySelector('.tile')) {

@@ -3,97 +3,102 @@
   --web-ui_button-border-color: rgb(var(--color-tree-frog));
 }
 
-.big-button {
-  --__internal__background-color: var(--web-ui_button-background-color, rgb(var(--color-macaw)));
-  --__internal__background-color-disabled: var(--web-ui_button-background-color-disabled, rgb(var(--color-swan)));
-  --__internal__border-color: var(--web-ui_button-border-color, rgb(var(--color-whale)));
-  --__internal__border-radius: var(--web-ui_button-border-radius, 12px);
-  --__internal__color: var(--web-ui_button-color, rgb(var(--color-snow)));
-  --__internal__color-active: var(--web-ui_button-color-active, var(--__internal__color));
-  --__internal__color-disabled: var(--web-ui_button-color-disabled, rgb(var(--color-hare)));
-  --__internal__filter-hover: var(--web-ui_button-filter-hover, brightness(1.1));
-  --__internal__height: var(--web-ui_button-height, 50px);
-  --__internal__lip-width: var(--web-ui_button-lip-width, 4px);
-  --__internal__padding: var(--web-ui_button-padding, 0 16px);
-  --web-ui_button-border-radius: 1rem;
-  --web-ui_button-color: rgb(var(--color-snow));
-  --web-ui_button-lip-width: 0.25rem;
-  align-items: center;
-  background: none;
-  border-color: transparent;
-  border-radius: var(--__internal__border-radius);
-  border-style: solid;
-  border-width: 0 0 var(--__internal__lip-width);
-  color: var(--__internal__color);
-  cursor: pointer;
-  display: flex;
-  font-size: 17px;
-  font-weight: 700;
-  height: var(--__internal__height);
-  justify-content: center;
-  min-width: 150px;
-  padding: var(--__internal__padding);
-  position: relative;
-  transition: filter 0.2s, transform var(--web-ui_button-transition-lip);
-  width: auto;
-  z-index: 0;
-}
+@scope (.big-button) {
+  :scope {
+    --__internal__background-color: var(--web-ui_button-background-color, rgb(var(--color-macaw)));
+    --__internal__background-color-disabled: var(--web-ui_button-background-color-disabled, rgb(var(--color-swan)));
+    --__internal__border-color: var(--web-ui_button-border-color, rgb(var(--color-whale)));
+    --__internal__border-radius: var(--web-ui_button-border-radius, 12px);
+    --__internal__color: var(--web-ui_button-color, rgb(var(--color-snow)));
+    --__internal__color-active: var(--web-ui_button-color-active, var(--__internal__color));
+    --__internal__color-disabled: var(--web-ui_button-color-disabled, rgb(var(--color-hare)));
+    --__internal__filter-hover: var(--web-ui_button-filter-hover, brightness(1.1));
+    --__internal__height: var(--web-ui_button-height, 50px);
+    --__internal__lip-width: var(--web-ui_button-lip-width, 4px);
+    --__internal__padding: var(--web-ui_button-padding, 0 16px);
+    --web-ui_button-border-radius: 1rem;
+    --web-ui_button-color: rgb(var(--color-snow));
+    --web-ui_button-lip-width: 0.25rem;
+    align-items: center;
+    background: none;
+    border-color: transparent;
+    border-radius: var(--__internal__border-radius);
+    border-style: solid;
+    border-width: 0 0 var(--__internal__lip-width);
+    color: var(--__internal__color);
+    cursor: pointer;
+    display: flex;
+    font-size: 17px;
+    font-weight: 700;
+    height: var(--__internal__height);
+    justify-content: center;
+    min-width: 150px;
+    padding: var(--__internal__padding);
+    position: relative;
+    transition: filter 0.2s, transform var(--web-ui_button-transition-lip);
+    width: auto;
+    z-index: 0;
+  }
 
-.big-button:active {
-  color: var(--__internal__color-active);
-  transform: translateY(var(--__internal__lip-width)) translateZ(0);
-}
+  :scope:active {
+    color: var(--__internal__color-active);
+    transform: translateY(var(--__internal__lip-width)) translateZ(0);
+  }
 
-.big-button::before {
-  background-color: var(--__internal__background-color);
-  border-radius: var(--__internal__border-radius);
-  bottom: 0;
-  box-shadow: 0 var(--__internal__lip-width) 0;
-  color: var(--__internal__border-color);
-  content: "";
-  left: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
-  transition: box-shadow var(--web-ui_button-transition-lip);
-  z-index: -1;
-}
+  :scope::before {
+    background-color: var(--__internal__background-color);
+    border-radius: var(--__internal__border-radius);
+    bottom: 0;
+    box-shadow: 0 var(--__internal__lip-width) 0;
+    color: var(--__internal__border-color);
+    content: "";
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    transition: box-shadow var(--web-ui_button-transition-lip);
+    z-index: -1;
+  }
 
-.big-button:active::before {
-  box-shadow: none;
-}
+  :scope:active::before {
+    box-shadow: none;
+  }
 
-.big-button:has(.htmx-request) {
-  pointer-events: none;
-}
+  :scope:has(.htmx-request) {
+    pointer-events: none;
+  }
 
-.big-button[disabled] {
-  background-color: var(--__internal__background-color-disabled);
-  color: var(--__internal__color-disabled);
-  cursor: not-allowed;
-  pointer-events: none;
-}
+  :scope[disabled] {
+    background-color: var(--__internal__background-color-disabled);
+    color: var(--__internal__color-disabled);
+    cursor: not-allowed;
+    pointer-events: none;
+  }
 
-.big-button[disabled]::before {
-  background-color: var(--__internal__background-color-disabled);
-}
+  :scope[disabled]::before {
+    background-color: var(--__internal__background-color-disabled);
+  }
 
-.big-button--request-stable {
-  transition: filter 0.2s;
-}
+  /* `data-steady`: a button that stays as it is while its request runs. It does not press down on
+     :active and a disabled one keeps its enabled look, so the form's submit does not flicker or
+     shift when it disables itself during the request. */
+  :scope[data-steady] {
+    transition: filter 0.2s;
+  }
 
-.big-button--request-stable:active {
-  transform: none;
-}
+  :scope[data-steady]:active {
+    transform: none;
+  }
 
-.big-button--request-stable:active::before {
-  box-shadow: 0 var(--__internal__lip-width) 0;
-}
+  :scope[data-steady]:active::before {
+    box-shadow: 0 var(--__internal__lip-width) 0;
+  }
 
-.big-button--request-stable[disabled] {
-  color: var(--__internal__color);
-}
+  :scope[data-steady][disabled] {
+    color: var(--__internal__color);
+  }
 
-.big-button--request-stable[disabled]::before {
-  background-color: var(--__internal__background-color);
+  :scope[data-steady][disabled]::before {
+    background-color: var(--__internal__background-color);
+  }
 }

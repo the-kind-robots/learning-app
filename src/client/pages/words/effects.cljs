@@ -30,7 +30,7 @@
 
 (nxr/register-effect! :effect/scroll-words-to-top
   (fn scroll-words-to-top [_ _]
-    (when-let [node (js/document.querySelector ".vocabulary__list")]
+    (when-let [node (js/document.querySelector ".vocabulary .list")]
       (set! (.-scrollTop node) 0))))
 
 
@@ -45,7 +45,7 @@
                       (fn [entries]
                         (when (some #(.-isIntersecting %) entries)
                           (dispatch [[:action/show-more-words]])))
-                      #js {:root       (.closest node ".vocabulary__list")
+                      #js {:root       (.closest node ".vocabulary .list")
                            :rootMargin "200px"})]
         (.observe observer node)
         (reset! sentinel-watch {:node node :observer observer})))))

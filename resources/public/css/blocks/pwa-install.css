@@ -1,134 +1,135 @@
 /* PWA Install Guide Modal — iOS step-by-step instructions */
 
-.app-install-guide {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-  transition: background 0.25s ease,
-              display 0.25s ease allow-discrete;
-}
-
-#app-install-guide[hidden] {
-  display: none;
-  pointer-events: none;
-  background: rgba(0, 0, 0, 0);
-  transition: background 0.25s ease,
-              display 0.25s ease allow-discrete;
-}
-
-@starting-style {
-  #app-install-guide:not([hidden]) {
-    background: rgba(0, 0, 0, 0);
+@scope (.app-install-guide) {
+  :scope {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    transition: background 0.25s ease,
+                display 0.25s ease allow-discrete;
   }
-}
 
-/* Card */
+  :scope[hidden] {
+    display: none;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0);
+    transition: background 0.25s ease,
+                display 0.25s ease allow-discrete;
+  }
 
-.app-install-guide__card {
-  width: calc(100% - 40px);
-  max-width: 340px;
-  background: rgb(var(--color-snow));
-  border-radius: 20px;
-  padding: 24px 22px;
-  padding-bottom: calc(24px + env(safe-area-inset-bottom));
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-  font-family: Nunito, sans-serif;
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
+  @starting-style {
+    :scope:not([hidden]) {
+      background: rgba(0, 0, 0, 0);
+    }
+  }
 
-#app-install-guide[hidden] .app-install-guide__card {
-  opacity: 0;
-  transform: translateY(40px);
-}
+  /* Card */
 
-@starting-style {
-  #app-install-guide:not([hidden]) .app-install-guide__card {
+  .card {
+    width: calc(100% - 40px);
+    max-width: 340px;
+    background: rgb(var(--color-snow));
+    border-radius: 20px;
+    padding: 24px 22px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+    font-family: Nunito, sans-serif;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+
+  :scope[hidden] .card {
     opacity: 0;
     transform: translateY(40px);
   }
+
+  @starting-style {
+    :scope:not([hidden]) .card {
+      opacity: 0;
+      transform: translateY(40px);
+    }
+  }
+
+  /* Header */
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: rgb(var(--color-eel));
+  }
+
+  .close {
+    background: none;
+    border: none;
+    font-size: 26px;
+    line-height: 1;
+    color: rgb(var(--color-wolf));
+    cursor: pointer;
+    padding: 0 2px;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /* Steps */
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .step-number {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgb(var(--color-polar));
+    color: rgb(var(--color-eel));
+    font-weight: 700;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .step-icon {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: #e8f2ff;
+    color: #2b7de9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .step-text {
+    font-size: 15px;
+    color: rgb(var(--color-eel));
+    line-height: 1.3;
+  }
+
+  .step-text strong {
+    font-weight: 700;
+  }
 }
-
-/* Header */
-
-.app-install-guide__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.app-install-guide__header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: rgb(var(--color-eel));
-}
-
-.app-install-guide__close {
-  background: none;
-  border: none;
-  font-size: 26px;
-  line-height: 1;
-  color: rgb(var(--color-wolf));
-  cursor: pointer;
-  padding: 0 2px;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-/* Steps */
-
-.app-install-guide__steps {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.app-install-guide__step {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.app-install-guide__step-number {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgb(var(--color-polar));
-  color: rgb(var(--color-eel));
-  font-weight: 700;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.app-install-guide__step-icon {
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: #e8f2ff;
-  color: #2b7de9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.app-install-guide__step-text {
-  font-size: 15px;
-  color: rgb(var(--color-eel));
-  line-height: 1.3;
-}
-
-.app-install-guide__step-text strong {
-  font-weight: 700;
-}
-

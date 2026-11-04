@@ -14,13 +14,13 @@
 
 (defn- collections-icon
   []
-  [:button.app-shell__corner-icon
+  [:button.corner-icon
    {:type       "button"
     :aria-label [:i18n :shell/open-collections]
     :title      [:i18n :collections/title]
     :on         {:click [[:action/go-to-collections]]}}
    ;; zprint: as written
-   [:svg.app-shell__corner-icon-svg
+   [:svg.corner-icon-svg
     {:viewBox "0 0 16 16" :aria-hidden "true"}
     [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
     [:rect {:x 10 :y 2 :width 4 :height 4 :rx 1}]
@@ -30,12 +30,12 @@
 
 (defn- close-icon
   []
-  [:button.app-shell__corner-icon
+  [:button.corner-icon
    {:type       "button"
     :aria-label [:i18n :dialog/close]
     :title      [:i18n :dialog/close]
     :on         {:click [[:action/close-screen]]}}
-   [:svg.app-shell__corner-icon-svg
+   [:svg.corner-icon-svg
     {:viewBox     "0 0 16 16"
      :aria-hidden "true"}
     [:path
@@ -48,7 +48,7 @@
 (defn- install-icon
   []
   ;; zprint: as written
-  [:svg.app-shell__icon
+  [:svg.icon
    {:aria-hidden    "true"
     :fill           "none"
     :stroke         "currentColor"
@@ -64,7 +64,7 @@
 (defn- trace-export-icon
   []
   ;; zprint: as written
-  [:svg.app-shell__icon
+  [:svg.icon
    {:aria-hidden    "true"
     :fill           "none"
     :stroke         "currentColor"
@@ -88,9 +88,9 @@
     (list
      ;; One fixed bar holds the three slots: word mark, info bar, actions. The side slots share the free
      ;; space equally, which centres the info bar in the bar rather than between its neighbours.
-     [:div.app-shell__bar
-      [:div.app-shell__bar-slot
-       [:button.app-shell__logo
+     [:div.app-bar
+      [:div.slot
+       [:button.logo
         ;; The browser opens and closes the settings, and marks this button expanded while they are open.
         ;; The name starts with the word on screen, then says what the press opens; the D is not read.
         {:aria-label    [:i18n :settings/open]
@@ -102,21 +102,21 @@
         ;; A development build's word mark ends in a red D; the ^boolean on the flag lets Closure drop it,
         ;; and the build mark below, from a release.
         (when ^boolean goog/DEBUG
-          [:span.app-shell__dev-mark "D"])]]
+          [:span.dev-mark "D"])]]
       ;; The middle of the bar, kept for what the learner should see at a glance: stars, progress, a notice.
-      [:div.app-shell__info-bar
+      [:div.info-bar
        ;; Which bundle the page loaded, and the tap that reloads onto the newest one.
        (when ^boolean goog/DEBUG
-         [:button.app-shell__build-mark
+         [:button.build-mark
           {:type       "button"
            :aria-label [:i18n :shell/reload-build]
            :title      [:i18n :shell/reload-build]
            :on         {:click [[:effect/get-newest-build]]}}
           build-mark])]
-      [:div.app-shell__actions
+      [:div.actions
        ;; The trace export leads the row: a development build's control among the shell's own.
        (when ^boolean goog/DEBUG
-         [:button.app-shell__icon-button
+         [:button.icon-button
           {:type       "button"
            :title      [:i18n :shell/export-trace]
            :aria-label [:i18n :shell/export-trace]
@@ -124,7 +124,7 @@
           (trace-export-icon)])
        ;; Install is not a sync action, and it is offered before any account exists.
        (when show-install?
-         [:button.app-shell__icon-button
+         [:button.icon-button
           {:type       "button"
            :title      [:i18n :shell/install]
            :aria-label [:i18n :shell/install]
@@ -140,7 +140,7 @@
      (if-let [view (:view (pages/table page))]
        (view state)
        (when read-error?
-         [:div.app-shell__read-error
+         [:div.read-error
           [:i18n :shell/read-error]]))
      ;; After the screen: its mount hook runs after the screen's, so the asking settings keep the focus.
      (settings-view/menu (settings-presenter/props state))

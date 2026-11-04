@@ -44,7 +44,7 @@ test.describe('Подсказки к словам в разборе ответа
     });
 
     await test.step('Тогда карточка предлагает «+ В СЛОВАРЬ»', async () => {
-      await expect(popover(page).locator('.token-card__word')).toHaveText('der Garten');
+      await expect(popover(page).locator('.token-card .word')).toHaveText('der Garten');
       await expect(popover(page).getByRole('button', { name: '+ В СЛОВАРЬ' })).toBeVisible();
     });
 
@@ -53,8 +53,8 @@ test.describe('Подсказки к словам в разборе ответа
     });
 
     await test.step('Тогда карточка пишет «✓ В словаре» и без кнопок', async () => {
-      await expect(popover(page).locator('.token-card__word')).toHaveText('der Hund');
-      await expect(popover(page).locator('.token-card__state')).toHaveText('✓ В словаре');
+      await expect(popover(page).locator('.token-card .word')).toHaveText('der Hund');
+      await expect(popover(page).locator('.token-card .state')).toHaveText('✓ В словаре');
       await expect(popover(page).getByRole('button')).toHaveCount(0);
     });
   });
@@ -70,8 +70,8 @@ test.describe('Подсказки к словам в разборе ответа
     });
 
     await test.step('Тогда та же карточка показывает «✓ В словаре»', async () => {
-      await expect(popover(page).locator('.token-card__state')).toHaveText('✓ В словаре');
-      await expect(popover(page).locator('.token-card__word')).toHaveText('der Garten');
+      await expect(popover(page).locator('.token-card .state')).toHaveText('✓ В словаре');
+      await expect(popover(page).locator('.token-card .word')).toHaveText('der Garten');
     });
 
     await test.step('Когда он открывает список слов', async () => {
@@ -79,7 +79,7 @@ test.describe('Подсказки к словам в разборе ответа
     });
 
     await test.step('Тогда там есть «der Garten»', async () => {
-      await expect(page.locator('.word-item__value').filter({ hasText: 'der Garten' })).toBeVisible();
+      await expect(page.locator('.word-item .value').filter({ hasText: 'der Garten' })).toBeVisible();
     });
   });
 
@@ -89,7 +89,7 @@ test.describe('Подсказки к словам в разборе ответа
     });
 
     await test.step('Когда он протягивает мышь по всей строке', async () => {
-      const box = await page.locator('.lesson__answer-body').boundingBox();
+      const box = await page.locator('.lesson .answer-body').boundingBox();
       await page.mouse.move(box.x + 1, box.y + box.height / 2);
       await page.mouse.down();
       await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, { steps: 8 });
@@ -146,7 +146,7 @@ test.describe('Подсказки к словам в разборе ответа
     });
 
     await test.step('Когда он кликает вне подсказки', async () => {
-      await page.locator('.lesson__prompt').click();
+      await page.locator('.lesson .prompt').click();
     });
 
     await test.step('Тогда подсказка закрывается сразу', async () => {

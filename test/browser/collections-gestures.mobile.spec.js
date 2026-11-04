@@ -95,7 +95,7 @@ async function slide(finger, from, to) {
 
 // The name each tile shows, in the order the screen reads.
 const tileNames = (page) =>
-  page.locator('.masonry > .tile > :first-child').locator('.tile__name, .tile__label-text');
+  page.locator('.masonry > .tile > :first-child').locator('.name, .label-text');
 
 // The count's digits, not its box: in a row the box is stretched to the
 // row's height, its text on the first line.
@@ -294,7 +294,7 @@ test.describe('Темы на телефоне: касания', () => {
     await test.step('Тогда плитки «Alltag» нет, фокус у соседа, ни одного ✕ не видно', async () => {
       await expect(button).toHaveCount(0);
       await expect(page.locator('.masonry [data-collection-id]:focus')).toHaveCount(1);
-      const shown = await page.locator('.tile__close').evaluateAll(
+      const shown = await page.locator('.tile .close').evaluateAll(
         (els) => els.filter((el) => getComputedStyle(el).opacity !== '0').length);
       expect(shown).toBe(0);
     });
@@ -376,7 +376,7 @@ test.describe('Темы на телефоне: касания', () => {
 
     await test.step('Когда он долго держит вторую строку папки', async () => {
       await page.evaluate(() => {
-        const closes = [...document.querySelectorAll('.tile__row .tile__close')];
+        const closes = [...document.querySelectorAll('.tile .row .close')];
         window.__frames = [];
         const sample = () => {
           window.__frames.push(closes.map((el) => {

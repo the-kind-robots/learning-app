@@ -11,135 +11,140 @@ body:has(.vocabulary) #app {
   height: 100%;
 }
 
-/* A fixed full-viewport column: the rows, then the search bar closing it.
-   The lesson button is not in it — the footer is fixed to the bottom, as on
-   home (home.css), and the column reserves its height at the foot.
+/* The dialog and the rows render inside the screen: the dialog has a `footer` of its own, and the rows'
+   `display` and `translation` are not the screen's. The word list is not cut off: the empty state is
+   the screen's own, written inside the list's `empty` row. */
+@scope (.vocabulary) to (.word-edit-dialog, .word-item) {
+  /* A fixed full-viewport column: the rows, then the search bar closing it.
+     The lesson button is not in it — the footer is fixed to the bottom, as on
+     home (home.css), and the column reserves its height at the foot.
 
-   The screen opts into the keyboard overlay (`data-vk-overlay`), so an open
-   keyboard is laid over the page: it covers the fixed footer, and the column
-   reserves the keyboard's inset instead of the footer's, which puts the
-   search bar directly on top of the keyboard while the list gives up the
-   height. A browser without the VirtualKeyboard API resizes the viewport
-   instead (`interactive-widget=resizes-content`), and the footer rides up
-   under the search bar.
+     The screen opts into the keyboard overlay (`data-vk-overlay`), so an open
+     keyboard is laid over the page: it covers the fixed footer, and the column
+     reserves the keyboard's inset instead of the footer's, which puts the
+     search bar directly on top of the keyboard while the list gives up the
+     height. A browser without the VirtualKeyboard API resizes the viewport
+     instead (`interactive-widget=resizes-content`), and the footer rides up
+     under the search bar.
 
-   The rows start right under the shell bar, behind a faint line of their
-   own. */
-.vocabulary {
-  /* The fixed footer: the button, its padding below, the safe area. */
-  --words-footer-height: calc(50px + 16px + env(safe-area-inset-bottom));
-  display: flex;
-  flex-direction: column;
-  inset: 0;
-  overflow: hidden;
-  padding-top: var(--app-bar-height);
-  /* fallback */
-  padding-bottom: var(--words-footer-height);
-  /* when supported: reserve either the footer or the keyboard */
-  padding-bottom: max(var(--words-footer-height), env(keyboard-inset-height, 0px));
-  position: fixed;
-}
+     The rows start right under the shell bar, behind a faint line of their
+     own. */
+  :scope {
+    /* The fixed footer: the button, its padding below, the safe area. */
+    --words-footer-height: calc(50px + 16px + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    inset: 0;
+    overflow: hidden;
+    padding-top: var(--app-bar-height);
+    /* fallback */
+    padding-bottom: var(--words-footer-height);
+    /* when supported: reserve either the footer or the keyboard */
+    padding-bottom: max(var(--words-footer-height), env(keyboard-inset-height, 0px));
+    position: fixed;
+  }
 
-.vocabulary__state {
-  display: none;
-}
+  .state {
+    display: none;
+  }
 
-/* The footer's top half: its background and gutters, and a
-   `page-footer__action` like the button below it, so field and button share
-   their width. The 12px under the field is the gap to the button with the
-   keyboard closed, and the air above the keyboard with it open. */
-.vocabulary__search-bar {
-  background: rgb(var(--color-polar));
-  flex: none;
-  padding: 16px 16px 12px;
-}
+  /* The footer's top half: its background and gutters, and a
+     `.footer-action` like the button below it, so field and button share
+     their width. The 12px under the field is the gap to the button with the
+     keyboard closed, and the air above the keyboard with it open. */
+  .search-bar {
+    background: rgb(var(--color-polar));
+    flex: none;
+    padding: 16px 16px 12px;
+  }
 
-.vocabulary__search-bar .input {
-  width: 100%;
-}
+  .search-bar .input {
+    width: 100%;
+  }
 
-/* The scroller spans the window, so its scrollbar stands at the window's
-   edge, between the shell bar and the search bar. The scrollbar's room is
-   kept on both edges whether it shows or not: the rows stay centred under
-   the footer, and do not jump sideways when a search makes the list fit. */
-.vocabulary__list {
-  border-top: 1px solid rgb(0 0 0 / 0.08);
-  flex: 1;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding-bottom: 16px;
-  scrollbar-gutter: stable both-edges;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
+  /* The scroller spans the window, so its scrollbar stands at the window's
+     edge, between the shell bar and the search bar. The scrollbar's room is
+     kept on both edges whether it shows or not: the rows stay centred under
+     the footer, and do not jump sideways when a search makes the list fit. */
+  .list {
+    border-top: 1px solid rgb(0 0 0 / 0.08);
+    flex: 1;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: 16px;
+    scrollbar-gutter: stable both-edges;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
 
-.vocabulary__list > .word-list {
-  margin-inline: auto;
-  max-width: 600px;
-}
+  .list > .word-list {
+    margin-inline: auto;
+    max-width: 600px;
+  }
 
-.vocabulary__empty-state {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+  .empty-state {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
 
-.vocabulary__empty-state-text {
-  color: rgb(var(--color-eel));
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0;
-}
+  .empty-state-text {
+    color: rgb(var(--color-eel));
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+  }
 
-.vocabulary__empty-state-hint {
-  color: rgb(var(--color-wolf));
-  font-size: 14px;
-  margin: 0 0 16px;
-}
+  .empty-state-hint {
+    color: rgb(var(--color-wolf));
+    font-size: 14px;
+    margin: 0 0 16px;
+  }
 
-.vocabulary__empty-state-cta {
-  background: rgb(var(--color-macaw));
-  border: none;
-  border-radius: 12px;
-  color: white;
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  height: 48px;
-  padding: 0 24px;
-}
+  .empty-state-cta {
+    background: rgb(var(--color-macaw));
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    height: 48px;
+    padding: 0 24px;
+  }
 
-/* No top padding: the search bar above ends in the gap. Its height is
-   `--words-footer-height`. */
-.vocabulary__footer {
-  --page-footer-gap: 0px;
-  --page-footer-padding-top: 0px;
-  --page-footer-padding-x: 16px;
-  --page-footer-padding-bottom: 16px;
-  background: rgb(var(--color-polar));
-  bottom: 0;
-  left: 0;
-  position: fixed;
-  right: 0;
-}
+  /* No top padding: the search bar above ends in the gap. Its height is
+     `--words-footer-height`. */
+  .footer {
+    --page-footer-gap: 0px;
+    --page-footer-padding-top: 0px;
+    --page-footer-padding-x: 16px;
+    --page-footer-padding-bottom: 16px;
+    background: rgb(var(--color-polar));
+    bottom: 0;
+    left: 0;
+    position: fixed;
+    right: 0;
+  }
 
-.vocabulary__start {
-  display: block;
-}
+  .start {
+    display: block;
+  }
 
-/* No words yet: no search bar or footer to reserve room for. */
-.vocabulary:has(> .vocabulary__list--empty) {
-  padding-bottom: 0;
-}
+  /* No words yet: no search bar or footer to reserve room for. */
+  :scope:has(> .list[data-empty]) {
+    padding-bottom: 0;
+  }
 
-.vocabulary__list--empty {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-}
+  .list[data-empty] {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+  }
 
-.vocabulary__list--empty > * {
-  width: 100%;
+  .list[data-empty] > * {
+    width: 100%;
+  }
 }

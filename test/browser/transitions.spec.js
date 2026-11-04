@@ -56,9 +56,9 @@ function dataAtFirstFrame(page, clickSel, dataSel) {
 }
 
 const CLOSE = 'button[aria-label="Закрыть"]';
-const HOME_DATA = '#home-words-button:not(.home__words-button--hidden)';
+const HOME_DATA = '#home-words-button:not([aria-hidden="true"])';
 const WORD_ROW = '.word-item';
-const FIRST_TRIAL = '.lesson__prompt';
+const FIRST_TRIAL = '.lesson .prompt';
 const THEME_TILE = '.masonry [data-collection-id]:not([data-collection-id="main"])';
 
 test.describe('Переходы между экранами', () => {
@@ -78,12 +78,12 @@ test.describe('Переходы между экранами', () => {
       const transitions = [
         ['главная → слова', '#home-words-button', WORD_ROW],
         ['слова → главная', CLOSE, HOME_DATA],
-        ['главная → урок', '.home__lesson-button', FIRST_TRIAL],
+        ['главная → урок', '.home .lesson-button', FIRST_TRIAL],
         ['урок → главная', CLOSE, HOME_DATA],
         ['главная → темы', 'button[aria-label="Открыть наборы"]', THEME_TILE],
         ['темы → главная', CLOSE, HOME_DATA],
         ['главная → слова', '#home-words-button', WORD_ROW],
-        ['слова → урок', '.vocabulary__start', FIRST_TRIAL],
+        ['слова → урок', '.vocabulary .start', FIRST_TRIAL],
         ['урок → главная', CLOSE, HOME_DATA],
       ];
       for (const [name, click, data] of transitions) {
@@ -112,7 +112,7 @@ test.describe('Переходы между экранами', () => {
       const matched = await page.evaluate(() => new Promise((resolve) => {
         const input = document.querySelector('input[placeholder="Поиск"]');
         requestAnimationFrame(() => {
-          const values = [...document.querySelectorAll('.word-item__value')].map((n) => n.textContent);
+          const values = [...document.querySelectorAll('.word-item .value')].map((n) => n.textContent);
           resolve(values.length > 0 && values.every((v) => v.includes('wortq')));
         });
         input.value = 'wortq';

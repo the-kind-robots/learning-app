@@ -1,24 +1,26 @@
-.word-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
+@scope (.word-list) to (.word-item) {
+  :scope {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
 
-.word-list__sentinel {
-  background: transparent;
-  display: block;
-  height: 1px;
-  margin: 0;
-  padding: 0;
-}
+  .sentinel {
+    background: transparent;
+    display: block;
+    height: 1px;
+    margin: 0;
+    padding: 0;
+  }
 
-.word-list__empty {
-  color: rgb(var(--color-wolf));
-  display: none;
-  padding: 48px 24px;
-  text-align: center;
-}
+  .empty {
+    color: rgb(var(--color-wolf));
+    display: none;
+    padding: 48px 24px;
+    text-align: center;
+  }
 
-.word-list__empty:only-child {
-  display: block;
+  .empty:only-child {
+    display: block;
+  }
 }

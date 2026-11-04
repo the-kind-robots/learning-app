@@ -5,7 +5,7 @@
 
 (defn- suggestion-item
   [{:keys [active? completes? lemma phrase? pos translations exact?]}]
-  [:li.suggestions__item
+  [:li.item
    {:role        "option"
     :data-active (when active? "")
     :data-exact  (when exact? "")
@@ -24,14 +24,14 @@
     {:lang "de"}
     lemma]
    (when phrase?
-     [:span.suggestions__badge
+     [:span.badge
       [:i18n :home/phrase-badge]])])
 
 
 (defn- add-form
   [{:keys [error phrase? pos suggestions translation translation-invalid? word]}]
   (let [{:keys [items]} suggestions]
-    [:form.home__add-form
+    [:form.form
      {:id "home-add-form"
       :autocapitalize "none"
       :autocorrect "off"
@@ -41,17 +41,17 @@
                       :translation [:event.form.field/value "translation"]
                       :pos         pos
                       :focus-id    "new-word-value"}]]}}
-     [:fieldset.home__add-fieldset
+     [:fieldset.fieldset
       ;; The mode has no control of its own: the legend and the label say which the form is about to save.
-      [:legend.home__add-legend.visually-hidden
+      [:legend.visually-hidden
        (if phrase? [:i18n :phrase/add] [:i18n :word/add])]
-      [:div.home__add-form-row
+      [:div.row
        [:div.autocomplete
-        [:div.home__add-label-row
-         [:label.home__add-form-label.visually-hidden
+        [:div
+         [:label.visually-hidden
           {:for "new-word-value"}
           (if phrase? [:i18n :home/phrase-label] [:i18n :home/word-label])]]
-        [:textarea.home__add-form-input.home__add-form-textarea
+        [:textarea.field
          {:id           "new-word-value"
           :name         "value"
           :rows         1
@@ -78,11 +78,11 @@
         [:ul.suggestions
          (for [item items]
            (suggestion-item item))]]
-       [:div.home__add-translation
-        [:label.home__add-form-label.visually-hidden
+       [:div.translation
+        [:label.visually-hidden
          {:for "new-word-translation"}
          [:i18n :home/translation-label]]
-        [:textarea.home__add-form-input.home__add-form-textarea
+        [:textarea.field
          {:id           "new-word-translation"
           :name         "translation"
           :rows         1
@@ -96,8 +96,7 @@
           :value        translation
           :placeholder  [:i18n :home/translation-placeholder]
           :required     true
-          :class        (when translation-invalid?
-                          "home__add-form-input--error")
+          :aria-invalid (when translation-invalid? "true")
           :on           {:focus   [[:effect/autogrow-target]]
                          :input   [[:action/update-translation [:event.target/value]]
                                    [:effect/autogrow-target]]
@@ -110,21 +109,22 @@
       ;; Every add error is said in words; a border alone looked like nothing happened. A failed save
       ;; is the app's fault and nothing the user does fixes it, so the text says only that.
       (when error
-        [:p.home__add-error
+        [:p.error
          {:role "alert"}
          (case error
            :error/empty-translations [:i18n :home/empty-translations]
            :error/save-failed        (if phrase?
                                        [:i18n :home/phrase-save-failed]
                                        [:i18n :home/word-save-failed]))])
-      [:button.home__add-form-submit.big-button.big-button--request-stable
-       {:type "submit"}
+      [:button.submit.big-button
+       {:type        "submit"
+        :data-steady true}
        [:i18n :home/add]]]]))
 
 
 (defn- collection-heading
   [collection-name]
-  [:h2.home__collection-heading
+  [:h2.heading
    {:contenteditable "plaintext-only"
     :spellcheck "false"
     :replicant/key "collection-heading"
@@ -139,26 +139,25 @@
   [state]
   (let [{:keys [active-collection empty-vocab? form]} (presenter/page-props state)]
     [:div.home
-     [:header.home__intro
-      [:h1.home__title.visually-hidden
+     [:header.intro
+      [:h1.visually-hidden
        [:i18n :home/title]]
-      [:p.home__subtitle
+      [:p.subtitle
        {:style {:visibility (if empty-vocab? "visible" "hidden")}}
        [:i18n :home/subtitle]]]
 
-     [:div.home__heading-slot
+     [:div
       (when active-collection
         (collection-heading (:name active-collection)))]
 
-     [:main.home__content
-      [:section#home-add-panel.home__add
+     [:main.content
+      [:section#home-add-panel.add
        {:replicant/on-mount [[:action/focus-word-input "new-word-value"]]}
-       [:header.home__add-header
-        [:h2.home__panel-title
+       [:header.add-header
+        [:h2.panel-title
          (if (:phrase? form) [:i18n :phrase/add] [:i18n :word/add])]
-        [:button#home-words-button.home__words-button
+        [:button#home-words-button.words-button
          {:type        "button"
-          :class       (when empty-vocab? "home__words-button--hidden")
           :aria-hidden (when empty-vocab? "true")
           :tabindex    (when empty-vocab? "-1")
           :on          {:click [[:action/go-to-words]]}}
@@ -166,11 +165,11 @@
 
        (add-form form)]]
 
-     [:footer#home-lesson-footer.home__footer.page-footer
+     [:footer#home-lesson-footer.footer.page-footer
       {:hidden empty-vocab?}
-      [:h2.home__lesson-title.visually-hidden
+      [:h2.visually-hidden
        [:i18n :lesson/title]]
-      [:div.page-footer__action
-       [:button.home__lesson-button.big-button.green-button
+      [:div.footer-action
+       [:button.lesson-button.big-button.green-button
         {:on {:click [[:action/go-to-lesson]]}}
         [:i18n :lesson/start]]]]]))

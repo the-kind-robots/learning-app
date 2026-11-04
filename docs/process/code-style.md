@@ -201,13 +201,13 @@ zprint enforces it (`.zprint.edn`, `:vector`). A vector counts as hiccup when it
 
 Bad — the tag carries the attributes and the first child
 ```clojure
-[:button.tile__target {:type "button"} [:span.tile__name name]
- [:span.tile__count count]]
+[:button.target {:type "button"} [:span.name name]
+ [:span.count count]]
 ```
 
 Bad — attributes and a child on one line
 ```clojure
-[:p.home__error {:role "alert"} [:i18n :home/save-failed]]
+[:p.error {:role "alert"} [:i18n :home/save-failed]]
 ```
 
 Bad — attribute keys on one line
@@ -223,12 +223,12 @@ Good
   :x2 "12"
   :y2 "15"}]
 
-[:button.tile__target
+[:button.target
  {:type "button"}
- [:span.tile__name name]
- [:span.tile__count count]]
+ [:span.name name]
+ [:span.count count]]
 
-[:p.home__error
+[:p.error
  {:role "alert"}
  [:i18n :home/save-failed]]
 
@@ -239,7 +239,7 @@ Good
 Good — one attribute only, or plain values as children
 ```clojure
 [:meta {:charset "UTF-8"}]
-[:span.tile__count count]
+[:span.count count]
 ```
 
 A table of shapes reads better a row per element. A `;; zprint: as written` comment right before a form leaves every vector in it as written. A whole top-level form is skipped with zprint's own `;!zprint {:format :skip}`.

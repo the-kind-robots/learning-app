@@ -1,102 +1,277 @@
-.home {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  margin: 0 auto;
-  max-width: 980px;
-  min-height: 100vh;
-  /*
-   * Prefer a stable viewport height.
-   * In Chromium PWA, `dvh` can drift slightly after a keyboard open/close cycle,
-   * which makes centered content "jump" on refresh. `svh` stays consistent.
-   */
-  min-height: 100svh;
-  padding: calc(var(--app-bar-height) + 20px) 16px 0;
-  /* fallback */
-  padding-bottom: calc(
-      96px +
-      env(safe-area-inset-bottom)
-  );
-  /* when supported: reserve either footer or keyboard space */
-  padding-bottom: max(
-    calc(
+/* The scope ends at the suggestion list and at the inside of a big button: both are components
+   that live in the home screen and style themselves. */
+@scope (.home) to (.suggestions, .big-button > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin: 0 auto;
+    max-width: 980px;
+    min-height: 100vh;
+    /*
+     * Prefer a stable viewport height.
+     * In Chromium PWA, `dvh` can drift slightly after a keyboard open/close cycle,
+     * which makes centered content "jump" on refresh. `svh` stays consistent.
+     */
+    min-height: 100svh;
+    padding: calc(var(--app-bar-height) + 20px) 16px 0;
+    /* fallback */
+    padding-bottom: calc(
         96px +
         env(safe-area-inset-bottom)
-    ),
-    env(keyboard-inset-height, 0px)
-  );
-  width: 100%;
-}
+    );
+    /* when supported: reserve either footer or keyboard space */
+    padding-bottom: max(
+      calc(
+          96px +
+          env(safe-area-inset-bottom)
+      ),
+      env(keyboard-inset-height, 0px)
+    );
+    width: 100%;
+  }
 
-.home__intro {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+  .intro {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
 
-/* Anchored to the top on purpose: centring turns every height change below —
-   a suggestion list, a growing field — into a move of the whole panel. */
-.home__content {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: flex-start;
-}
+  /* Anchored to the top on purpose: centring turns every height change below —
+     a suggestion list, a growing field — into a move of the whole panel. */
+  .content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
 
-.home__subtitle {
-  color: rgb(var(--color-wolf));
-  font-size: 14px;
-  margin: 0;
-  max-width: 520px;
-}
+  .subtitle {
+    color: rgb(var(--color-wolf));
+    font-size: 14px;
+    margin: 0;
+    max-width: 520px;
+  }
 
-/*
- * Home screen active collection heading.
- * Always-editable h2 — contenteditable inline. No element-type toggle, just
- * an emerald caret on focus and a placeholder when empty.
- */
-.home__collection-heading {
-  align-self: center;
-  caret-color: rgb(var(--color-peacock));
-  color: rgb(var(--color-black-text));
-  cursor: text;
-  font-family: inherit;
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: -0.8px;
-  line-height: 1.27;
-  margin: 8px 0 0;
-  max-width: 100%;
-  min-width: 1ch;
-  outline: none;
-  padding: 0;
-  text-align: center;
-  word-break: break-word;
-}
+  /*
+   * Home screen active collection heading.
+   * Always-editable h2 — contenteditable inline. No element-type toggle, just
+   * an emerald caret on focus and a placeholder when empty.
+   */
+  .heading {
+    align-self: center;
+    caret-color: rgb(var(--color-peacock));
+    color: rgb(var(--color-black-text));
+    cursor: text;
+    font-family: inherit;
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    line-height: 1.27;
+    margin: 8px 0 0;
+    max-width: 100%;
+    min-width: 1ch;
+    outline: none;
+    padding: 0;
+    text-align: center;
+    word-break: break-word;
+  }
 
-.home__collection-heading:empty:not(:focus)::before {
-  color: rgb(var(--color-hare));
-  content: "Без названия";
-  pointer-events: none;
-}
+  .heading:empty:not(:focus)::before {
+    color: rgb(var(--color-hare));
+    content: "Без названия";
+    pointer-events: none;
+  }
 
 
-.home__footer {
-  --page-footer-gap: 0px;
-  --page-footer-padding-top: 16px;
-  --page-footer-padding-x: 16px;
-  --page-footer-padding-bottom: 16px;
-  background: rgb(var(--color-polar));
-  bottom: 0;
-  left: 0;
-  position: fixed;
-  right: 0;
-  z-index: 0;
-}
+  .footer {
+    --page-footer-gap: 0px;
+    --page-footer-padding-top: 16px;
+    --page-footer-padding-x: 16px;
+    --page-footer-padding-bottom: 16px;
+    background: rgb(var(--color-polar));
+    bottom: 0;
+    left: 0;
+    position: fixed;
+    right: 0;
+    z-index: 0;
+  }
 
-.home__footer[hidden] {
-  display: none;
+  .footer[hidden] {
+    display: none;
+  }
+
+  .add[data-success] {
+    animation: home-add-success-flash 1.2s ease-out forwards;
+  }
+
+  .add {
+    background: rgb(255 255 255 / 0.7);
+    border: 2px solid rgb(0 0 0 / 0.08);
+    border-radius: 18px;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    padding: 20px;
+    width: 100%;
+  }
+
+  .add-header {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    /* margin-bottom: 20px; */
+  }
+
+  .panel-title {
+    font-size: 18px;
+    font-weight: 800;
+    margin: 0;
+  }
+
+  .words-button {
+    animation: home-words-button-fade-in 400ms ease-out forwards;
+    align-items: center;
+    background: none;
+    border: 2px solid rgb(var(--color-swan));
+    border-radius: 20px;
+    color: rgb(var(--color-wolf));
+    display: inline-flex;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    justify-content: center;
+    padding: 8px 16px;
+  }
+
+  .words-button[aria-hidden="true"] {
+    animation: none;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 0;
+    padding-top: 16px;
+    width: 100%;
+  }
+
+  .fieldset {
+    border: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin: 0;
+    min-inline-size: 0;
+    padding: 0;
+  }
+
+  /* One column at every width: the row layout used to flip to a column the
+     moment the input became a phrase, relaying out the form under the cursor. */
+  .row {
+    align-items: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .translation {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .field {
+    background: rgb(var(--color-polar));
+    border: 2px solid rgb(var(--color-swan));
+    border-radius: 12px;
+    box-sizing: border-box;
+    caret-color: rgb(var(--color-macaw));
+    color: rgb(var(--color-eel));
+    flex: 1;
+    font: var(--text-body-weight) var(--text-body-size) / var(--text-body-line-height) din-round, sans-serif;
+    font-size: 16px;
+    letter-spacing: var(--text-body-letter-spacing);
+    line-height: var(--__internal__input-line-height, var(--text-body-line-height));
+    height: 52px;
+    min-width: 0;
+    outline: none;
+    overflow: hidden;
+    padding: 12px 16px;
+    text-transform: var(--text-body-casing);
+    transition: border-color 0.15s, background-color 0.15s;
+    width: 100%;
+    scroll-margin-top: 16px;
+  }
+
+  .field:focus {
+    background: rgb(var(--color-snow));
+    border-color: rgb(var(--color-macaw));
+    outline: none;
+  }
+
+  /* :where keeps the weight of the old single-class rule, so the focus border above still wins. */
+  .field:where([aria-invalid="true"]) {
+    border-color: rgb(var(--color-fire-ant));
+  }
+
+  /* Sits closer to the fields it is about than to the button below. */
+  .error {
+    color: rgb(var(--color-fire-ant));
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: -6px 0 0;
+  }
+
+  /* Both fields grow with their text. */
+  .field {
+    field-sizing: content;
+    height: auto;
+    max-height: 136px;
+    min-height: 52px;
+    overflow-y: auto;
+    resize: none;
+  }
+
+  .submit.big-button {
+    --web-ui_button-height: 52px;
+    margin-top: 4px;
+    width: 100%;
+  }
+
+  @media (min-width: 700px) {
+    .fieldset {
+      gap: 24px;
+    }
+  }
+
+  @media (min-width: 900px) {
+    .add {
+      margin-inline: auto;
+      max-width: 640px;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .add {
+      box-shadow: 0 6px 16px rgb(0 0 0 / 0.08);
+    }
+
+    .submit,
+    .field {
+      width: 100%;
+    }
+
+    .form {
+      padding-bottom: 12px;
+    }
+
+  }
 }
 
 @keyframes home-words-button-fade-in {
@@ -111,173 +286,4 @@
 @keyframes home-add-success-flash {
   0%   { background: rgb(var(--color-sea-sponge), 0.2);}
   100% { background: rgb(255 255 255 / 0.7);}
-}
-
-.home__add--success {
-  animation: home-add-success-flash 1.2s ease-out forwards;
-}
-
-.home__add {
-  background: rgb(255 255 255 / 0.7);
-  border: 2px solid rgb(0 0 0 / 0.08);
-  border-radius: 18px;
-  display: flex;
-  flex-direction: column;
-  overflow: visible;
-  padding: 20px;
-  width: 100%;
-}
-
-.home__add-header {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  /* margin-bottom: 20px; */
-}
-
-.home__panel-title {
-  font-size: 18px;
-  font-weight: 800;
-  margin: 0;
-}
-
-.home__words-button {
-  animation: home-words-button-fade-in 400ms ease-out forwards;
-  align-items: center;
-  background: none;
-  border: 2px solid rgb(var(--color-swan));
-  border-radius: 20px;
-  color: rgb(var(--color-wolf));
-  display: inline-flex;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  justify-content: center;
-  padding: 8px 16px;
-}
-
-.home__words-button--hidden {
-  animation: none;
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
-}
-
-.home__add-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 0;
-  padding-top: 16px;
-  width: 100%;
-}
-
-.home__add-fieldset {
-  border: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin: 0;
-  min-inline-size: 0;
-  padding: 0;
-}
-
-/* One column at every width: the row layout used to flip to a column the
-   moment the input became a phrase, relaying out the form under the cursor. */
-.home__add-form-row {
-  align-items: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.home__add-translation {
-  flex: 1;
-  min-width: 0;
-}
-
-.home__add-form-input {
-  background: rgb(var(--color-polar));
-  border: 2px solid rgb(var(--color-swan));
-  border-radius: 12px;
-  box-sizing: border-box;
-  caret-color: rgb(var(--color-macaw));
-  color: rgb(var(--color-eel));
-  flex: 1;
-  font: var(--text-body-weight) var(--text-body-size) / var(--text-body-line-height) din-round, sans-serif;
-  font-size: 16px;
-  letter-spacing: var(--text-body-letter-spacing);
-  line-height: var(--__internal__input-line-height, var(--text-body-line-height));
-  height: 52px;
-  min-width: 0;
-  outline: none;
-  overflow: hidden;
-  padding: 12px 16px;
-  text-transform: var(--text-body-casing);
-  transition: border-color 0.15s, background-color 0.15s;
-  width: 100%;
-  scroll-margin-top: 16px;
-}
-
-.home__add-form-input:focus {
-  background: rgb(var(--color-snow));
-  border-color: rgb(var(--color-macaw));
-  outline: none;
-}
-
-.home__add-form-input--error {
-  border-color: rgb(var(--color-fire-ant));
-}
-
-/* Sits closer to the fields it is about than to the button below. */
-.home__add-error {
-  color: rgb(var(--color-fire-ant));
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.4;
-  margin: -6px 0 0;
-}
-
-.home__add-form-textarea {
-  field-sizing: content;
-  height: auto;
-  max-height: 136px;
-  min-height: 52px;
-  overflow-y: auto;
-  resize: none;
-}
-
-.home__add-form-submit.big-button {
-  --web-ui_button-height: 52px;
-  margin-top: 4px;
-  width: 100%;
-}
-
-@media (min-width: 700px) {
-  .home__add-fieldset {
-    gap: 24px;
-  }
-}
-
-@media (min-width: 900px) {
-  .home__add {
-    margin-inline: auto;
-    max-width: 640px;
-  }
-}
-
-@media (max-width: 600px) {
-  .home__add {
-    box-shadow: 0 6px 16px rgb(0 0 0 / 0.08);
-  }
-
-  .home__add-form-submit,
-  .home__add-form-input {
-    width: 100%;
-  }
-
-  .home__add-form {
-    padding-bottom: 12px;
-  }
-
 }

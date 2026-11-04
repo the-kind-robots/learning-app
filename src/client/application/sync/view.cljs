@@ -5,7 +5,7 @@
   "A laptop beside a phone: connecting devices, not reloading the page."
   []
   ;; zprint: as written
-  [:svg.app-shell__icon
+  [:svg.icon
    {:aria-hidden    "true"
     :fill           "none"
     :stroke         "currentColor"
@@ -25,22 +25,23 @@
    {:replicant/on-mount [[:action/open-dialog]]
     :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
          :close [[:action/close-sync-menu]]}}
-   [:div.sync-menu-dialog__content
+   [:div.content
     (when show-account-actions?
       (list
-       [:button.sync-menu-dialog__item
+       [:button.item
         {:type "button"
          :on   {:click [[:effect/open-sync-qr]]}}
         [:i18n :sync/connect-device]]
-       [:button.sync-menu-dialog__item
+       [:button.item
         {:type "button"
          :on   {:click [[:effect/share-sync-link
                          {:copied-message [:i18n :sync/recovery-link-copied]
                           :title [:i18n :sync/recovery-link-title]}]]}}
         [:i18n :sync/recovery-link]]))
-    [:button.sync-menu-dialog__item.sync-menu-dialog__item--cancel
-     {:type "button"
-      :on   {:click [[:action/close-sync-menu]]}}
+    [:button.item
+     {:type        "button"
+      :data-cancel true
+      :on          {:click [[:action/close-sync-menu]]}}
      [:i18n :sync/cancel]]]])
 
 
@@ -50,15 +51,15 @@
    {:replicant/on-mount [[:action/open-dialog]]
     :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
          :close [[:action/close-sync-qr]]}}
-   [:div.pairing-dialog__content
-    [:h2.pairing-dialog__title
+   [:div.content
+    [:h2.title
      [:i18n :sync/connect-device]]
-    [:p.pairing-dialog__hint
+    [:p.hint
      [:i18n :sync/scan-qr]]
-    [:img.pairing-dialog__qr
+    [:img.qr
      {:src qr-url
       :alt [:i18n :sync/qr]}]
-    [:button.pairing-dialog__close
+    [:button.close
      {:type "button"
       :on   {:click [[:action/close-sync-qr]]}}
      [:i18n :dialog/close]]]])
@@ -68,7 +69,7 @@
   "The bar's button that opens the sync menu, when the device can use it."
   [{:keys [show-sync?]}]
   (when show-sync?
-    [:button.app-shell__icon-button
+    [:button.icon-button
      {:type       "button"
       :title      [:i18n :sync/title]
       :aria-label [:i18n :sync/title]

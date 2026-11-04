@@ -1,52 +1,55 @@
-.input {
-  align-items: center;
-  background: rgb(var(--color-snow));
-  border: 2px solid rgb(var(--color-swan));
-  border-radius: 12px;
-  box-sizing: border-box;
-  display: flex;
-  position: relative;
-}
+@scope (.input) {
+  :scope {
+    align-items: center;
+    background: rgb(var(--color-snow));
+    border: 2px solid rgb(var(--color-swan));
+    border-radius: 12px;
+    box-sizing: border-box;
+    display: flex;
+    position: relative;
+  }
 
-.input__search-icon {
-  background-image: url(/icons.svg);
-  background-position: -132px -69px;
-  display: inline-block;
-  height: 15px;
-  left: 16px;
-  margin-right: 17px;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%) scale(1.4);
-  transform-origin: 50% 50%;
-  vertical-align: middle;
-  width: 14px;
-}
+  .search-icon {
+    background-image: url(/icons.svg);
+    background-position: -132px -69px;
+    display: inline-block;
+    height: 15px;
+    left: 16px;
+    margin-right: 17px;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%) scale(1.4);
+    transform-origin: 50% 50%;
+    vertical-align: middle;
+    width: 14px;
+  }
 
-.input__input-area {
-  background-color: inherit;
-  border: none;
-  border-radius: 12px;
-  caret-color: rgb(var(--color-macaw));
-  color: rgb(var(--color-eel));
-  display: flex;
-  flex: 1;
-  font: var(--text-body-weight) var(--text-body-size) / var(--text-body-line-height) din-round, sans-serif;
-  font-size: var(--__internal__input-font-size, var(--text-body-size));
-  letter-spacing: var(--text-body-letter-spacing);
-  line-height: var(--__internal__input-line-height, var(--text-body-line-height));
-  min-width: 0;
-  outline: none;
-  overflow: hidden;
-  padding: var(--__internal__input-padding, 8px 14px);
-  text-transform: var(--text-body-casing);
-  width: 100%;
-}
+  .field {
+    background-color: inherit;
+    border: none;
+    border-radius: 12px;
+    caret-color: rgb(var(--color-macaw));
+    color: rgb(var(--color-eel));
+    display: flex;
+    flex: 1;
+    font: var(--text-body-weight) var(--text-body-size) / var(--text-body-line-height) din-round, sans-serif;
+    font-size: var(--__internal__input-font-size, var(--text-body-size));
+    letter-spacing: var(--text-body-letter-spacing);
+    line-height: var(--__internal__input-line-height, var(--text-body-line-height));
+    min-width: 0;
+    outline: none;
+    overflow: hidden;
+    padding: var(--__internal__input-padding, 8px 14px);
+    text-transform: var(--text-body-casing);
+    width: 100%;
+  }
 
-.input__input-area--icon {
-  padding-left: 45px;
-}
+  /* Room on the left for the search icon. */
+  .field[data-icon] {
+    padding-left: 45px;
+  }
 
-.input:focus-within {
-  border-color: rgb(var(--color-macaw));
+  :scope:focus-within {
+    border-color: rgb(var(--color-macaw));
+  }
 }

@@ -42,11 +42,11 @@ async function placeTiles(page, answer) {
 // tiles of `exampleAnswer`. Returns with the revealed answer on screen.
 async function playToExampleReveal(page, exampleAnswer) {
   await page.goto('/lesson');
-  await expect(page.locator('.lesson__prompt')).toBeVisible();
+  await expect(page.locator('.lesson .prompt')).toBeVisible();
   await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('der Hund');
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
   await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await expect(page.locator('.lesson__instruction')).toContainText('предложение');
+  await expect(page.locator('.lesson .instruction')).toContainText('предложение');
   await placeTiles(page, exampleAnswer);
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
 }
@@ -58,14 +58,14 @@ async function setUpLesson(page, exampleAnswer) {
   await playToExampleReveal(page, exampleAnswer);
 }
 
-const token = (page, index) => page.locator(`.lesson__answer-token[data-word-index="${index}"]`);
+const token = (page, index) => page.locator(`.lesson .token[data-word-index="${index}"]`);
 
 // The revealed answer's rendered width, and the width of the same text set
 // as plain text in the same block — a sibling copy with the same class, so
 // the same font and size, removed again at once.
 async function answerWidths(page) {
   return page.evaluate(() => {
-    const body = document.querySelector('.lesson__answer-body:has(.lesson__answer-token)');
+    const body = document.querySelector('.lesson .answer-body:has(.token)');
     const width = (el) => {
       const range = document.createRange();
       range.selectNodeContents(el);

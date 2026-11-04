@@ -39,7 +39,7 @@ async function seedWord(page, { active = null, collections = [], examples = [] }
 }
 
 async function openWord(page, text = 'Bahnhof') {
-  await page.locator('.word-item__display', { hasText: text }).first().click();
+  await page.locator('.word-item .display', { hasText: text }).first().click();
   await page.getByRole('dialog').waitFor();
 }
 

@@ -7,11 +7,11 @@
   [{:keys [correct-answer correct-answer-segments]}]
   (if (seq correct-answer-segments)
     (into
-     [:p.lesson__answer-body {:lang "de"}]
+     [:p.answer-body {:lang "de"}]
      (interpose " ")
      (for [{:keys [annotated? expanded? text word-index]} correct-answer-segments]
        (if annotated?
-         [:button.lesson__answer-token
+         [:button.token
           {:type "button"
            :data-word-index word-index
            :aria-haspopup "dialog"
@@ -20,7 +20,7 @@
            :on {:click [[:action/open-answer-hint word-index]]}}
           text]
          text)))
-    [:p.lesson__answer-body
+    [:p.answer-body
      {:lang "de"}
      correct-answer]))
 
@@ -31,12 +31,13 @@
    {:replicant/key      :input
     :replicant/on-mount [[:action/focus-lesson-input]
                          [:effect/after-paint [[:effect/enter :action/start-answer]]]]}
-   [:form.lesson__footer.lesson__footer--input.page-footer
-    {:autocapitalize "none"
+   [:form.footer.page-footer
+    {:data-variant "input"
+     :autocapitalize "none"
      :autocorrect "off"
      :on {:submit [[:effect/prevent-default]
                    [:action/check-answer [:event.form.field/value "answer"]]]}}
-    [:answer-field.lesson__input
+    [:answer-field.field
      {:id             "lesson-answer"
       :name           "answer"
       :autocapitalize "none"
@@ -55,7 +56,7 @@
       :on             {:keydown [[:action/submit-if-ctrl-enter
                                   {:key   [:event.keyboard/key]
                                    :ctrl? [:event.keyboard/ctrl?]}]]}}]
-    [:div.lesson__action.page-footer__action
+    [:div.footer-action
      [:button.big-button
       {:type "submit"}
       [:i18n :lesson/check]]]]])
@@ -67,14 +68,15 @@
    {:replicant/key      :success
     :replicant/on-mount [[:action/focus-continue-button
                           (if finished? "#lesson-finish" "#lesson-next")]]}
-   [:div.lesson__footer.lesson__footer--success.page-footer
-    [:div.lesson__answer
-     [:h3.lesson__answer-header
+   [:div.footer.page-footer
+    {:data-variant "success"}
+    [:div.answer
+     [:h3.answer-header
       [:i18n :lesson/correct]]
      (answer-body props)]
     [:form
      {:on {:submit [[:effect/prevent-default]]}}
-     [:div.lesson__action.page-footer__action
+     [:div.footer-action
       [:button.big-button
        {:id   (if finished? "lesson-finish" "lesson-next")
         :type "button"
@@ -90,19 +92,20 @@
   [:footer#lesson-footer
    {:replicant/key      :error
     :replicant/on-mount [[:action/focus-continue-button "#lesson-next"]]}
-   [:div.lesson__footer.lesson__footer--error.page-footer
-    [:div.lesson__answer
+   [:div.footer.page-footer
+    {:data-variant "error"}
+    [:div.answer
      (when user-answer
        (list
-        [:h3.lesson__answer-header
+        [:h3.answer-header
          [:i18n :lesson/your-answer]]
-        [:p.lesson__answer-body
+        [:p.answer-body
          {:lang "de"}
          user-answer]))
-     [:h3.lesson__answer-header
+     [:h3.answer-header
       [:i18n :lesson/correct-answer]]
      (answer-body props)]
-    [:div.lesson__action.page-footer__action
+    [:div.footer-action
      [:button.big-button
       {:id   "lesson-next"
        :type "button"
@@ -115,18 +118,18 @@
   [:div.token-card
    (cond-> {}
      data-dismiss (assoc :data-dismiss data-dismiss))
-   [:p.token-card__word
+   [:p.word
     {:lang "de"}
     word]
-   [:p.token-card__translation translation]
+   [:p.translation translation]
    (when (= :word-state/known-with-translation word-state)
-     [:p.token-card__state
+     [:p.state
       [:i18n :lesson/in-dictionary]])
    (when-let [action-label (case word-state
                              :word-state/known-missing-translation [:i18n :lesson/add-translation]
                              :word-state/unknown-word [:i18n :lesson/add-to-dictionary]
                              nil)]
-     [:button.token-card__button
+     [:button.button
       {:type "button"
        :on   {:click [[:action/save-lesson-word
                        {:dictionary-form word
@@ -144,30 +147,30 @@
     :replicant/on-update [[:action/reposition-token-popover]]}
    [:div#popover-content
     (hint-card props)]
-   [:div#popover-arrow.popover__arrow]])
+   [:div#popover-arrow.arrow]])
 
 
 (defn progress
   [lesson-state attrs]
   (let [value (presenter/progress-props lesson-state)]
-    [:div#lesson-progress.lesson__progress-shell
+    [:div#lesson-progress.progress
      attrs
-     [:div.lesson__progress
+     [:div.track
       {:role           "progressbar"
        :aria-label     [:i18n :lesson/progress]
        :aria-valuemin  0
        :aria-valuemax  100
        :aria-valuenow  value
        :aria-valuetext (str value "%")}
-      [:div#lesson-progress-bar.lesson__progress-value {:style {:width (str value "%")}}]]]))
+      [:div#lesson-progress-bar.fill {:style {:width (str value "%")}}]]]))
 
 
 (defn challenge
   [lesson-state]
   (let [{:keys [kind prompt]} (presenter/challenge-props lesson-state)]
-    [:div#lesson-challenge.lesson__challenge
-     [:h2.lesson__prompt prompt]
-     [:p.lesson__instruction
+    [:div#lesson-challenge.challenge
+     [:h2.prompt prompt]
+     [:p.instruction
       (case kind
         :trial/example [:i18n :lesson/translate-sentence]
         :trial/phrase  [:i18n :lesson/translate-phrase]
@@ -177,16 +180,16 @@
 (defn empty-state
   []
   [:div.lesson
-   [:h1.lesson__title.visually-hidden
+   [:h1.visually-hidden
     [:i18n :lesson/title]]
-   [:main.lesson__body
-    [:div.lesson__empty
-     [:div.lesson__empty-state
-      [:p.lesson__empty-state-text
+   [:main.body
+    [:div.empty
+     [:div.empty-state
+      [:p.empty-text
        [:i18n :lesson/empty]]
-      [:p.lesson__empty-state-hint
+      [:p.empty-hint
        [:i18n :lesson/empty-hint]]
-      [:button.lesson__empty-state-cta
+      [:button.empty-cta
        {:type "button"
         :on   {:click [[:action/go-to-words]]}}
        [:i18n :lesson/add-words]]]]]])
@@ -201,7 +204,7 @@
     ;; Opened before memory is loaded: the lesson is drawn once it is, and until then there is no trial.
     (nil? (:lesson/state state))
     [:div.lesson
-     [:h1.lesson__title.visually-hidden
+     [:h1.visually-hidden
       [:i18n :lesson/title]]]
 
     :else
@@ -209,12 +212,12 @@
           answer-hint  (presenter/answer-hint-props state)]
       [:div.lesson
        (when answer-hint (answer-hint-popover answer-hint))
-       [:h1.lesson__title.visually-hidden
+       [:h1.visually-hidden
         [:i18n :lesson/title]]
        ;; The lesson is closed by the shell's corner ✕ (`:action/close-screen`).
-       [:header.lesson__header
+       [:header.header
         (progress lesson-state {})]
-       [:main.lesson__body
+       [:main.body
         (challenge lesson-state)]
        (let [footer-props (presenter/footer-props state)]
          (if footer-props

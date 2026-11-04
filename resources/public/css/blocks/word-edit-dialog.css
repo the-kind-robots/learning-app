@@ -1,543 +1,556 @@
 /*
  * The word dialog: the word and its translations written straight on the sheet, a strip of cards with the
  * word's examples, one for each collection, and a footer that stays at the bottom while the rest scrolls.
+ * The strip (`word-examples`) is a block of its own and is cut out of the dialog's scope.
  */
-.word-edit-dialog.modal {
-  background: rgb(var(--color-snow));
-  border: none;
-  border-radius: 20px;
-  box-shadow: 0 12px 40px rgb(0 0 0 / 0.12);
-  max-height: calc(100dvh - 32px);
-  overflow: hidden;
-  width: calc(100% - 24px);
-}
-
-.word-edit-dialog.modal[open] {
-  display: flex;
-  flex-direction: column;
-}
-
-@media (max-width: 600px) {
-  .word-edit-dialog.modal {
-    margin-top: 96px;
-    max-height: calc(100dvh - 108px);
+@scope (.word-edit-dialog) to (.word-examples) {
+  :scope.modal {
+    background: rgb(var(--color-snow));
+    border: none;
+    border-radius: 20px;
+    box-shadow: 0 12px 40px rgb(0 0 0 / 0.12);
+    max-height: calc(100dvh - 32px);
+    overflow: hidden;
+    width: calc(100% - 24px);
   }
-}
 
-.word-edit-dialog__form {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-}
+  :scope.modal[open] {
+    display: flex;
+    flex-direction: column;
+  }
 
-.word-edit-dialog__form:focus {
-  outline: none;
-}
+  @media (max-width: 600px) {
+    :scope.modal {
+      margin-top: 96px;
+      max-height: calc(100dvh - 108px);
+    }
+  }
 
-.word-edit-dialog__body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-}
+  .form {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
 
-.word-edit-dialog__head {
-  display: flex;
-  flex-direction: column;
-  padding: 28px 28px 0;
-}
+  .form:focus {
+    outline: none;
+  }
 
-/* Fields are written on the sheet; a field that has the focus gets a fill. */
-.word-edit-dialog__word,
-.word-edit-dialog__translations {
-  background: none;
-  border: none;
-  border-radius: 8px;
-  box-sizing: border-box;
-  font-family: inherit;
-  margin: 0 -6px;
-  outline: none;
-  padding-left: 6px;
-  padding-right: 6px;
-  resize: none;
-  width: calc(100% + 12px);
-}
+  .body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
 
-.word-edit-dialog__word:focus,
-.word-edit-dialog__translations:focus {
-  background: rgb(var(--color-iguana));
-}
+  .head {
+    display: flex;
+    flex-direction: column;
+    padding: 28px 28px 0;
+  }
 
-.word-edit-dialog__word {
-  color: rgb(var(--color-black-text));
-  font-size: 26px;
-  font-weight: 800;
-  height: 40px;
-}
+  /* Fields are written on the sheet; a field that has the focus gets a fill. */
+  .word,
+  .translations {
+    background: none;
+    border: none;
+    border-radius: 8px;
+    box-sizing: border-box;
+    font-family: inherit;
+    margin: 0 -6px;
+    outline: none;
+    padding-left: 6px;
+    padding-right: 6px;
+    resize: none;
+    width: calc(100% + 12px);
+  }
 
-.word-edit-dialog__word--phrase {
-  field-sizing: content;
-  height: auto;
-  line-height: 1.25;
-  min-height: 40px;
-  overflow: hidden;
-  padding-bottom: 4px;
-  padding-top: 4px;
-}
-
-.word-edit-dialog__error {
-  color: #b42318;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.word-edit-dialog__translations {
-  color: rgb(var(--color-eel));
-  field-sizing: content;
-  font-size: 17px;
-  line-height: 26px;
-  min-height: 1lh;
-  padding-bottom: 2px;
-  padding-top: 2px;
-}
-
-.word-edit-dialog__notice {
-  background: rgb(var(--color-canary));
-  border-radius: 12px;
-  color: #6b4e00;
-  font-size: 14px;
-  line-height: 1.4;
-  margin-top: 10px;
-  padding: 10px 12px;
-}
-
-/* One card for every collection of the word, side by side, as tall as the tallest. */
-.word-examples {
-  align-items: stretch;
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding: 24px 28px 4px;
-  scroll-padding-left: 28px;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-}
-
-.word-examples::-webkit-scrollbar {
-  display: none;
-}
-
-.word-examples__end {
-  flex: none;
-  width: 6px;
-}
-
-.word-example {
-  --accent: rgb(var(--color-hare));
-  border: 2px solid var(--accent);
-  border-radius: 16px;
-  box-sizing: border-box;
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  padding: 0 24px 12px;
-  scroll-snap-align: start;
-  width: 290px;
-}
-
-/* A lone card spans the strip; the end spacer is for scrolling, which it has none of. */
-.word-example:only-of-type {
-  flex: 1 1 auto;
-  min-width: 0;
-  width: auto;
-}
-
-.word-example:only-of-type + .word-examples__end {
-  display: none;
-}
-
-.word-example--owl { --accent: rgb(var(--color-owl)); }
-.word-example--macaw { --accent: rgb(var(--color-macaw)); }
-.word-example--fox { --accent: rgb(var(--color-fox)); }
-.word-example--starfish { --accent: rgb(var(--color-starfish)); }
-.word-example--beetle { --accent: rgb(var(--color-beetle)); }
-.word-example--bee { --accent: rgb(var(--color-bee)); }
-.word-example--cardinal { --accent: rgb(var(--color-cardinal)); }
-.word-example--peacock { --accent: rgb(var(--color-peacock)); }
-
-.word-example__title {
-  color: rgb(var(--color-wolf));
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  line-height: 1.3;
-  margin: 0;
-  overflow: hidden;
-  padding-top: 22px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/*
- * A sentence and a translation are written in place: the text area lies over the same text set as plain
- * paragraph (where the bold word is) in one grid cell. The area is clear until it has the focus, then the
- * paragraph steps aside; the cell is as tall as the taller, so nothing moves.
- */
-.word-example__sentence,
-.word-example__translation {
-  display: grid;
-  margin: 16px -6px 0;
-}
-
-.word-example__sentence--pending {
-  opacity: 0.35;
-}
-
-.word-example__text,
-.word-example__field,
-.word-example__status {
-  border-radius: 8px;
-  box-sizing: border-box;
-  font-family: inherit;
-  grid-area: 1 / 1;
-  line-height: 1.6;
-  margin: 0;
-  min-height: 1.6em;
-  overflow-wrap: anywhere;
-  padding: 0 6px;
-  white-space: pre-wrap;
-}
-
-.word-example__text {
-  color: rgb(var(--color-black-text));
-  font-size: 18px;
-}
-
-.word-example__text strong {
-  font-weight: 800;
-}
-
-.word-example__field {
-  align-self: stretch;
-  background: none;
-  border: none;
-  caret-color: rgb(var(--color-black-text));
-  color: transparent;
-  field-sizing: content;
-  font-size: 18px;
-  height: auto;
-  outline: none;
-  overflow: hidden;
-  resize: none;
-}
-
-.word-example__field:focus {
-  background: rgb(var(--color-iguana));
-  color: rgb(var(--color-black-text));
-}
-
-.word-example__sentence:focus-within .word-example__text,
-.word-example__translation:focus-within .word-example__text {
-  visibility: hidden;
-}
-
-.word-example__translation {
-  margin-top: 14px;
-}
-
-.word-example__text--translation,
-.word-example__field--translation,
-.word-example__status {
-  font-size: 15px;
-}
-
-.word-example__text--translation,
-.word-example__status {
-  color: rgb(var(--color-wolf));
-}
-
-.word-example__field--translation:focus {
-  color: rgb(var(--color-wolf));
-}
-
-.word-example__text--hidden,
-.word-example__field--hidden {
-  visibility: hidden;
-}
-
-.word-example__status {
-  font-weight: 700;
-}
-
-.word-example__status--failed {
-  color: #b42318;
-}
-
-/* The card's own action is a text button: the example, not the button, holds the eye. */
-.word-example__spacer {
-  flex: 1;
-  min-height: 4px;
-}
-
-.word-example__regenerate {
-  align-items: center;
-  align-self: flex-start;
-  background: none;
-  border: none;
-  border-radius: 10px;
-  color: rgb(var(--color-humpback));
-  cursor: pointer;
-  display: flex;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 800;
-  gap: 8px;
-  height: 40px;
-  margin-left: -10px;
-  padding: 0 10px;
-}
-
-.word-example__regenerate:not(:disabled):active {
-  background: rgb(var(--color-iguana));
-}
-
-@media (hover: hover) {
-  .word-example__regenerate:not(:disabled):hover {
+  .word:focus,
+  .translations:focus {
     background: rgb(var(--color-iguana));
   }
 
-  .word-edit-dialog__delete:hover {
-    background: rgb(var(--color-walking-fish));
-    color: rgb(var(--color-fire-ant));
-  }
-}
-
-.word-example__regenerate:disabled {
-  cursor: default;
-}
-
-.word-example__icon {
-  height: 16px;
-  width: 16px;
-}
-
-.word-example__icon--spin {
-  animation: word-example-spin 0.9s linear infinite;
-}
-
-@keyframes word-example-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .word-example__icon--spin {
-    animation-duration: 3s;
-  }
-}
-
-/*
- * Footer: a quiet delete on the left; reset and save on the right, pressed like the app's other big buttons,
- * save the only filled one.
- */
-.word-edit-dialog__footer {
-  align-items: center;
-  border-top: 1px solid #ececec;
-  display: flex;
-  flex-shrink: 0;
-  gap: 12px;
-  margin-top: 24px;
-  padding: 16px 28px 24px;
-}
-
-.word-edit-dialog__spacer {
-  flex: 1;
-}
-
-.word-edit-dialog__delete,
-.word-edit-dialog__reset,
-.word-edit-dialog__save {
-  cursor: pointer;
-  font-family: inherit;
-  height: 48px;
-}
-
-.word-edit-dialog__delete {
-  align-items: center;
-  background: none;
-  border: none;
-  border-radius: 12px;
-  color: rgb(var(--color-wolf));
-  display: flex;
-  flex: none;
-  justify-content: center;
-  margin-left: -12px;
-  width: 48px;
-}
-
-.word-edit-dialog__delete:active {
-  background: rgb(var(--color-walking-fish));
-  color: rgb(var(--color-fire-ant));
-}
-
-.word-edit-dialog__reset {
-  background: rgb(var(--color-snow));
-  border: 2px solid rgb(var(--color-swan));
-  border-radius: 14px;
-  box-shadow: 0 3px 0 rgb(var(--color-swan));
-  box-sizing: border-box;
-  color: rgb(var(--color-eel));
-  font-size: 16px;
-  font-weight: 700;
-  padding: 0 16px;
-}
-
-.word-edit-dialog__save {
-  background: rgb(var(--color-macaw));
-  border: none;
-  border-radius: 14px;
-  box-shadow: 0 4px 0 rgb(var(--color-whale));
-  color: rgb(var(--color-snow));
-  font-size: 16px;
-  font-weight: 800;
-  padding: 0 22px;
-}
-
-.word-edit-dialog__reset:disabled,
-.word-edit-dialog__save:disabled {
-  background: rgb(var(--color-swan));
-  box-shadow: none;
-  color: #8a8a8a;
-  cursor: default;
-}
-
-.word-edit-dialog__reset:disabled {
-  background: rgb(var(--color-snow));
-}
-
-.word-edit-dialog__reset:not(:disabled):active,
-.word-edit-dialog__save:not(:disabled):active {
-  box-shadow: none;
-  transform: translateY(3px);
-}
-
-
-/*
- * On a desktop the dialog is narrow and centred, its type larger. One card fills the dialog; with several,
- * each keeps its width and the next one shows.
- */
-@media (min-width: 700px) {
-  .word-edit-dialog.modal {
-    border-radius: 24px;
-    box-shadow: 0 16px 48px rgb(0 0 0 / 0.14);
-    margin-top: 150px;
-    max-height: calc(100dvh - 182px);
-    max-width: 460px;
-    width: 460px;
+  .word {
+    color: rgb(var(--color-black-text));
+    font-size: 26px;
+    font-weight: 800;
+    height: 40px;
   }
 
-  .word-edit-dialog__head {
-    padding: 32px 32px 0;
+  /* The word of a phrase is a text area (the `input` word is not): it may run over several lines. */
+  textarea.word {
+    field-sizing: content;
+    height: auto;
+    line-height: 1.25;
+    min-height: 40px;
+    overflow: hidden;
+    padding-bottom: 4px;
+    padding-top: 4px;
   }
 
-  .word-edit-dialog__word {
-    font-size: 34px;
+  .error {
+    color: #b42318;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .translations {
+    color: rgb(var(--color-eel));
+    field-sizing: content;
+    font-size: 17px;
+    line-height: 26px;
+    min-height: 1lh;
+    padding-bottom: 2px;
+    padding-top: 2px;
+  }
+
+  .notice {
+    background: rgb(var(--color-canary));
+    border-radius: 12px;
+    color: #6b4e00;
+    font-size: 14px;
+    line-height: 1.4;
+    margin-top: 10px;
+    padding: 10px 12px;
+  }
+
+  @media (hover: hover) {
+    .delete:hover {
+      background: rgb(var(--color-walking-fish));
+      color: rgb(var(--color-fire-ant));
+    }
+  }
+
+  /*
+   * Footer: a quiet delete on the left; reset and save on the right, pressed like the app's other big buttons,
+   * save the only filled one.
+   */
+  .footer {
+    align-items: center;
+    border-top: 1px solid #ececec;
+    display: flex;
+    flex-shrink: 0;
+    gap: 12px;
+    margin-top: 24px;
+    padding: 16px 28px 24px;
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  .delete,
+  .reset,
+  .save {
+    cursor: pointer;
+    font-family: inherit;
     height: 48px;
   }
 
-  .word-edit-dialog__word--phrase {
-    height: auto;
-    min-height: 48px;
-  }
-
-  .word-edit-dialog__translations {
-    font-size: 20px;
-    line-height: 30px;
-    margin-top: 6px;
-    padding-bottom: 0;
-    padding-top: 0;
-  }
-
-  .word-examples {
-    gap: 12px;
-    padding: 26px 32px 4px;
-    scroll-padding-left: 32px;
-  }
-
-  .word-examples__end {
-    width: 2px;
-  }
-
-  .word-example {
-    border-radius: 18px;
-    padding: 0 26px 14px;
-    width: 320px;
-  }
-
-  .word-example__title {
-    font-size: 14px;
-    padding-top: 24px;
-  }
-
-  .word-example__sentence {
-    margin-top: 18px;
-  }
-
-  .word-example__translation {
-    margin-top: 16px;
-  }
-
-  .word-example__text,
-  .word-example__field {
-    font-size: 20px;
-  }
-
-  .word-example__text--translation,
-  .word-example__field--translation,
-  .word-example__status {
-    font-size: 16px;
-  }
-
-  .word-example__spacer {
-    min-height: 6px;
-  }
-
-  .word-example__regenerate {
-    font-size: 16px;
-    height: 44px;
+  .delete {
+    align-items: center;
+    background: none;
+    border: none;
+    border-radius: 12px;
+    color: rgb(var(--color-wolf));
+    display: flex;
+    flex: none;
+    justify-content: center;
     margin-left: -12px;
-    padding: 0 12px;
+    width: 48px;
   }
 
-  .word-edit-dialog__footer {
-    gap: 12px;
-    margin-top: 28px;
-    padding: 18px 32px 28px;
+  .delete:active {
+    background: rgb(var(--color-walking-fish));
+    color: rgb(var(--color-fire-ant));
   }
 
-  .word-edit-dialog__delete,
-  .word-edit-dialog__reset,
-  .word-edit-dialog__save {
-    font-size: 18px;
-    height: 52px;
+  .reset {
+    background: rgb(var(--color-snow));
+    border: 2px solid rgb(var(--color-swan));
+    border-radius: 14px;
+    box-shadow: 0 3px 0 rgb(var(--color-swan));
+    box-sizing: border-box;
+    color: rgb(var(--color-eel));
+    font-size: 16px;
+    font-weight: 700;
+    padding: 0 16px;
   }
 
-  .word-edit-dialog__delete {
-    margin-left: -14px;
-    width: 52px;
-  }
-
-  .word-edit-dialog__delete svg {
-    height: 24px;
-    width: 24px;
-  }
-
-  .word-edit-dialog__reset {
+  .save {
+    background: rgb(var(--color-macaw));
+    border: none;
+    border-radius: 14px;
+    box-shadow: 0 4px 0 rgb(var(--color-whale));
+    color: rgb(var(--color-snow));
+    font-size: 16px;
+    font-weight: 800;
     padding: 0 22px;
   }
 
-  .word-edit-dialog__save {
-    padding: 0 28px;
+  .reset:disabled,
+  .save:disabled {
+    background: rgb(var(--color-swan));
+    box-shadow: none;
+    color: #8a8a8a;
+    cursor: default;
+  }
+
+  .reset:disabled {
+    background: rgb(var(--color-snow));
+  }
+
+  .reset:not(:disabled):active,
+  .save:not(:disabled):active {
+    box-shadow: none;
+    transform: translateY(3px);
+  }
+
+  /*
+   * On a desktop the dialog is narrow and centred, its type larger.
+   */
+  @media (min-width: 700px) {
+    :scope.modal {
+      border-radius: 24px;
+      box-shadow: 0 16px 48px rgb(0 0 0 / 0.14);
+      margin-top: 150px;
+      max-height: calc(100dvh - 182px);
+      max-width: 460px;
+      width: 460px;
+    }
+
+    .head {
+      padding: 32px 32px 0;
+    }
+
+    .word {
+      font-size: 34px;
+      height: 48px;
+    }
+
+    textarea.word {
+      height: auto;
+      min-height: 48px;
+    }
+
+    .translations {
+      font-size: 20px;
+      line-height: 30px;
+      margin-top: 6px;
+      padding-bottom: 0;
+      padding-top: 0;
+    }
+
+    .footer {
+      gap: 12px;
+      margin-top: 28px;
+      padding: 18px 32px 28px;
+    }
+
+    .delete,
+    .reset,
+    .save {
+      font-size: 18px;
+      height: 52px;
+    }
+
+    .delete {
+      margin-left: -14px;
+      width: 52px;
+    }
+
+    .delete svg {
+      height: 24px;
+      width: 24px;
+    }
+
+    .reset {
+      padding: 0 22px;
+    }
+
+    .save {
+      padding: 0 28px;
+    }
+  }
+}
+
+/* One card for every collection of the word, side by side, as tall as the tallest. */
+@scope (.word-examples) to (.word-example) {
+  :scope {
+    align-items: stretch;
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 24px 28px 4px;
+    scroll-padding-left: 28px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  :scope::-webkit-scrollbar {
+    display: none;
+  }
+
+  .end {
+    flex: none;
+    width: 6px;
+  }
+
+  /* A lone card spans the strip; the end spacer is for scrolling, which it has none of. */
+  :scope > .word-example:only-of-type + .end {
+    display: none;
+  }
+
+  /* On a desktop one card fills the dialog; with several, each keeps its width and the next one shows. */
+  @media (min-width: 700px) {
+    :scope {
+      gap: 12px;
+      padding: 26px 32px 4px;
+      scroll-padding-left: 32px;
+    }
+
+    .end {
+      width: 2px;
+    }
+  }
+}
+
+@scope (.word-example) {
+  :scope {
+    --accent: rgb(var(--color-hare));
+    border: 2px solid var(--accent);
+    border-radius: 16px;
+    box-sizing: border-box;
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    padding: 0 24px 12px;
+    scroll-snap-align: start;
+    width: 290px;
+  }
+
+  /* A lone card spans the strip. */
+  :scope:only-of-type {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+  }
+
+  :scope[data-accent="owl"] { --accent: rgb(var(--color-owl)); }
+  :scope[data-accent="macaw"] { --accent: rgb(var(--color-macaw)); }
+  :scope[data-accent="fox"] { --accent: rgb(var(--color-fox)); }
+  :scope[data-accent="starfish"] { --accent: rgb(var(--color-starfish)); }
+  :scope[data-accent="beetle"] { --accent: rgb(var(--color-beetle)); }
+  :scope[data-accent="bee"] { --accent: rgb(var(--color-bee)); }
+  :scope[data-accent="cardinal"] { --accent: rgb(var(--color-cardinal)); }
+  :scope[data-accent="peacock"] { --accent: rgb(var(--color-peacock)); }
+
+  .title {
+    color: rgb(var(--color-wolf));
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    line-height: 1.3;
+    margin: 0;
+    overflow: hidden;
+    padding-top: 22px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /*
+   * A sentence and a translation are written in place: the text area lies over the same text set as plain
+   * paragraph (where the bold word is) in one grid cell. The area is clear until it has the focus, then the
+   * paragraph steps aside; the cell is as tall as the taller, so nothing moves.
+   */
+  .sentence,
+  .translation {
+    display: grid;
+    margin: 16px -6px 0;
+  }
+
+  .sentence[data-pending] {
+    opacity: 0.35;
+  }
+
+  .text,
+  .field,
+  .status {
+    border-radius: 8px;
+    box-sizing: border-box;
+    font-family: inherit;
+    grid-area: 1 / 1;
+    line-height: 1.6;
+    margin: 0;
+    min-height: 1.6em;
+    overflow-wrap: anywhere;
+    padding: 0 6px;
+    white-space: pre-wrap;
+  }
+
+  .text {
+    color: rgb(var(--color-black-text));
+    font-size: 18px;
+  }
+
+  .text strong {
+    font-weight: 800;
+  }
+
+  .field {
+    align-self: stretch;
+    background: none;
+    border: none;
+    caret-color: rgb(var(--color-black-text));
+    color: transparent;
+    field-sizing: content;
+    font-size: 18px;
+    height: auto;
+    outline: none;
+    overflow: hidden;
+    resize: none;
+  }
+
+  .field:focus {
+    background: rgb(var(--color-iguana));
+    color: rgb(var(--color-black-text));
+  }
+
+  .sentence:focus-within .text,
+  .translation:focus-within .text {
+    visibility: hidden;
+  }
+
+  .translation {
+    margin-top: 14px;
+  }
+
+  .translation .text,
+  .translation .field,
+  .status {
+    font-size: 15px;
+  }
+
+  .translation .text,
+  .status {
+    color: rgb(var(--color-wolf));
+  }
+
+  .translation .field:focus {
+    color: rgb(var(--color-wolf));
+  }
+
+  [data-hidden] {
+    visibility: hidden;
+  }
+
+  .status {
+    font-weight: 700;
+  }
+
+  .status[data-failed] {
+    color: #b42318;
+  }
+
+  /* The card's own action is a text button: the example, not the button, holds the eye. */
+  .spacer {
+    flex: 1;
+    min-height: 4px;
+  }
+
+  .regenerate {
+    align-items: center;
+    align-self: flex-start;
+    background: none;
+    border: none;
+    border-radius: 10px;
+    color: rgb(var(--color-humpback));
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    gap: 8px;
+    height: 40px;
+    margin-left: -10px;
+    padding: 0 10px;
+  }
+
+  .regenerate:not(:disabled):active {
+    background: rgb(var(--color-iguana));
+  }
+
+  @media (hover: hover) {
+    .regenerate:not(:disabled):hover {
+      background: rgb(var(--color-iguana));
+    }
+  }
+
+  .regenerate:disabled {
+    cursor: default;
+  }
+
+  .icon {
+    height: 16px;
+    width: 16px;
+  }
+
+  .icon[data-spinning] {
+    animation: word-example-spin 0.9s linear infinite;
+  }
+
+  @keyframes word-example-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .icon[data-spinning] {
+      animation-duration: 3s;
+    }
+  }
+
+  @media (min-width: 700px) {
+    :scope {
+      border-radius: 18px;
+      padding: 0 26px 14px;
+      width: 320px;
+    }
+
+    .title {
+      font-size: 14px;
+      padding-top: 24px;
+    }
+
+    .sentence {
+      margin-top: 18px;
+    }
+
+    .translation {
+      margin-top: 16px;
+    }
+
+    .text,
+    .field {
+      font-size: 20px;
+    }
+
+    .translation .text,
+    .translation .field,
+    .status {
+      font-size: 16px;
+    }
+
+    .spacer {
+      min-height: 6px;
+    }
+
+    .regenerate {
+      font-size: 16px;
+      height: 44px;
+      margin-left: -12px;
+      padding: 0 12px;
+    }
   }
 }

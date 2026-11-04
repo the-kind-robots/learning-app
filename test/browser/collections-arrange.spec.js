@@ -19,7 +19,7 @@ const abc = [
 
 // The name each tile shows, in the order the screen reads.
 const tileNames = (page) =>
-  page.locator('.masonry > .tile > :first-child').locator('.tile__name, .tile__label-text');
+  page.locator('.masonry > .tile > :first-child').locator('.name, .label-text');
 
 async function openCollections(page) {
   await page.getByRole('button', { name: 'Открыть наборы' }).click();
@@ -38,7 +38,7 @@ async function dragAbove(page, from, onto) {
 
 const accentsByName = (page) =>
   page.locator('.masonry > .tile').evaluateAll((tiles) => Object.fromEntries(tiles.map((tile) => [
-    tile.querySelector('.tile__name, .tile__label-text').textContent,
+    tile.querySelector('.name, .label-text').textContent,
     getComputedStyle(tile).getPropertyValue('--accent').replace(/\s/g, ''),
   ])));
 
@@ -111,7 +111,7 @@ test.describe('Порядок тем', () => {
 
     await test.step('Тогда папка стоит перед «Grammatik», её строки по-прежнему по порядку', async () => {
       await expect(tileNames(page)).toHaveText(['Всё подряд', 'Kurs', 'Grammatik', 'Solo']);
-      await expect(page.locator('.tile__row-name')).toHaveText(['Kapitel 1', 'Kapitel 2']);
+      await expect(page.locator('.tile .row-name')).toHaveText(['Kapitel 1', 'Kapitel 2']);
     });
   });
 

@@ -48,8 +48,8 @@ for (const height of [844, 667]) {
 
     await test.step('Тогда задание внутри окна урока, слова ниже задания и выше лотка', async () => {
       const box = (locator) => locator.boundingBox();
-      const body = await box(page.locator('.lesson__body'));
-      const prompt = await box(page.locator('.lesson__prompt'));
+      const body = await box(page.locator('.lesson .body'));
+      const prompt = await box(page.locator('.lesson .prompt'));
       const bank = await box(page.getByRole('group', { name: 'Плитки' }));
       const tray = await box(page.getByRole('group', { name: 'Ваш ответ' }));
       expect(prompt.y).toBeGreaterThanOrEqual(body.y);

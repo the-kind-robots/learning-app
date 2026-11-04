@@ -55,7 +55,7 @@ test.describe('Согласованность списка слов', () => {
       // Read in the first frame after the tap: the rows are there at once.
       shown = await page.evaluate(() => new Promise((resolve) => {
         requestAnimationFrame(() => resolve(
-          [...document.querySelectorAll('.word-item__value')].map((n) => n.textContent),
+          [...document.querySelectorAll('.word-item .value')].map((n) => n.textContent),
         ));
         document.querySelector('#home-words-button').click();
       }));
@@ -232,16 +232,16 @@ test.describe('Согласованность списка слов', () => {
     await test.step('Когда он пробует удалить слово', async () => {
       let prompt = null;
       page.once('dialog', (dialog) => { prompt = dialog.message(); dialog.dismiss(); });
-      await page.locator('.word-item__display').first().click();
-      await page.locator('.word-edit-dialog__delete').click();
+      await page.locator('.word-item .display').first().click();
+      await page.locator('.word-edit-dialog .delete').click();
       await expect.poll(() => prompt).toBe('Удалить «Haus» окончательно?');
       await page.keyboard.press('Escape');
     });
 
     await test.step('Тогда урок начинается со словом из словаря', async () => {
       await page.getByRole('button', { name: 'Закрыть' }).click();
-      await page.locator('.home__lesson-button').click();
-      await expect(page.locator('.lesson__prompt')).toBeVisible();
+      await page.locator('.home .lesson-button').click();
+      await expect(page.locator('.lesson .prompt')).toBeVisible();
     });
 
     await test.step('Тогда на экране тем выбрано «Всё подряд», запомненный id не тронут', async () => {

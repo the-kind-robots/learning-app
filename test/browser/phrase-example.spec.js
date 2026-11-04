@@ -88,8 +88,8 @@ test.describe('Пример к фразе', () => {
       await page.goto('/lesson');
       // Two trials exist, and the example is not one the lesson will offer
       // yet: the only selectable trial is the phrase's own.
-      await expect(page.locator('.lesson__instruction')).toHaveText('Переведите фразу на немецкий');
-      await expect(page.locator('.lesson__prompt')).toHaveText(GLOSS);
+      await expect(page.locator('.lesson .instruction')).toHaveText('Переведите фразу на немецкий');
+      await expect(page.locator('.lesson .prompt')).toHaveText(GLOSS);
       await expect(progressNow(page)).toHaveAttribute('aria-valuenow', '0');
     });
 
@@ -109,8 +109,8 @@ test.describe('Пример к фразе', () => {
     });
 
     await test.step('Тогда ему предлагают перевести предложение-пример', async () => {
-      await expect(page.locator('.lesson__instruction')).toHaveText('Переведите предложение на немецкий');
-      await expect(page.locator('.lesson__prompt')).toHaveText(SENTENCE_RU);
+      await expect(page.locator('.lesson .instruction')).toHaveText('Переведите предложение на немецкий');
+      await expect(page.locator('.lesson .prompt')).toHaveText(SENTENCE_RU);
     });
 
     await test.step('Когда он верно переводит предложение', async () => {
@@ -131,7 +131,7 @@ test.describe('Пример к фразе', () => {
       await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(PHRASE);
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
       await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-      await expect(page.locator('.lesson__instruction')).toHaveText('Переведите предложение на немецкий');
+      await expect(page.locator('.lesson .instruction')).toHaveText('Переведите предложение на немецкий');
       await placeTiles(page, SENTENCE);
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
     });
@@ -149,7 +149,7 @@ test.describe('Пример к фразе', () => {
     });
 
     await test.step('Тогда карточка про «der Fall», а не про всю фразу', async () => {
-      const card = page.locator('#popover').locator('.token-card__word');
+      const card = page.locator('#popover').locator('.token-card .word');
       await expect(card).toHaveText('der Fall');
       await expect(card).not.toHaveText(PHRASE);
     });

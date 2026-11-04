@@ -20,7 +20,7 @@ async function showWord(page, sentence) {
   await addWord(page, 'der Hund', 'пёс');
   await seedExample(page, undefined, sentence);
   await page.goto('/lesson');
-  await expect(page.locator('.lesson__prompt')).toBeVisible();
+  await expect(page.locator('.lesson .prompt')).toBeVisible();
 }
 
 // Answers the word, and leaves the example on screen.
@@ -29,7 +29,7 @@ async function showExample(page, sentence) {
   await field(page).fill('der Hund');
   await check(page).click();
   await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await expect(page.locator('.lesson__instruction')).toContainText('предложение');
+  await expect(page.locator('.lesson .instruction')).toContainText('предложение');
 }
 
 async function place(page, words) {

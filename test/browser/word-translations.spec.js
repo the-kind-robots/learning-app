@@ -17,7 +17,7 @@ test.describe('Переводы слова', () => {
     });
 
     await test.step('Когда он открывает слово, пишет «ужин» и «вечерняя еда» на двух строках и жмёт «Сохранить»', async () => {
-      await page.locator('.word-item__display', { hasText: 'Abendessen' }).click();
+      await page.locator('.word-item .display', { hasText: 'Abendessen' }).click();
       await translations(page).fill('ужин\n  вечерняя еда  \n\n');
       await page.getByRole('button', { name: 'Сохранить' }).click();
       await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -28,7 +28,7 @@ test.describe('Переводы слова', () => {
     });
 
     await test.step('Когда он открывает слово снова', async () => {
-      await page.locator('.word-item__display', { hasText: 'Abendessen' }).click();
+      await page.locator('.word-item .display', { hasText: 'Abendessen' }).click();
     });
 
     await test.step('Тогда каждый перевод на своей строке, без лишних', async () => {
@@ -42,7 +42,7 @@ test.describe('Переводы слова', () => {
       await memoryReady(page);
       await addWord(page, 'Abendessen', 'ужин');
       await page.goto('/words');
-      await page.locator('.word-item__display', { hasText: 'Abendessen' }).click();
+      await page.locator('.word-item .display', { hasText: 'Abendessen' }).click();
     });
 
     await test.step('Когда он ставит курсор в конец перевода и нажимает Enter', async () => {
@@ -77,7 +77,7 @@ test.describe('Переводы слова', () => {
       await memoryReady(page);
       await addWord(page, 'Abendessen', 'ужин');
       await page.goto('/words');
-      await page.locator('.word-item__display', { hasText: 'Abendessen' }).click();
+      await page.locator('.word-item .display', { hasText: 'Abendessen' }).click();
       one = (await translations(page).boundingBox()).height;
     });
 
@@ -117,7 +117,7 @@ test.describe('Переводы фразы', () => {
     });
 
     await test.step('Когда он открывает фразу', async () => {
-      await page.locator('.word-item__display', { hasText: 'auf jeden Fall' }).click();
+      await page.locator('.word-item .display', { hasText: 'auf jeden Fall' }).click();
     });
 
     await test.step('Тогда каждый перевод на своей строке', async () => {

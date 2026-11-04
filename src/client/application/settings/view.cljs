@@ -15,13 +15,13 @@
     :popover    (when-not asking? "auto")
     :role       "dialog"}
    ;; Radios: one language of four, the arrows move between them; the group is named, the name not shown.
-   [:fieldset.settings-menu__group
+   [:fieldset.group
     {:aria-label [:i18n :settings/language]}
     (for [{:keys [code selected?] :as language} languages]
-      [:label.settings-menu__language
+      [:label.language
        {:replicant/key code
         :lang code}
-       [:input.settings-menu__radio
+       [:input.radio
         {:checked selected?
          :name    "language"
          :type    "radio"
@@ -32,25 +32,25 @@
        (:name language)
        ;; The flag adorns the name: the name alone is read out. A small flat stripe in the palette's colours.
        ;; zprint: as written
-       (when-let [flag (get {"en" [[:rect.settings-menu__flag-blue {:height 40 :width 60}]
+       (when-let [flag (get {"en" [[:rect.flag-blue {:height 40 :width 60}]
                                    ;; A wide white edge keeps the red cross off the blue: the two are near in lightness.
-                                   [:rect.settings-menu__flag-white {:height 40 :width 15 :x 22.5}]
-                                   [:rect.settings-menu__flag-white {:height 15 :width 60 :y 12.5}]
-                                   [:rect.settings-menu__flag-red {:height 40 :width 5 :x 27.5}]
-                                   [:rect.settings-menu__flag-red {:height 5 :width 60 :y 17.5}]]
-                             "fr" [[:rect.settings-menu__flag-blue {:height 40 :width 20}]
-                                   [:rect.settings-menu__flag-white {:height 40 :width 20 :x 20}]
-                                   [:rect.settings-menu__flag-red {:height 40 :width 20 :x 40}]]
-                             "ru" [[:rect.settings-menu__flag-white {:height 13.34 :width 60}]
-                                   [:rect.settings-menu__flag-blue {:height 13.34 :width 60 :y 13.33}]
-                                   [:rect.settings-menu__flag-red {:height 13.34 :width 60 :y 26.66}]]
-                             "tr" [[:rect.settings-menu__flag-red {:height 40 :width 60}]
-                                   [:circle.settings-menu__flag-white {:cx 21.25 :cy 20 :r 10}]
-                                   [:circle.settings-menu__flag-red {:cx 23.75 :cy 20 :r 8}]
-                                   [:path.settings-menu__flag-white
+                                   [:rect.flag-white {:height 40 :width 15 :x 22.5}]
+                                   [:rect.flag-white {:height 15 :width 60 :y 12.5}]
+                                   [:rect.flag-red {:height 40 :width 5 :x 27.5}]
+                                   [:rect.flag-red {:height 5 :width 60 :y 17.5}]]
+                             "fr" [[:rect.flag-blue {:height 40 :width 20}]
+                                   [:rect.flag-white {:height 40 :width 20 :x 20}]
+                                   [:rect.flag-red {:height 40 :width 20 :x 40}]]
+                             "ru" [[:rect.flag-white {:height 13.34 :width 60}]
+                                   [:rect.flag-blue {:height 13.34 :width 60 :y 13.33}]
+                                   [:rect.flag-red {:height 13.34 :width 60 :y 26.66}]]
+                             "tr" [[:rect.flag-red {:height 40 :width 60}]
+                                   [:circle.flag-white {:cx 21.25 :cy 20 :r 10}]
+                                   [:circle.flag-red {:cx 23.75 :cy 20 :r 8}]
+                                   [:path.flag-white
                                     {:d "M29.167 20l9.045 2.939-5.59-7.694v9.511l5.59-7.694z"}]]}
                             code)]
-         (into [:svg.settings-menu__flag
+         (into [:svg.flag
                 {:aria-hidden "true"
                  :viewBox     "0 0 60 40"}]
                flag))])]])

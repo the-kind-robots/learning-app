@@ -16,7 +16,7 @@ async function seedThemes(page) {
 }
 
 async function openWord(page, text) {
-  await page.locator('.word-item__display', { hasText: text }).first().click();
+  await page.locator('.word-item .display', { hasText: text }).first().click();
 }
 
 test.describe('Исправление написания слова', () => {

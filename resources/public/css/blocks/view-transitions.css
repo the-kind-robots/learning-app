@@ -7,7 +7,7 @@
 :root {
   --screen-easing: cubic-bezier(.2, .8, .2, 1);
 }
-html:active-view-transition .app-shell__bar {
+html:active-view-transition .app-bar {
   view-transition-name: app-bar;
 }
 
@@ -82,7 +82,7 @@ html:active-view-transition-type(next-trial)::view-transition-new(lesson-trial) 
 
 /* A deleted collection: its tile shrinks away, the tiles after it glide into the gap. */
 
-html:active-view-transition-type(close-gap) :is(.tile, .tile__row) {
+html:active-view-transition-type(close-gap) :is(.tile, .tile .row) {
   view-transition-name: match-element;
   view-transition-class: tile;
 }

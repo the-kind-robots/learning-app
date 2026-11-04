@@ -173,13 +173,13 @@ test.describe('Старт приложения', () => {
 
     await test.step('Когда он открывает урок', async () => {
       await page.goto('/lesson');
-      await expect(page.locator('.lesson__prompt')).toBeVisible();
+      await expect(page.locator('.lesson .prompt')).toBeVisible();
       await runAskedFrames(page);
     });
 
     await test.step('Тогда задание урока остаётся, «Загружаем...» не возвращается', async () => {
       await expect(page.getByText('Загружаем...')).toHaveCount(0);
-      await expect(page.locator('.lesson__prompt')).toBeVisible();
+      await expect(page.locator('.lesson .prompt')).toBeVisible();
     });
   });
 });

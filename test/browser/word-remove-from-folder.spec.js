@@ -35,8 +35,8 @@ test.describe('Удаление слова из набора с вложенны
     await test.step('Когда он убирает слово из набора', async () => {
       let prompt = null;
       page.once('dialog', (dialog) => { prompt = dialog.message(); dialog.accept(); });
-      await page.locator('.word-item__display').first().click();
-      await page.locator('.word-edit-dialog__delete').click();
+      await page.locator('.word-item .display').first().click();
+      await page.locator('.word-edit-dialog .delete').click();
       await expect.poll(() => prompt).toBe('Убрать «bischer» из набора?');
     });
 
