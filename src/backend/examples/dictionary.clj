@@ -129,8 +129,7 @@
   (->> doc-groups
        (remove nil?)
        (apply concat)
-       (utils/distinct-by :id)
-       (vec)))
+       (utils/distinct-by :id)))
 
 
 ;; =============================================================================

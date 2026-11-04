@@ -133,6 +133,11 @@ Before it builds a generation request the system SHALL look the target up in the
 SHALL carry the found entry's part of speech and CEFR level in that request. A target the dictionary
 does not know SHALL be sent without a part of speech and at the default CEFR level.
 
+When several entries share the target, the lookup SHALL answer those written as the target — with or
+without their article, for a target without one — before those that only have the target among their
+forms, each group in rank order, whatever the number of entries. The found entry SHALL be the first
+whose gloss matches the word's translation, and with none matching, the first entry.
+
 The dictionary is the SQLite dictionary built for the client; the system SHALL read it directly and
 SHALL NOT depend on a separate dictionary database.
 
@@ -166,6 +171,14 @@ dictionary is never mistaken for a word the dictionary does not know.
 
 - **WHEN** the dictionary is asked for "die Leiter"
 - **THEN** only the entry written with that article is found, not "der Leiter"
+
+#### Scenario: A form that many lemmas share
+
+- **WHEN** the dictionary is asked for a word that more than eight lemmas have among their forms, as
+  nine share "sie"
+- **THEN** the entries written as that word come first, and the others after them in rank order
+- **AND** a word whose translation matches no gloss gets the lemma written as the word, not another
+  lemma of the form
 
 #### Scenario: The lookup query is planned against an index
 
