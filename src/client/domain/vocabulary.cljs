@@ -69,14 +69,11 @@
 
 (defn merged-word
   "The one word that conflicting `versions` come to: the fields of the last written by `:modified-at`, and
-   the translations of every version, so a word added on two devices keeps both meanings."
-  [versions]
-  (let [latest (reduce (fn [a b]
-                         (if (pos? (compare (:modified-at a) (:modified-at b)))
-                           a
-                           b))
-                       versions)]
-    (assoc latest :translation (reduce merge-translations [] (map :translation versions)))))
+   the translations of every version, oldest first, so a word added on two devices keeps both meanings;
+   `tie-break` decides between two written together. The order of versions changes nothing."
+  [tie-break versions]
+  (let [oldest-first (sort-by (juxt :modified-at tie-break) versions)]
+    (assoc (last oldest-first) :translation (reduce merge-translations [] (map :translation oldest-first)))))
 
 
 (def id-prefix

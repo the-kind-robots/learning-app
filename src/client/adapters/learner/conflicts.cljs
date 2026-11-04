@@ -17,6 +17,14 @@
   (js/Promise.all (into-array promises)))
 
 
+(defn- revision-order
+  "The revision of a stored `version` as a comparable: its generation, then
+   its hash."
+  [version]
+  (let [[generation hash] (str/split (:_rev version) #"-" 2)]
+    [(js/parseInt generation 10) hash]))
+
+
 (defn- ^:async resolve-conflict!
   "Writes the merged word (`domain.vocabulary/merged-word`) of a document's conflicting
    revisions and deletes the losers, so the conflict is gone everywhere."
@@ -26,7 +34,7 @@
   (let [conflicting (await (all! (map #(db/get user-db (:_id doc) {:rev %})
                                       (:_conflicts doc))))
         revisions   (cons doc conflicting)
-        merged      (vocabulary/merged-word revisions)
+        merged      (vocabulary/merged-word revision-order revisions)
         losers      (remove #(= (:_rev %) (:_rev merged)) revisions)]
     (await (db/insert user-db merged))
     (await (all! (map #(db/remove user-db %) losers)))))
@@ -52,14 +60,6 @@
       (await (all! (map #(resolve-conflict! user-db %) conflicted))))
     (catch js/Error err
       (log/warn :sync/conflict-resolution-failed {:error (ex-message err)}))))
-
-
-(defn- revision-order
-  "The revision of a stored `version` as a comparable: its generation, then
-   its hash."
-  [version]
-  (let [[generation hash] (str/split (:_rev version) #"-" 2)]
-    [(js/parseInt generation 10) hash]))
 
 
 (defn- ^:async resolve-collection!
