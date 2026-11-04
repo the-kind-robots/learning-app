@@ -1,7 +1,8 @@
 # Invite mail Worker
 
 Mails the operator an invite request (#650). The backend POSTs
-`{"subject": …, "text": …}` with `Authorization: Bearer <secret>`; the Worker
+`{"subject": …, "text": …, "html": …}` (`html` optional) with
+`Authorization: Bearer <secret>`; the Worker
 sends it from `invite@sprecha.de` with the `send_email` binding and answers
 204.
 

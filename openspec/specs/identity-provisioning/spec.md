@@ -59,13 +59,17 @@ The packaged application SHALL expose a `mint-invite` command-line entry point t
 
 ### Requirement: A device without an account requests an invite
 
-`POST /api/invite-requests` SHALL accept `{"sha256": …, "words": …, "days": …, "note": …}`: the lowercase hex sha256 of a secret the device keeps, its word count and its days of practice, both non-negative integers, and a note the learner writes to the operator, not blank and at most 500 characters once trimmed of every space, the invisible ones too. The body SHALL be `application/json`; any other Content-Type SHALL be refused with 415. The note SHALL reach the operator's mail and page as text, never as markup; in the mail the Grant and Decline links SHALL come before it and every line of it SHALL be quoted with `> `. The request SHALL carry nothing else and SHALL create no CouchDB database. A new request SHALL be stored as pending and mailed to the operator once; a hash already requested SHALL answer its current status and mail nothing, unless its status is `expired`: then the request SHALL be replaced by a new one with new links, and its old grant dropped. An expired request SHALL stay as it was when no new request can be made. A request whose mail has not gone SHALL not exist for the device: reading it SHALL answer 404, and posting it again SHALL answer 503 for a minute, then make the request anew. Its links SHALL still decide it, since a mail can arrive after the Worker's answer timed out. A request stored now SHALL be answered `201 Created`, one that already exists `200`; both SHALL carry `Location: /api/invite-requests/<sha256>` and `{"status": …}`. A refusal SHALL carry `Retry-After`.
+`POST /api/invite-requests` SHALL accept `{"sha256": …, "words": …, "days": …, "note": …}`: the lowercase hex sha256 of a secret the device keeps, its word count and its days of practice, both non-negative integers, and a note the learner writes to the operator, not blank and at most 500 characters once trimmed of every space, the invisible ones too. The body SHALL be `application/json`; any other Content-Type SHALL be refused with 415. The note SHALL reach the operator's mail and page as text, never as markup. The mail SHALL have an HTML part and a plain-text part; in both the Grant and Decline links SHALL come before the note, and in the plain-text part every line of the note SHALL be quoted with `> `. The request SHALL carry nothing else and SHALL create no CouchDB database. A new request SHALL be stored as pending and mailed to the operator once; a hash already requested SHALL answer its current status and mail nothing, unless its status is `expired`: then the request SHALL be replaced by a new one with new links, and its old grant dropped. An expired request SHALL stay as it was when no new request can be made. A request whose mail has not gone SHALL not exist for the device: reading it SHALL answer 404, and posting it again SHALL answer 503 for a minute, then make the request anew. Its links SHALL still decide it, since a mail can arrive after the Worker's answer timed out. A request stored now SHALL be answered `201 Created`, one that already exists `200`; both SHALL carry `Location: /api/invite-requests/<sha256>` and `{"status": …}`. A refusal SHALL carry `Retry-After`.
 
 A client address SHALL make at most 5 requests in 24 hours that reach the operator; a request refused or whose mail did not go SHALL not count. The next one SHALL be refused with 429 and change nothing. An IPv6 address SHALL count as its /64, and an IPv4 address written as IPv6 as that IPv4 address. The limit SHALL remember at most 10000 networks at once; past that a request from a network it does not know SHALL be refused with 429. All callers together SHALL mail at most 50 new requests in 24 hours, and the backend SHALL try at most 100 mails a day; past either, a new hash SHALL be refused with 429, and a hash already requested SHALL still answer its status.
 
 #### Scenario: First request
 - **WHEN** a device posts a hash nobody requested, with its stats
 - **THEN** the answer is `201 Created` with the request's `Location` and `pending`, the request is stored, and one mail with the note, the stats and the Grant and Decline links goes to the operator
+
+#### Scenario: A note with links of its own
+- **WHEN** a note holds a line such as `Grant: https://…`
+- **THEN** both parts of the mail carry the real Grant and Decline links before it, and the plain-text part quotes it with `> `
 
 #### Scenario: Repeated request
 - **WHEN** a device posts a hash it already requested
@@ -110,11 +114,15 @@ A client address SHALL make at most 5 requests in 24 hours that reach the operat
 
 ### Requirement: The operator decides a request from the email
 
-Each link in the mail SHALL open a page with one button, Grant or Decline, and SHALL change nothing when opened: mail scanners fetch links. The button's POST SHALL decide. The links SHALL carry a token of their own, unknown to the device, and the server SHALL store only its sha256. Granting SHALL store the request's hash as a single-use grant with the lifetime a minted invite has, so the device's secret is redeemed by `/api/identity/provision` like any invite. A request SHALL be decided once; a later POST on either link SHALL change nothing and the page SHALL say how the request was decided.
+Each link in the mail SHALL open a page with one button, Grant or Decline, and SHALL change nothing when opened: mail scanners fetch links. The button's POST SHALL decide. The page SHALL carry its own styles and load no stylesheet of the app's, so the app's cached files cannot leave it unstyled. The links SHALL carry a token of their own, unknown to the device, and the server SHALL store only its sha256. Granting SHALL store the request's hash as a single-use grant with the lifetime a minted invite has, so the device's secret is redeemed by `/api/identity/provision` like any invite. A request SHALL be decided once; a later POST on either link SHALL change nothing and the page SHALL say how the request was decided.
 
 #### Scenario: Opening a link
 - **WHEN** the operator, or a mail scanner, opens the Grant link
 - **THEN** a page shows the request's stats and a Grant button, and the request is still pending
+
+#### Scenario: Opening a link after a deploy
+- **WHEN** the operator opens a link in a browser whose service worker still holds the last deploy's files
+- **THEN** the page is styled on the first open
 
 #### Scenario: Granting
 - **WHEN** the operator presses Grant

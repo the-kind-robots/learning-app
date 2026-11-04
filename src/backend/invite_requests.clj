@@ -4,8 +4,10 @@
    makes that secret the device's invite."
   (:require
    [cheshire.core :as cheshire]
+   [clojure.java.io :as io]
    [clojure.string :as str]
    [grants :as grants]
+   [hiccup :as hiccup]
    [malli.core :as m]
    [malli.transform :as mt]
    [next.jdbc :as jdbc]
@@ -205,6 +207,153 @@
         false))))
 
 
+(defn- practice
+  "\"312 words learned over 24 days of practice.\""
+  [words days]
+  (str words
+       (if (= 1 words) " word" " words")
+       " learned over "
+       days
+       (if (= 1 days) " day" " days")
+       " of practice."))
+
+
+(defn- mail-button
+  [href class text {:keys [background color edge lip padding]}]
+  [:td
+   {:width "50%"
+    :style {:padding padding}}
+   [:a
+    {:class class
+     :href  href
+     :style {:background      background
+             :border          (str "2px solid " edge)
+             :border-bottom   (str "4px solid " lip)
+             :border-radius   "16px"
+             :color           color
+             :display         "block"
+             :font-size       "17px"
+             :font-weight     "800"
+             :line-height     "46px"
+             :text-align      "center"
+             :text-decoration "none"}}
+    text]])
+
+
+(defn- invite-mail
+  "The mail that brings the operator a request: an HTML part and a plain-text
+   one. The links come before the note and the note is text, so a note cannot
+   pass its own links off as the real ones."
+  [links words days note]
+  (let [font  "Nunito, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        muted {:color "#6f6f6f" :font-size "17px" :line-height "1.5" :margin "0"}]
+    {:subject "Sprecha: invite request"
+     :text
+     (format
+      "A device asks for an invite.\n\nGrant: %s/grant\nDecline: %s/decline\n\nWords: %d\nDays of practice: %d\n\nThe learner wrote:\n\n%s\n"
+      links
+      links
+      words
+      days
+      (->> (str/split-lines note)
+           (map #(str "> " %))
+           (str/join "\n")))
+     :html
+     (hiccup/render
+      [:html
+       {:lang "en"}
+       [:head
+        [:meta {:charset "UTF-8"}]
+        [:meta
+         {:name    "viewport"
+          :content "width=device-width, initial-scale=1"}]
+        [:meta
+         {:name    "color-scheme"
+          :content "light dark"}]
+        [:meta
+         {:name    "supported-color-schemes"
+          :content "light dark"}]
+        [:style
+         (slurp (io/resource "invite-mail.css"))]]
+       [:body
+        {:style {:background "#f7f7f7" :margin "0" :padding "0"}}
+        [:table.mail
+         {:role        "presentation"
+          :width       "100%"
+          :cellpadding "0"
+          :cellspacing "0"
+          :style       {:background "#f7f7f7"}}
+         [:tr
+          [:td
+           {:align "center"
+            :style {:padding "24px 12px"}}
+           [:table.mail__card
+            {:role        "presentation"
+             :width       "100%"
+             :cellpadding "0"
+             :cellspacing "0"
+             :style       {:background    "#ffffff"
+                           :border-radius "20px"
+                           :color         "#3c3c3c"
+                           :font-family   font
+                           :max-width     "520px"}}
+            [:tr
+             [:td
+              {:style {:padding "36px 28px 28px"}}
+              [:p
+               {:style {:font-size "15px" :font-weight "800" :margin "0 0 28px"}}
+               (for [color ["#58cc02" "#a3d40a" "#f5d400"]]
+                 [:span
+                  {:style {:background    color
+                           :border-radius "50%"
+                           :display       "inline-block"
+                           :height        "7px"
+                           :margin-right  "3px"
+                           :width         "7px"}}])
+               [:span
+                {:style {:margin-left "5px"}}
+                "Sprecha"]]
+              [:h1
+               {:style {:font-size "26px" :font-weight "800" :line-height "1.2" :margin "0 0 8px"}}
+               "Someone asks for an invite"]
+              [:p.mail__muted
+               {:style (assoc muted :margin "0 0 28px")}
+               (practice words days)]
+              [:table
+               {:role        "presentation"
+                :width       "100%"
+                :cellpadding "0"
+                :cellspacing "0"
+                :style       {:margin "0 0 32px" :max-width "380px"}}
+               [:tr
+                (mail-button
+                 (str links "/grant")
+                 "mail__grant"
+                 "Grant"
+                 {:background "#58cc02" :color "#ffffff" :edge "#58cc02" :lip "#58a700" :padding "0 6px 0 0"})
+                (mail-button
+                 (str links "/decline")
+                 "mail__decline"
+                 "Decline"
+                 {:background "#ffffff" :color "#6f4ea1" :edge "#e5e5e5" :lip "#e5e5e5" :padding "0 0 0 6px"})]]
+              [:p.mail__label
+               {:style {:color "#8a5fc7" :font-size "14px" :font-weight "700" :margin "0 0 10px"}}
+               "They wrote"]
+              [:p
+               {:style {:font-size     "19px"
+                        :line-height   "1.55"
+                        :margin        "0 0 32px"
+                        :overflow-wrap "anywhere"
+                        :white-space   "pre-line"}}
+               note]
+              [:p.mail__muted.mail__rule
+               {:style (assoc muted
+                              :border-top  "2px solid #f0f0f0"
+                              :font-size   "13px"
+                              :padding-top "20px")}
+               "Each button opens a page where you confirm. Opening it changes nothing."]]]]]]]]])}))
+
+
 ;;
 ;; Requests
 ;;
@@ -339,20 +488,7 @@
       ;; A mail that throws or fails leaves the request unsent: the next
       ;; request replaces it once `mail-wait-s` is over.
       (try
-        (mail!
-         {:subject "Sprecha: invite request"
-          ;; The links come first and every line of the note is quoted, so
-          ;; a note cannot pass its own links off as the real ones.
-          :text
-          (format
-           "A device asks for an invite.\n\nGrant: %s/grant\nDecline: %s/decline\n\nWords: %d\nDays of practice: %d\n\nThe learner wrote:\n\n%s\n"
-           links
-           links
-           words
-           days
-           (->> (str/split-lines note)
-                (map #(str "> " %))
-                (str/join "\n")))})
+        (mail! (invite-mail links words days note))
         (catch Exception e
           (t/event! ::mail-failed {:level :error :data {:error (ex-message e)}})
           false))
@@ -426,30 +562,59 @@
      {:name    "robots"
       :content "noindex"}]
     [:title "Invite request"]
-    [:link
-     {:rel  "stylesheet"
-      :href "/css/styles.css"}]]
+    [:style
+     (slurp (io/resource "invite-decision.css"))]]
    :html/body
-   [:main.invite-decision
-    [:h1.invite-decision__title "Invite request"]
-    [:blockquote.invite-decision__note note]
-    [:p.invite-decision__stats words " words, " days " days of practice."]
-    (case (status request)
-      ;; An unsent request has a page too: its mail can arrive after the
-      ;; Worker's answer timed out.
-      (:request/pending :request/unsent)
-      [:form
-       {:method "post"}
-       (if (= :request/granted decision)
-         [:button.big-button.green-button
-          {:type "submit"}
-          "Grant"]
-         [:button.big-button.invite-decision__decline
-          {:type "submit"}
-          "Decline"])]
-      :request/granted
-      [:p.invite-decision__outcome.invite-decision__outcome--granted "Granted."]
-      :request/expired
-      [:p.invite-decision__outcome.invite-decision__outcome--granted "Granted. The invite expired unused."]
-      :request/declined
-      [:p.invite-decision__outcome.invite-decision__outcome--declined "Declined."])]})
+   (let [wrote   [:div.invite-decision__quote
+                  [:p.invite-decision__label "They wrote"]
+                  [:p.invite-decision__note note]]
+         stats   [:p.invite-decision__muted
+                  (practice words days)]
+         outcome (fn [mark path title line]
+                   [:<>
+                    [:div.invite-decision__outcome
+                     [:span
+                      {:class       ["invite-decision__mark" (str "invite-decision__mark--" mark)]
+                       :aria-hidden "true"}
+                      [:svg
+                       {:width          "22"
+                        :height         "22"
+                        :viewBox        "0 0 24 24"
+                        :fill           "none"
+                        :stroke         "currentColor"
+                        :stroke-width   "3"
+                        :stroke-linecap "round"
+                        :stroke-linejoin "round"}
+                       [:path {:d path}]]]
+                     [:h1.invite-decision__title title]]
+                    (when line [:p.invite-decision__muted line])
+                    wrote
+                    stats])
+         check   "M5 12.5l4.5 4.5L19 7.5"]
+     [:main.invite-decision
+      [:div.brand
+       (for [color ["#58cc02" "#a3d40a" "#f5d400"]]
+         [:span.brand__dot {:style {:background color}}])
+       [:span.brand__name "Sprecha"]]
+      (case (status request)
+        ;; An unsent request has a page too: its mail can arrive after the
+        ;; Worker's answer timed out.
+        (:request/pending :request/unsent)
+        (let [grant? (= :request/granted decision)]
+          [:<>
+           [:h1.invite-decision__title
+            (if grant? "Grant this invite?" "Decline this invite?")]
+           wrote
+           stats
+           [:form.invite-decision__form
+            {:method "post"}
+            [:button
+             {:class ["invite-decision__button" (when-not grant? "invite-decision__button--decline")]
+              :type  "submit"}
+             (if grant? "Grant" "Decline")]]])
+        :request/granted
+        (outcome "granted" check "Granted" "The device can open its account now.")
+        :request/expired
+        (outcome "granted" check "Granted" "The invite expired unused.")
+        :request/declined
+        (outcome "declined" "M7 7l10 10M17 7L7 17" "Declined" nil))])})
