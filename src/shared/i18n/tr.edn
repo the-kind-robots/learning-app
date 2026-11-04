@@ -44,6 +44,7 @@
  :lesson/add-words            "Kelime ekle"
  :lesson/answer               "Almanca cevap"
  :lesson/answer-placeholder   "Çeviriyi yaz..."
+ :lesson/attempts             [:fn/str "Deneme: {{:count}}"]
  :lesson/check                "KONTROL ET"
  :lesson/correct              "Doğru!"
  :lesson/correct-answer       "Doğrusu:"
@@ -52,6 +53,7 @@
  :lesson/finish               "BİTİR"
  :lesson/in-dictionary        "✓ Sözlükte"
  :lesson/next                 "DEVAM"
+ :lesson/previous-trial       "Önceki görev"
  :lesson/progress             "Ders ilerlemesi"
  :lesson/start                "DERSE BAŞLA"
  :lesson/tiles                "Parçalar"

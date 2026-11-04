@@ -70,7 +70,7 @@ test.describe('Базовые сценарии на выпускаемой сб�
     });
 
     await test.step('Тогда ему предлагают перевести пример', async () => {
-      await expect(page.locator('.lesson__prompt')).toHaveText(SENTENCE_RU);
+      await expect(page.locator('#lesson-challenge .lesson__prompt')).toHaveText(SENTENCE_RU);
     });
 
     await test.step('Когда он собирает пример из плиток', async () => {

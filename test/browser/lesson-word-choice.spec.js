@@ -37,7 +37,7 @@ test.describe('Выбор слов урока', () => {
       await page.goto('/lesson');
       const answers = Object.fromEntries(words.map(([value, translation]) => [translation, value]));
       for (let trial = 0; trial < 3; trial++) {
-        const prompt = page.locator('.lesson__prompt');
+        const prompt = page.locator('#lesson-challenge .lesson__prompt');
         await expect(prompt).toBeVisible();
         const text = (await prompt.textContent()).trim();
         prompts.push(text);

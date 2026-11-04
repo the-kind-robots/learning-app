@@ -299,6 +299,12 @@
     (some-> ^js (:replicant/dom-event dispatch-data) .-detail .-order js->clj)))
 
 
+(nxr/register-placeholder! :event/page
+  ;; The page a `<page-strip>` reports in its `pagechange` event.
+  (fn [dispatch-data]
+    (some-> ^js (:replicant/dom-event dispatch-data) .-detail .-page)))
+
+
 (nxr/register-placeholder! :event/self-click?
   (fn [dispatch-data]
     (let [e (:replicant/dom-event dispatch-data)]

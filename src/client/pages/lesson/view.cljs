@@ -148,8 +148,8 @@
 
 
 (defn progress
-  [lesson-state attrs]
-  (let [value (presenter/progress-props lesson-state)]
+  [state attrs]
+  (let [value (presenter/progress-props state)]
     [:div#lesson-progress.lesson__progress-shell
      attrs
      [:div.lesson__progress
@@ -159,19 +159,40 @@
        :aria-valuemax  100
        :aria-valuenow  value
        :aria-valuetext (str value "%")}
-      [:div#lesson-progress-bar.lesson__progress-value {:style {:width (str value "%")}}]]]))
+      [:div#lesson-progress-bar.lesson__progress-value {:style {:transform (str "translateX(" (- value 100) "%)")}}]]]))
 
 
 (defn challenge
-  [lesson-state]
-  (let [{:keys [kind prompt]} (presenter/challenge-props lesson-state)]
-    [:div#lesson-challenge.lesson__challenge
-     [:h2.lesson__prompt prompt]
-     [:p.lesson__instruction
-      (case kind
-        :trial/example [:i18n :lesson/translate-sentence]
-        :trial/phrase  [:i18n :lesson/translate-phrase]
-        :trial/word    [:i18n :lesson/translate-word])]]))
+  [{:keys [kind prompt]} attrs]
+  [:div.lesson__challenge
+   attrs
+   [:h2.lesson__prompt prompt]
+   [:p.lesson__instruction
+    (case kind
+      :trial/example [:i18n :lesson/translate-sentence]
+      :trial/phrase  [:i18n :lesson/translate-phrase]
+      :trial/word    [:i18n :lesson/translate-word])]])
+
+
+(defn- past-footer
+  "The panel of a trial left behind, along the bottom over the current trial's panel."
+  [{:keys [attempts current-page finished? first-try?] :as props}]
+  [:div.lesson__footer.lesson__footer--success.lesson__footer--past.page-footer
+   [:div.lesson__answer
+    [:h3.lesson__answer-header
+     (if first-try?
+       [:i18n :lesson/correct]
+       [:i18n :lesson/attempts {:count attempts}])]
+    (answer-body props)]
+   [:div.lesson__action.page-footer__action
+    [:button.big-button
+     {:type "button"
+      :on   {:click (if finished?
+                      [[:action/go-to-home]]
+                      [[:action/view-trial current-page current-page]])}}
+     (if finished?
+       [:i18n :lesson/finish]
+       [:i18n :lesson/next])]]])
 
 
 (defn empty-state
@@ -205,20 +226,45 @@
       [:i18n :lesson/title]]]
 
     :else
-    (let [lesson-state (:lesson/state state)
-          answer-hint  (presenter/answer-hint-props state)]
+    (let [answer-hint (presenter/answer-hint-props state)
+          {:keys [back? current-page current-shown? first-shown? page pages previous-page viewed-answer]}
+          (presenter/strip-props state)]
       [:div.lesson
        (when answer-hint (answer-hint-popover answer-hint))
        [:h1.lesson__title.visually-hidden
         [:i18n :lesson/title]]
        ;; The lesson is closed by the shell's corner ✕ (`:action/close-screen`).
        [:header.lesson__header
-        (progress lesson-state {})]
+        ;; A finger swipes the strip; a mouse has this arrow, so it shows on fine pointers only.
+        (when back?
+          [:button.lesson__back
+           {:type       "button"
+            :aria-label [:i18n :lesson/previous-trial]
+            :disabled   first-shown?
+            :on         {:click [[:action/view-trial previous-page current-page]]}}
+           "‹"])
+        (progress state {})]
        [:main.lesson__body
-        (challenge lesson-state)]
-       (let [footer-props (presenter/footer-props state)]
-         (if footer-props
-           (case (:variant footer-props)
-             :success (success-footer footer-props)
-             :error   (error-footer footer-props))
-           (input-footer (presenter/input-props state))))])))
+        ;; The trials answered, then the current one; `pages.lesson.page-strip` scrolls to `page`.
+        (into
+         [:page-strip.lesson__strip
+          {:page page
+           :on   {:pagechange [[:action/view-trial [:event/page] current-page]]}}]
+         (for [{:keys [current? shown?] :as props} pages]
+           [:section.lesson__page
+            {:replicant/key [current? (:page props)]
+             :aria-hidden   (not shown?)}
+            (challenge props (when current? {:id "lesson-challenge"}))]))]
+       ;; Only the challenge moves with the strip: a past trial's answer is a strip along the bottom; the
+       ;; current panel, hidden meanwhile, keeps its place and its typed answer.
+       [:div.lesson__panel
+        [:div.lesson__panel-current
+         {:inert (not current-shown?)}
+         (let [footer-props (presenter/footer-props state)]
+           (if footer-props
+             (case (:variant footer-props)
+               :success (success-footer footer-props)
+               :error   (error-footer footer-props))
+             (input-footer (presenter/input-props state))))]
+        (when viewed-answer
+          (past-footer viewed-answer))]])))

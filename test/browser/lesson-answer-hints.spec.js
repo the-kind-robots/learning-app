@@ -146,7 +146,7 @@ test.describe('Подсказки к словам в разборе ответа
     });
 
     await test.step('Когда он кликает вне подсказки', async () => {
-      await page.locator('.lesson__prompt').click();
+      await page.locator('#lesson-challenge .lesson__prompt').click();
     });
 
     await test.step('Тогда подсказка закрывается сразу', async () => {

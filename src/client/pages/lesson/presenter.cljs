@@ -4,14 +4,13 @@
    [domain.lesson :as lesson]))
 
 
-(defn challenge-props
-  [state]
-  (let [trial (lesson/current-trial state)]
-    {:kind   (cond
-               (lesson/example-trial? trial) :trial/example
-               (lesson/phrase-trial? trial)  :trial/phrase
-               :else                         :trial/word)
-     :prompt (:prompt trial)}))
+(defn- trial-challenge
+  [trial]
+  {:kind   (cond
+             (lesson/example-trial? trial) :trial/example
+             (lesson/phrase-trial? trial)  :trial/phrase
+             :else                         :trial/word)
+   :prompt (:prompt trial)})
 
 
 (defn input-props
@@ -25,21 +24,28 @@
 
 
 (defn progress-props
+  "The progress of the trial shown: the past one viewed, otherwise the current one."
   [state]
-  (lesson/progress state))
+  (if-let [viewed (:lesson/viewed-trial state)]
+    (-> state :lesson/state (lesson/past-progress viewed))
+    (-> state :lesson/state lesson/progress)))
 
 
 (defn answer-hint-props
   "Props for the hint card over the opened answer word, or nil when closed: the word, its translation and its
-   `:word-state` (`domain.vocabulary/translation-state`). A word already stored with this translation
-   auto-dismisses the card."
+   `:word-state` (`domain.vocabulary/translation-state`), known for the current trial only. A word already
+   stored with this translation auto-dismisses the card."
   [state]
   (when-let [{:keys [dictionary-form translation word-index]}
              (when-let [open-index (:lesson/open-hint-index state)]
-               (->> (lesson/answer-segments (lesson/current-trial (:lesson/state state)))
+               ;; The answer on the panel: the past trial's viewed, otherwise the current one's.
+               (->> (lesson/answer-segments (if-let [viewed (:lesson/viewed-trial state)]
+                                              (-> state :lesson/state lesson/past-trials (get viewed) :trial)
+                                              (-> state :lesson/state lesson/current-trial)))
                     (filter #(= open-index (:word-index %)))
                     first))]
-    (let [word-state (get (:lesson/answer-hints state) word-index)]
+    (let [word-state (when-not (:lesson/viewed-trial state)
+                       (get (:lesson/answer-hints state) word-index))]
       {:word         dictionary-form
        :translation  translation
        :word-index   word-index
@@ -47,19 +53,53 @@
        :word-state   word-state})))
 
 
+(defn- answer-props
+  "The correct answer of `trial`, and for an example its words, the hinted ones tappable."
+  [state trial]
+  {:correct-answer (:answer trial)
+   :correct-answer-segments (when (lesson/example-trial? trial)
+                              (for [{:keys [type word-index] :as segment} (lesson/answer-segments trial)]
+                                (assoc segment
+                                       :annotated? (= :annotated-word type)
+                                       :expanded?  (= word-index (:lesson/open-hint-index state)))))})
+
+
 (defn footer-props
   [state]
   (let [lesson-state (:lesson/state state)]
-    (when-let [result (lesson/last-result lesson-state)]
-      (let [trial (lesson/current-trial lesson-state)]
-        {:variant        (if (:correct? result) :success :error)
-         :correct-answer (lesson/expected-answer lesson-state)
-         :correct-answer-segments (when (lesson/example-trial? trial)
-                                    (mapv (fn [{:keys [type word-index] :as segment}]
-                                            (assoc segment
-                                                   :annotated? (= :annotated-word type)
-                                                   :expanded?  (= word-index (:lesson/open-hint-index state))))
-                                          (lesson/answer-segments trial)))
-         :user-answer    (when-not (str/blank? (:answer result))
-                           (:answer result))
-         :finished?      (lesson/finished? lesson-state)}))))
+    (when-let [{:keys [answer correct?]} (lesson/last-result lesson-state)]
+      (merge (answer-props state (lesson/current-trial lesson-state))
+             {:variant     (if correct? :success :error)
+              :user-answer (when-not (str/blank? answer) answer)
+              :finished?   (lesson/finished? lesson-state)}))))
+
+
+(defn strip-props
+  "Props for the strip of trials: its pages, the trials answered then the current one, each a challenge with
+   `:page`, `:current?` and `:shown?`; the `:page` shown and the `:current-page`; whether there is a trial to
+   go back to (`:back?`) and the first is shown; whether the current trial is shown; and the answer of the past
+   one viewed, with whether the lesson is over, its button then finishing the lesson."
+  [state]
+  (let [lesson-state (:lesson/state state)
+        past         (lesson/past-trials lesson-state)
+        viewed       (:lesson/viewed-trial state)
+        current-page (count past)
+        page         (or viewed current-page)]
+    {:back?        (pos? current-page)
+     :current-page current-page
+     :current-shown? (nil? viewed)
+     :first-shown? (= 0 page)
+     :page         page
+     :pages        (->> (conj (mapv :trial past) (lesson/current-trial lesson-state))
+                        (map-indexed (fn [index trial]
+                                       (assoc (trial-challenge trial)
+                                              :current? (= index current-page)
+                                              :page     index
+                                              :shown?   (= index page)))))
+     :previous-page (dec page)
+     :viewed-answer (when-let [{:keys [attempts trial]} (get past viewed)]
+                      (assoc (answer-props state trial)
+                             :attempts     attempts
+                             :current-page current-page
+                             :finished?    (lesson/finished? lesson-state)
+                             :first-try?   (= 1 attempts)))}))

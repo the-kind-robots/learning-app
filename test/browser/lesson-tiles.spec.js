@@ -29,7 +29,7 @@ async function showExample(page, sentence) {
   await field(page).fill('der Hund');
   await check(page).click();
   await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await expect(page.locator('.lesson__instruction')).toContainText('предложение');
+  await expect(page.locator('#lesson-challenge .lesson__instruction')).toContainText('предложение');
 }
 
 async function place(page, words) {
