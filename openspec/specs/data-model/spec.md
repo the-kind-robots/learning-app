@@ -128,12 +128,17 @@ The app SHALL create no index in user-db or in device-db, and SHALL bring none u
 - **AND** the screen asked for is shown once memory is loaded
 
 ### Requirement: Vocab conflict resolution unions translations
-The system SHALL resolve a vocab document revision conflict by unioning the translations of the conflicting revisions, not by plain last-write-wins.
+The system SHALL resolve a vocab document revision conflict by unioning the translations of the conflicting revisions, not by plain last-write-wins. The other fields SHALL be those of the revision last written by `modified-at`; between revisions written at the same `modified-at`, the higher revision SHALL win. The translations SHALL be listed from the oldest revision to the newest. The order the conflicting revisions are read in SHALL change nothing, so every device resolving the same conflict writes the same word.
 
 #### Scenario: Concurrent translations merge
 - **WHEN** two devices add the same word with different translations and sync
 - **THEN** the resolved document contains the union of both translation sets
 - **AND** neither side's translation is dropped
+
+#### Scenario: Revisions written at the same time resolve the same on every device
+- **WHEN** two revisions of a word carry the same `modified-at`
+- **THEN** the resolved document has the fields of the higher revision
+- **AND** it is the same whichever revision is read first
 
 ### Requirement: A word keeps the part of speech of the suggestion it was picked from
 A vocabulary document of a word added from a picked suggestion SHALL carry `pos`, the part of speech of that suggestion as the dictionary names it. The part of speech SHALL count only while the word field still holds the picked lemma; a word typed, or typed on after the pick, SHALL be stored without `pos`. A phrase SHALL NOT carry `pos`. `pos` is optional, so documents written before it need no migration, and a word added again whose document exists SHALL keep the stored document's `pos` as it is.

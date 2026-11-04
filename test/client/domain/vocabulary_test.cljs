@@ -1,6 +1,9 @@
 (ns client.domain.vocabulary-test
   (:require
    [cljs.test :refer-macros [are deftest is testing]]
+   [clojure.test.check :as tc]
+   [clojure.test.check.generators :as gen]
+   [clojure.test.check.properties :as prop :include-macros true]
    [domain.vocabulary :as sut]))
 
 
@@ -138,18 +141,39 @@
 
 
 (deftest conflicting-versions-merge-into-the-last-written-with-every-translation
-  (let [older {:modified-at "2026-01-01" :translation [{:lang "ru" :value "пёс"}] :value "Hund"}
-        newer {:modified-at "2026-02-01" :translation [{:lang "ru" :value "собака"}] :value "der Hund"}]
-    (is (= {:modified-at "2026-02-01"
+  (let [older {:_rev "1-a" :modified-at "2026-01-01" :translation [{:lang "ru" :value "пёс"}] :value "Hund"}
+        newer {:_rev "1-b" :modified-at "2026-02-01" :translation [{:lang "ru" :value "собака"}] :value "der Hund"}]
+    (is (= {:_rev        "1-b"
+            :modified-at "2026-02-01"
             :translation [{:lang "ru" :value "пёс"} {:lang "ru" :value "собака"}]
             :value       "der Hund"}
-           (sut/merged-word [older newer]))
-        "the newer fields win; the translations of both are kept")
-    (is (= #{{:lang "ru" :value "пёс"} {:lang "ru" :value "собака"}}
-           (set (:translation (sut/merged-word [newer older]))))
-        "whatever the order")
-    (is (= "b" (:value (sut/merged-word [(assoc older :value "a") (assoc older :value "b")])))
-        "equal dates: the later version")))
+           (sut/merged-word :_rev [newer older]))
+        "the newer fields win; the translations of both are kept, the older first")
+    (is (= "b" (:value (sut/merged-word :_rev [(assoc older :_rev "1-b" :value "b") (assoc older :value "a")])))
+        "equal dates: the higher revision")))
+
+
+(def ^:private gen-versions-in-any-order
+  "Versions of one word, few times so that ties are common, and the same versions shuffled."
+  (gen/let [versions (gen/vector-distinct-by
+                      :_rev
+                      (gen/hash-map :_rev        (gen/fmap #(str "1-" %) gen/string-alphanumeric)
+                                    :modified-at (gen/elements ["2026-01-01" "2026-01-02"])
+                                    :translation (gen/vector (gen/hash-map :lang  (gen/return "ru")
+                                                                           :value (gen/elements ["a" "b" "c"]))
+                                                             1
+                                                             3)
+                                    :value       gen/string-alphanumeric)
+                      {:max-elements 4 :min-elements 2})
+            shuffled (gen/shuffle versions)]
+    [versions shuffled]))
+
+
+(deftest conflicting-versions-merge-the-same-whatever-order-they-come-in
+  (is (:pass? (tc/quick-check 300
+                              (prop/for-all [[versions shuffled] gen-versions-in-any-order]
+                                            (= (sut/merged-word :_rev versions)
+                                               (sut/merged-word :_rev shuffled)))))))
 
 
 (deftest the-edit-dialog-text-is-read-as-the-kind-of-the-word
