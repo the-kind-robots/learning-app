@@ -150,7 +150,9 @@
      :trials           trials
      :remaining-trials trials
      :current-trial    (select-trial (remove locked-trial? trials))
-     :last-result      nil}))
+     :last-result      nil
+     :misses           {}
+     :past-trials      []}))
 
 
 (defn expected-answer
@@ -196,24 +198,38 @@
         remaining      (cond-> (:remaining-trials state)
                          correct? (remove-trial current-trial)
                          unlock?  (unlock-example-trials (:word-id current-trial)))]
-    (assoc state
-           :last-result {:answer answer :correct? correct?}
-           :remaining-trials remaining
-           :trials      (cond-> (:trials state)
-                          unlock? (unlock-example-trials (:word-id current-trial))))))
+    (cond-> (assoc state
+                   :last-result {:answer answer :correct? correct?}
+                   :remaining-trials remaining
+                   :trials      (cond-> (:trials state)
+                                  unlock? (unlock-example-trials (:word-id current-trial))))
+      (not correct?) (update-in [:misses current-trial] (fnil inc 0)))))
 
 
 (defn advance
+  "The lesson on its next trial, the one answered right kept among the past trials; nil when none is left."
   [state]
   (let [select-trial (-> state :options :trial-selector)
         unlocked     (filterv (complement locked-trial?) (:remaining-trials state))
+        current      (:current-trial state)
         available    (if (> (count unlocked) 1)
-                       (remove-trial unlocked (:current-trial state))
+                       (remove-trial unlocked current)
                        unlocked)]
     (when (seq available)
-      (assoc state
-             :current-trial (select-trial available)
-             :last-result   nil))))
+      (cond-> (assoc state
+                     :current-trial (select-trial available)
+                     :last-result   nil)
+        (-> state :last-result :correct?)
+        (update :past-trials
+                conj
+                {:attempts (inc (get (:misses state) current 0))
+                 :trial    current})))))
+
+
+(defn past-trials
+  "The trials answered right and left behind, in order: `{:trial :attempts}`, the right answer counted."
+  [state]
+  (:past-trials state))
 
 
 (defn progress
@@ -224,6 +240,12 @@
     (if (pos? total)
       (* 100 (/ completed total))
       0)))
+
+
+(defn past-progress
+  "The progress as the past trial at `index` was asked: each trial before it was answered right."
+  [state index]
+  (* 100 (/ index (count (:trials state)))))
 
 
 (defn finished?

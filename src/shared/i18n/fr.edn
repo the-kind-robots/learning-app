@@ -44,6 +44,7 @@
  :lesson/add-words            "Ajouter des mots"
  :lesson/answer               "Réponse en allemand"
  :lesson/answer-placeholder   "Saisissez la traduction…"
+ :lesson/attempts             [:fn/str "Essais : {{:count}}"]
  :lesson/check                "VÉRIFIER"
  :lesson/correct              "Correct !"
  :lesson/correct-answer       "Bonne réponse :"
@@ -52,6 +53,7 @@
  :lesson/finish               "TERMINER"
  :lesson/in-dictionary        "✓ Dans le dictionnaire"
  :lesson/next                 "SUIVANT"
+ :lesson/previous-trial       "Tâche précédente"
  :lesson/progress             "Progression de la leçon"
  :lesson/start                "COMMENCER LA LEÇON"
  :lesson/tiles                "Tuiles"

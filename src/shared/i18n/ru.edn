@@ -44,6 +44,7 @@
  :lesson/add-words            "Добавить слова"
  :lesson/answer               "Ответ на немецком"
  :lesson/answer-placeholder   "Введите перевод..."
+ :lesson/attempts             [:fn/str "Попыток: {{:count}}"]
  :lesson/check                "ПРОВЕРИТЬ"
  :lesson/correct              "Правильно!"
  :lesson/correct-answer       "Правильно:"
@@ -52,6 +53,7 @@
  :lesson/finish               "ЗАКОНЧИТЬ"
  :lesson/in-dictionary        "✓ В словаре"
  :lesson/next                 "ДАЛЕЕ"
+ :lesson/previous-trial       "Предыдущее задание"
  :lesson/progress             "Прогресс урока"
  :lesson/start                "НАЧАТЬ УРОК"
  :lesson/tiles                "Плитки"

@@ -1,0 +1,31 @@
+const { expect } = require('./fixtures');
+const { addWord } = require('./add-form.shared');
+const { seedExample } = require('./lesson-answer.shared');
+
+// A word with an example: the word is answered (wrong first, when asked), then the example is on screen,
+// the word the one trial behind it (#734).
+
+const field = (page) => page.getByRole('textbox', { name: 'Ответ на немецком' });
+const check = (page) => page.getByRole('button', { name: 'ПРОВЕРИТЬ' });
+const next = (page) => page.getByRole('button', { name: 'ДАЛЕЕ' });
+const prompt = (page, text) => page.getByRole('heading', { name: text, exact: true });
+const tray = (page) => page.getByRole('group', { name: 'Ваш ответ' });
+const bank = (page) => page.getByRole('group', { name: 'Плитки' });
+
+async function answerWordThenShowExample(page, { missFirst }) {
+  await page.goto('/home');
+  await addWord(page, 'der Hund', 'пёс');
+  await seedExample(page);
+  await page.goto('/lesson');
+  if (missFirst) {
+    await field(page).fill('die Katze');
+    await check(page).click();
+    await next(page).click();
+  }
+  await field(page).fill('der Hund');
+  await check(page).click();
+  await next(page).click();
+  await expect(prompt(page, 'Пёс спит в саду.')).toBeVisible();
+}
+
+module.exports = { answerWordThenShowExample, prompt, next, tray, bank };

@@ -109,8 +109,8 @@ test.describe('Пример к фразе', () => {
     });
 
     await test.step('Тогда ему предлагают перевести предложение-пример', async () => {
-      await expect(page.locator('.lesson__instruction')).toHaveText('Переведите предложение на немецкий');
-      await expect(page.locator('.lesson__prompt')).toHaveText(SENTENCE_RU);
+      await expect(page.locator('#lesson-challenge .lesson__instruction')).toHaveText('Переведите предложение на немецкий');
+      await expect(page.locator('#lesson-challenge .lesson__prompt')).toHaveText(SENTENCE_RU);
     });
 
     await test.step('Когда он верно переводит предложение', async () => {
@@ -131,7 +131,7 @@ test.describe('Пример к фразе', () => {
       await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill(PHRASE);
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
       await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-      await expect(page.locator('.lesson__instruction')).toHaveText('Переведите предложение на немецкий');
+      await expect(page.locator('#lesson-challenge .lesson__instruction')).toHaveText('Переведите предложение на немецкий');
       await placeTiles(page, SENTENCE);
       await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
     });

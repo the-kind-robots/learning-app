@@ -17,7 +17,19 @@
    :lesson/empty?         (boolean error)
    :lesson/open-hint-index nil
    :lesson/state          lesson-state
+   :lesson/viewed-trial   nil
    :page/current          :page/lesson})
+
+
+(nxr/register-action! :action/view-trial
+  ;; The strip goes to `page`: a past trial, or the current one at `current-page` (viewed: nil). A hint open
+  ;; over the other closes.
+  (fn view-trial [state page current-page]
+    (let [viewed (when (< page current-page) page)]
+      (when (not= viewed (:lesson/viewed-trial state))
+        [[:effect/save
+          {:lesson/open-hint-index nil
+           :lesson/viewed-trial    viewed}]]))))
 
 
 (nxr/register-action! :action/open-lesson

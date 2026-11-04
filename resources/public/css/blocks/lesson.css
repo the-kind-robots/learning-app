@@ -18,7 +18,8 @@
  * shrink before the prompt is touched.
  *
  * `overflow:hidden` is the only enforced overflow rule and is required by the
- * "nothing scrolls on the lesson page" constraint.
+ * "nothing scrolls on the lesson page" constraint. The one exception is the
+ * strip of trials: it scrolls sideways, a page at a time (#734).
  */
 
 .lesson {
@@ -41,6 +42,8 @@
   /* top: clears the shell bar; the air under it is part of the blank that
      gives way. */
   padding: var(--app-bar-height) 16px 0;
+  /* The anchor of the back arrow. */
+  position: relative;
   width: 100%;
 }
 
@@ -57,10 +60,15 @@
   background: var(--web-ui_progress-bar-background, rgb(var(--color-swan)));
   border-radius: calc(var(--__internal__progress-bar-height) / 2);
   min-width: 0;
+  /* The fill is full width and slides in from the left; the track cuts it at
+     its own rounded ends. */
+  overflow: hidden;
   position: relative;
   width: 100%;
 }
 
+/* The progress moves by `transform`, which the compositor animates: a busy
+   main thread (a swipe, a render) does not make it stutter, as `width` did. */
 .lesson__progress-value {
   background: currentcolor;
   border-radius: inherit;
@@ -68,8 +76,9 @@
   height: var(--__internal__progress-bar-height);
   min-width: 0;
   position: relative;
-  transition: width 0.4s ease;
-  width: 0%;
+  transform: translateX(-100%);
+  transition: transform 0.4s ease;
+  width: 100%;
 }
 
 .lesson__progress-value::before {
@@ -92,6 +101,79 @@
   overflow: hidden;
   text-align: center;
   width: 100%;
+}
+
+/* The trials answered, then the current one; a swipe moves a page at a time.
+   The page is the strip's width, so the challenge in it lays out as before. */
+.lesson__strip {
+  display: flex;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.lesson__strip::-webkit-scrollbar {
+  display: none;
+}
+
+.lesson__page {
+  flex: 0 0 100%;
+  height: 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* Steps the strip back; a finger swipes instead, so it is there for a mouse.
+   It stands left of the header, out of its flow: the bar keeps its width when
+   the arrow appears. */
+.lesson__back {
+  background: none;
+  border: 0;
+  bottom: 0;
+  color: rgb(var(--color-wolf));
+  cursor: pointer;
+  display: none;
+  font: 700 28px/1 Nunito, sans-serif;
+  height: 44px;
+  margin-block: auto;
+  position: absolute;
+  right: 100%;
+  top: var(--app-bar-height);
+  width: 44px;
+}
+
+.lesson__back:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lesson__back {
+    display: block;
+  }
+}
+
+/* The panel stays put: the current one keeps its place, hidden, so the
+   challenge does not move and its answer is kept; a past trial's answer is a
+   strip of its own height along the bottom, its button where the current one
+   is. */
+.lesson__panel {
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.lesson__panel-current[inert] {
+  visibility: hidden;
+}
+
+.lesson__footer--past {
+  bottom: 0;
+  inset-inline: 0;
+  position: absolute;
 }
 
 .lesson__challenge {
@@ -354,6 +436,11 @@
   .lesson__footer--input {
     flex-direction: column;
     justify-content: center;
+  }
+
+  /* A column, so the button sits under the answer where the input panel has it. */
+  .lesson__footer--past {
+    flex-direction: column;
   }
 
   .lesson__footer--error {

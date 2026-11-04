@@ -46,7 +46,7 @@ async function playToExampleReveal(page, exampleAnswer) {
   await page.getByRole('textbox', { name: 'Ответ на немецком' }).fill('der Hund');
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
   await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
-  await expect(page.locator('.lesson__instruction')).toContainText('предложение');
+  await expect(page.locator('#lesson-challenge .lesson__instruction')).toContainText('предложение');
   await placeTiles(page, exampleAnswer);
   await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
 }
