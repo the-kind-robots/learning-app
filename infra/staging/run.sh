@@ -112,6 +112,7 @@ in_c install -d -m 700 /etc/credstore.encrypted
 encrypt_credential couchdb_admin_password "${COUCH_PASS}"
 encrypt_credential db_auth_secret "$(in_c openssl rand -hex 32)"
 encrypt_credential borg-passphrase "${BORG_PASS}"
+encrypt_credential invite_mail_secret "$(in_c openssl rand -hex 32)"
 in_c bash -c 'install -d -m 700 /etc/learning-app
               printf "BORG_REPO=/var/lib/dbmaintainer/borg-repo\n" > /etc/learning-app/environment
               chmod 600 /etc/learning-app/environment'

@@ -714,13 +714,16 @@
 
 (deftest a-recycled-id-is-refused-not-inherited
   (testing "a userdb left by a previous owner of the id blocks provisioning"
-    (let [db (migrated-db)]
+    (let [db     (migrated-db)
+          invite (sut/mint-grant! db)]
       (with-redefs [db/exists? (constantly true)]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"userdb already exists"
-                              (#'sut/create-account! db))))
+                              (#'sut/create-account! db invite))))
       (is (empty? (jdbc/execute! db ["SELECT id FROM users"]))
-          "the transaction rolled the row back, the id stays unspent"))))
+          "the transaction rolled the row back, the id stays unspent")
+      (is (true? (#'sut/burn-grant! db invite))
+          "and the invite with it"))))
 
 
 (deftest a-fresh-id-provisions-and-secures-its-userdb
@@ -730,7 +733,7 @@
       (with-redefs [db/exists? (constantly false)
                     db/use     (fn [name] name)
                     db/secure  (fn [name security] (reset! secured [name security]))]
-        (let [{:keys [id token]} (#'sut/create-account! db)]
+        (let [{:keys [id token]} (#'sut/create-account! db (sut/mint-grant! db))]
           (is (int? id))
           (is (= 40 (count token)))
           (is (= (str "userdb-" id) (first @secured)))
@@ -747,7 +750,7 @@
                     db/destroy (fn [db] (reset! destroyed (:name db)) (delay nil))]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"couch is down"
-                              (sut/create-account! db))))
+                              (sut/create-account! db (sut/mint-grant! db)))))
       (is (empty? (jdbc/execute! db ["SELECT id FROM users"]))
           "the insert rolled back, no orphan row")
       (is (= "userdb-1" @destroyed)
@@ -756,17 +759,20 @@
 
 (deftest a-failed-provision-burns-nothing-for-the-next-attempt
   (testing "after a couch failure the same id provisions cleanly"
-    (let [db (migrated-db)]
+    (let [db     (migrated-db)
+          invite (sut/mint-grant! db)]
       (with-redefs [db/exists? (constantly false)
                     db/use     (fn [name] {:name name})
                     db/secure  (fn [_ _] (throw (ex-info "couch is down" {})))
                     db/destroy (fn [_] (delay nil))]
-        (is (thrown? clojure.lang.ExceptionInfo (sut/create-account! db))))
+        (is (thrown? clojure.lang.ExceptionInfo (sut/create-account! db invite))))
       (with-redefs [db/exists? (constantly false)
                     db/use     (fn [name] {:name name})
                     db/secure  (fn [_ _] nil)]
-        (is (= 1 (:id (sut/create-account! db)))
-            "the id the failed attempt minted is minted again, not leaked")))))
+        (is (= 1 (:id (sut/create-account! db invite)))
+            "the same invite opens the account, and the id the failed attempt minted is minted again")
+        (is (nil? (sut/create-account! db invite))
+            "a spent invite opens nothing")))))
 
 
 (defn- ^File temp-dir

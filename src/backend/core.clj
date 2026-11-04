@@ -9,9 +9,12 @@
    [db :as db]
    [examples :as examples]
    [examples.dictionary :as dictionary]
+   [grants :as grants]
    [hiccup :as hiccup]
    [i18n :as i18n]
+   [invite-requests :as invite-requests]
    [migrations :as migrations]
+   [muuntaja.core :as muuntaja]
    [next.jdbc :as jdbc]
    [next.jdbc.prepare :as prepare]
    [next.jdbc.result-set :as result-set]
@@ -21,16 +24,19 @@
    [reitit.http :as http]
    [reitit.http.interceptors.exception :as exception]
    [reitit.http.interceptors.keyword-parameters :as keyword-parameters]
+   [reitit.http.interceptors.muuntaja :as interceptors.muuntaja]
    [reitit.http.interceptors.parameters :as parameters]
    [reitit.interceptor.sieppari :as sieppari]
    [reitit.ring :as ring]
    [ring.middleware.cookies :as cookies]
    [ring.util.response :as response]
+   [sieppari.context :as context]
    [taoensso.telemere :as t]
    [userdb :as userdb]
    [utils :as utils])
   (:import
-   [java.security MessageDigest SecureRandom]
+   [java.net URLDecoder]
+   [java.security MessageDigest]
    [java.sql PreparedStatement ResultSetMetaData]
    [java.util HexFormat]
    [javax.crypto Mac]
@@ -215,58 +221,63 @@
 ;;
 
 
-(def ^:private ^SecureRandom secure-random (SecureRandom.))
-
-
-(defn- random-token
-  "A 160-bit URL-safe bearer token (40 hex chars)."
-  []
-  (let [bytes (byte-array 20)]
-    (.nextBytes secure-random bytes)
-    (.formatHex (HexFormat/of) bytes)))
+(defn- burn-grant!
+  "Atomically burns an unused, unexpired grant. Returns true when burned."
+  [db token]
+  (some?
+   (jdbc/execute-one!
+     db
+     ["UPDATE grants SET used_at = UNIXEPOCH()
+      WHERE sha256 = ? AND used_at IS NULL AND expires_at > ?
+      RETURNING sha256"
+      (utils/sha256-hex token) (System/currentTimeMillis)])))
 
 
 (defn create-account!
-  "Mints a bearer token, creates the account row holding its sha256, and its
-   role-secured CouchDB userdb. Returns {:id int :token str} — the raw token
-   is the user's key, stored nowhere on the server.
+  "Spends `invite`, mints a bearer token, creates the account row holding its
+   sha256, and its role-secured CouchDB userdb. Returns {:id int :token str} —
+   the raw token is the user's key, stored nowhere on the server — or nil when
+   `invite` is not a live one.
 
-   The CouchDB steps run inside the transaction, like the guard below already
-   does: the row and the secured userdb exist together or not at all (#254).
-   A failed step throws, the insert rolls back, and the id — never handed to
-   anyone — is simply minted again by the next attempt.
+   The burn and the CouchDB steps run inside one transaction, like the guard
+   below already does: the spent invite, the row and the secured userdb exist
+   together or not at all (#254). A failed step throws, everything rolls back,
+   the invite stays unspent, and the id — never handed to anyone — is simply
+   minted again by the next attempt.
 
    Refuses an id whose userdb already exists. Account ids are row ids and
    CouchDB outlives app.db resets, so a recycled id would silently inherit —
    and sync down — the previous owner's data (seen live, #182). Refusal keeps
    the evidence; deleting the stale userdb is the operator's call."
-  [db]
-  (let [token (random-token)
+  [db invite]
+  (let [token (utils/random-token)
         id    (jdbc/with-transaction [tx db]
-                ;; Explicit builder: the id must come back as :id no matter
-                ;; which connection options the caller carries.
-                (let [{:keys [id]} (jdbc/execute-one! tx
-                                     ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
-                                      (utils/sha256-hex token)]
-                                     {:builder-fn result-set/as-unqualified-maps})
-                      dbname       (userdb/db-name id)]
-                  (when (db/exists? dbname)
-                    (throw (ex-info "userdb already exists for a fresh account id"
-                                    {:type ::recycled-id :id id})))
-                  (try
-                    (db/secure (db/use dbname) {:members {:names [] :roles [(str "u:" id)]}})
-                    (catch Exception e
-                      ;; The rollback frees the id for reuse, and the guard
-                      ;; above would refuse it for as long as a leftover
-                      ;; userdb exists — so the userdb this very call created
-                      ;; (the guard just proved the name was free) goes too.
-                      ;; Best effort: if CouchDB is down, the delete fails
-                      ;; like everything else and reconciliation reports the
-                      ;; orphan.
-                      (try @(db/destroy {:name dbname}) (catch Exception _))
-                      (throw e)))
-                  id))]
-    {:id id :token token}))
+                (when (burn-grant! tx invite)
+                  ;; Explicit builder: the id must come back as :id no matter
+                  ;; which connection options the caller carries.
+                  (let [{:keys [id]} (jdbc/execute-one! tx
+                                       ["INSERT INTO users (token_sha256) VALUES (?) RETURNING id"
+                                        (utils/sha256-hex token)]
+                                       {:builder-fn result-set/as-unqualified-maps})
+                        dbname       (userdb/db-name id)]
+                    (when (db/exists? dbname)
+                      (throw (ex-info "userdb already exists for a fresh account id"
+                                      {:type ::recycled-id :id id})))
+                    (try
+                      (db/secure (db/use dbname) {:members {:names [] :roles [(str "u:" id)]}})
+                      (catch Exception e
+                        ;; The rollback frees the id for reuse, and the guard
+                        ;; above would refuse it for as long as a leftover
+                        ;; userdb exists — so the userdb this very call created
+                        ;; (the guard just proved the name was free) goes too.
+                        ;; Best effort: if CouchDB is down, the delete fails
+                        ;; like everything else and reconciliation reports the
+                        ;; orphan.
+                        (try @(db/destroy {:name dbname}) (catch Exception _))
+                        (throw e)))
+                    id)))]
+    (when id
+      {:id id :token token})))
 
 
 (defn- authenticated-user-id
@@ -283,12 +294,10 @@
   "Stores the sha256 of a fresh single-use grant token and returns the
    plaintext token — shown once, REPL-only (ADR-0006 phase-1 invites)."
   ([db]
-   (mint-grant! db (* 30 24 60 60 1000)))
+   (mint-grant! db grants/ttl-ms))
   ([db ttl-ms]
-   (let [token (random-token)]
-     (jdbc/execute! db
-       ["INSERT INTO grants (sha256, expires_at) VALUES (?, ?)"
-        (utils/sha256-hex token) (+ (System/currentTimeMillis) ttl-ms)])
+   (let [token (utils/random-token)]
+     (grants/store! db (utils/sha256-hex token) ttl-ms)
      token)))
 
 
@@ -310,21 +319,14 @@
   (str base-url "/#invite=" token))
 
 
-(defn- burn-grant!
-  "Atomically burns an unused, unexpired grant. Returns true when burned."
-  [db token]
-  (some?
-   (jdbc/execute-one!
-     db
-     ["UPDATE grants SET used_at = UNIXEPOCH()
-      WHERE sha256 = ? AND used_at IS NULL AND expires_at > ?
-      RETURNING sha256"
-      (utils/sha256-hex token) (System/currentTimeMillis)])))
-
-
 (comment
   (on-connection [db db-spec]
     (mint-grant! db)))
+
+
+(def ^:private mail-operator!
+  "Mails the operator an invite request's links."
+  (invite-requests/mailer (System/getenv) running-from-source?))
 
 
 ;;
@@ -357,7 +359,7 @@
   "The exception goes to the log; the client gets a bare 500."
   [^Throwable e _request]
   (t/log! {:level :error :id ::request-failed :error e} "Request failed")
-  {:status 500 :body ""})
+  {:status 500})
 
 
 (def cookie-interceptor
@@ -406,8 +408,8 @@
             (response/header "Content-Hash" sha256)
             ;; Content-addressed — gzip compression delegated to the reverse proxy.
             (response/header "Cache-Control" "public, max-age=31536000, immutable"))
-        {:status 404 :body ""}))
-    {:status 404 :body ""}))
+        {:status 404}))
+    {:status 404}))
 
 
 (defn- wasm-handler
@@ -597,11 +599,52 @@
   (not (some #{(:language subject)} i18n/languages)))
 
 
+(def ^:private json-only
+  "Muuntaja for routes that speak JSON alone: a body is read only as JSON, and
+   every answer is UTF-8 JSON whatever Accept and Accept-Charset ask for."
+  (-> muuntaja/default-options
+      (update :formats select-keys ["application/json"])
+      (assoc-in [:http :extract-accept] (constantly nil))
+      (assoc-in [:http :extract-accept-charset] (constantly nil))
+      muuntaja/create))
+
+
+(def ^:private json-body
+  "Refuses with 415 a request whose body is not JSON: a browser sends JSON
+   across origins only after asking, and plain text without asking."
+  {:name  ::json-body
+   :enter (fn [{:keys [request] :as ctx}]
+            (if (get-in request [:muuntaja/request :format])
+              ctx
+              (context/terminate ctx {:status 415})))})
+
+
+(def ^:private json-responses
+  "Route interceptors that send a map body as JSON and leave the request body
+   alone: `/api/examples` checks the session before it reads the body."
+  [(interceptors.muuntaja/format-negotiate-interceptor json-only)
+   (interceptors.muuntaja/format-response-interceptor json-only)])
+
+
 (defn- bad-request
   [message]
-  {:status  400
-   :headers {"Content-Type" "application/json"}
-   :body    (cheshire/generate-string {:error message})})
+  {:status 400 :body {:error message}})
+
+
+(defn- operator-link
+  "The handlers of the operator's mail link that decides as `decision`. Mail
+   scanners open links, so its GET only shows the button; its POST decides."
+  [decision]
+  (let [page (fn [invite-request]
+               (if invite-request
+                 (invite-requests/page invite-request decision)
+                 {:status 404}))]
+    {:get  (fn [{:keys [path-params]}]
+             (page (on-connection [db db-spec]
+                     (invite-requests/token-request db (:token path-params)))))
+     :post (fn [{:keys [path-params]}]
+             (page (on-connection [db db-spec]
+                     (invite-requests/decide! db (:token path-params) decision))))}))
 
 
 (defn- example-response
@@ -613,36 +656,26 @@
     ;; The cache holds the example as data, so a hit renders here
     ;; exactly as a fresh generation does.
     :outcome/success
-    {:status  200
-     :headers {"Content-Type" "application/json"}
-     :body    (cheshire/generate-string result)}
+    {:status 200 :body result}
 
     ;; The pair's failure: no candidate passed, or the input was
     ;; refused.
     :outcome/rejected
-    {:status  422
-     :headers {"Content-Type" "application/json"}
-     :body    (cheshire/generate-string
-               {:error "No example could be generated for this word"})}
+    {:status 422 :body {:error "No example could be generated for this word"}}
 
     ;; The provider's own delay; no delay sends no header.
     :outcome/throttled
     (let [seconds (some-> (:retry-after-ms result) (/ 1000.0) Math/ceil long)]
-      {:status  429
-       :headers (cond-> {"Content-Type" "application/json"}
-                  (and seconds (pos? seconds))
-                  (assoc "Retry-After" (str seconds)))
-       :body    (cheshire/generate-string
-                 {:error "Examples are temporarily unavailable"})})
+      (cond-> {:status 429 :body {:error "Examples are temporarily unavailable"}}
+        (and seconds (pos? seconds))
+        (assoc :headers {"Retry-After" (str seconds)})))
 
     ;; The service's problem, never the session's: the
     ;; provider's 401 or 403 does not reach the client.
     :outcome/unavailable
     {:status  503
-     :headers {"Content-Type" "application/json"
-               "Retry-After"  "30"}
-     :body    (cheshire/generate-string
-               {:error "Examples are temporarily unavailable"})}))
+     :headers {"Retry-After" "30"}
+     :body    {:error "Examples are temporarily unavailable"}}))
 
 
 (defn- page-language
@@ -659,18 +692,19 @@
   (http/ring-handler
    ;; Main handler
    (http/router
-    [["/dictionary/:filename"
-      {:get (fn [{:keys [path-params] :as req}]
-              (if (= (:filename path-params) "manifest")
+    [;; The manifest is a map and leaves as JSON; the file is no collection,
+     ;; so muuntaja leaves it as it is.
+     ["/dictionary/:filename"
+      {:get (fn [{:keys [path-params] :as request}]
+              (if (= "manifest" (:filename path-params))
                 (if-let [{:keys [sha256]} (get-in @dictionary-manifest [:files "dictionary.sqlite"])]
-                  (let [hash12 (subs sha256 0 12)]
-                    {:status  200
-                     :headers {"Content-Type"  "application/json"
-                               "Cache-Control" "no-cache"}
-                     :body    (cheshire/generate-string {:hash     sha256
-                                                         :filename (str "dict." hash12 ".sqlite")})})
-                  {:status 404 :body ""})
-                (dictionary-handler req)))}]
+                  {:status  200
+                   :headers {"Cache-Control" "no-cache"}
+                   :body    {:filename (str "dict." (subs sha256 0 12) ".sqlite")
+                             :hash     sha256}}
+                  {:status 404})
+                (dictionary-handler request)))
+       :interceptors json-responses}]
 
      ["/auth/check"
       {:get
@@ -688,7 +722,8 @@
      ;; before the parameters are: an anonymous caller does not even get told
      ;; which parameter it forgot.
      ["/api/examples"
-      {:get
+      {:interceptors json-responses
+       :get
        (fn [request]
          ;; One connection for the whole answer — the session, the lookup and
          ;; the write. There is no pool, so each `on-connection` was a file
@@ -698,19 +733,15 @@
            (let [{:keys [word]} (:params request)]
              (cond
                (nil? (authenticated-user-id db (request-token request)))
-               {:status 401 :body ""}
+               {:status 401}
 
                ;; A repeated parameter arrives as a vector; neither the subject
                ;; nor the prompt can be built from two values.
                (some vector? (map (:params request) [:word :context :language :pos]))
-               {:status  400
-                :headers {"Content-Type" "application/json"}
-                :body    (cheshire/generate-string {:error "Parameters take one value each"})}
+               (bad-request "Parameters take one value each")
 
                (str/blank? word)
-               {:status  400
-                :headers {"Content-Type" "application/json"}
-                :body    (cheshire/generate-string {:error "Missing 'word' parameter"})}
+               (bad-request "Missing 'word' parameter")
 
                :else
                ;; One subject value feeds both the cache key and the prompt.
@@ -725,7 +756,7 @@
        (fn [request]
          (on-connection [db db-spec]
            (if (nil? (authenticated-user-id db (request-token request)))
-             {:status 401 :body ""}
+             {:status 401}
              (let [body    (try
                              (some-> (:body request) io/reader (cheshire/parse-stream true))
                              (catch Exception _
@@ -750,42 +781,113 @@
              (server/as-channel request
                                 {:on-open  (fn [channel] (push/subscribe! id channel))
                                  :on-close (fn [channel _status] (push/unsubscribe! id channel))})
-             {:status 401 :body ""})))}]
+             {:status 401})))}]
 
      ["/api/identity/provision"
-      {:post
-       (fn [request]
+      {:interceptors [json-body]
+       :muuntaja json-only
+       :post
+       (fn [{{:keys [invite]} :body-params}]
          (on-connection [db db-spec]
-           (let [{:keys [invite]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
-             (if (and (utils/non-blank invite) (burn-grant! db invite))
-               (try
-                 (let [{:keys [id token]} (create-account! db)]
-                   {:status  200
-                    :headers {"Content-Type" "application/json"}
-                    :body    (cheshire/generate-string {:id id :token token})})
-                 (catch clojure.lang.ExceptionInfo e
-                   (if (= ::recycled-id (:type (ex-data e)))
-                     (do (t/event! ::recycled-id-refused {:level :error :data (ex-data e)})
-                         {:status 503 :body ""})
-                     (throw e))))
-               {:status 403 :body ""}))))}]
+           (try
+             (if-let [account (when (and (string? invite) (utils/non-blank invite))
+                                (create-account! db invite))]
+               {:status 200 :body account}
+               {:status 403})
+             (catch clojure.lang.ExceptionInfo e
+               (if (= ::recycled-id (:type (ex-data e)))
+                 (do (t/event! ::recycled-id-refused {:level :error :data (ex-data e)})
+                     {:status 503})
+                 (throw e))))))}]
 
      ;; Adopting a key means holding a token and nothing else. The token comes
      ;; in the body rather than the cookie so a device can find out whether it
      ;; is valid, and whose it is, before making it this device's identity.
      ["/api/identity/account"
-      {:post
-       (fn [request]
+      {:interceptors [json-body]
+       :muuntaja json-only
+       :post
+       (fn [{{:keys [token]} :body-params}]
          (on-connection [db db-spec]
-           (let [{:keys [token]} (some-> (:body request) io/reader (cheshire/parse-stream true))]
-             (if-let [user-id (authenticated-user-id db token)]
-               {:status  200
-                :headers {"Content-Type" "application/json"}
-                :body    (cheshire/generate-string {:id user-id})}
-               {:status 401 :body ""}))))}]]
+           (if-let [user-id (when (string? token) (authenticated-user-id db token))]
+             {:status 200 :body {:id user-id}}
+             {:status 401})))}]
+
+     ;; JSON in and out through muuntaja for the device's two routes: bodies
+     ;; arrive as `:body-params` and maps leave encoded. The operator's links
+     ;; are HTML forms and stay clear of it.
+     ["/api/invite-requests"
+      ;; A device without an account asks the operator for an invite. It
+      ;; sends a hash, two counts and a note, and gets no CouchDB database.
+      [""
+       {:interceptors [json-body]
+        :muuntaja json-only
+        :post
+        (fn [request]
+          (let [invite-request (invite-requests/from-body (:body-params request))
+                ;; nginx's X-Real-IP replaces whatever the client sent; the
+                ;; socket's peer answers when nothing stands in front.
+                address        (or (utils/non-blank (get-in request [:headers "x-real-ip"]))
+                                   (:remote-addr request))]
+            (cond
+              (nil? invite-request)
+              {:status 400 :body {:error "Expected sha256, words, days and a note"}}
+
+              (not (invite-requests/admits? address (System/currentTimeMillis)))
+              {:status 429 :headers {"Retry-After" "3600"}}
+
+              :else
+              (let [location (str "/api/invite-requests/" (:sha256 invite-request))
+                    outcome  (on-connection [db db-spec]
+                               (invite-requests/request! db
+                                                         (configured-public-url (System/getenv))
+                                                         mail-operator!
+                                                         address
+                                                         invite-request))]
+                (case outcome
+                  :outcome/created {:status 201 :headers {"Location" location} :body {:status "pending"}}
+                  :failure/full    {:status 429 :headers {"Retry-After" "3600"}}
+                  :failure/mail    {:status 503 :headers {"Retry-After" "60"}}
+                  ;; Already requested: the answer points at the request
+                  ;; that exists.
+                  {:status 200 :headers {"Location" location} :body {:status (name outcome)}})))))}]
+
+      ;; A request is read with the secret it was made with, in the header:
+      ;; knowing a request's hash is not owning it, and a header stays out of
+      ;; access logs. The answer links the next step.
+      ["/:sha256"
+       {:muuntaja json-only
+        :get
+        (fn [{:keys [headers path-params]}]
+          (let [secret (some->> (get headers "authorization") (re-matches #"Bearer (\S+)") second)
+                status (when secret
+                         (on-connection [db db-spec]
+                           (invite-requests/secret-status db (:sha256 path-params) secret)))]
+            (if status
+              {:status  200
+               :headers {"Cache-Control" "no-store"}
+               :body    {:links  (case status
+                                   :request/granted {:provision "/api/identity/provision"}
+                                   :request/expired {:request "/api/invite-requests"}
+                                   {})
+                         :status (name status)}}
+              {:status 404})))}]
+
+      ;; The operator's links. Under /api/ so the service worker never
+      ;; answers them with the app shell.
+      ["/:token" {:interceptors [(hiccup/interceptor)]}
+       ["/grant" (operator-link :request/granted)]
+       ["/decline" (operator-link :request/declined)]]]]
 
     {:data {:interceptors [(exception/exception-interceptor
-                            {::exception/default log-and-hide-exception})
+                            ;; A body muuntaja cannot read, or in a charset it
+                            ;; does not know, is the client's mistake.
+                            (let [client-mistake (fn [_error _request] {:status 400})]
+                              {::exception/default log-and-hide-exception
+                               :muuntaja/decode    client-mistake
+                               :muuntaja/request-charset-negotiation client-mistake}))
+                           ;; Mounts only where route data names `:muuntaja`.
+                           (interceptors.muuntaja/format-interceptor)
                            cookie-interceptor
                            (parameters/parameters-interceptor)
                            (keyword-parameters/keyword-parameters-interceptor)]}})
@@ -876,8 +978,25 @@
    {:executor sieppari/executor}))
 
 
+(defn- undecodable-path-handler
+  "Answers 400 to a path that does not percent-decode, such as `/%zz`, and
+   passes every other request on. The router decodes path parameters before
+   any interceptor runs, so such a path would escape the exception handlers
+   as a 500."
+  [{:keys [uri]}]
+  (when-not (try (URLDecoder/decode ^String uri "UTF-8")
+                 (catch IllegalArgumentException _
+                   nil))
+    {:status 400}))
+
+
 (def ring-handler
-  (let [ring-handler #(ring/routes service-worker-handler wasm-handler resource-handler app-handler)]
+  (let [ring-handler #(ring/routes
+                       undecodable-path-handler
+                       service-worker-handler
+                       wasm-handler
+                       resource-handler
+                       app-handler)]
     (if running-from-source?
       (ring/reloading-ring-handler ring-handler)
       (ring-handler))))
@@ -890,7 +1009,12 @@
   [app port]
   (ensure-log-handler!)
   (push/start!)
-  (reset! server (server/run-server app {:port port :legacy-return-value? false})))
+  ;; Loopback only: nginx stands in front and writes X-Real-IP, which the
+  ;; invite limit trusts, so nothing may reach the server around it.
+  (reset! server (server/run-server app
+                                    {:ip   "127.0.0.1"
+                                     :legacy-return-value? false
+                                     :port port})))
 
 
 (def ^:private drain-timeout-ms

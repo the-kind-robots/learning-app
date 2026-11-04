@@ -11,6 +11,7 @@ Options:
   --rotate-openrouter    Re-prompt and overwrite example-generation credential
   --rotate-couchdb       Re-prompt and overwrite CouchDB admin credential
   --rotate-borg          Re-prompt and overwrite Borg passphrase
+  --rotate-invite-mail   Re-prompt and overwrite the invite-mail Worker secret
   --deployer-key <key>   Provide deployer SSH public key
   --borg-repo <repo>     Set or replace BORG_REPO
   -h, --help             Show this help
@@ -32,11 +33,13 @@ bootstrap=false
 rotate_openrouter=false
 rotate_couchdb=false
 rotate_borg=false
+rotate_invite_mail=false
 deployer_key=""
 borg_repo=""
 openrouter_changed=false
 couchdb_changed=false
 db_auth_secret_changed=false
+invite_mail_changed=false
 cert_issued=false
 app_was_active=false
 nginx_was_active=false
@@ -60,6 +63,9 @@ while [ $# -gt 0 ]; do
       ;;
     --rotate-borg)
       rotate_borg=true
+      ;;
+    --rotate-invite-mail)
+      rotate_invite_mail=true
       ;;
     --deployer-key)
       shift
@@ -144,6 +150,9 @@ write_credential() {
       couchdb_admin_password)
         couchdb_changed=true
         ;;
+      invite_mail_secret)
+        invite_mail_changed=true
+        ;;
     esac
   else
     info "Credential ${name} exists; skipping"
@@ -181,6 +190,7 @@ else
   write_credential "couchdb_admin_password" "Enter admin password for CouchDB" "${rotate_couchdb}"
 fi
 write_credential "borg-passphrase" "Enter encryption password for BorgBackup" "${rotate_borg}"
+write_credential "invite_mail_secret" "Enter the invite-mail Worker secret (its INVITE_MAIL_SECRET)" "${rotate_invite_mail}"
 
 # Signs the proxy-auth headers the app hands to CouchDB. Nobody types this one,
 # so it is generated rather than asked for; the app refuses to start without it.
@@ -338,7 +348,7 @@ fi
 # oneshot and loads its credential on every run, so it needs no restart.
 if [ "${app_was_active}" = true ] \
    && { [ "${openrouter_changed}" = true ] || [ "${couchdb_changed}" = true ] \
-        || [ "${db_auth_secret_changed}" = true ]; }; then
+        || [ "${db_auth_secret_changed}" = true ] || [ "${invite_mail_changed}" = true ]; }; then
   systemctl restart learning-app-run.service
   info "Restarted learning-app-run.service to load rotated credentials"
 fi
