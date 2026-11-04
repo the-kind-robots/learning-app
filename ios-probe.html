@@ -20,7 +20,10 @@
       '<b>Режим:</b> ' + (navigator.standalone ? 'установленное приложение' : 'Safari') + '<br>' +
       '<b>Кука постоянная:</b> ' + (has('probe_persistent') ? 'есть' : 'нет') + '<br>' +
       '<b>Кука сессионная:</b> ' + (has('probe_session') ? 'есть' : 'нет') + '<br>' +
-      '<b>localStorage:</b> ' + (ls() || 'нет');
+      '<b>localStorage:</b> ' + (ls() || 'нет') + '<br>' +
+      '<b>Telegram-объекты:</b> ' + (Object.keys(window).filter((k) => /telegram/i.test(k)).join(', ') || 'нет') + '<br>' +
+      '<b>Safari/ в UA:</b> ' + (/ Safari\//.test(navigator.userAgent) ? 'есть' : 'нет') + '<br>' +
+      '<b>User-Agent:</b> <code style="word-break:break-all">' + navigator.userAgent + '</code>';
   };
   document.getElementById('set').onclick = () => {
     document.cookie = 'probe_persistent=1; Max-Age=31536000; path=/; SameSite=Lax; Secure';
