@@ -259,9 +259,33 @@
   }
 }
 
+/* A wide screen keeps the phone's pinned footer, but lined up with the card:
+   the lesson button takes the card's width, the grey band gives way to a fade
+   into the page, and the content starts lower so it does not hang at the top. */
 @media (min-width: 900px) {
+  .home {
+    padding-top: clamp(64px, 16vh, 160px);
+  }
+
+  .home__collection-heading {
+    font-size: 40px;
+    letter-spacing: -1px;
+    line-height: 1.2;
+  }
+
   .home__add {
+    background: rgb(var(--color-snow));
     margin-inline: auto;
+    max-width: 640px;
+  }
+
+  .home__footer {
+    --page-footer-padding-top: 32px;
+    --page-footer-padding-bottom: 32px;
+    background: linear-gradient(rgb(var(--color-snow), 0), rgb(var(--color-snow)) 40%);
+  }
+
+  .home__footer .page-footer__action {
     max-width: 640px;
   }
 }
