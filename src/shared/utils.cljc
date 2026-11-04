@@ -100,14 +100,16 @@
 
 
 (defn distinct-by
+  "The first element of `coll` for each value of `f`, in the order of `coll`, as a vector."
   [f coll]
   (->> coll
-       (reduce (fn [m x]
-                 (if (contains? m (f x))
-                   m
-                   (assoc m (f x) x)))
-               {})
-       vals))
+       (reduce (fn [[seen kept] element]
+                 (let [key (f element)]
+                   (if (contains? seen key)
+                     [seen kept]
+                     [(conj seen key) (conj kept element)])))
+               [#{} []])
+       second))
 
 
 (defn index-by

@@ -578,6 +578,51 @@
     :rank         10
     :forms        []
     :translations [{:lang "ru" :value "добро"}]}
+   {:value        "sie"
+    :pos          "pron"
+    :rank         60
+    :forms        []
+    :translations [{:lang "ru" :value "она"}]}
+   {:value        "der Sie"
+    :pos          "noun"
+    :rank         50
+    :forms        []
+    :translations [{:lang "ru" :value "женщина"}]}
+   {:value        "die Sie"
+    :pos          "noun"
+    :rank         40
+    :forms        []
+    :translations [{:lang "ru" :value "самка"}]}
+   {:value        "es"
+    :pos          "pron"
+    :rank         980
+    :forms        ["sie"]
+    :translations [{:lang "ru" :value "оно"}]}
+   {:value        "er"
+    :pos          "pron"
+    :rank         970
+    :forms        ["sie"]
+    :translations [{:lang "ru" :value "он"}]}
+   {:value        "ihn"
+    :pos          "pron"
+    :rank         960
+    :forms        ["sie"]
+    :translations [{:lang "ru" :value "его"}]}
+   {:value        "ihnen"
+    :pos          "pron"
+    :rank         950
+    :forms        ["sie"]
+    :translations [{:lang "ru" :value "им"}]}
+   {:value        "ihm"
+    :pos          "pron"
+    :rank         940
+    :forms        ["sie"]
+    :translations [{:lang "ru" :value "ему"}]}
+   {:value        "ihrer"
+    :pos          "pron"
+    :rank         930
+    :forms        ["sie"]
+    :translations [{:lang "ru" :value "их"}]}
    {:value        "Bezug auf etwas nehmen"
     :pos          "phrase"
     :rank         100
@@ -695,6 +740,16 @@
      (is (= ["das Gute" "gutern"]
             (mapv :value (dictionary/lookup-dictionary-entries "Gute")))
          "the noun written exactly so outranks a verb that merely has the form"))))
+
+
+(deftest a-form-that-many-lemmas-share-is-found-exact-first
+  (with-dictionary
+   (fn []
+     (is (= ["sie" "der Sie" "die Sie" "es" "er" "ihn" "ihnen" "ihm" "ihrer"]
+            (mapv :value (dictionary/lookup-dictionary-entries "sie")))
+         "past eight entries too: those written so first, then the rest, each by rank")
+     (is (= "sie" (:lemma (dictionary/lookup-word-meta "sie" "ru" [] nil)))
+         "no gloss matches, so the first entry is taken"))))
 
 
 (deftest a-word-with-an-umlaut-is-found
