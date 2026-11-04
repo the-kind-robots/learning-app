@@ -186,7 +186,9 @@
                                         :headers {"Authorization" (str "Bearer " secret)
                                                   "Content-Type"  "application/json"}
                                         :method  :post
-                                        :timeout 3000
+                                        ;; `send` answers once Cloudflare took
+                                        ;; the mail, about 4 s.
+                                        :timeout 10000
                                         :url     url})]
           (or (and (nil? error) (<= 200 status 299))
               (do (t/event! ::mail-failed {:level :error :data {:error (some-> error ex-message) :status status}})
