@@ -118,6 +118,29 @@
      [:i18n :sync/cancel]]]])
 
 
+(defn- held-link-dialog
+  [link]
+  [:dialog.pairing-dialog.modal
+   {:replicant/on-mount [[:action/open-dialog]]
+    :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
+         :close [[:action/close-held-link]]}}
+   [:div.pairing-dialog__content
+    [:h2.pairing-dialog__title
+     [:i18n :sync/held-link-title]]
+    [:p.pairing-dialog__hint
+     [:i18n :sync/held-link-hint]]
+    [:button.pairing-dialog__close
+     {:type "button"
+      :on   {:click [[:effect/copy-held-link
+                      {:copied-message [:i18n :sync/recovery-link-copied]
+                       :link link}]]}}
+     [:i18n :sync/copy-link]]
+    [:button.pairing-dialog__close
+     {:type "button"
+      :on   {:click [[:action/close-held-link]]}}
+     [:i18n :dialog/close]]]])
+
+
 (defn sync-button
   "The bar's button that opens the sync menu: grey without an account, lit green while online, orange offline."
   [{:keys [show-sync? status]}]
@@ -141,13 +164,14 @@
 
 
 (defn dialogs
-  "The sync menu beside its control, and the QR dialog or the form that asks to turn the sync on, whichever is
-   open."
-  [{:keys [open-dialog show-sync? sync-qr] :as props}]
+  "The sync menu beside its control, and the QR dialog, the form that asks to turn the sync on or the dialog of a
+   link Telegram's browser opened, whichever is open."
+  [{:keys [held-link open-dialog show-sync? sync-qr] :as props}]
   (list
    (when show-sync?
      (sync-menu props))
    (case open-dialog
-     :dialog/qr      (sync-qr-dialog sync-qr)
-     :dialog/request (sync-dialog props)
+     :dialog/held-link (held-link-dialog held-link)
+     :dialog/qr        (sync-qr-dialog sync-qr)
+     :dialog/request   (sync-dialog props)
      nil)))

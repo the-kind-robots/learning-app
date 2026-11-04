@@ -1,7 +1,8 @@
 (ns application.sync.actions
   "Joining another device to this account's sync: the dialog that shows the
    link as a QR code, and closing it when the device that opened the link has
-   joined. Without an account, the form that asks us to turn the sync on. One
+   joined. Without an account, the form that asks us to turn the sync on. In
+   Telegram's browser, the dialog of a credential link left for another. One
    of them is open at a time: `:app/sync-open` says which. The sync menu is
    the browser's popover and keeps no state."
   (:require
@@ -51,6 +52,11 @@
 (nxr/register-action! :action/close-sync-qr
   (fn close-sync-qr [state]
     (close state :sync-open/qr)))
+
+
+(nxr/register-action! :action/close-held-link
+  (fn close-held-link [state]
+    (close state :sync-open/held-link)))
 
 
 (nxr/register-action! :action/device-joined

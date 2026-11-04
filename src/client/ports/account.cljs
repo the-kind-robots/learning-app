@@ -43,7 +43,8 @@
 
 (defn check-incoming-auth!
   "Handles an incoming `#key=` or `#invite=` credential in the address. It runs before the learner's databases
-   open: a key from another account wipes the local data, which then opens fresh."
+   open: a key from another account wipes the local data, which then opens fresh. Resolves with the link when
+   Telegram's browser opened it and it was left for another browser, nil otherwise."
   []
   (account/check-incoming-auth! nil))
 

@@ -92,9 +92,12 @@
 
  :sync/cancel                 "İptal"
  :sync/connect-device         "Cihaz bağla"
+ :sync/copy-link              "Bağlantıyı kopyala"
  :sync/enable                 "Kelimelerimi sakla"
  :sync/enable-ask             "Bunu elle açıyoruz. Bize birkaç kelime ya da sadece bir merhaba yazın. Hazır olunca logonun yanındaki simge yeşile döner."
  :sync/enable-title           "Kelimeleriniz hiç kaybolmasın"
+ :sync/held-link-hint         "Telegram bağlantıyı kendi tarayıcısında açtı ve oturum orada kalırdı. Bağlantıyı kopyalayıp Safari'de veya Chrome'da açın ya da yüklü uygulamaya yapıştırın."
+ :sync/held-link-title        "Bağlantıyı Safari'de açın"
  :sync/not-a-recovery-link    "Bu bir kurtarma bağlantısı değil"
  :sync/paste-prompt           "Kurtarma bağlantısını yapıştırın"
  :sync/paste-recovery-link    "Kurtarma bağlantısını yapıştır"

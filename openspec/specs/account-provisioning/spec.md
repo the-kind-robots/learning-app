@@ -140,3 +140,15 @@ On boot, a device that holds no identity and opens no credential link SHALL adop
 #### Scenario: The app installed from a signed-in Safari
 - **WHEN** a device with no identity boots holding the auth cookie of an account
 - **THEN** the device adopts that account and offers the account actions
+
+### Requirement: Telegram's browser leaves a credential link for another browser
+Telegram's in-app browser keeps its own storage, so an account adopted or an invite redeemed there is lost to Safari and to the installed app. A page that boots with a `#key=` or `#invite=` fragment in Telegram's browser, known by its `TelegramWebviewProxy` object, SHALL adopt nothing and redeem nothing. It SHALL show the dialog «Откройте ссылку в Safari», whose «Скопировать ссылку» copies the whole link, fragment included.
+
+#### Scenario: A recovery link opened from Telegram
+- **WHEN** a recovery link is opened in Telegram's browser
+- **THEN** the dialog «Откройте ссылку в Safari» is shown and the device adopts no account
+- **AND** «Скопировать ссылку» copies the link with its `key=` and `pair=`
+
+#### Scenario: An invite opened from Telegram
+- **WHEN** an invite link is opened in Telegram's browser
+- **THEN** the dialog «Откройте ссылку в Safari» is shown and no provision request is made

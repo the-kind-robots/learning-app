@@ -357,47 +357,55 @@
 (defn ^:async check-incoming-auth!
   "Handles an incoming `#key=` or `#invite=` credential (ADR-0006), or the token of an auth cookie on a
    device with no identity. A key destroys local data only when it belongs to another account; runs before
-   the databases open, so a wipe leaves a fresh instance."
+   the databases open, so a wipe leaves a fresh instance. Resolves with the link when Telegram's browser
+   opened it, which takes nothing from it, and nil otherwise."
   [_]
   (let [;; Credentials arrive in the fragment rather than in the query string
         ;; The fragment is never sent to the server, so the credential stays out of access logs and Referer headers.
         params (js/URLSearchParams. (.. js/window -location -hash (slice 1)))
+        key    (.get params "key")
         invite (.get params "invite")
-        token  (or (.get params "key")
+        token  (or key
                    ;; iOS gives an app added to the home screen Safari's cookies, not its storage (#683).
                    (when-not (or invite (await (identity/load-identity!)))
                      (identity/cookie-token)))]
-    (cond
-      (some? token)
-      (try
-        (if-let [account-id (await (identity/account-id! token))]
-          (do
-            (when-let [stored (await (identity/load-identity!))]
-              ;; Wiped through a throwaway handle before the databases open: a handle that existed at
-              ;; destroy time hangs on every later call.
-              (when (not= (:id stored) account-id)
-                (await (db/destroy (db/use "user-db")))))
-            (await (identity/save-identity! {:id account-id :token token}))
-            ;; The echo that ends pairing (ADR-0009): the QR carried a nonce; the receipt carries it back
-            ;; through replication and closes the dialog of the device that minted it.
-            (when-some [nonce (.get params "pair")]
-              (await (db/insert (db/use "user-db")
-                                {:_id  (str "pairing:" nonce)
-                                 :type "pairing"})))
-            (log/info :sync/adopted {:user-id account-id}))
-          (log/warn :sync/invalid-key {}))
-        (catch js/Error err
-          (log/warn :sync/adopt-failed {:error (ex-message err)})))
+    (if (and (or key invite) (exists? js/TelegramWebviewProxy))
+      ;; Telegram's browser keeps its own storage: an account adopted there, or an invite burnt there, stays
+      ;; there (#683). The link goes on to Safari or the app whole.
+      (.. js/window -location -href)
+      (do
+        (cond
+          (some? token)
+          (try
+            (if-let [account-id (await (identity/account-id! token))]
+              (do
+                (when-let [stored (await (identity/load-identity!))]
+                  ;; Wiped through a throwaway handle before the databases open: a handle that existed at
+                  ;; destroy time hangs on every later call.
+                  (when (not= (:id stored) account-id)
+                    (await (db/destroy (db/use "user-db")))))
+                (await (identity/save-identity! {:id account-id :token token}))
+                ;; The echo that ends pairing (ADR-0009): the QR carried a nonce; the receipt carries it back
+                ;; through replication and closes the dialog of the device that minted it.
+                (when-some [nonce (.get params "pair")]
+                  (await (db/insert (db/use "user-db")
+                                    {:_id  (str "pairing:" nonce)
+                                     :type "pairing"})))
+                (log/info :sync/adopted {:user-id account-id}))
+              (log/warn :sync/invalid-key {}))
+            (catch js/Error err
+              (log/warn :sync/adopt-failed {:error (ex-message err)})))
 
-      (some? invite)
-      (try
-        (if (await (identity/load-identity!))
-          (log/warn :sync/already-provisioned {})
-          (let [provisioned (await (identity/provision! invite))]
-            (await (identity/save-identity! provisioned))
-            (log/info :sync/provisioned {:user-id (:id provisioned)})))
-        (catch js/Error err
-          (log/warn :sync/provision-failed {:error (ex-message err)}))))))
+          (some? invite)
+          (try
+            (if (await (identity/load-identity!))
+              (log/warn :sync/already-provisioned {})
+              (let [provisioned (await (identity/provision! invite))]
+                (await (identity/save-identity! provisioned))
+                (log/info :sync/provisioned {:user-id (:id provisioned)})))
+            (catch js/Error err
+              (log/warn :sync/provision-failed {:error (ex-message err)}))))
+        nil))))
 
 
 (defn open-recovery-link!

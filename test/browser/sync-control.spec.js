@@ -540,6 +540,57 @@ test.describe('Ссылка восстановления', () => {
     });
   });
 
+  test('пользователь открывает ссылку восстановления в браузере Telegram → окно «Откройте ссылку в Safari», ссылка копируется целиком', async ({ page, context }) => {
+    const link = '/#key=test-token&pair=nonce-1';
+
+    await test.step('Дано браузер Telegram', async () => {
+      await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+      await page.addInitScript(() => { window.TelegramWebviewProxy = { postEvent() {} }; });
+      await answerAccount(page);
+    });
+
+    await test.step('Когда он открывает ссылку восстановления', async () => {
+      await page.goto(link);
+    });
+
+    await test.step('Тогда он видит окно «Откройте ссылку в Safari»', async () => {
+      await expect(page.getByRole('heading', { name: 'Откройте ссылку в Safari' })).toBeVisible();
+    });
+
+    await test.step('Когда он нажимает «Скопировать ссылку»', async () => {
+      page.once('dialog', (alert) => alert.accept());
+      await page.getByRole('button', { name: 'Скопировать ссылку' }).click();
+    });
+
+    await test.step('Тогда в буфере вся ссылка, а устройство так и не вошло в аккаунт', async () => {
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain('#key=test-token&pair=nonce-1');
+      await page.getByRole('button', { name: 'Закрыть' }).click();
+      await syncButton(page).click();
+      await expect(pasteItem(page)).toBeVisible();
+    });
+  });
+
+  test('пользователь открывает инвайт в браузере Telegram → инвайт не тратится', async ({ page }) => {
+    let provisions = 0;
+
+    await test.step('Дано браузер Telegram', async () => {
+      await page.addInitScript(() => { window.TelegramWebviewProxy = { postEvent() {} }; });
+      await page.route('**/api/identity/provision', (route) => {
+        provisions += 1;
+        return route.fulfill({ json: { id: 7, token: 'test-token' } });
+      });
+    });
+
+    await test.step('Когда он открывает инвайт', async () => {
+      await page.goto('/#invite=test-invite');
+    });
+
+    await test.step('Тогда он видит окно «Откройте ссылку в Safari», и инвайт не отправлен', async () => {
+      await expect(page.getByRole('heading', { name: 'Откройте ссылку в Safari' })).toBeVisible();
+      expect(provisions).toBe(0);
+    });
+  });
+
   test('пользователь без аккаунта вставляет не ссылку → сообщение, аккаунта нет', async ({ page }) => {
     let message;
 

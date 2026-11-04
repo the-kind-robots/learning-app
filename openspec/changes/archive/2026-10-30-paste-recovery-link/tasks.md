@@ -11,5 +11,6 @@
 ## 3. Verify
 
 - [x] 2.4 A device with no identity adopts the token of its auth cookie on boot; the cookie is kept for 400 days
+- [x] 2.5 In Telegram's browser a `#key=` or `#invite=` link is neither adopted nor redeemed; a dialog copies it whole
 - [x] 3.1 `sync-control.spec.js`, unit tests, clj-kondo
 - [ ] 3.2 The installed app on an iPhone joins an account from a pasted link — not provable in the worktree
