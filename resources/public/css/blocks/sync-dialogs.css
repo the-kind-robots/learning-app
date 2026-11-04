@@ -1,40 +1,77 @@
-/* Sync menu dialog — sheet of action buttons */
+/* Sync menu — a popover under the sync control, drawn as the settings menu under the word mark. The screen
+   stays as it is behind it. */
 
-.sync-menu-dialog__content {
-  display: flex;
+.sync-menu {
+  background: rgb(var(--color-snow));
+  border: 1px solid rgb(0 0 0 / 0.08);
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.14);
+  color: rgb(var(--color-black-text));
   flex-direction: column;
-  padding: 8px 0;
+  font-family: Nunito, sans-serif;
+  gap: 2px;
+  inset: auto;
+  /* Where the anchor is unknown, under the word mark, as the settings. */
+  left: 8px;
+  /* The tip, 34px from the menu's edge, under the control's middle. */
+  left: calc(anchor(--sync-control center) - 34px);
+  margin: 0;
+  min-width: 196px;
+  overflow: visible;
+  padding: 8px;
+  position: fixed;
+  top: 52px;
+  width: max-content;
 }
 
-.sync-menu-dialog__item {
+.sync-menu:popover-open {
+  display: flex;
+}
+
+/* The tip points at the control. */
+.sync-menu::before {
+  background: rgb(var(--color-snow));
+  border-left: 1px solid rgb(0 0 0 / 0.08);
+  border-top: 1px solid rgb(0 0 0 / 0.08);
+  content: "";
+  height: 12px;
+  left: 28px;
+  position: absolute;
+  top: -7px;
+  transform: rotate(45deg);
+  width: 12px;
+}
+
+.sync-menu__item {
+  align-items: center;
   background: none;
   border: none;
-  border-radius: 0;
+  border-radius: 10px;
   color: rgb(var(--color-black-text));
   cursor: pointer;
+  display: flex;
   font-family: inherit;
   font-size: 16px;
   font-weight: 600;
-  min-height: 52px;
-  padding: 14px 20px;
+  min-height: 44px;
+  padding: 0 10px;
   text-align: left;
   transition: background-color 0.1s;
-  width: 100%;
+}
+
+.sync-menu__item:focus-visible {
+  outline: 2px solid rgb(var(--color-macaw));
+  outline-offset: 2px;
 }
 
 @media (hover: hover) {
-  .sync-menu-dialog__item:hover {
+  .sync-menu__item:hover {
     background: rgb(var(--color-polar));
   }
 }
 
-.sync-menu-dialog__item:active {
+.sync-menu__item:active {
   background: rgb(var(--color-polar));
-}
-
-.sync-menu-dialog__item--cancel {
-  color: rgb(var(--color-cardinal));
-  margin-top: 4px;
 }
 
 

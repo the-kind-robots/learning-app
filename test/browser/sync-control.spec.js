@@ -127,6 +127,95 @@ test.describe('Иконка синхронизации', () => {
   });
 });
 
+test.describe('Меню синхронизации', () => {
+  const home = (page) => page.getByRole('heading', { name: 'Главная' });
+  const syncMenu = (page) => page.getByRole('dialog', { name: 'Синхронизация' });
+
+  const openMenu = async (page) => {
+    await page.goto('/home');
+    await syncButton(page).click();
+    await expect(syncMenu(page)).toBeVisible();
+  };
+
+  test('пользователь нажимает иконку синхронизации → меню под ней, без «Отмены», главная на месте', async ({ page }) => {
+    await test.step('Дано пользователь на главной', async () => {
+      await page.goto('/home');
+    });
+
+    await test.step('Когда он нажимает иконку синхронизации', async () => {
+      await syncButton(page).click();
+    });
+
+    await test.step('Тогда меню открыто под иконкой, «Отмены» в нём нет, главная видна', async () => {
+      await expect(syncMenu(page)).toBeVisible();
+      const icon = await syncButton(page).boundingBox();
+      const menu = await syncMenu(page).boundingBox();
+      expect(menu.y).toBeGreaterThanOrEqual(icon.y + icon.height);
+      expect(menu.x).toBeLessThanOrEqual(icon.x + icon.width / 2);
+      expect(menu.x + menu.width).toBeGreaterThanOrEqual(icon.x + icon.width / 2);
+      await expect(syncMenu(page).getByRole('button', { name: 'Отмена' })).toHaveCount(0);
+      await expect(home(page)).toBeVisible();
+    });
+  });
+
+  test('пользователь нажимает мимо меню или Esc → меню закрыто, главная на месте', async ({ page }) => {
+    await test.step('Дано открытое меню синхронизации', async () => {
+      await openMenu(page);
+    });
+
+    await test.step('Когда он нажимает в низ экрана, мимо меню', async () => {
+      await page.mouse.click(640, 650);
+    });
+
+    await test.step('Тогда меню нет, а главная видна', async () => {
+      await expect(syncMenu(page)).toHaveCount(0);
+      await expect(home(page)).toBeVisible();
+    });
+
+    await test.step('Когда он снова открывает меню и нажимает Esc', async () => {
+      await syncButton(page).click();
+      await expect(syncMenu(page)).toBeVisible();
+      await page.keyboard.press('Escape');
+    });
+
+    await test.step('Тогда меню снова нет', async () => {
+      await expect(syncMenu(page)).toHaveCount(0);
+    });
+  });
+
+  test('пользователь нажимает иконку синхронизации при открытом меню → меню закрывается', async ({ page }) => {
+    await test.step('Дано открытое меню синхронизации', async () => {
+      await openMenu(page);
+    });
+
+    await test.step('Когда он снова нажимает иконку', async () => {
+      await syncButton(page).click();
+    });
+
+    await test.step('Тогда меню нет', async () => {
+      await expect(syncMenu(page)).toHaveCount(0);
+    });
+  });
+
+  test('пользователь с аккаунтом выбирает «Подключить устройство» → меню закрыто, виден QR-код', async ({ page }) => {
+    await test.step('Дано пользователь с аккаунтом открыл меню синхронизации', async () => {
+      await stubAccountCopy(page.context());
+      await signIn(page);
+      await expect(syncButton(page)).toHaveCSS('color', GREEN);
+      await syncButton(page).click();
+    });
+
+    await test.step('Когда он выбирает «Подключить устройство»', async () => {
+      await syncMenu(page).getByRole('button', { name: 'Подключить устройство' }).click();
+    });
+
+    await test.step('Тогда меню нет, а QR-код виден', async () => {
+      await expect(page.getByRole('img', { name: 'QR-код для подключения устройства' })).toBeVisible();
+      await expect(syncMenu(page)).toHaveCount(0);
+    });
+  });
+});
+
 test.describe('Сохранить мои слова', () => {
   const syncDialog = (page) => page.getByRole('dialog', { name: 'Чтобы слова не потерялись' });
 

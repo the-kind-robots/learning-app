@@ -19,33 +19,37 @@
    [:path {:d "M19 17.2h0"}]])
 
 
-(defn- sync-menu-dialog
+(defn- sync-menu
+  "A popover under the control, as the settings are under the word mark: the browser opens and closes it,
+   and each item closes it too."
   [{:keys [show-account-actions?]}]
-  [:dialog.sync-menu-dialog.modal
-   {:replicant/on-mount [[:action/open-dialog]]
-    :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
-         :close [[:action/close-sync-menu]]}}
-   [:div.sync-menu-dialog__content
-    (if show-account-actions?
-      (list
-       [:button.sync-menu-dialog__item
-        {:type "button"
-         :on   {:click [[:effect/open-sync-qr]]}}
-        [:i18n :sync/connect-device]]
-       [:button.sync-menu-dialog__item
-        {:type "button"
-         :on   {:click [[:effect/share-sync-link
-                         {:copied-message [:i18n :sync/recovery-link-copied]
-                          :title [:i18n :sync/recovery-link-title]}]]}}
-        [:i18n :sync/recovery-link]])
-      [:button.sync-menu-dialog__item
-       {:type "button"
-        :on   {:click [[:action/open-sync-dialog]]}}
-       [:i18n :sync/enable]])
-    [:button.sync-menu-dialog__item.sync-menu-dialog__item--cancel
-     {:type "button"
-      :on   {:click [[:action/close-sync-menu]]}}
-     [:i18n :sync/cancel]]]])
+  [:div.sync-menu
+   {:id         "sync-menu"
+    :aria-label [:i18n :sync/title]
+    :popover    "auto"
+    :role       "dialog"}
+   (if show-account-actions?
+     (list
+      [:button.sync-menu__item
+       {:popovertarget "sync-menu"
+        :popovertargetaction "hide"
+        :type "button"
+        :on {:click [[:effect/open-sync-qr]]}}
+       [:i18n :sync/connect-device]]
+      [:button.sync-menu__item
+       {:popovertarget "sync-menu"
+        :popovertargetaction "hide"
+        :type "button"
+        :on {:click [[:effect/share-sync-link
+                      {:copied-message [:i18n :sync/recovery-link-copied]
+                       :title [:i18n :sync/recovery-link-title]}]]}}
+       [:i18n :sync/recovery-link]])
+     [:button.sync-menu__item
+      {:popovertarget "sync-menu"
+       :popovertargetaction "hide"
+       :type "button"
+       :on {:click [[:action/open-sync-dialog]]}}
+      [:i18n :sync/enable]])])
 
 
 (defn- sync-qr-dialog
@@ -109,27 +113,31 @@
   [{:keys [show-sync? status]}]
   (when show-sync?
     [:button.app-shell__sync
-     {:type       "button"
-      :class      (case status
-                    :sync/online  "app-shell__sync--online"
-                    :sync/offline "app-shell__sync--offline"
-                    nil)
-      :title      [:i18n :sync/title]
+     {:type          "button"
+      :class         (case status
+                       :sync/online  "app-shell__sync--online"
+                       :sync/offline "app-shell__sync--offline"
+                       nil)
+      :title         [:i18n :sync/title]
       ;; The colour says it to the eye; the name says it to a screen reader.
-      :aria-label [:i18n
-                   (case status
-                     :sync/online  :sync/title-online
-                     :sync/offline :sync/title-offline
-                     :sync/title-off)]
-      :on         {:click [[:action/open-sync-menu]]}}
+      :aria-label    [:i18n
+                      (case status
+                        :sync/online  :sync/title-online
+                        :sync/offline :sync/title-offline
+                        :sync/title-off)]
+      ;; The browser opens and closes the menu, and marks this button expanded while it is open.
+      :popovertarget "sync-menu"}
      (sync-icon)]))
 
 
 (defn dialogs
-  "The sync menu, the QR dialog and the form that asks to turn the sync on, whichever is open."
-  [{:keys [open-dialog sync-qr] :as props}]
-  (case open-dialog
-    :dialog/menu    (sync-menu-dialog props)
-    :dialog/qr      (sync-qr-dialog sync-qr)
-    :dialog/request (sync-dialog props)
-    nil))
+  "The sync menu beside its control, and the QR dialog or the form that asks to turn the sync on, whichever is
+   open."
+  [{:keys [open-dialog show-sync? sync-qr] :as props}]
+  (list
+   (when show-sync?
+     (sync-menu props))
+   (case open-dialog
+     :dialog/qr      (sync-qr-dialog sync-qr)
+     :dialog/request (sync-dialog props)
+     nil)))

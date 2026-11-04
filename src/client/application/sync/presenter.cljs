@@ -10,7 +10,6 @@
   [state]
   {:note           (:app/sync-request-note state)
    :open-dialog    (case (:app/sync-open state)
-                     :sync-open/menu    :dialog/menu
                      :sync-open/qr      :dialog/qr
                      :sync-open/request :dialog/request
                      nil)
