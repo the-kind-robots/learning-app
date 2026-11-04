@@ -108,6 +108,8 @@
                                                                trimmed
                                                                (world/clock world :now-iso))))]]))
                       (learner/collection learner active-id)))]
-      (cond-> {:name (if renamed (:name renamed) current)}
+      (cond-> {:name (if renamed
+                       (:name renamed)
+                       current)}
         renamed (assoc :renamed? true)
         taken?  (assoc :noop :duplicate)))))

@@ -100,6 +100,34 @@
                  {:vector {:fn-format nil :respect-nl? true}
                   :map    {:force-nl? false}})))}
 
+ ;; `if` and `if-not` — the test stays on the `if` line. A branch that is no plain value (a vector, a map, a
+ ;; call): each branch on a line of its own. Plain values — a string, a number, a keyword, a symbol, nil, a
+ ;; boolean, `@x`, an empty collection — stay on one line while they fit. `if-let` and `if-some` take
+ ;; :binding, which puts each branch on a line of its own anyway. A `;; zprint: as written` comment right
+ ;; before a form leaves it as written. docs/process/code-style.md, "If Layout".
+ :list    {:option-fn
+           (fn [options _ elements]
+             (when (and (contains? #{'if 'if-not} (first elements))
+                        (not (every? (fn [branch]
+                                       (or (not (coll? branch))
+                                           (empty? branch)
+                                           (and (seq? branch)
+                                                (= 'clojure.core/deref (first branch))
+                                                (not (coll? (second branch))))))
+                                     (drop 2 elements)))
+                        ;; The marker before this form or before any form around it.
+                        (not (loop [path (second (:zloc options))]
+                               (cond
+                                 (not (map? path)) false
+                                 (= ";; zprint: as written"
+                                    (some-> (remove (fn [node] (clojure.string/blank? (str node))) (:l path))
+                                            last
+                                            str
+                                            clojure.string/trim))
+                                 true
+                                 :else (recur (:ppath path))))))
+               {:fn-style :arg1-force-nl-body}))}
+
  ;; Function-specific formatting
  :fn-map  {;; Threading macros - keep short forms on one line
            "->"            :none

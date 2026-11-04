@@ -51,7 +51,9 @@
 (defn language
   "The language the interface speaks: `picked`, while it has a dictionary, else the system's."
   [picked tag]
-  (if (some #{picked} languages) picked (system-language tag)))
+  (if (some #{picked} languages)
+    picked
+    (system-language tag)))
 
 
 (defn asks-language?
@@ -69,12 +71,19 @@
     (and (vector? markup) (= :i18n (first markup)))
     (let [[_ k params] markup]
       ;; A key the language has not translated yet reads in Russian, so a dictionary can grow key by key.
-      (m1p/lookup nil (if (contains? dictionary k) dictionary (dictionaries "ru")) k params))
+      (m1p/lookup nil
+                  (if (contains? dictionary k)
+                    dictionary
+                    (dictionaries "ru"))
+                  k
+                  params))
 
     (or (vector? markup) (map? markup))
     (reduce-kv (fn [coll k v]
                  (let [v' (interpolated dictionary v)]
-                   (if (identical? v v') coll (assoc coll k v'))))
+                   (if (identical? v v')
+                     coll
+                     (assoc coll k v'))))
                markup
                markup)
 

@@ -219,7 +219,9 @@
        (fn [^js event]
          (let [character (.-key event)
                now       (js/Date.now)
-               text      (if (< (- now (:at @typed)) 1000) (:text @typed) "")]
+               text      (if (< (- now (:at @typed)) 1000)
+                           (:text @typed)
+                           "")]
            (when (and (= 1 (count character))
                       (not (or (.-ctrlKey event) (.-altKey event) (.-metaKey event)))
                       (not (and (= " " character) (= "" text))))

@@ -69,7 +69,9 @@
 
 (defn ^:async c2
   []
-  (let [val (if true (delayed 5) nil)] ; ternary
+  (let [val (if true
+              (delayed 5)
+              nil)] ; ternary
     (println "val = " val)))
 
 

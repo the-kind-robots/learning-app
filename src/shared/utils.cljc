@@ -102,7 +102,11 @@
 (defn distinct-by
   [f coll]
   (->> coll
-       (reduce (fn [m x] (if (contains? m (f x)) m (assoc m (f x) x))) {})
+       (reduce (fn [m x]
+                 (if (contains? m (f x))
+                   m
+                   (assoc m (f x) x)))
+               {})
        vals))
 
 

@@ -29,7 +29,9 @@
   (when-let [{:suggestions/keys [items active-idx]} (:home/suggestions state)]
     (let [word   (:home/word state)
           idxs   (vocabulary/completing-indexes word items)
-          marked (if (some #{active-idx} idxs) active-idx (vocabulary/leading-index word items))
+          marked (if (some #{active-idx} idxs)
+                   active-idx
+                   (vocabulary/leading-index word items))
           rows   (vec (map-indexed (partial suggestion-props word marked) items))]
       {:items        rows
        :marked       (some->> marked (get rows))

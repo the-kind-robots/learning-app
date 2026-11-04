@@ -131,7 +131,9 @@
                                  {:collection-id collection-id
                                   :status        :request/pending})}]
          [:effect/request-another-example
-          {:avoid   (if (str/blank? sentence) [] [sentence])
+          {:avoid   (if (str/blank? sentence)
+                      []
+                      [sentence])
            :subject (examples/subject {:collection-name (:name (learner/collection learner collection-id))
                                        :language language
                                        :word     (learner/word learner id)})

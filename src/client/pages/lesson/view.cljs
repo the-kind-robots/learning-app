@@ -82,7 +82,9 @@
         :on   {:click (if finished?
                         [[:action/go-to-home]]
                         [[:action/next-trial]])}}
-       (if finished? [:i18n :lesson/finish] [:i18n :lesson/next])]]]]])
+       (if finished?
+         [:i18n :lesson/finish]
+         [:i18n :lesson/next])]]]]])
 
 
 (defn- error-footer

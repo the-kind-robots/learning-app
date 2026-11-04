@@ -58,7 +58,9 @@
             flip?    (and (< above pad)
                           (<= (+ (.-bottom rect) ph offset pad)
                               js/window.innerHeight))
-            top      (if flip? (+ (.-bottom rect) offset) above)]
+            top      (if flip?
+                       (+ (.-bottom rect) offset)
+                       above)]
         (set! (.. pop -style -left) (str left "px"))
         (set! (.. pop -style -top) (str top "px"))
         (.setAttribute pop "data-side" (if flip? "bottom" "top"))
@@ -146,7 +148,9 @@
        (when-not (open? pop)
          (.showPopover pop))
        (position!)
-       (schedule-auto-close! (if (active?) 0 (initial-close-ms)))))))
+       (schedule-auto-close! (if (active?)
+                               0
+                               (initial-close-ms)))))))
 
 
 (defn reposition!
@@ -157,7 +161,9 @@
   (js/requestAnimationFrame
    (fn []
      (position!)
-     (schedule-auto-close! (if (active?) 0 (initial-close-ms))))))
+     (schedule-auto-close! (if (active?)
+                             0
+                             (initial-close-ms))))))
 
 
 (defonce window-listeners

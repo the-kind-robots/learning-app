@@ -163,7 +163,9 @@
    taken back: false; otherwise true, or nil when nothing was written."
   [{:keys [databases] :as learner} ops]
   (let [first-try (await (attempt-writes! learner ops))
-        result    (if (complete? first-try) first-try (await (attempt-writes! learner ops)))]
+        result    (if (complete? first-try)
+                    first-try
+                    (await (attempt-writes! learner ops)))]
     (if (complete? result)
       (when (seq (:writes first-try)) true)
       (do (when-let [docs (seq (into (restorations first-try) (restorations result)))]

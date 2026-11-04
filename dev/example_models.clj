@@ -200,7 +200,9 @@
   (println (format "  accepted after retries : %d/%d (%s)" accepted words (pct (share accepted words))))
   (println (format "  accepted on 1st attempt: %d/%d (%s)" accepted-first words (pct (share accepted-first words))))
   (println (format "  attempts per accepted  : %s (all attempts / accepted)"
-                   (if (pos? accepted) (format "%.2f" (/ (double attempts-total) accepted)) "n/a")))
+                   (if (pos? accepted)
+                     (format "%.2f" (/ (double attempts-total) accepted))
+                     "n/a")))
   (println (format "  latency p50 / p95      : %s / %s ms" (or p50 "n/a") (or p95 "n/a")))
   (println (format "  cost per accepted      : %s"
                    (if (and cost-total (pos? accepted))

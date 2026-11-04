@@ -152,8 +152,12 @@
                          (- 11 difficulty)
                          (js/Math.pow stability (- (weight 1)))
                          (dec (js/Math.exp (* (- 1 recall) (weight 2))))
-                         (if (= :rating/hard rating) (weight 6) 1)
-                         (if (= :rating/easy rating) (weight 7) 1))))))
+                         (if (= :rating/hard rating)
+                           (weight 6)
+                           1)
+                         (if (= :rating/easy rating)
+                           (weight 7)
+                           1))))))
            stability-min
            stability-max)))
 
@@ -249,7 +253,9 @@
                                                       (/ (- (aget answer-ms other) (aget answer-ms one))
                                                          (- (aget lengths other) (aget lengths one))))
                                                 (recur one (inc other) (inc filled)))))
-            b           (if (pos? slope-count) (max 0 (median (.subarray slopes 0 slope-count))) 0)
+            b           (if (pos? slope-count)
+                          (max 0 (median (.subarray slopes 0 slope-count)))
+                          0)
             a           (max 1 (median (.map answer-ms (fn [ms position] (- ms (* b (aget lengths position)))))))
             ratios      (.sort (.map answer-ms (fn [ms position] (/ ms (+ a (* b (aget lengths position)))))))]
         {:a    a
@@ -284,7 +290,9 @@
    seconds; nil for a word with no answer. The review an earlier version wrote when the word was added — the
    first, retained, untimed, within two seconds of the word's `:created-at` — is no answer, and is skipped."
   [{:keys [pace weights word] ^js history :history}]
-  (let [size         (if history (.-length (.-review-ids history)) 0)
+  (let [size         (if history
+                       (.-length (.-review-ids history))
+                       0)
         reviewed-at  (when history (.-reviewed-at history))
         retained     (when history (.-retained history))
         answer-ms    (when history (.-answer-ms history))

@@ -77,7 +77,9 @@
             headers     (if has-header?
                           (mapv #(str/lower-case (str/trim %)) first-row)
                           ["word" "count"])
-            data-rows   (if has-header? (rest rows) rows)
+            data-rows   (if has-header?
+                          (rest rows)
+                          rows)
             sorted      (if (some #{"rank"} headers)
                           data-rows
                           (sort-by (fn [row]

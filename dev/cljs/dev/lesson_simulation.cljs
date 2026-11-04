@@ -81,7 +81,9 @@
       (cond
         (or (>= (count chosen) size) (and (empty? known-words) (empty? new-words))) chosen
         (empty? known-words) (recur (conj chosen (first new-words)) known-words (rest new-words))
-        :else (let [position (if (< (random) 0.1) (js/Math.floor (* (random) (count known-words))) 0)]
+        :else (let [position (if (< (random) 0.1)
+                               (js/Math.floor (* (random) (count known-words)))
+                               0)]
                 (recur (conj chosen (known-words position))
                        (into (subvec known-words 0 position) (subvec known-words (inc position)))
                        new-words))))))
