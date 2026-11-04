@@ -12,6 +12,7 @@
 <p id="out"></p>
 <button id="set">Записать метки</button>
 <button id="reset">Сбросить</button>
+<p><button id="copy">Скопировать адрес</button> <span id="copied"></span></p>
 <script>
   const has = (name) => document.cookie.split('; ').some((c) => c.startsWith(name + '='));
   const ls = () => { try { return localStorage.getItem('probe'); } catch (e) { return 'ошибка'; } };
@@ -36,6 +37,12 @@
     document.cookie = 'probe_session=; Max-Age=0; path=/; SameSite=Lax; Secure';
     try { localStorage.removeItem('probe'); } catch (e) {}
     show();
+  };
+  document.getElementById('copy').onclick = () => {
+    const out = document.getElementById('copied');
+    navigator.clipboard.writeText(location.href + '#key=probe')
+      .then(() => { out.textContent = 'скопировано, вставьте куда-нибудь'; },
+            (e) => { out.textContent = 'ошибка: ' + e; });
   };
   show();
 </script>
