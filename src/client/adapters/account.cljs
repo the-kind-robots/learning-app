@@ -355,14 +355,18 @@
 
 
 (defn ^:async check-incoming-auth!
-  "Handles an incoming `#key=` or `#invite=` credential (ADR-0006). A key destroys local data only when it
-   belongs to another account; runs before the databases open, so a wipe leaves a fresh instance."
+  "Handles an incoming `#key=` or `#invite=` credential (ADR-0006), or the token of an auth cookie on a
+   device with no identity. A key destroys local data only when it belongs to another account; runs before
+   the databases open, so a wipe leaves a fresh instance."
   [_]
   (let [;; Credentials arrive in the fragment rather than in the query string
         ;; The fragment is never sent to the server, so the credential stays out of access logs and Referer headers.
         params (js/URLSearchParams. (.. js/window -location -hash (slice 1)))
-        token  (.get params "key")
-        invite (.get params "invite")]
+        invite (.get params "invite")
+        token  (or (.get params "key")
+                   ;; iOS gives an app added to the home screen Safari's cookies, not its storage (#683).
+                   (when-not (or invite (await (identity/load-identity!)))
+                     (identity/cookie-token)))]
     (cond
       (some? token)
       (try

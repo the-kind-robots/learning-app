@@ -7,6 +7,7 @@ On iOS an app added to the home screen keeps its storage apart from Safari and o
 - The sync menu of a device without an account offers to paste a recovery link, after «Сохранить мои слова».
 - A pasted link's fragment goes into the address and the app starts again, so the boot adopts the key exactly as from an opened link — `pair=` included.
 - A text that is not a recovery link is refused with a short message; nothing changes.
+- iOS copies Safari's cookies, not its storage, into an app added to the home screen (measured on an iPhone with a probe page). So a device with no identity adopts the token of its auth cookie on boot, and the auth cookie is kept for 400 days instead of the session.
 
 ## Capabilities
 

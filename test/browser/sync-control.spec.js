@@ -519,6 +519,27 @@ test.describe('Ссылка восстановления', () => {
     });
   });
 
+  test('пользователь открывает приложение, установленное из Safari с аккаунтом → устройство в аккаунте', async ({ page }) => {
+    await test.step('Дано устройство без аккаунта, но с кукой аккаунта, как её переносит iOS при установке', async () => {
+      await answerAccount(page);
+      await page.goto('/home');
+      await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+      await page.evaluate(() => {
+        document.cookie = 'auth-token=test-token; Max-Age=60; path=/; SameSite=Lax; Secure';
+      });
+    });
+
+    await test.step('Когда он открывает приложение', async () => {
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    });
+
+    await test.step('Тогда меню предлагает «Подключить устройство»', async () => {
+      await syncButton(page).click();
+      await expect(connectItem(page)).toBeVisible();
+    });
+  });
+
   test('пользователь без аккаунта вставляет не ссылку → сообщение, аккаунта нет', async ({ page }) => {
     let message;
 

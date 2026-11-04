@@ -109,7 +109,7 @@ The system SHALL NOT expose an unauthenticated endpoint that creates a server ac
 - **THEN** the route does not exist and no account is created
 
 ### Requirement: Auth cookie is a derived cache protected by durable storage
-The account token's durable home SHALL be local device storage (IndexedDB); the auth cookie SHALL be derived from it and re-established on each launch, so cookie eviction does not lose sign-in. The system SHALL request persistent storage to shield that durable store from automatic eviction.
+The account token's durable home SHALL be local device storage (IndexedDB); the auth cookie SHALL be derived from it and re-established on each launch, so cookie eviction does not lose sign-in. The cookie SHALL be kept for 400 days rather than for the browser session. The system SHALL request persistent storage to shield that durable store from automatic eviction.
 
 #### Scenario: Cookie rebuilt on launch
 - **WHEN** the app launches on a device that has a stored token but no auth cookie
@@ -133,3 +133,10 @@ A device without an account SHALL accept a recovery link pasted into its sync me
 #### Scenario: Not a recovery link
 - **WHEN** the pasted text is not a link with a `key=` fragment
 - **THEN** the message «Это не ссылка восстановления» is shown and the device still has no account
+
+### Requirement: A device without an identity adopts the token of its auth cookie
+On boot, a device that holds no identity and opens no credential link SHALL adopt the token of its auth cookie as if that token had arrived as a key. iOS copies Safari's cookies, and not its storage, into an app added to the home screen, so the installed app keeps the account Safari had.
+
+#### Scenario: The app installed from a signed-in Safari
+- **WHEN** a device with no identity boots holding the auth cookie of an account
+- **THEN** the device adopts that account and offers the account actions

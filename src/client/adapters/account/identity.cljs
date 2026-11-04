@@ -1,6 +1,7 @@
 (ns adapters.account.identity
   (:require
    [auth :as auth]
+   [clojure.string :as str]
    [db :as db]
    [goog.crypt :as crypt]))
 
@@ -44,10 +45,22 @@
 (defn use-identity!
   "Makes the server authenticate requests as this identity by writing its
    token to the cookie `/auth/check` reads. Not HttpOnly — the client owns the
-   token, it builds the sync link from it."
+   token, it builds the sync link from it. Kept for 400 days, the most a
+   browser keeps a cookie: on iOS it is what an app added to the home screen
+   brings along from Safari."
   [{:keys [token]}]
   (set! js/document.cookie
-        (str auth/token-cookie "=" token "; path=/; SameSite=Lax; Secure")))
+        (str auth/token-cookie "=" token "; Max-Age=34560000; path=/; SameSite=Lax; Secure")))
+
+
+(defn cookie-token
+  "The token of the cookie `use-identity!` writes, or nil."
+  []
+  (some (fn [pair]
+          (let [[cookie-name value] (str/split pair #"=" 2)]
+            (when (= auth/token-cookie cookie-name)
+              value)))
+        (str/split js/document.cookie #"; ")))
 
 
 (defn ^:async account-id!
