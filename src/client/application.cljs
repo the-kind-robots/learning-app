@@ -337,14 +337,18 @@
 (defn state
   "The state the screens are computed from: the interface's own, in `:app-state` of `system`, with whether the
    learner's data is loading, loaded or unreadable (`:learner/status`), the language the learner picked
-   (`:learner/language`) and the system's (`:system/language`). The data itself is read from the learner, which
-   `:effect/enter` hands to the actions."
+   (`:learner/language`), the lessons passed since the local midnight (`:learner/lessons-today`) and the system's
+   language (`:system/language`). The data itself is read from the learner, which `:effect/enter` hands to the
+   actions."
   [{:keys [app-state capabilities]}]
-  (let [{:keys [learner page]} capabilities]
+  (let [{:keys [learner page world]} capabilities
+        ^js midnight (js/Date. (world/clock world :now-ms))]
+    (.setHours midnight 0 0 0 0)
     (assoc @app-state
-           :learner/language (learner/language learner)
-           :learner/status   (learner/status learner)
-           :system/language  (page/system-language page))))
+           :learner/language      (learner/language learner)
+           :learner/lessons-today (learner/lessons-passed-since learner (.toISOString midnight))
+           :learner/status        (learner/status learner)
+           :system/language       (page/system-language page))))
 
 
 (defn start-render!

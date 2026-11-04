@@ -182,6 +182,7 @@
   [{:keys [databases] :as learner} entity value]
   (case entity
     :entity/collection (await (persist! learner documents/collection-schema value))
+    :entity/lesson     (await (persist! learner documents/lesson-schema value))
     :entity/review     (await (persist! learner documents/review-schema value))
     :entity/example    (let [{:keys [collection-id example word word-id]} value
                              doc  (documents/example-doc word-id word collection-id example)

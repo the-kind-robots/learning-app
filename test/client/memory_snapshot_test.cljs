@@ -170,6 +170,7 @@
     :word          "der Hund"
     :word-id       "vocab:der hund"}
    {:_id "settings" :_rev "1-g" :language "en" :type "settings"}
+   {:_id "lesson-1" :_rev "1-h" :passed-at "2026-01-03T00:00:10.000Z" :type "lesson"}
    {:_id "task-1" :_rev "1-e" :type "task"}
    {:_id "vocab:weg" :_rev "2-f" :_deleted true}])
 
@@ -204,6 +205,7 @@
                        :word          "der Hund"
                        :word-id       "vocab:der hund"}}
    :examples-by-word {"vocab:der hund" #{"example:vocab:der hund:coll-tiere:0123456789ab"}}
+   :lessons-passed   {"lesson-1" "2026-01-03T00:00:10.000Z"}
    :settings         {:id "settings" :language "en"}
    :slot-of          {"vocab:der hund" 0}})
 

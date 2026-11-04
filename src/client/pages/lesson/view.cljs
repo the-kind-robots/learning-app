@@ -66,25 +66,35 @@
   [:footer#lesson-footer
    {:replicant/key      :success
     :replicant/on-mount [[:action/focus-continue-button
-                          (if finished? "#lesson-finish" "#lesson-next")]]}
+                          (if finished? "#lesson-again" "#lesson-next")]]}
    [:div.lesson__footer.lesson__footer--success.page-footer
     [:div.lesson__answer
-     [:h3.lesson__answer-header
-      [:i18n :lesson/correct]]
+     ;; The way home sits beside the verdict, so the main button stands where «ДАЛЕЕ» does.
+     [:div.lesson__answer-title
+      [:h3.lesson__answer-header
+       [:i18n :lesson/correct]]
+      (when finished?
+        [:button.lesson__finish
+         {:id   "lesson-finish"
+          :type "button"
+          :on   {:click [[:action/go-to-home]]}}
+         [:i18n :lesson/finish]])]
      (answer-body props)]
     [:form
      {:on {:submit [[:effect/prevent-default]]}}
      [:div.lesson__action.page-footer__action
-      [:button.big-button
-       {:id   (if finished? "lesson-finish" "lesson-next")
-        :type "button"
-        ;; A native button already clicks on Enter; a keydown handler clicking it again advanced the lesson twice.
-        :on   {:click (if finished?
-                        [[:action/go-to-home]]
-                        [[:action/next-trial]])}}
-       (if finished?
-         [:i18n :lesson/finish]
-         [:i18n :lesson/next])]]]]])
+      ;; A native button already clicks on Enter; a keydown handler clicking it again advanced the lesson twice.
+      (if finished?
+        [:button.big-button
+         {:id   "lesson-again"
+          :type "button"
+          :on   {:click [[:action/next-lesson]]}}
+         [:i18n :lesson/again]]
+        [:button.big-button
+         {:id   "lesson-next"
+          :type "button"
+          :on   {:click [[:action/next-trial]]}}
+         [:i18n :lesson/next]])]]]])
 
 
 (defn- error-footer

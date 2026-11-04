@@ -16,7 +16,7 @@
     "Applies `ops`, `[entity id change]` each, in one bulk write; `change` returns the new entity, nil to
      write nothing, or `:entity/deleted`. A promise of true, nil when nothing was written, or false when the write was taken back.")
   (insert! [l entity value]
-    "Writes a new `entity` of `value` (`:entity/collection`, `:entity/review` or `:entity/example`). A promise
+    "Writes a new `entity` of `value` (`:entity/collection`, `:entity/lesson`, `:entity/review` or `:entity/example`). A promise
      of the entity written, its id included; for an example nil when the learner does not hold it afterwards.")
   (active-collection [l]
     "The collection active on this device, or nil for «Всё подряд».")
@@ -109,6 +109,12 @@
   "The words in scope of `coll` that match `query`."
   [learner coll query]
   (memory/matching-words (memory learner) coll query))
+
+
+(defn lessons-passed-since
+  "How many lessons the learner passed at `since-iso`, an ISO time in UTC, or later."
+  [learner since-iso]
+  (memory/lessons-passed-since (memory learner) since-iso))
 
 
 (defn practice-days

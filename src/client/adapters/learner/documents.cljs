@@ -12,6 +12,7 @@
      example     {:id :word-id :collection-id :word :value :translation
                   :structure}
      settings    {:id :language}
+     lesson      {:id :passed-at}
 
    Words and phrases are one document type that differ by `:kind`. Every
    type lives in user-db and replicates with the account."
@@ -29,6 +30,11 @@
 
 (def review-schema
   {:type "review"
+   :db   :user/db})
+
+
+(def lesson-schema
+  {:type "lesson"
    :db   :user/db})
 
 
@@ -107,7 +113,7 @@
 
 (def schemas
   "Every document type of the learner's data."
-  [vocab-schema review-schema collection-schema example-schema settings-schema])
+  [vocab-schema review-schema lesson-schema collection-schema example-schema settings-schema])
 
 
 (defn entity

@@ -11,7 +11,7 @@
    [client.support.learner :as test-learner]
    [client.support.memory-projection :as projection]
    [client.support.wait :as wait]
-   [cljs.test :refer-macros [deftest is testing use-fixtures]]
+   [cljs.test :refer-macros [are deftest is testing use-fixtures]]
    [db :as db]))
 
 
@@ -69,6 +69,19 @@
     (is (= ["r1"] (review-ids (sut/with-docs memory [(assoc review :_rev "2-b")]) "vocab:der hund")) "arriving again")
     (is (= ["r1"] (review-ids (sut/with-docs memory [{:_deleted true :_id "r1" :_rev "2-b"}]) "vocab:der hund"))
         "a deletion")))
+
+
+(deftest lessons-passed-since-a-time-count-each-lesson-once
+  (let [lesson (fn [id passed-at] {:_id id :_rev "1-a" :passed-at passed-at :type "lesson"})
+        memory (sut/with-docs sut/empty-memory
+                              [(lesson "l1" "2026-01-01T21:00:00.000Z")
+                               (lesson "l2" "2026-01-02T08:00:00.000Z")
+                               (lesson "l3" "2026-01-02T09:30:00.000Z")
+                               (lesson "l3" "2026-01-02T09:30:00.000Z")])]
+    (are [since passed] (= passed (sut/lessons-passed-since memory since))
+     "2026-01-02T00:00:00.000Z" 2
+     "2026-01-01T00:00:00.000Z" 3
+     "2026-01-03T00:00:00.000Z" 0)))
 
 
 (deftest reviews-of-the-same-second-are-in-id-order-whatever-their-order

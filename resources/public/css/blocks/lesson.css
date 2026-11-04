@@ -342,6 +342,39 @@
   color: rgb(var(--color-tree-frog));
 }
 
+/* The verdict's line; at the end of a lesson the way home sits at its right,
+   so the main button below stands where «ДАЛЕЕ» does. */
+.lesson__answer-title {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+/* The way home, quiet beside the verdict. Its target is 44px tall, but the
+   negative margins keep the line as tall as the verdict alone. */
+.lesson__finish {
+  background: none;
+  border: 0;
+  border-radius: 12px;
+  color: inherit;
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  height: 44px;
+  letter-spacing: 0.04em;
+  margin-block: -12px;
+  margin-inline-end: -12px;
+  padding: 0 12px;
+}
+
+.lesson__finish:focus-visible {
+  outline: 3px solid currentcolor;
+  outline-offset: 2px;
+}
+
 .lesson__footer--error {
   background-color: rgb(var(--color-walking-fish));
   color: rgb(var(--color-fire-ant));

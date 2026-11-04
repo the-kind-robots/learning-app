@@ -149,6 +149,117 @@
   overflow: hidden;
 }
 
+/* Today's lessons: gold stars, five of them one purple star, and from five
+   purple on their number before one. At most four purple and four gold
+   stand in a row, so the row stays narrow on a phone. */
+.app-shell__stars {
+  align-items: center;
+  display: flex;
+  gap: 1px;
+}
+
+.app-shell__star {
+  flex: none;
+  height: 18px;
+  stroke-linejoin: round;
+  stroke-width: 2.6;
+  width: 18px;
+}
+
+.app-shell__star-lip {
+  fill: rgb(227, 162, 0);
+  stroke: rgb(227, 162, 0);
+}
+
+.app-shell__star-body {
+  fill: rgb(var(--color-bee));
+  stroke: rgb(var(--color-bee));
+}
+
+.app-shell__star--purple {
+  filter: drop-shadow(0 0 2px rgba(150, 100, 230, 0.55));
+  height: 22px;
+  margin-inline-end: 1px;
+  width: 22px;
+}
+
+.app-shell__star--purple .app-shell__star-lip {
+  fill: rgb(75, 47, 120);
+  stroke: rgb(75, 47, 120);
+}
+
+.app-shell__star--purple .app-shell__star-body {
+  fill: rgb(125, 79, 196);
+  stroke: rgb(125, 79, 196);
+}
+
+.app-shell__star-core {
+  fill: rgb(180, 140, 240);
+  stroke: rgb(180, 140, 240);
+  stroke-width: 1;
+}
+
+.app-shell__star-sparkle {
+  fill: rgb(230, 214, 255);
+  stroke: none;
+}
+
+.app-shell__star-number {
+  color: rgb(107, 63, 176);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* A star lights up once as it mounts: it fades in from a little smaller and
+   brighter. A purple one glows up and settles. */
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell__star {
+    animation: app-shell-star-light 0.9s ease-out both;
+  }
+
+  .app-shell__star--purple {
+    animation: app-shell-star-glow 1.4s ease-out both;
+  }
+}
+
+@keyframes app-shell-star-light {
+  0% {
+    filter: brightness(1.6);
+    opacity: 0;
+    transform: scale(0.7);
+  }
+
+  60% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+
+  100% {
+    filter: brightness(1);
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes app-shell-star-glow {
+  0% {
+    filter: drop-shadow(0 0 0 rgba(150, 100, 230, 0));
+    opacity: 0;
+    transform: scale(0.6);
+  }
+
+  50% {
+    filter: drop-shadow(0 0 6px rgba(170, 120, 255, 0.9));
+    opacity: 1;
+  }
+
+  100% {
+    filter: drop-shadow(0 0 2px rgba(150, 100, 230, 0.55));
+    transform: scale(1);
+  }
+}
+
 /* A button that reads as the word mark: its background, border and padding
    are cleared. */
 .app-shell__logo {
