@@ -8,7 +8,6 @@
    [client.support.test :refer [async-testing]])
   (:require
    [abort :as abort]
-   [adapters.learner :as learner-adapter]
    [adapters.learner.documents :as documents]
    [adapters.learner.memory :as memory]
    [application.example-backfill :as backfill]
@@ -216,7 +215,9 @@
                       (catch-up store)
                       (js/Promise.resolve (:learner/memory @store))))
                   (memory [_] (:learner/memory @store))
-                  (on-change [_ f] (learner-adapter/on-change {:store store} f))
+                  (on-change [_ f]
+                    (add-watch store f (fn [_ _ before after] (when-not (identical? before after) (f))))
+                    #(remove-watch store f))
                   (insert! [_ _ example]
                     (swap! saves conj [(:word example)])
                     (swap! store

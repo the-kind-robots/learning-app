@@ -6,7 +6,6 @@
    [client.support.test :refer [async-testing]])
   (:require
    [adapters.account :as account]
-   [adapters.learner :as learner-adapter]
    [adapters.learner.documents :as documents]
    [client.support.db-fixtures :as db-fixtures]
    [client.support.learner :as test-learner]
@@ -210,7 +209,7 @@
       (await (account/sync-once! dbs
                                  "account"
                                  (fn [{:keys [pulled-ids]}]
-                                   (learner-adapter/resolve-conflicts! {:databases dbs} pulled-ids)))))
+                                   (learner/resolve-conflicts! (learner/as-learner {:databases dbs}) pulled-ids)))))
     @reads))
 
 

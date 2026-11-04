@@ -3,7 +3,7 @@
    it, and the link that joins another device to it. The page decides when it replicates (online, shown). `adapters.account` does the work."
   (:refer-clojure :exclude [exists?])
   (:require
-   [adapters.account :as adapter]
+   [adapters.account :as account]
    [lambdaisland.glogi :as log]
    [ports.learner :as learner]
    [ports.page :as page]
@@ -45,7 +45,7 @@
   "Handles an incoming `#key=` or `#invite=` credential in the address. It runs before the learner's databases
    open: a key from another account wipes the local data, which then opens fresh."
   []
-  (adapter/check-incoming-auth! nil))
+  (account/check-incoming-auth! nil))
 
 
 (def ^:private first-pass-wait-ms
@@ -90,7 +90,7 @@
 (defn- follow-page!
   "Tells the account whether the device is online and the page visible, now and on every change."
   [page account]
-  (let [tell! #(adapter/page-changed! account
+  (let [tell! #(account/page-changed! account
                                       {:online?  (page/online? page)
                                        :visible? (page/visible? page)})]
     (page/on-online page tell!)
@@ -111,7 +111,7 @@
    granted one starts the account in place, and `on-status` hears it; a declined one ends the asking until the
    next request."
   [{:keys [learner page world]}]
-  (let [account (await (adapter/start! {:after-pull #(learner/resolve-conflicts! learner (:pulled-ids %))
+  (let [account (await (account/start! {:after-pull #(learner/resolve-conflicts! learner (:pulled-ids %))
                                         :storage    (learner/storage learner)}))
         following? (atom false)
         follow-request!
@@ -119,9 +119,9 @@
           (when (compare-and-set! following? false true)
             (loop []
               (await (page/until-active page nil))
-              (case (await (adapter/check-request! account))
+              (case (await (account/check-request! account))
                 :request/granted
-                (when (await (adapter/open! account))
+                (when (await (account/open! account))
                   (follow-page! page account))
 
                 (nil :request/declined)
@@ -130,22 +130,22 @@
                 (do (await (world/clock world :sleep request-check-ms nil))
                     (recur))))
             (reset! following? false)))]
-    (if (adapter/open? account)
+    (if (account/open? account)
       (follow-page! page account)
       ;; Not awaited: it lasts until a stored request is decided, and ends at once without one.
       (follow-request!))
     (reify Account
-      (exists? [_] (adapter/open? account))
-      (sync! [_ reason] (adapter/sync! account reason))
-      (sync-link [_] (adapter/link account))
-      (sync-link [_ nonce] (adapter/link account nonce))
-      (on-device-joined [_ nonce f] (adapter/on-device-joined account nonce f))
-      (on-status [_ f] (adapter/on-status account f))
+      (exists? [_] (account/open? account))
+      (sync! [_ reason] (account/sync! account reason))
+      (sync-link [_] (account/link account))
+      (sync-link [_ nonce] (account/link account nonce))
+      (on-device-joined [_ nonce f] (account/on-device-joined account nonce f))
+      (on-status [_ f] (account/on-status account f))
       ;; Resolves once the request is stored; the following lasts until it is decided, so it is not waited for.
       (request-sync! [_ request]
-        (.then (adapter/save-request! account request)
+        (.then (account/save-request! account request)
                (fn []
                  (follow-request!)
                  nil)))
       ;; The first sync since the account opened, so after a granted request the wait is for its own.
-      (initialized [_] (initialization learner world (adapter/first-sync account))))))
+      (initialized [_] (initialization learner world (account/first-sync account))))))
