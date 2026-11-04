@@ -183,7 +183,9 @@
   display: inline-flex;
   height: 28px;
   justify-content: center;
-  padding: 0 2px;
+  /* 2px on top lowers the icon by 1px onto the middle of the word's lowercase
+     letters; centred in the box it sat above them. */
+  padding: 2px 2px 0;
   position: relative;
   transition: color 0.3s, filter 0.3s;
 }
