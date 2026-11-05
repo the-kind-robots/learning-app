@@ -15,24 +15,72 @@
  *
  * Room for a taller footer (tiles, keyboard) comes out of two blanks first:
  * the header's row under the progress bar and the offset above the prompt both
- * shrink; then the instruction slides out under the header; only then is the
- * prompt touched.
+ * shrink; only then is the prompt touched.
  *
  * `overflow:hidden` is the only enforced overflow rule and is required by the
  * "nothing scrolls on the lesson page" constraint. The one exception is the
  * strip of trials: it scrolls sideways, a page at a time (#734).
  */
 
-.lesson {
-  display: flex;
-  flex-direction: column;
-  inset: 0;
-  overflow: hidden;
-  position: fixed;
+/* The keyboard's height, as the lesson lifts over it. Registered, so it
+   animates; everything that makes room for the keyboard reads this one value,
+   and so moves in the same frames. */
+@property --lesson-keyboard {
+  inherits: true;
+  initial-value: 0px;
+  syntax: "<length>";
 }
 
+/* The keyboard's height as the prompt's card sees it: in step with the lesson
+   as it lifts, but on the way down it takes its own 150 ms. */
+@property --lesson-prompt-keyboard {
+  inherits: true;
+  initial-value: 0px;
+  syntax: "<length>";
+}
+
+/* The keyboard overlays the lesson (`:keyboard-overlays?`): while the answer
+   is being typed, the lesson lifts its own bottom over it, in one quick move of
+   100 ms (#765). A browser that shortens the screen instead moves it at once. */
+/* Once the answer's panel takes the field's place, the lesson drops at once,
+   in that same frame: the panel stands where it stays, and the keyboard slides
+   away over it. Waiting for the keyboard to report itself gone showed the
+   panel high for 100 ms, then dropped it. The card rides down in 100 ms. */
+.lesson {
+  --lesson-prompt-keyboard: var(--lesson-keyboard);
+
+  bottom: var(--lesson-keyboard);
+  display: flex;
+  flex-direction: column;
+  inset-block-start: 0;
+  inset-inline: 0;
+  overflow: hidden;
+  position: fixed;
+  /* A plain ease-out: the lift's curve covers most of the way in its first
+     20 ms, and the card read as a jump. 150 ms: the frame that draws the
+     answer's panel takes some 50 ms on a phone, which leaves 100 to see. */
+  transition: --lesson-prompt-keyboard 150ms ease-out;
+}
+
+/* Lifting, only the lesson's value animates; the card's follows it frame by
+   frame. */
+.lesson:has(.lesson__footer--input:focus-within) {
+  --lesson-keyboard: env(keyboard-inset-height, 0px);
+
+  transition: --lesson-keyboard 100ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lesson,
+  .lesson:has(.lesson__footer--input:focus-within) {
+    transition: none;
+  }
+}
+
+/* The progress bar stands at the top of its row: when the row gives way, only
+   the blank under the bar goes, and the bar never moves (#765). */
 .lesson__header {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   gap: 12px;
   margin: 0 auto;
@@ -48,9 +96,11 @@
   width: 100%;
 }
 
+/* Where the middle of its 56px row would put it. */
 .lesson__progress-shell {
   display: flex;
   flex: 1 1 auto;
+  margin-top: 20px;
   min-width: 0;
 }
 
@@ -280,7 +330,7 @@
    verdict's 22px line under the 16px padding. The main button below stands
    where «ДАЛЕЕ» does. In the verdict's green. */
 .lesson__panel-finish {
-  color: rgb(64, 125, 0);
+  color: rgb(var(--color-tree-frog));
   display: flex;
   inset-inline: max(16px, calc((100% - 600px) / 2));
   justify-content: flex-end;
@@ -320,65 +370,74 @@
 }
 
 /*
- * The blank above the prompt is a function of dvh: it anchors the prompt near
- * 30% of the viewport height (minus the header's ~100px so the 30% is measured
- * from the viewport top), and shrinks, down to nothing, when the body has less
- * room than the prompt needs (a taller footer, or the keyboard open with
- * `interactive-widget=resizes-content`).
- * No CSS transition here — the value tracks whatever timing the browser
- * uses to animate dvh during the keyboard show/hide, so the prompt follows
- * the viewport shrink naturally, in sync with the footer.
+ * The blank above the prompt depends on the screen and the keyboard alone, so
+ * a taller panel after an answer does not move the prompt. It sets a one-line
+ * card halfway between the progress bar and the field: half the room above the
+ * keyboard less half of the header (124px), the panel with the field (188px)
+ * and the card with its instruction (80px). It shrinks, down to nothing, when
+ * the body has less room than the prompt needs (a taller footer, a short
+ * screen) (#765).
  */
 .lesson__challenge::before {
   content: "";
-  /* The 12px is the air above the prompt, the 28px the instruction's line:
-     they give way with the rest. */
-  flex: 0 1 calc(30dvh - 100px + 12px + 28px);
+  flex: 0 1 calc(50dvh - 196px - var(--lesson-prompt-keyboard) / 2);
 }
 
-/* The largest text on the screen, one size whatever its length: a word too
-   long for its line breaks at a syllable (#751). A browser without a
-   hyphenation dictionary breaks it anywhere instead of overflowing. */
+/* The prompt on its card, as wide as its words, one size whatever its length:
+   a word too long for its line breaks at a syllable (#751). A browser without
+   a hyphenation dictionary breaks it anywhere instead of overflowing. The card
+   marks it out; its size does not (#765). */
 .lesson__prompt {
-  color: rgb(var(--color-black-text));
+  background-color: rgb(var(--color-snow));
+  border: 2px solid rgb(var(--color-swan));
+  border-radius: 0.75rem;
+  box-sizing: border-box;
+  color: rgb(var(--color-eel));
   font-family: Nunito, sans-serif;
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 500;
   hyphens: auto;
-  line-height: 1.25;
-  margin: 0 0 12px;
+  line-height: 23px;
+  /* Clear of the card's edge, so the instruction does not thicken it. */
+  margin: 0 0 16px;
+  max-width: 100%;
   overflow-wrap: anywhere;
+  padding: 0.625rem 0.875rem;
   /* The prompt is the translation as it was typed, line breaks included
      (GH-365). */
   white-space: pre-line;
+  width: fit-content;
 }
 
-/* The instruction and the prompt under it. The instruction hangs above the
-   prompt, out of the flow: once the blank above has given way, it slides out
-   under the header before the prompt is touched. */
+/* The prompt's card and its instruction under it, centred. */
 .lesson__task {
+  align-items: center;
+  display: flex;
   flex: none;
-  position: relative;
+  flex-direction: column;
   width: 100%;
 }
 
-/* The last resort, once the header, the blank and the instruction have all
-   given way: a long example's tiles in six rows on a small phone leave the
-   prompt less than four lines at 22 px. It sets smaller. */
-@container lesson-page (max-height: 130px) {
-  .lesson__prompt {
-    font-size: 18px;
-  }
+.lesson__instruction {
+  color: rgb(var(--color-wolf));
+  font-size: 14px;
+  line-height: 18px;
+  margin: 0;
+  text-align: center;
 }
 
-.lesson__instruction {
-  bottom: 100%;
-  color: rgb(var(--color-wolf));
-  font-size: 15px;
-  inset-inline: 0;
-  line-height: 20px;
-  margin: 0 0 8px;
-  position: absolute;
+/* The last resort, once the header and the blank have given way: a long
+   example's tiles in six rows on a small phone leave the card too little room.
+   The instruction goes, the prompt sets smaller. */
+@container lesson-page (max-height: 130px) {
+  .lesson__instruction {
+    display: none;
+  }
+
+  .lesson__prompt {
+    font-size: 15px;
+    line-height: 20px;
+  }
 }
 
 /* The panel at the bottom: on a phone it spans the screen; on desktop it is a
@@ -453,11 +512,10 @@
   margin: 0;
 }
 
-/* The answer reads larger than its verdict, in the panel's darkest ink. */
+/* The answer in the prompt's size, light, in the panel's colour (#765). */
 .lesson__answer-body {
-  color: var(--lesson-answer-ink, inherit);
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 500;
   hyphens: auto;
   line-height: 1.4;
   margin: 0;
@@ -507,12 +565,21 @@
   text-decoration-color: transparent;
 }
 
-/* Greens darker than the brand's own, so the text on the pale ground passes
-   4.5:1. */
+/* The brand's green: soft on the pale ground, by choice (#765). */
 .lesson__footer--success {
-  --lesson-answer-ink: rgb(43, 95, 0);
   background-color: rgb(var(--color-sea-sponge));
-  color: rgb(64, 125, 0);
+  color: rgb(var(--color-tree-frog));
+}
+
+/* The main button after an answer takes the panel's colour (#765). */
+.lesson__footer--success .big-button {
+  --web-ui_button-background-color: rgb(var(--color-owl));
+  --web-ui_button-border-color: rgb(var(--color-tree-frog));
+}
+
+.lesson__footer--error .big-button {
+  --web-ui_button-background-color: rgb(var(--color-cardinal));
+  --web-ui_button-border-color: rgb(var(--color-fire-ant));
 }
 
 /* The way home at the end of a lesson (`.lesson__panel-finish` places it). */
@@ -553,11 +620,9 @@
   font-weight: 700;
 }
 
-/* The learner's own answer, under the correct one in weight. */
+/* The learner's own answer, set like the correct one under it. */
 .lesson__answer-body--yours {
-  font-size: 18px;
-  font-weight: 500;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .lesson__empty {
@@ -609,13 +674,17 @@
     padding-top: var(--app-bar-height);
   }
 
+  .lesson__progress-shell {
+    margin-top: 24px;
+  }
+
   .lesson__challenge {
     gap: 12px;
   }
 
   /* The challenge's gap counts as part of the blank above the prompt. */
   .lesson__challenge::before {
-    flex-basis: calc(30dvh - 112px + 28px);
+    flex-basis: calc(30dvh - 112px);
   }
 
   .lesson__input {
@@ -653,9 +722,8 @@
  * phone, short for the same reason, gets the same compact layout: the field
  * starts at two rows (autogrow continues). The prompt and its instruction stay
  * as they were — a word that shrinks or loses its instruction as the keyboard
- * rises reads as a glitch (#763). Short of room, they give way as anywhere
- * else: the instruction slides under the header, then the last resort above
- * sets the prompt smaller.
+ * rises reads as a glitch (#763); the prompt only moves up with the blank
+ * above it. Short of room, the last resort above applies.
  */
 @media (max-height: 560px) {
   .lesson__input {

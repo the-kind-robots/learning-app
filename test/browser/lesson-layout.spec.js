@@ -64,3 +64,39 @@ test('ученик на компьютере ошибается и доходи�
     expectSpans(await page.getByRole('button', { name: 'ЕЩЁ УРОК' }).boundingBox(), edges);
   });
 });
+
+// The button's face is its ::before; the panel's colours are the brand's red and green (#765).
+const face = (button) => button.evaluate((element) => getComputedStyle(element, '::before').backgroundColor);
+
+test('ученик ошибается, потом отвечает верно → «ДАЛЕЕ» красная на красной панели, зелёная на зелёной', async ({ page }) => {
+  const next = page.getByRole('button', { name: 'ДАЛЕЕ' });
+
+  await test.step('Дано два слова и начатый урок', async () => {
+    await page.goto('/home');
+    await addWord(page, 'Haus', 'дом');
+    await addWord(page, 'Hund', 'собака');
+    await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
+    await expect(page.locator('#lesson-answer')).toBeVisible();
+  });
+
+  await test.step('Когда он отвечает неверно', async () => {
+    await answer(page, 'Falsch');
+  });
+
+  await test.step('Тогда «ДАЛЕЕ» красная', async () => {
+    await expect(page.getByRole('heading', { name: 'Правильно:' })).toBeVisible();
+    expect(await face(next)).toBe('rgb(255, 75, 75)');
+  });
+
+  await test.step('Когда он переходит дальше и отвечает верно', async () => {
+    await next.click();
+    await expect(page.locator('#lesson-answer')).toBeVisible();
+    const prompt = (await page.locator('#lesson-challenge .lesson__prompt').textContent()).trim();
+    await answer(page, ANSWERS[prompt]);
+  });
+
+  await test.step('Тогда «ДАЛЕЕ» зелёная', async () => {
+    await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
+    expect(await face(next)).toBe('rgb(88, 204, 2)');
+  });
+});
