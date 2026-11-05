@@ -19,9 +19,10 @@
     :aria-label [:i18n :shell/open-collections]
     :title      [:i18n :collections/title]
     :on         {:click [[:action/go-to-collections]]}}
+   ;; The box is the drawing, so the bar places the drawing itself.
    ;; zprint: as written
    [:svg.app-shell__corner-icon-svg
-    {:viewBox "0 0 16 16" :aria-hidden "true"}
+    {:aria-hidden "true" :height "16.5" :viewBox "2 2 12 12" :width "16.5"}
     [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
     [:rect {:x 10 :y 2 :width 4 :height 4 :rx 1}]
     [:rect {:x 2 :y 10 :width 4 :height 4 :rx 1}]
@@ -35,9 +36,12 @@
     :aria-label [:i18n :dialog/close]
     :title      [:i18n :dialog/close]
     :on         {:click [[:action/close-screen]]}}
+   ;; The box is the drawing with its round caps, so the bar places the drawing itself.
    [:svg.app-shell__corner-icon-svg
-    {:viewBox     "0 0 16 16"
-     :aria-hidden "true"}
+    {:aria-hidden "true"
+     :height      "13.75"
+     :viewBox     "3 3 10 10"
+     :width       "13.75"}
     [:path
      {:d "M4 4 L12 12 M12 4 L4 12"
       :stroke "currentColor"
