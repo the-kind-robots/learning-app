@@ -23,8 +23,7 @@ body:has(.vocabulary) #app {
    instead (`interactive-widget=resizes-content`), and the footer rides up
    under the search bar.
 
-   The rows start right under the shell bar, behind a faint line of their
-   own. */
+   The rows start right under the shell bar, with no line between (#776). */
 .vocabulary {
   /* The fixed footer: the button, its padding below, the safe area. */
   --words-footer-height: calc(50px + 16px + env(safe-area-inset-bottom));
@@ -63,7 +62,6 @@ body:has(.vocabulary) #app {
    kept on both edges whether it shows or not: the rows stay centred under
    the footer, and do not jump sideways when a search makes the list fit. */
 .vocabulary__list {
-  border-top: 1px solid rgb(0 0 0 / 0.08);
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
