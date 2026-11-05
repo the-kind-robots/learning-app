@@ -83,15 +83,16 @@
 
 
 (defn- star
-  "A star of today's lessons: gold for a lesson, purple for five, drawn alike. Each lights up once as it mounts."
+  "A star of today's lessons: gold for a lesson, purple for five, drawn alike and of one size. Each lights up once
+   as it mounts."
   [purple? key]
   ;; zprint: as written
   [:svg
    {:class         (if purple? "app-shell__star app-shell__star--purple" "app-shell__star")
     :replicant/key key
     :aria-hidden   "true"
-    :viewBox       (if purple? "-3 -3 30 31" "-2 -2 28 29")}
-   [:path.app-shell__star-lip {:d star-path :transform (if purple? "translate(0 1.4)" "translate(0 1.8)")}]
+    :viewBox       "-2 -2 28 29"}
+   [:path.app-shell__star-lip {:d star-path :transform "translate(0 1.8)"}]
    [:path.app-shell__star-body {:d star-path}]
    [:path.app-shell__star-core {:d "M12 6.8l1.4 2.9 3.2.4-2.3 2.3.5 3.2L12 14l-2.8 1.6.5-3.2-2.3-2.3 3.2-.4z"}]
    [:path.app-shell__star-sparkle {:d "M21.5 0.5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"}]])
