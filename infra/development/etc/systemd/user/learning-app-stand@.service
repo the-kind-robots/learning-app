@@ -10,3 +10,7 @@ Description=Learning App dev stand: put branch %i on it
 Type=oneshot
 WorkingDirectory=%h/Projects/learning-app
 ExecStart=/bin/bash /usr/local/lib/learning-app/switch-stand.sh %i
+# The script often ends before journald ties its output to the unit, and
+# `journalctl -u` then shows none of it — not even the reason it refused. The
+# identifier travels with every line: `journalctl --user -t learning-app-stand`.
+SyslogIdentifier=learning-app-stand
