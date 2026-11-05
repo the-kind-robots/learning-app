@@ -24,10 +24,13 @@ test('ученик открыл первый урок после запуска 
   });
 });
 
-// The page sets `interactive-widget=resizes-content`: an open keyboard is a
-// shorter viewport, so a shorter viewport stands in for it (#763).
-test('ученик на телефоне нажал на поле ответа и открылась клавиатура → слово задания того же размера, подсказка над ним на месте', async ({ page }) => {
+// Headless Chrome has no virtual keyboard to overlay the lesson: a shorter viewport stands in for one, as in a
+// browser where the keyboard shortens the screen (#763, #765).
+test('ученик на телефоне нажал на поле ответа и открылась клавиатура → слово задания поднимается вместе с полем, того же размера, подсказка под ним видна, полоса прогресса на месте', async ({ page }) => {
   let before;
+  let fieldBefore;
+  let progressBefore;
+  let frames;
 
   await test.step('Дано начатый урок со словом', async () => {
     await page.goto('/home');
@@ -39,13 +42,36 @@ test('ученик на телефоне нажал на поле ответа �
 
   await test.step('Когда он нажимает на поле и клавиатура укорачивает экран', async () => {
     await page.getByRole('textbox', { name: 'Ответ на немецком' }).tap();
+    fieldBefore = await page.locator('#lesson-answer').boundingBox();
+    progressBefore = await page.getByRole('progressbar', { name: 'Прогресс урока' }).boundingBox();
+    // The prompt's top and the field's, every frame for half a second from the moment the screen shortens.
+    const seen = page.evaluate(() => new Promise((resolve) => {
+      const prompt = document.querySelector('#lesson-challenge .lesson__prompt');
+      const field = document.querySelector('#lesson-answer');
+      const tops = [];
+      const start = performance.now();
+      const frame = () => {
+        tops.push({ field: field.getBoundingClientRect().top, prompt: prompt.getBoundingClientRect().top });
+        if (performance.now() - start < 500) requestAnimationFrame(frame);
+        else resolve(tops);
+      };
+      requestAnimationFrame(frame);
+    }));
     await page.setViewportSize({ width: 390, height: 430 });
+    frames = await seen;
   });
 
-  await test.step('Тогда слово задания той же высоты, подсказка видна над ним', async () => {
+  await test.step('Тогда слово задания на новом месте в том же кадре, что и поле, той же высоты, подсказка видна под ним, полоса прогресса там же', async () => {
+    const progress = await page.getByRole('progressbar', { name: 'Прогресс урока' }).boundingBox();
+    expect(progress.y).toBe(progressBefore.y);
     await expect(page.getByRole('textbox', { name: 'Ответ на немецком' })).toBeFocused();
     const after = await page.getByText('перевод', { exact: true }).boundingBox();
+    expect(after.y).toBeLessThan(before.y - 20);
+    const fieldMoved = frames.find((frame) => frame.field < fieldBefore.y - 2);
+    expect(fieldMoved.prompt).toBeCloseTo(after.y, 0);
     expect(after.height).toBeCloseTo(before.height, 0);
-    await expect(page.getByText('Переведите слово на немецкий')).toBeInViewport();
+    const instruction = page.getByText('Переведите слово на немецкий');
+    await expect(instruction).toBeInViewport();
+    expect((await instruction.boundingBox()).y).toBeGreaterThanOrEqual(after.y + after.height);
   });
 });

@@ -39,7 +39,8 @@
                                  [[:action/show-home context]])
                       :view    pages.home.view/page}
    ;; A lesson is a mode, not a step deeper: it fades in and out. Within it, «ДАЛЕЕ» moves the trial.
-   :page/lesson      {:open        :action/open-lesson
+   :page/lesson      {:keyboard-overlays? true
+                      :open        :action/open-lesson
                       :path        "/lesson"
                       :refresh     (fn [state _]
                                      (when (and (nil? (:lesson/state state))

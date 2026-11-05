@@ -171,15 +171,15 @@
   [:div.lesson__challenge
    attrs
    [:div.lesson__task
+    ;; The language picks the hyphenation of a word too long for its line.
+    [:h2.lesson__prompt
+     {:lang "ru"}
+     prompt]
     [:p.lesson__instruction
      (case kind
        :trial/example [:i18n :lesson/translate-sentence]
        :trial/phrase  [:i18n :lesson/translate-phrase]
-       :trial/word    [:i18n :lesson/translate-word])]
-    ;; The language picks the hyphenation of a word too long for its line.
-    [:h2.lesson__prompt
-     {:lang "ru"}
-     prompt]]])
+       :trial/word    [:i18n :lesson/translate-word])]]])
 
 
 (defn empty-state
