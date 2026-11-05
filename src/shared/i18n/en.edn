@@ -54,7 +54,6 @@
  :lesson/finish               "FINISH"
  :lesson/in-dictionary        "✓ In dictionary"
  :lesson/next                 "NEXT"
- :lesson/previous-trial       "Previous task"
  :lesson/progress             "Lesson progress"
  :lesson/start                "START LESSON"
  :lesson/tiles                "Tiles"

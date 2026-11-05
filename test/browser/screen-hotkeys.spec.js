@@ -120,4 +120,23 @@ test.describe('Экраны слов и тем с клавиатуры', () => {
       await expect(page).toHaveURL(/\/words$/);
     });
   });
+
+  test('пользователь жмёт Esc при открытых настройках на списке слов → закрываются только настройки', async ({ page }) => {
+    await test.step('Дано на списке слов открыты настройки', async () => {
+      await homeWithHaus(page);
+      await page.getByRole('button', { name: 'Список слов' }).click();
+      await page.getByRole('button', { name: /^Шпреха/ }).click();
+      await expect(page.getByRole('dialog', { name: 'Настройки' })).toBeVisible();
+    });
+
+    await test.step('Когда он жмёт Esc', async () => {
+      await page.keyboard.press('Escape');
+    });
+
+    await test.step('Тогда настроек нет, а список слов на месте', async () => {
+      await expect(page.getByRole('dialog', { name: 'Настройки' })).toHaveCount(0);
+      await nothingHappensFor(page, 500);
+      await expect(page).toHaveURL(/\/words$/);
+    });
+  });
 });

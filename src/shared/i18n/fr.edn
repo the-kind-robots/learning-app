@@ -54,7 +54,6 @@
  :lesson/finish               "TERMINER"
  :lesson/in-dictionary        "✓ Dans le dictionnaire"
  :lesson/next                 "SUIVANT"
- :lesson/previous-trial       "Tâche précédente"
  :lesson/progress             "Progression de la leçon"
  :lesson/start                "COMMENCER LA LEÇON"
  :lesson/tiles                "Tuiles"

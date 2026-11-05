@@ -4,22 +4,24 @@
 
 
 ;; The page panel: a custom element, `<page-panel>`, under a `<page-strip>`. Its children lie over one another, and
-;; the one shown is the last that is not inert. It keeps the height of that child in its own `--page-panel-height`,
-;; for the page's CSS to paint behind them; while its `page` attribute changes it carries `easing`, under which the
-;; CSS lets that height travel. It knows nothing of the app state or of what its children hold.
+;; the one shown is the last that is not inert. It keeps how far up from its bottom that child reaches in its own
+;; `--page-panel-height`, for the page's CSS to paint behind them; while its `page` attribute changes it carries
+;; `easing`, under which the CSS lets that height travel. It knows nothing of the app state or of what its children hold.
 ;;
 ;; Properties the element keeps: `sizes` (the observer of its children's size) and `settle` (the timer that ends
 ;; `easing`).
 
 
 (defn- measure!
-  "Puts the height of the child shown in `--page-panel-height`."
+  "Puts how far up from the panel's bottom the child shown reaches in `--page-panel-height`."
   [^js panel]
   (when-let [^js shown (->> (js/Array.from (.-children panel))
                             reverse
                             (remove (fn [^js child] (.-inert child)))
                             first)]
-    (.setProperty (.-style panel) "--page-panel-height" (str (.-height (.getBoundingClientRect shown)) "px"))))
+    (.setProperty (.-style panel)
+                  "--page-panel-height"
+                  (str (- (.-bottom (.getBoundingClientRect panel)) (.-top (.getBoundingClientRect shown))) "px"))))
 
 
 (defn- watch!

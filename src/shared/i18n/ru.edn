@@ -54,7 +54,6 @@
  :lesson/finish               "ЗАКОНЧИТЬ"
  :lesson/in-dictionary        "✓ В словаре"
  :lesson/next                 "ДАЛЕЕ"
- :lesson/previous-trial       "Предыдущее задание"
  :lesson/progress             "Прогресс урока"
  :lesson/start                "НАЧАТЬ УРОК"
  :lesson/tiles                "Плитки"

@@ -22,10 +22,9 @@ html:active-view-transition::view-transition-old(app-bar) {
 
 /* The main button at the bottom stands still across a screen change, as the bar does: it has one size and one
    place on every screen (#767). Only its label and colour change, the old fading into the new where it stands,
-   by the browser's own cross-fade, whose blending keeps a label that does not change from flickering (#776).
-   A lesson's panel for a past trial lies over the current one, inert meanwhile: only the button shown is named. */
+   by the browser's own cross-fade, whose blending keeps a label that does not change from flickering (#776). */
 
-html:active-view-transition-type(deeper, back, fade-in, fade-out) .page-footer__action > .big-button:not([inert] *) {
+html:active-view-transition-type(deeper, back, fade-in, fade-out) .page-footer__action > .big-button {
   view-transition-name: main-button;
 }
 

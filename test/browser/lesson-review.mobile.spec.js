@@ -21,11 +21,10 @@ async function swipeRight(page) {
   });
 }
 
-test('ученик на телефоне свайпает вправо → прошлое задание, его ответ полосой внизу, кнопка на месте, стрелки нет', async ({ page }) => {
+test('ученик на телефоне свайпает вправо → прошлое задание, его ответ полосой внизу, кнопка на месте', async ({ page }) => {
   let button;
   await test.step('Дано на экране пример после отвеченного слова', async () => {
     await answerWordThenShowExample(page, { missFirst: false });
-    await expect(page.getByRole('button', { name: 'Предыдущее задание' })).toBeHidden();
     button = await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).boundingBox();
   });
 

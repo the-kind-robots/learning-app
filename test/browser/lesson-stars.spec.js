@@ -72,7 +72,6 @@ test.describe('Звёзды за уроки', () => {
       await expect(progress(page)).toHaveAttribute('aria-valuenow', '0');
       await expect(page.locator('#lesson-answer')).toBeVisible();
       await expect(page.locator('.lesson__prompt')).toHaveCount(1);
-      await expect(page.getByRole('button', { name: 'Предыдущее задание' })).toBeHidden();
       await expect(stars(page)).toHaveAccessibleName('Уроков за сегодня: 1');
     });
 
