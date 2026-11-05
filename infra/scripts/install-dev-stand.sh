@@ -354,8 +354,6 @@ section "Named, not this script's to do"
 # machine, and none of them is carried by this repository.
 manual "Cloudflare tunnel token, for <name>.dev.sprecha.de" \
     "docs/dev/mobile-pwa-testing.md, One-time setup"
-manual "Tailscale login and 'tailscale serve', for the tailnet name" \
-    "docs/dev/mobile-pwa-testing.md, Over the tailnet"
 
 if command -v getent > /dev/null 2>&1 \
     && ! getent hosts sprecha.localhost > /dev/null 2>&1

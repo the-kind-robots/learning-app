@@ -25,8 +25,7 @@ infra/scripts/install-dev-stand.sh
 
 It installs what this repository carries — the nginx vhost, the CouchDB
 configuration and databases, the systemd user units — checks the rest, and
-names what only you can do (a CouchDB admin, a tunnel token, a Tailscale
-login). Re-running it on a correct machine changes nothing, and answering no
+names what only you can do (a CouchDB admin, a tunnel token). Re-running it on a correct machine changes nothing, and answering no
 to every question reports without touching anything.
 
 Then open http://sprecha.localhost/.
