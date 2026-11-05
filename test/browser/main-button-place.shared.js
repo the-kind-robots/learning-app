@@ -1,7 +1,7 @@
 const { expect } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
 
-// The big bottom button stands in one place on home, the words list and the lesson (#767).
+// The big bottom button stands in one place on home, the themes screen, the words list and the lesson (#767, #773).
 
 // The button's box once it has settled: two reads a frame apart that agree.
 async function settledBox(button) {
@@ -15,11 +15,16 @@ async function settledBox(button) {
   return box;
 }
 
-// Opens the words list from home, starts a lesson from it and answers wrong; the main button's box on each.
+// Opens the themes screen from home and closes it, opens the words list, starts a lesson from it and answers
+// wrong; the main button's box on each.
 async function mainButtonBoxes(page) {
   const start = page.getByRole('button', { name: 'НАЧАТЬ УРОК' });
   const boxes = {};
   boxes['главная «НАЧАТЬ УРОК»'] = await settledBox(start);
+  await page.getByRole('button', { name: 'Открыть наборы' }).click();
+  boxes['наборы «ДОБАВИТЬ НАБОР»'] = await settledBox(page.getByRole('button', { name: 'ДОБАВИТЬ НАБОР' }));
+  await page.getByRole('button', { name: 'Закрыть' }).click();
+  await expect(start).toBeVisible();
   await page.getByRole('button', { name: 'Список слов' }).click();
   await expect(page.getByRole('button', { name: 'Закрыть' })).toBeVisible();
   boxes['слова «НАЧАТЬ УРОК»'] = await settledBox(start);

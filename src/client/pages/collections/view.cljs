@@ -140,26 +140,6 @@
     (for [row rows] (folder-row row))]])
 
 
-(defn- add-button
-  []
-  [:button.switcher__add
-   {:type       "button"
-    :aria-label [:i18n :collections/new]
-    :on         {:click [[:effect/stop-propagation]
-                         [:effect/save {:collections/editing-id nil}]
-                         [:effect/prompt-create-collection [:i18n :collections/new-name]]]}}
-   [:svg
-    {:viewBox     "0 0 40 40"
-     :width       28
-     :height      28
-     :aria-hidden "true"}
-    [:path
-     {:d "M20 8 V32 M8 20 H32"
-      :stroke "currentColor"
-      :stroke-width 4
-      :stroke-linecap "round"}]]])
-
-
 (defn page
   [state]
   (let [{:keys [tiles]} (presenter/page-props state)]
@@ -179,4 +159,12 @@
         (if (:folder? tile)
           (folder-tile tile)
           (plain-tile tile)))]
-     (add-button)]))
+     ;; The main button stands where «НАЧАТЬ УРОК» does on home (#773).
+     [:footer.switcher__footer.page-footer
+      [:div.page-footer__action
+       [:button.big-button.green-button
+        {:type "button"
+         :on   {:click [[:effect/stop-propagation]
+                        [:effect/save {:collections/editing-id nil}]
+                        [:effect/prompt-create-collection [:i18n :collections/new-name]]]}}
+        [:i18n :collections/add]]]]]))

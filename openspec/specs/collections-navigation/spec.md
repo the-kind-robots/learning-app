@@ -18,7 +18,7 @@ The system SHALL navigate to the collections page when the collections icon is t
 #### Scenario: Navigate to the themes screen
 - **WHEN** the user taps the collections grid icon
 - **THEN** the themes screen is shown
-- **AND** it renders all existing collections as tiles and the floating «+» button
+- **AND** it renders all existing collections as tiles and the button «ДОБАВИТЬ НАБОР»
 
 ### Requirement: Tapping a collection card switches the active collection
 The system SHALL switch the active collection and navigate back to the home screen when a collection card is tapped.
@@ -185,13 +185,6 @@ Every tap target on the themes screen — a collection tile, a folder header sta
 - **WHEN** keyboard focus is on a target or on a delete control
 - **THEN** a focus ring is drawn around it
 
-### Requirement: A floating button creates a collection
-The system SHALL show a floating «+» button fixed at the bottom right of the themes screen, always on screen, which opens the name prompt; confirming with a non-blank name creates the collection. The grid SHALL keep a bottom inset so the button covers no tile.
-
-#### Scenario: Creating from the floating button
-- **WHEN** the user taps the floating «+» and confirms a non-blank name
-- **THEN** the collection is created and appears as a tile
-
 ### Requirement: The delete mark takes the place of the count
 In editing mode, and while keyboard focus is on a target or on its delete mark, the delete mark (✕) of a tile, a folder header or a folder row SHALL stand where that target's word count stands, and the count SHALL be hidden while the mark is shown. On a folder row the mark SHALL stand at the count's horizontal place and be centred on the row's height, however many lines the name takes. The mark SHALL NOT overlap the name, and the name SHALL keep the same width and the same place in its tile whether the mark is shown or not.
 
@@ -282,3 +275,14 @@ A tile other than «Всё подряд» SHALL be dragged when the pointer, sti
 - **WHEN** the screen is scrolled to its last tile and the user drags that tile and holds the finger at the top edge
 - **THEN** the page scrolls to its start on its own
 - **AND** the tile let go above the first collection stands second
+
+### Requirement: The footer's button creates a collection
+The system SHALL show along the bottom of the themes screen the footer every screen with a main button has, always on screen, with the main button «ДОБАВИТЬ НАБОР», which opens the name prompt; confirming with a non-blank name creates the collection. No floating button SHALL stand over the tiles. The grid SHALL keep a bottom inset so the footer covers no tile.
+
+#### Scenario: Creating from the footer's button
+- **WHEN** the user taps «ДОБАВИТЬ НАБОР» and confirms a non-blank name
+- **THEN** the collection is created and appears as a tile
+
+#### Scenario: The last tile clear of the footer
+- **WHEN** the user on a phone scrolls the themes screen to its end
+- **THEN** every tile and «ДОБАВИТЬ НАБОР» are wholly in view

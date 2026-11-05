@@ -27,11 +27,11 @@ test.describe('Плитки тем на телефоне', () => {
       await page.getByRole('button', { name: 'Открыть наборы' }).click();
     });
 
-    await test.step('Тогда все плитки и кнопка «Новый набор» целиком в видимой области', async () => {
+    await test.step('Тогда все плитки и кнопка «ДОБАВИТЬ НАБОР» целиком в видимой области', async () => {
       for (const name of names) {
         await expect(page.getByRole('button', { name: name + ' 0', exact: true })).toBeInViewport({ ratio: 1 });
       }
-      await expect(page.getByRole('button', { name: 'Новый набор' })).toBeInViewport({ ratio: 1 });
+      await expect(page.getByRole('button', { name: 'ДОБАВИТЬ НАБОР' })).toBeInViewport({ ratio: 1 });
     });
 
     await test.step('Тогда ни одна плитка не разорвана между колонками', async () => {

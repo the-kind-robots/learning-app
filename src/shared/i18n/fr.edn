@@ -2,10 +2,10 @@
 ;; before `:`, `?`, `!`, `%` and inside « », so a line never starts with the mark.
 {:language/name               "Français"
 
+ :collections/add             "AJOUTER UNE COLLECTION"
  :collections/all             "Tous les mots"
  :collections/delete          [:fn/str "Supprimer la collection « {{:name}} »"]
  :collections/deleted         [:fn/str "Collection « {{:name}} » supprimée"]
- :collections/new             "Nouvelle collection"
  :collections/new-name        "Nom de la nouvelle collection :"
  :collections/title           "Collections"
 

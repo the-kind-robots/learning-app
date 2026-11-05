@@ -229,9 +229,9 @@ test.describe('Плитки тем', () => {
       expect(await collectionNames(page)).not.toContain('Grammatik');
     });
 
-    await test.step('Когда он создаёт набор «Grammatik» кнопкой «+»', async () => {
+    await test.step('Когда он создаёт набор «Grammatik» кнопкой «ДОБАВИТЬ НАБОР»', async () => {
       page.once('dialog', (dialog) => dialog.accept('Grammatik'));
-      await page.getByRole('button', { name: 'Новый набор' }).click();
+      await page.getByRole('button', { name: 'ДОБАВИТЬ НАБОР' }).click();
     });
 
     await test.step('Тогда «Grammatik» — плитка с суммой слов детей', async () => {

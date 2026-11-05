@@ -223,7 +223,7 @@ New behaviour first appears here as a test title: `<actor> <action> → <result>
 
 ## main-button-place.spec.js
 
-- ученик на компьютере идёт с главной через список слов в урок → главная кнопка везде одного размера и на одном месте _(desktop)_
+- ученик на компьютере идёт с главной через наборы и список слов в урок → главная кнопка везде одного размера и на одном месте _(desktop)_
 
 ## malformed-query.spec.js
 
@@ -475,7 +475,7 @@ New behaviour first appears here as a test title: `<actor> <action> → <result>
 
 ## main-button-place.mobile.spec.js
 
-- ученик на телефоне идёт с главной через список слов в урок → главная кнопка везде одного размера и на одном месте _(mobile)_
+- ученик на телефоне идёт с главной через наборы и список слов в урок → главная кнопка везде одного размера и на одном месте _(mobile)_
 
 ## screen-transitions.mobile.spec.js
 
