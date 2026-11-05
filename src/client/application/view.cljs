@@ -19,9 +19,10 @@
     :aria-label [:i18n :shell/open-collections]
     :title      [:i18n :collections/title]
     :on         {:click [[:action/go-to-collections]]}}
+   ;; The box is the drawing, so the bar places the drawing itself.
    ;; zprint: as written
    [:svg.app-shell__corner-icon-svg
-    {:viewBox "0 0 16 16" :aria-hidden "true"}
+    {:aria-hidden "true" :height "16.5" :viewBox "2 2 12 12" :width "16.5"}
     [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
     [:rect {:x 10 :y 2 :width 4 :height 4 :rx 1}]
     [:rect {:x 2 :y 10 :width 4 :height 4 :rx 1}]
@@ -35,9 +36,12 @@
     :aria-label [:i18n :dialog/close]
     :title      [:i18n :dialog/close]
     :on         {:click [[:action/close-screen]]}}
+   ;; The box is the drawing with its round caps, so the bar places the drawing itself.
    [:svg.app-shell__corner-icon-svg
-    {:viewBox     "0 0 16 16"
-     :aria-hidden "true"}
+    {:aria-hidden "true"
+     :height      "13.75"
+     :viewBox     "3 3 10 10"
+     :width       "13.75"}
     [:path
      {:d "M4 4 L12 12 M12 4 L4 12"
       :stroke "currentColor"
@@ -83,15 +87,16 @@
 
 
 (defn- star
-  "A star of today's lessons: gold for a lesson, purple for five, drawn alike. Each lights up once as it mounts."
+  "A star of today's lessons: gold for a lesson, purple for five, drawn alike and of one size. Each lights up once
+   as it mounts."
   [purple? key]
   ;; zprint: as written
   [:svg
    {:class         (if purple? "app-shell__star app-shell__star--purple" "app-shell__star")
     :replicant/key key
     :aria-hidden   "true"
-    :viewBox       (if purple? "-3 -3 30 31" "-2 -2 28 29")}
-   [:path.app-shell__star-lip {:d star-path :transform (if purple? "translate(0 1.4)" "translate(0 1.8)")}]
+    :viewBox       "-2 -2 28 29"}
+   [:path.app-shell__star-lip {:d star-path :transform "translate(0 1.8)"}]
    [:path.app-shell__star-body {:d star-path}]
    [:path.app-shell__star-core {:d "M12 6.8l1.4 2.9 3.2.4-2.3 2.3.5 3.2L12 14l-2.8 1.6.5-3.2-2.3-2.3 3.2-.4z"}]
    [:path.app-shell__star-sparkle {:d "M21.5 0.5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"}]])

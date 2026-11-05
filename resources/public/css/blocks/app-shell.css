@@ -151,16 +151,20 @@
 
 /* Today's lessons: gold stars, five of them one purple star, and from five
    purple on their number before one. At most four purple and four gold
-   stand in a row, so the row stays narrow on a phone. */
+   stand in a row, so the row stays narrow on a phone. The bar's line is the
+   middle of the word mark's lowercase letters; 3.5px on top lowers the
+   stars onto it, the middle of a star's drawing 0.2px above its box's. */
 .app-shell__stars {
   align-items: center;
   display: flex;
   gap: 1px;
+  padding-top: 3.5px;
 }
 
-/* Both stars are drawn alike: a dark lip under the body, a lighter core, a
-   sparkle and a soft glow. A gold star takes shades of yellow, a purple one
-   shades of violet and a larger size. */
+/* Both stars are drawn alike and of one size: a dark lip under the body, a
+   lighter core, a sparkle and a soft glow. A gold star takes shades of
+   yellow, a purple one shades of violet. Eight of them, 24 lessons, still
+   fit beside the word mark and the sync on a 390px phone. */
 .app-shell__star {
   --star-lip: 196, 134, 0;
   --star-body: var(--color-bee);
@@ -170,10 +174,10 @@
   --star-flare: 255, 200, 40;
   filter: drop-shadow(0 0 2px rgba(var(--star-glow), 0.55));
   flex: none;
-  height: 18px;
+  height: 24px;
   stroke-linejoin: round;
   stroke-width: 2.6;
-  width: 18px;
+  width: 24px;
 }
 
 .app-shell__star--purple {
@@ -183,9 +187,6 @@
   --star-sparkle: 230, 214, 255;
   --star-glow: 150, 100, 230;
   --star-flare: 170, 120, 255;
-  height: 22px;
-  margin-inline-end: 1px;
-  width: 22px;
 }
 
 .app-shell__star-lip {
@@ -211,7 +212,7 @@
 
 .app-shell__star-number {
   color: rgb(107, 63, 176);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 800;
   line-height: 1;
 }
@@ -311,9 +312,10 @@
 /* Shell actions sit in one row so any of them can be absent without leaving a
    hole: the trace export in a development build, install only when
    installable, the grid icon on home and the close mark on every other
-   page. */
+   page. Each stands from the row's top, so the taller install button does not
+   push the grid or the close mark off the bar's line. */
 .app-shell__actions {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   flex: 1 1 0;
   gap: 4px;
@@ -322,8 +324,11 @@
   min-width: max-content;
 }
 
-/* The grid and the close mark, both buttons: the
-   background, border and padding a button brings are cleared. */
+/* The grid and the close mark, both buttons: the background and border a
+   button brings are cleared. Each icon's box is its drawing, so the padding
+   places the drawing itself: 3px on top centres it on the bar's line, 1.25px
+   on the right sets it as far from the edge as the word mark's first letter
+   is from the other. */
 .app-shell__corner-icon {
   align-items: center;
   background: none;
@@ -332,8 +337,8 @@
   cursor: pointer;
   display: inline-flex;
   height: 28px;
-  justify-content: center;
-  padding: 0;
+  justify-content: flex-end;
+  padding: 3px 1.25px 0 0;
   text-decoration: none;
   transition: opacity 0.15s, transform 0.15s;
   width: 28px;
@@ -351,8 +356,6 @@
 
 .app-shell__corner-icon-svg {
   fill: currentcolor;
-  height: 22px;
-  width: 22px;
 }
 
 
