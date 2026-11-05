@@ -29,8 +29,8 @@ It installs no toolchain and holds no credentials. These stay yours:
 - **A CouchDB admin account** — below. Without it the script cannot create the
   databases.
 - **An account in the app** — «Your account», below.
-- **A Cloudflare tunnel token** and **a Tailscale login**, for reaching the
-  stand from a phone — [mobile-pwa-testing.md](mobile-pwa-testing.md).
+- **A Cloudflare tunnel token**, for reaching the stand from a phone —
+  [mobile-pwa-testing.md](mobile-pwa-testing.md).
 
 The script names each of these when it finds it missing, with the section that
 covers it.
@@ -135,5 +135,5 @@ CouchDB is not running. `systemctl status couchdb`, or `couchdb` in a terminal.
 
 ## Related guides
 
-- Phone testing over a Cloudflare tunnel or the tailnet: [mobile-pwa-testing.md](mobile-pwa-testing.md)
+- Phone testing over a Cloudflare tunnel: [mobile-pwa-testing.md](mobile-pwa-testing.md)
 - The units and vhost themselves: [../../infra/README.md](../../infra/README.md)

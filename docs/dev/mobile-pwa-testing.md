@@ -58,26 +58,6 @@ systemctl status cloudflared
 journalctl -u cloudflared -f
 ```
 
-## Over the tailnet
-
-The stand is also reachable on the machine's Tailscale name,
-`https://<machine>.<tailnet>.ts.net`. Tailscale terminates TLS and proxies to
-the same local nginx, so the origin is https and therefore a secure context —
-the service worker registers and the app installs to the home screen exactly as
-on the tunnel hostname. The phone needs Tailscale switched on; nothing off the
-tailnet can reach the name at all.
-
-Two commands, once per machine:
-
-```bash
-sudo tailscale set --operator=$USER
-sudo tailscale serve --bg --https=443 http://127.0.0.1:80
-```
-
-Worth knowing before switching: browser storage is per origin. Opening the app
-on the tailnet name is a fresh install — an empty local database that
-repopulates by sync, and a home-screen icon that has to be added again.
-
 ## Running the stand
 
 The stand is two systemd **user** units, `infra/development/etc/systemd/user/`:
@@ -128,14 +108,13 @@ it when asked; `git switch master` brings the checkout back.
 The devtools socket connects to the page's own origin and to nothing else
 (`dev/cljs/dev/devtools_socket.cljs`, a `:devtools :preloads` entry). There is
 no setting, so where hot reload works follows from which origins nginx proxies
-`/shadow-cljs/` for: the machine's tailnet address and `sprecha.localhost`,
-yes; the public dev host, no — nginx refuses a request the tunnel forwarded,
-and that refusal is what keeps the watch off the public internet.
+`/shadow-cljs/` for: `sprecha.localhost`, yes; the public dev host, no — nginx
+refuses a request the tunnel forwarded, and that refusal is what keeps the
+watch off the public internet.
 
 So on the public name the app works and only hot reload is missing. What it
 looks like: the shadow-cljs client keeps retrying and shows its reconnect
-banner over the page, forever. That is the arrangement, not a fault. Open the
-app on the tailnet name — Tailscale switched on — when you want hot reload.
+banner over the page, forever.
 
 nginx proxies `/shadow-cljs/` to port 9630, so the watch holding that port is
 the only one the phone can reach, and only one watch per machine can hold it.
