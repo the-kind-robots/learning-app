@@ -108,13 +108,14 @@ it when asked; `git switch master` brings the checkout back.
 The devtools socket connects to the page's own origin and to nothing else
 (`dev/cljs/dev/devtools_socket.cljs`, a `:devtools :preloads` entry). There is
 no setting, so where hot reload works follows from which origins nginx proxies
-`/shadow-cljs/` for: `sprecha.localhost`, yes; the public dev host, no — nginx
-refuses a request the tunnel forwarded, and that refusal is what keeps the
-watch off the public internet.
-
-So on the public name the app works and only hot reload is missing. What it
-looks like: the shadow-cljs client keeps retrying and shows its reconnect
-banner over the page, forever.
+`/shadow-cljs/` for: `sprecha.localhost`, and the public dev host past
+Cloudflare Access. The watch runs code it is sent, so an Access application
+must cover `<name>.dev.sprecha.de/shadow-cljs` and let only you in. nginx
+refuses a tunnel request that carries no `Cf-Access-Jwt-Assertion`: without
+the Access application the socket stays closed, and the shadow-cljs client
+shows its reconnect banner forever. Sign in once on
+`https://<name>.dev.sprecha.de/shadow-cljs/` on the phone; the page's socket
+then carries the Access cookie.
 
 nginx proxies `/shadow-cljs/` to port 9630, so the watch holding that port is
 the only one the phone can reach, and only one watch per machine can hold it.
