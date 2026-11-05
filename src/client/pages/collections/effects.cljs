@@ -209,7 +209,8 @@
 (nxr/register-effect! :effect/listen-for-typing
   ;; On the document: when the screen opens nothing has focus, and a keystroke reaches no tile.
   ;; A pause over a second starts a new search. A space counts only inside a search, so on its own it still
-  ;; presses the focused target.
+  ;; presses the focused target. An open menu or dialog takes the keys: the letters typed in a dialog's field
+  ;; were lost, and with a menu open a tile behind it took the focus.
   (fn listen-for-typing [_ _]
     (let [listener (js/AbortController.)
           typed    (volatile! {:text "" :at 0})]
@@ -224,7 +225,8 @@
                            "")]
            (when (and (= 1 (count character))
                       (not (or (.-ctrlKey event) (.-altKey event) (.-metaKey event)))
-                      (not (and (= " " character) (= "" text))))
+                      (not (and (= " " character) (= "" text)))
+                      (not (js/document.querySelector ":popover-open, :modal")))
              (let [text (str text character)]
                (vreset! typed {:text text :at now})
                (.preventDefault event)

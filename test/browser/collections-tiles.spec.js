@@ -382,4 +382,50 @@ test.describe('Плитки тем', () => {
       await expect(page.getByLabel('Слово (немецкий)')).toHaveValue('Haus');
     });
   });
+
+  test('пользователь на экране тем печатает в поле окна «Сохранить мои слова» → текст в поле', async ({ page }) => {
+    const dialog = (page) => page.getByRole('dialog', { name: 'Чтобы слова не потерялись' });
+
+    await test.step('Дано на экране тем с темой «Solo» открыто окно «Сохранить мои слова»', async () => {
+      await page.goto('/');
+      await seedCollections(page, [['solo', 'Solo', ['vocab:g']]]);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await expect(page.getByRole('button', { name: 'Solo 1', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Синхронизация' }).click();
+      await page.getByRole('button', { name: 'Сохранить мои слова' }).click();
+      await expect(dialog(page)).toBeVisible();
+    });
+
+    await test.step('Когда он печатает «Solo» в поле заметки', async () => {
+      await dialog(page).getByRole('textbox').focus();
+      await page.keyboard.type('Solo');
+    });
+
+    await test.step('Тогда в поле «Solo»', async () => {
+      await expect(dialog(page).getByRole('textbox')).toHaveValue('Solo');
+    });
+  });
+
+  test('пользователь на экране тем открыл меню настроек и печатает → фокус не уходит на тему за меню', async ({ page }) => {
+    const settings = (page) => page.getByRole('dialog', { name: 'Настройки' });
+
+    await test.step('Дано на экране тем с темой «Solo» открыто меню настроек', async () => {
+      await page.goto('/');
+      await seedCollections(page, [['solo', 'Solo', ['vocab:g']]]);
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await expect(page.getByRole('button', { name: 'Solo 1', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: /^Шпреха/ }).click();
+      await expect(settings(page)).toBeVisible();
+    });
+
+    await test.step('Когда он печатает «so»', async () => {
+      await page.keyboard.type('so');
+      await nothingHappensFor(page, 300);
+    });
+
+    await test.step('Тогда «Solo» не в фокусе, меню открыто', async () => {
+      await expect(page.getByRole('button', { name: 'Solo 1', exact: true })).not.toBeFocused();
+      await expect(settings(page)).toBeVisible();
+    });
+  });
 });

@@ -239,7 +239,7 @@ The target of the active collection — «Всё подряд» when no collecti
 - **THEN** the tile `Solo` is marked current and «Всё подряд» is not
 
 ### Requirement: Typing on the themes screen focuses the matching target
-On the themes screen, characters typed without Ctrl, Alt or Meta SHALL move keyboard focus to the first target, in reading order, whose shown name contains the typed text, case ignored. Characters typed less than a second apart SHALL extend the same text; after a longer pause the next character SHALL start a new one. A space SHALL extend a text already being typed and otherwise SHALL keep its usual effect on the focused target. When no target matches, focus SHALL stay where it is.
+On the themes screen, characters typed without Ctrl, Alt or Meta SHALL move keyboard focus to the first target, in reading order, whose shown name contains the typed text, case ignored. Characters typed less than a second apart SHALL extend the same text; after a longer pause the next character SHALL start a new one. A space SHALL extend a text already being typed and otherwise SHALL keep its usual effect on the focused target. When no target matches, focus SHALL stay where it is. While a menu or a dialog is open over the screen, typing SHALL search no target and SHALL keep its usual effect there.
 
 #### Scenario: Typing part of a name
 - **WHEN** the collections `Kurs / Kapitel 1`, `Kurs / Kapitel 2` and `Solo` are on the themes screen
@@ -253,6 +253,14 @@ On the themes screen, characters typed without Ctrl, Alt or Meta SHALL move keyb
 #### Scenario: A pause starts a new search
 - **WHEN** the user types `kap`, pauses for more than a second, and types `so`
 - **THEN** focus is on the tile `Solo`
+
+#### Scenario: Typing in a dialog's field
+- **WHEN** the «Сохранить мои слова» dialog is open over the themes screen and the user types `Solo` in its note field
+- **THEN** the field holds `Solo`
+
+#### Scenario: Typing with a menu open
+- **WHEN** the settings menu is open over the themes screen and the user types `so`
+- **THEN** the tile `Solo` does not take the focus
 
 ### Requirement: A tile is dragged to a new place
 A tile other than «Всё подряд» SHALL be dragged when the pointer, still down, travels more than 10 px from where it went down: on a touch screen after a long press has put a target of the tile in its editing state, or from a target already in its editing state; with a mouse at once. A folder tile SHALL be dragged by any of its targets and SHALL move as one, its rows keeping their order. While a tile is dragged it SHALL follow the pointer, the page SHALL NOT scroll with the pointer's movement, and a caret SHALL show where it lands: above or below the tile nearest the pointer, never before «Всё подряд». While the pointer is within 56 px of the window's top or bottom edge, the page SHALL scroll toward that edge on its own, faster the nearer the pointer, until the page ends or the pointer leaves that band; the tile and the caret SHALL follow the scroll. On release the tile SHALL stand at the caret, the editing state SHALL end, and no collection SHALL be activated. The new order SHALL be kept in the collections' positions — `0`, `1`, `2`, … in the order of the tiles after «Всё подряд», every collection of a folder taking its tile's — so that it holds on every device the learner's data reaches. A tile released where it stood SHALL write nothing.
