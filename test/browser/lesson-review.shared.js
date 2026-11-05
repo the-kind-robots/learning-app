@@ -12,10 +12,10 @@ const prompt = (page, text) => page.getByRole('heading', { name: text, exact: tr
 const tray = (page) => page.getByRole('group', { name: 'Ваш ответ' });
 const bank = (page) => page.getByRole('group', { name: 'Плитки' });
 
-async function answerWordThenShowExample(page, { missFirst }) {
+async function answerWordThenShowExample(page, { missFirst, example = { translation: 'Пёс спит в саду.', sentence: 'Der Hund schläft im Garten.' } }) {
   await page.goto('/home');
   await addWord(page, 'der Hund', 'пёс');
-  await seedExample(page);
+  await seedExample(page, example.translation, example.sentence);
   await page.goto('/lesson');
   if (missFirst) {
     await field(page).fill('die Katze');
@@ -25,7 +25,7 @@ async function answerWordThenShowExample(page, { missFirst }) {
   await field(page).fill('der Hund');
   await check(page).click();
   await next(page).click();
-  await expect(prompt(page, 'Пёс спит в саду.')).toBeVisible();
+  await expect(prompt(page, example.translation)).toBeVisible();
 }
 
 module.exports = { answerWordThenShowExample, prompt, next, tray, bank };

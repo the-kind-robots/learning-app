@@ -69,16 +69,8 @@
                           (if finished? "#lesson-again" "#lesson-next")]]}
    [:div.lesson__footer.lesson__footer--success.page-footer
     [:div.lesson__answer
-     ;; The way home sits beside the verdict, so the main button stands where «ДАЛЕЕ» does.
-     [:div.lesson__answer-title
-      [:h3.lesson__answer-header
-       [:i18n :lesson/correct]]
-      (when finished?
-        [:button.lesson__finish
-         {:id   "lesson-finish"
-          :type "button"
-          :on   {:click [[:action/go-to-home]]}}
-         [:i18n :lesson/finish]])]
+     [:h3.lesson__answer-header
+      [:i18n :lesson/correct]]
      (answer-body props)]
     [:form
      {:on {:submit [[:effect/prevent-default]]}}
@@ -190,35 +182,6 @@
      prompt]]])
 
 
-(defn- past-footer
-  "The panel of a trial left behind, along the bottom over the current trial's panel."
-  [{:keys [attempts current-page finished? first-try?] :as props}]
-  [:div.lesson__footer.lesson__footer--success.lesson__footer--past.page-footer
-   [:div.lesson__answer
-    ;; Once the lesson is over, the same pair as on its final trial.
-    [:div.lesson__answer-title
-     [:h3.lesson__answer-header
-      (if first-try?
-        [:i18n :lesson/correct]
-        [:i18n :lesson/attempts {:count attempts}])]
-     (when finished?
-       [:button.lesson__finish
-        {:type "button"
-         :on   {:click [[:action/go-to-home]]}}
-        [:i18n :lesson/finish]])]
-    (answer-body props)]
-   [:div.lesson__action.page-footer__action
-    (if finished?
-      [:button.big-button
-       {:type "button"
-        :on   {:click [[:action/next-lesson]]}}
-       [:i18n :lesson/again]]
-      [:button.big-button
-       {:type "button"
-        :on   {:click [[:action/view-trial current-page current-page]]}}
-       [:i18n :lesson/next]])]])
-
-
 (defn empty-state
   []
   [:div.lesson
@@ -251,7 +214,7 @@
 
     :else
     (let [answer-hint (presenter/answer-hint-props state)
-          {:keys [back? current-page current-shown? first-shown? page pages previous-page viewed-answer]}
+          {:keys [back? current-page current-shown? finished? first-shown? page pages previous-page viewed-answer]}
           (presenter/strip-props state)]
       [:div.lesson
        (when answer-hint (answer-hint-popover answer-hint))
@@ -280,8 +243,19 @@
              :aria-hidden   (not shown?)}
             (challenge props (when current? {:id "lesson-challenge"}))]))]
        ;; Only the challenge moves with the strip: a past trial's answer is a strip along the bottom; the
-       ;; current panel, hidden meanwhile, keeps its place and its typed answer.
-       [:div.lesson__panel
+       ;; current panel, hidden meanwhile, keeps its place and its typed answer. `pages.lesson.page-panel`
+       ;; gives the CSS the height of the panel shown, for the colour behind them; the panel shown is its last
+       ;; child that is not inert, so the way home comes first.
+       [:page-panel.lesson__panel
+        {:page (when-not current-shown? page)}
+        ;; At the end of a lesson the way home, one for every panel: it travels with the panel's edge.
+        (when finished?
+          [:div.lesson__panel-finish
+           [:button.lesson__finish
+            {:id   "lesson-finish"
+             :type "button"
+             :on   {:click [[:action/go-to-home]]}}
+            [:i18n :lesson/finish]]])
         [:div.lesson__panel-current
          {:inert (not current-shown?)}
          (let [footer-props (presenter/footer-props state)]
@@ -290,5 +264,27 @@
                :success (success-footer footer-props)
                :error   (error-footer footer-props))
              (input-footer (presenter/input-props state))))]
-        (when viewed-answer
-          (past-footer viewed-answer))]])))
+        ;; A past trial's panel: its answer is one per page, so the answer leaving fades where it stood while the
+        ;; next appears; leaving for the current one, the panel fades too, inert at once.
+        (when-let [{:keys [attempts first-try?]} viewed-answer]
+          [:div.lesson__footer.lesson__footer--success.lesson__footer--past.page-footer
+           {:replicant/unmounting {:class "lesson__footer--leaving"
+                                   :inert true}}
+           [:div.lesson__answer
+            {:replicant/key        page
+             :replicant/unmounting {:class "lesson__answer--leaving"}}
+            [:h3.lesson__answer-header
+             (if first-try?
+               [:i18n :lesson/correct]
+               [:i18n :lesson/attempts {:count attempts}])]
+            (answer-body viewed-answer)]
+           [:div.lesson__action.page-footer__action
+            (if finished?
+              [:button.big-button
+               {:type "button"
+                :on   {:click [[:action/next-lesson]]}}
+               [:i18n :lesson/again]]
+              [:button.big-button
+               {:type "button"
+                :on   {:click [[:action/view-trial current-page current-page]]}}
+               [:i18n :lesson/next]])]])]])))
