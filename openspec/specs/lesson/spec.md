@@ -409,7 +409,7 @@ Where items gain equally, which of them the lesson takes SHALL be decided at ran
 - **AND** they are not the ones the vocabulary happens to be listed first
 
 ### Requirement: The learner looks back at the trials already answered
-The lesson SHALL keep, in the order they were answered, the trials it has left behind — one entry for each trial answered right, never one for a wrong attempt — each with the number of attempts it took. The lesson screen SHALL lay its trials out as a horizontal strip: the trials left behind, then the current one. The learner SHALL go back one trial by swiping right, and on a screen with a fine pointer also by an arrow beside the progress bar; the strip SHALL stop on each trial. Only the challenge SHALL move with the strip: the bottom panel and its button SHALL stay in place, at the height of the current trial's panel. On a trial left behind the panel SHALL be green and show "Правильно!" when it took one attempt, otherwise "Попыток: N", and the correct answer with the hinted words of an example tappable; its button "Далее" SHALL return to the current trial. Once the last trial is answered the strip SHALL still go back, and a past trial's button SHALL be "Закончить", finishing the lesson.
+The lesson SHALL keep, in the order they were answered, the trials it has left behind — one entry for each trial answered right, never one for a wrong attempt — each with the number of attempts it took. The lesson screen SHALL lay its trials out as a horizontal strip: the trials left behind, then the current one. The learner SHALL go back one trial by swiping right, and on a screen with a fine pointer also by an arrow beside the progress bar; the strip SHALL stop on each trial. Only the challenge SHALL move with the strip: the bottom panel and its button SHALL stay in place, at the height of the current trial's panel. On a trial left behind the panel SHALL be green and show "Правильно!" when it took one attempt, otherwise "Попыток: N", and the correct answer with the hinted words of an example tappable; its button "Далее" SHALL return to the current trial. Once the last trial is answered the strip SHALL still go back, and a past trial's panel SHALL offer what the final trial's does: «ЕЩЁ УРОК» as its main button, starting a new lesson, and «ЗАКОНЧИТЬ» as a quiet button on the line of its verdict, finishing the lesson.
 
 #### Scenario: Swiping back to a trial answered right at the first try
 - **WHEN** the learner has answered a trial right and moved on, and swipes back to it
@@ -434,7 +434,12 @@ The lesson SHALL keep, in the order they were answered, the trials it has left b
 
 #### Scenario: After the last trial
 - **WHEN** the learner has answered the last trial right and goes back to a trial before it
-- **THEN** its panel shows its answer, and its button "Закончить" finishes the lesson
+- **THEN** its panel shows its answer, «ЕЩЁ УРОК» and «ЗАКОНЧИТЬ»
+- **AND** «ЗАКОНЧИТЬ» finishes the lesson
+
+#### Scenario: One more lesson from a past trial
+- **WHEN** the learner has answered the last trial right, goes back to a trial before it and activates «ЕЩЁ УРОК»
+- **THEN** the first trial of a new lesson is on display
 
 ### Requirement: The end of a lesson offers one more
 When the final trial of a lesson is answered correctly, the footer SHALL offer «ЕЩЁ УРОК» as its main button, focused, standing exactly where «ДАЛЕЕ» stands after any other trial, and «ЗАКОНЧИТЬ» as a quiet button on the line of «Правильно!», at its end. «ЕЩЁ УРОК» SHALL start a new lesson at once, on the lesson screen. «ЗАКОНЧИТЬ» SHALL show the home screen.

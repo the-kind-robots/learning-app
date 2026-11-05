@@ -191,20 +191,28 @@
   [{:keys [attempts current-page finished? first-try?] :as props}]
   [:div.lesson__footer.lesson__footer--success.lesson__footer--past.page-footer
    [:div.lesson__answer
-    [:h3.lesson__answer-header
-     (if first-try?
-       [:i18n :lesson/correct]
-       [:i18n :lesson/attempts {:count attempts}])]
+    ;; Once the lesson is over, the same pair as on its final trial.
+    [:div.lesson__answer-title
+     [:h3.lesson__answer-header
+      (if first-try?
+        [:i18n :lesson/correct]
+        [:i18n :lesson/attempts {:count attempts}])]
+     (when finished?
+       [:button.lesson__finish
+        {:type "button"
+         :on   {:click [[:action/go-to-home]]}}
+        [:i18n :lesson/finish]])]
     (answer-body props)]
    [:div.lesson__action.page-footer__action
-    [:button.big-button
-     {:type "button"
-      :on   {:click (if finished?
-                      [[:action/go-to-home]]
-                      [[:action/view-trial current-page current-page]])}}
-     (if finished?
-       [:i18n :lesson/finish]
-       [:i18n :lesson/next])]]])
+    (if finished?
+      [:button.big-button
+       {:type "button"
+        :on   {:click [[:action/next-lesson]]}}
+       [:i18n :lesson/again]]
+      [:button.big-button
+       {:type "button"
+        :on   {:click [[:action/view-trial current-page current-page]]}}
+       [:i18n :lesson/next]])]])
 
 
 (defn empty-state
