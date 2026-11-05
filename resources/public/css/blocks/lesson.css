@@ -632,10 +632,6 @@
     max-width: 632px;
   }
 
-  .lesson__footer .page-footer__action {
-    max-width: none;
-  }
-
   /* The colour behind the panels is the sheet too. */
   .lesson__panel::before {
     border-radius: 24px 24px 0 0;

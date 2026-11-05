@@ -55,11 +55,14 @@ test.describe('Кнопка «Синхронизация»', () => {
     });
   });
 
-  test('пользователь с аккаунтом открывает слова, наборы или урок → кнопки нет', async ({ page }) => {
+  test('пользователь с аккаунтом открывает слова, наборы или урок → кнопка там же, где на главной', async ({ page }) => {
+    let onHome;
+
     await test.step('Дано пользователь с аккаунтом и словом «Haus» на главной', async () => {
       await signIn(page);
       await expect(syncButton(page)).toBeVisible();
       await addWord(page, 'Haus', 'дом');
+      onHome = await syncButton(page).boundingBox();
     });
 
     for (const [screen, opener, shown] of SCREENS) {
@@ -68,8 +71,9 @@ test.describe('Кнопка «Синхронизация»', () => {
         await expect(shown(page)).toBeVisible();
       });
 
-      await test.step('Тогда кнопки «Синхронизация» нет', async () => {
-        await expect(syncButton(page)).toHaveCount(0);
+      await test.step('Тогда кнопка «Синхронизация» видна там же, где на главной', async () => {
+        await expect(syncButton(page)).toBeVisible();
+        expect(await syncButton(page).boundingBox()).toEqual(onHome);
       });
 
       await test.step('Когда он закрывает экран', async () => {

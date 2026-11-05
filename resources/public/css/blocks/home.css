@@ -281,12 +281,7 @@
 
   .home__footer {
     --page-footer-padding-top: 32px;
-    --page-footer-padding-bottom: 32px;
     background: linear-gradient(rgb(var(--color-snow), 0), rgb(var(--color-snow)) 40%);
-  }
-
-  .home__footer .page-footer__action {
-    max-width: 640px;
   }
 }
 
