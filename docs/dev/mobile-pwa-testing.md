@@ -107,6 +107,17 @@ journalctl --user -u learning-app-dev-watch -f
 The logs are the journal — the compile output the watch used to print into a
 terminal is `journalctl --user -u learning-app-dev-watch`.
 
+To put a pushed branch on the stand:
+
+```bash
+systemctl --user start learning-app-stand@<branch>.service
+```
+
+It refuses when the main checkout has uncommitted changes; otherwise it
+detaches the checkout onto `origin/<branch>`, restarts the backend if server
+code changed, and returns once the watch has rebuilt. Background sessions use
+it when asked; `git switch master` brings the checkout back.
+
 ## Daily workflow
 
 1. Start local app stack (the units above, if they are not already running).

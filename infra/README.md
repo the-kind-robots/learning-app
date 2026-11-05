@@ -52,8 +52,9 @@ infra/
 | `learning-app-restart.service`           | Performs the restart                              |
 | `learning-app-dev-watch.service`         | Dev stand: `shadow-cljs watch app` (user unit)    |
 | `learning-app-dev-backend.service`       | Dev stand: the backend on 8083 (user unit)        |
+| `learning-app-stand@.service`            | Dev stand: put branch `%i` on it (user unit)      |
 
-The last two are **user** units under `development/`, not part of the package.
+The last three are **user** units under `development/`, not part of the package.
 They replace the two terminals the dev stand used to be, so it survives the
 session that started it and `systemctl --user status` answers what is running.
 `install-dev-stand.sh` installs and enables them; running them day to day is
