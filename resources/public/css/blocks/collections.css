@@ -7,15 +7,9 @@
  * across that break, which is also what keeps `position: relative` on the
  * tile and on its rows meaning what it means anywhere else.
  */
-body:has(.switcher) {
-  background: rgb(var(--color-polar));
-}
-
-
 .switcher {
   --tile-gap: 10px;
 
-  background: rgb(var(--color-polar));
   display: flex;
   flex-direction: column;
   min-height: 100svh;
