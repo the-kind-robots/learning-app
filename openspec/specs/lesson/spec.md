@@ -482,7 +482,7 @@ The system SHALL record a lesson as passed when its final trial is answered corr
 - **THEN** no passed lesson is recorded
 
 ### Requirement: The lesson screen keeps one column
-On desktop the lesson screen SHALL lay out its progress bar, its answer field, the content of its bottom panel and its main button in one column of one width, centred; the main button SHALL span that column and stand in the same place whether it reads «ПРОВЕРИТЬ», «ДАЛЕЕ» or «ЕЩЁ УРОК», given panels of the same height. The bottom panel after an answer SHALL be a sheet as wide as the column with its padding, with rounded top corners; on a phone it SHALL span the screen width without rounding. The prompt SHALL be set without a frame, under its instruction, at one size whatever its length, and SHALL break a word too long for its line at a syllable. A tile SHALL never be wider than the answer field. On a 360×690 phone a 15-word example SHALL keep its whole prompt inside the lesson body in every state of the trial.
+On desktop the lesson screen SHALL lay out its progress bar, its answer field, the content of its bottom panel and its main button in one column of one width, centred; the main button SHALL span that column and stand in the same place whether it reads «ПРОВЕРИТЬ», «ДАЛЕЕ» or «ЕЩЁ УРОК», given panels of the same height. The bottom panel after an answer SHALL be a sheet as wide as the column with its padding, with rounded top corners; on a phone it SHALL span the screen width without rounding. The prompt SHALL be set without a frame, under its instruction, at one size whatever its length and whether or not the on-screen keyboard is shown, and SHALL break a word too long for its line at a syllable. A tile SHALL never be wider than the answer field. On a 360×690 phone a 15-word example SHALL keep its whole prompt inside the lesson body in every state of the trial.
 
 #### Scenario: The main button keeps its place on desktop
 - **WHEN** a learner on desktop answers a word trial wrong, then answers the final trial right
@@ -500,3 +500,8 @@ On desktop the lesson screen SHALL lay out its progress bar, its answer field, t
 #### Scenario: A long example on a small phone
 - **WHEN** a learner on a 360×690 phone shows a 15-word example's tiles, places them all and checks a wrong order
 - **THEN** in each of these states the whole prompt is inside the lesson body, above the panel
+
+#### Scenario: The keyboard opens over a word trial
+- **WHEN** a learner on a phone taps the answer field of a word trial and the on-screen keyboard shortens the screen
+- **THEN** the prompt keeps the size it had before
+- **AND** its instruction stays visible above it
