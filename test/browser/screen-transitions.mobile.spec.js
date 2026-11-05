@@ -1,6 +1,6 @@
 const { test, expect, nothingHappensFor } = require('./fixtures');
 const { seedWords } = require('./seed.shared');
-const { recordTransitions, transitions, forgetTransitions } = require('./screen-transitions.shared');
+const { recordTransitions, transitions, mainButtonTransitions, forgetTransitions } = require('./screen-transitions.shared');
 
 // How a screen change moves on a phone (#634, ADR-0024). What the browser
 // drew is read from the transition's animations: which snapshot moved, and
@@ -16,6 +16,14 @@ const BACK = [{
   kind: 'back',
   animations: ['::view-transition-new(root) screen-return-from-left', '::view-transition-old(root) screen-leave-right'],
 }];
+
+// The main button's group draws no movement of its own: only the browser's cross-fade of its old and new image.
+const BUTTON_FADES = [
+  '::view-transition-new(main-button) -ua-mix-blend-mode-plus-lighter',
+  '::view-transition-new(main-button) -ua-view-transition-fade-in',
+  '::view-transition-old(main-button) -ua-mix-blend-mode-plus-lighter',
+  '::view-transition-old(main-button) -ua-view-transition-fade-out',
+];
 
 async function seedCollections(page, names) {
   await page.evaluate(async (names) => {
@@ -39,6 +47,42 @@ async function openHome(page) {
 }
 
 test.describe('Переходы между экранами на телефоне', () => {
+  test('ученик открывает список слов → «НАЧАТЬ УРОК» стоит на месте, пока экран въезжает', async ({ page }) => {
+    let box;
+    await test.step('Дано главная', async () => {
+      await openHome(page);
+      box = await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).boundingBox();
+    });
+
+    await test.step('Когда он нажимает «Список слов»', async () => {
+      await page.getByRole('button', { name: 'Список слов' }).click();
+    });
+
+    await test.step('Тогда кнопка не едет с экраном, а перетекает на месте, и на экране слов стоит там же', async () => {
+      await expect(page.getByPlaceholder('Поиск')).toBeVisible();
+      await expect.poll(() => mainButtonTransitions(page)).toEqual([{ kind: 'deeper', animations: BUTTON_FADES }]);
+      expect(await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).boundingBox()).toEqual(box);
+    });
+  });
+
+  test('ученик начинает урок → кнопка стоит на месте, «НАЧАТЬ УРОК» перетекает в «ПРОВЕРИТЬ»', async ({ page }) => {
+    let box;
+    await test.step('Дано главная', async () => {
+      await openHome(page);
+      box = await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).boundingBox();
+    });
+
+    await test.step('Когда он нажимает «НАЧАТЬ УРОК»', async () => {
+      await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
+    });
+
+    await test.step('Тогда кнопка перетекает на месте и стоит там же', async () => {
+      await expect(page.getByRole('button', { name: 'ПРОВЕРИТЬ' })).toBeVisible();
+      await expect.poll(() => mainButtonTransitions(page)).toEqual([{ kind: 'fade-in', animations: BUTTON_FADES }]);
+      expect(await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).boundingBox()).toEqual(box);
+    });
+  });
+
   test('ученик открывает список слов → экран въезжает справа, главная уходит влево', async ({ page }) => {
     await test.step('Дано главная', async () => {
       await openHome(page);
