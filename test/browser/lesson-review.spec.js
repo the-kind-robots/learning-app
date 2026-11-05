@@ -6,6 +6,14 @@ const { answerWordThenShowExample, prompt, next, tray, bank } = require('./lesso
 
 const back = (page) => page.getByRole('button', { name: 'Предыдущее задание' });
 const progress = (page) => page.getByRole('progressbar', { name: 'Прогресс урока' });
+const oneMore = (page) => page.getByRole('button', { name: 'ЕЩЁ УРОК' });
+
+async function finishLesson(page) {
+  await answerWordThenShowExample(page, { missFirst: false });
+  await placeTiles(page, 'Der Hund schläft im Garten.');
+  await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
+  await oneMore(page).waitFor();
+}
 
 test.describe('Пройденные задания урока', () => {
   test('ученик нажимает стрелку назад → видит прошлое задание и его ответ, прогресс как до него', async ({ page }) => {
@@ -62,22 +70,20 @@ test.describe('Пройденные задания урока', () => {
     });
   });
 
-  test('ученик ответил на последнее задание и вернулся назад → у прошлого задания «ЗАКОНЧИТЬ», урок закончен', async ({ page }) => {
+  test('ученик ответил на последнее задание и вернулся назад → у прошлого задания «ЕЩЁ УРОК» и «ЗАКОНЧИТЬ», «ЗАКОНЧИТЬ» ведёт на главную', async ({ page }) => {
     await test.step('Дано пример верно собран, урок окончен', async () => {
-      await answerWordThenShowExample(page, { missFirst: false });
-      await placeTiles(page, 'Der Hund schläft im Garten.');
-      await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
-      await expect(page.getByRole('button', { name: 'ЗАКОНЧИТЬ' })).toBeVisible();
-      await expect(bank(page)).toHaveCount(0);
+      await finishLesson(page);
     });
 
     await test.step('Когда он возвращается к слову', async () => {
       await back(page).click();
     });
 
-    await test.step('Тогда видно слово и его ответ, кнопка «ЗАКОНЧИТЬ»', async () => {
+    await test.step('Тогда видно слово и его ответ, кнопки «ЕЩЁ УРОК» и «ЗАКОНЧИТЬ»', async () => {
       await expect(prompt(page, 'пёс')).toBeVisible();
       await expect(page.locator('.lesson__footer--past')).toContainText('der Hund');
+      await expect(oneMore(page)).toBeVisible();
+      await expect(page.getByRole('button', { name: 'ЗАКОНЧИТЬ' })).toBeVisible();
       await expect(next(page)).toHaveCount(0);
     });
 
@@ -87,6 +93,25 @@ test.describe('Пройденные задания урока', () => {
 
     await test.step('Тогда урок закончен, он на главной', async () => {
       await expect(page).toHaveURL(/\/home$/);
+    });
+  });
+
+  test('ученик после конца урока вернулся к слову и жмёт «ЕЩЁ УРОК» → новый урок с первого задания', async ({ page }) => {
+    await test.step('Дано урок окончен, на экране прошлое задание', async () => {
+      await finishLesson(page);
+      await back(page).click();
+      await expect(prompt(page, 'пёс')).toBeVisible();
+    });
+
+    await test.step('Когда он жмёт «ЕЩЁ УРОК»', async () => {
+      await oneMore(page).click();
+    });
+
+    await test.step('Тогда на экране первое задание нового урока, прогресс на нуле', async () => {
+      await expect(page).toHaveURL(/\/lesson$/);
+      await expect(progress(page)).toHaveAttribute('aria-valuenow', '0');
+      await expect(page.getByRole('textbox', { name: 'Ответ на немецком' })).toBeVisible();
+      await expect(back(page)).toBeHidden();
     });
   });
 });
