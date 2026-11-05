@@ -300,9 +300,16 @@ section "The stand (systemd user units)"
 
 unit_source="${repo_root}/infra/development/etc/systemd/user"
 
-for unit in learning-app-dev-watch.service learning-app-dev-backend.service; do
+for unit in learning-app-dev-watch.service learning-app-dev-backend.service learning-app-stand@.service; do
     install_system_file "${unit_source}/${unit}" "/etc/systemd/user/${unit}" "unit ${unit}"
 done
+
+# Started per branch, never enabled; the script it runs lives outside the
+# checkout it switches.
+install_system_file \
+    "${repo_root}/infra/development/usr/local/lib/learning-app/switch-stand.sh" \
+    /usr/local/lib/learning-app/switch-stand.sh \
+    "stand switch script"
 
 # Milliseconds, needs no root and says nothing when nothing changed, so it
 # runs on every pass rather than being tracked into one.

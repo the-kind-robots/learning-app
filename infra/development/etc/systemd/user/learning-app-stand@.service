@@ -1,0 +1,12 @@
+[Unit]
+Description=Learning App dev stand: put branch %i on it
+
+[Service]
+# A background session is isolated to its worktree and may not touch the main
+# checkout. When the owner asks it to put its branch on the stand, it starts
+# this unit: `systemctl --user start learning-app-stand@<branch>.service`.
+# The instance is the branch name as is; branches here are dashes and
+# lowercase, which systemd takes without escaping.
+Type=oneshot
+WorkingDirectory=%h/Projects/learning-app
+ExecStart=/bin/bash /usr/local/lib/learning-app/switch-stand.sh %i
