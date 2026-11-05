@@ -77,29 +77,28 @@
 (defn strip-props
   "Props for the strip of trials: its pages, the trials answered then the current one, each a challenge with
    `:page`, `:current?` and `:shown?`; the `:page` shown and the `:current-page`; whether there is a trial to
-   go back to (`:back?`) and the first is shown; whether the current trial is shown; and the answer of the past
-   one viewed, with whether the lesson is over, its button then finishing the lesson."
+   go back to (`:back?`) and the first is shown; whether the current trial is shown; whether the lesson is over
+   (`:finished?`), its panels then offering the way home; and the answer of the past one viewed."
   [state]
   (let [lesson-state (:lesson/state state)
         past         (lesson/past-trials lesson-state)
         viewed       (:lesson/viewed-trial state)
         current-page (count past)
         page         (or viewed current-page)]
-    {:back?        (pos? current-page)
-     :current-page current-page
+    {:back?          (pos? current-page)
+     :current-page   current-page
      :current-shown? (nil? viewed)
-     :first-shown? (= 0 page)
-     :page         page
-     :pages        (->> (conj (mapv :trial past) (lesson/current-trial lesson-state))
-                        (map-indexed (fn [index trial]
-                                       (assoc (trial-challenge trial)
-                                              :current? (= index current-page)
-                                              :page     index
-                                              :shown?   (= index page)))))
-     :previous-page (dec page)
-     :viewed-answer (when-let [{:keys [attempts trial]} (get past viewed)]
-                      (assoc (answer-props state trial)
-                             :attempts     attempts
-                             :current-page current-page
-                             :finished?    (lesson/finished? lesson-state)
-                             :first-try?   (= 1 attempts)))}))
+     :finished?      (lesson/finished? lesson-state)
+     :first-shown?   (= 0 page)
+     :page           page
+     :pages          (->> (conj (mapv :trial past) (lesson/current-trial lesson-state))
+                          (map-indexed (fn [index trial]
+                                         (assoc (trial-challenge trial)
+                                                :current? (= index current-page)
+                                                :page     index
+                                                :shown?   (= index page)))))
+     :previous-page  (dec page)
+     :viewed-answer  (when-let [{:keys [attempts trial]} (get past viewed)]
+                       (assoc (answer-props state trial)
+                              :attempts   attempts
+                              :first-try? (= 1 attempts)))}))

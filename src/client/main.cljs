@@ -16,6 +16,7 @@
    [pages.lesson.actions]
    [pages.lesson.answer-field]
    [pages.lesson.effects]
+   [pages.lesson.page-panel]
    [pages.lesson.page-strip]
    [pages.words.actions]
    [pages.words.effects]
