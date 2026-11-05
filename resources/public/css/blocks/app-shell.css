@@ -76,29 +76,32 @@
   color: rgb(var(--color-cardinal));
 }
 
-/* Which bundle the page loaded, in the info bar, and the tap that reloads onto
-   the newest one. Quiet — the small grey line it reads as, with no button
-   chrome — and it shrinks and ellipsises rather than pushing either neighbour.
-   `touch-action: manipulation` because a hold on text this small otherwise
-   starts a selection instead of a tap. Positioned, so it lies over the unseen
-   tap area of the sync on its left and keeps its own taps. */
+/* Which bundle the page loaded, under the info bar's row, and the tap that
+   reloads onto the newest one. Quiet — the small grey line it reads as, with
+   no button chrome. Out of the row's flow, in the air below it and clear of
+   the stars' button, so the stars stand and move as in a release build; it
+   ellipsises rather than spread past the middle. `touch-action: manipulation`
+   because a hold on text this small otherwise starts a selection instead of
+   a tap. */
 .app-shell__build-mark {
-  position: relative;
   background: none;
   border: 0;
   color: rgb(var(--color-hare));
   cursor: pointer;
-  flex: 0 1 auto;
   font-family: Nunito, sans-serif;
   font-size: 11px;
   font-weight: 600;
+  left: 50%;
   line-height: 14px;
   margin: 0;
-  min-width: 0;
+  max-width: 160px;
   overflow: hidden;
   padding: 0;
+  position: absolute;
   text-overflow: ellipsis;
+  top: calc(100% + 8px);
   touch-action: manipulation;
+  transform: translateX(-50%);
   white-space: nowrap;
 }
 
@@ -136,8 +139,10 @@
 
 /* The middle of the bar, kept for what the learner should see at a glance on
    any screen: today's stars, the lesson's progress, a short notice. A
-   development build shows its build mark here. The row is 28px tall and
-   clips what does not fit, so nothing put here moves the bar or the screen. */
+   development build shows its build mark under it. The row is 28px tall, so
+   nothing put here moves the bar or the screen. What does not fit is not
+   cut: stars on the move, nine at the 25th lesson, draw over the bar's
+   edges and over the marks beside them, above the actions too. */
 .app-shell__info-bar {
   align-items: center;
   display: flex;
@@ -146,17 +151,21 @@
   height: 28px;
   justify-content: center;
   min-width: 0;
-  overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 /* Today's lessons: gold stars, five of them one purple star, and from five
    purple on their number before one. At most four purple and four gold
    stand in a row, so the row stays narrow on a phone. The bar's line is the
    middle of the word mark's lowercase letters; 3.5px on top lowers the
-   stars onto it, the middle of a star's drawing 0.2px above its box's. */
+   stars onto it, the middle of a star's drawing 0.2px above its box's.
+   The stars come newest first and the row lays them from the right: a star
+   that comes is put first, so it stands right of the stars that go. */
 .app-shell__stars {
   align-items: center;
   display: flex;
+  flex-direction: row-reverse;
   gap: 1px;
   padding-top: 3.5px;
 }
@@ -217,13 +226,133 @@
   line-height: 1;
 }
 
-/* A star lights up once as it mounts: it grows in, glows up and settles. */
+/* The bar draws only today's count; the stars move as they come and go.
+   A star that joins the row lights up and grows from nothing past its size
+   and back, its width with it, so the centred row widens and the stars
+   before it slide left. A purple star that joins grows in gold, the fifth
+   of its five, and turns purple at the height of its glow, while the stars
+   that go — the four gold before it, and the purple stars a number takes
+   over — gather into it: Replicant keeps a star that goes, `--leaving`,
+   until its transition ends. The number fades in as they gather.
+   The stars the app opens on come with the row, and only light up: for the
+   row's first 1.5s every motion but the light-up starts as far back as it
+   is long, over before it is seen. Then the row's `--app-shell-stars-open`
+   turns `done`, and the motions start on time; the stars already there
+   have long finished, and a motion's timing changed by name does not start
+   it again. A style query reads the row's value; a `var()` of an animated
+   property in `animation` would make it void. Every fill is backward only:
+   a finished motion leaves a star to its own style, which `--leaving` then
+   changes. */
 @media (prefers-reduced-motion: no-preference) {
+  /* `done` is the row's own value; the opening holds `opening` over it
+     with no fill, so once it ends no animation is left on the page. */
+  .app-shell__stars {
+    --app-shell-stars-open: done;
+    animation: app-shell-stars-open 1.5s;
+  }
+
   .app-shell__star {
-    animation: app-shell-star-glow 1.4s ease-out both;
+    animation:
+      app-shell-star-glow 1.4s ease-out backwards,
+      app-shell-star-grow 600ms ease-in-out -600ms backwards;
+  }
+
+  .app-shell__star--purple {
+    animation:
+      app-shell-star-glow 1.4s ease-out backwards,
+      app-shell-star-grow 600ms ease-in-out -600ms backwards,
+      app-shell-star-gold 690ms step-end -690ms;
+  }
+
+  .app-shell__star-number {
+    animation: app-shell-star-number-in 600ms ease-out -1200ms backwards;
+  }
+
+  @container style(--app-shell-stars-open: done) {
+    .app-shell__star {
+      animation-delay: 0s;
+    }
+
+    .app-shell__star-number {
+      animation-delay: 600ms;
+    }
+  }
+
+  /* The gap before a star that goes goes with it. It waits out the growth
+     of the star it gathers into within its own time, not as a delay:
+     Replicant removes it `transition-duration` + 200ms after it starts to
+     go, whatever the delay. */
+  .app-shell__star--leaving {
+    margin-inline-start: -1px;
+    opacity: 0;
+    transform: scale(.35);
+    transition: all 1050ms linear(0, 0 57%, 0.03 68%, 0.18 79%, 0.49 89%, 1);
+    width: 0;
   }
 }
 
+@keyframes app-shell-stars-open {
+  from,
+  to {
+    --app-shell-stars-open: opening;
+  }
+}
+
+/* The gold of `.app-shell__star`, worn by a purple star while it grows in. */
+@keyframes app-shell-star-gold {
+  from,
+  to {
+    --star-lip: 196, 134, 0;
+    --star-body: var(--color-bee);
+    --star-core: 255, 228, 120;
+    --star-sparkle: 255, 212, 70;
+    --star-glow: 240, 176, 0;
+    --star-flare: 255, 200, 40;
+  }
+}
+
+@keyframes app-shell-star-number-in {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Without motion the bar shows the new count at once. */
+@media (prefers-reduced-motion: reduce) {
+  .app-shell__star--leaving {
+    display: none;
+  }
+}
+
+/* The width and the size grow together, slow at first and last, so the stars
+   before it slide left all the way rather than leap at the start; past its
+   size at 70%, then settling. */
+@keyframes app-shell-star-grow {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+    width: 0;
+  }
+
+  70% {
+    opacity: 1;
+    transform: scale(1.1);
+    width: 24px;
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    width: 24px;
+  }
+}
+
+/* The size and the opacity settle by 40%, before a growth ends: a growing
+   star, given back to its light-up then, keeps its size. */
 @keyframes app-shell-star-glow {
   0% {
     filter: drop-shadow(0 0 0 rgba(var(--star-glow), 0));
@@ -231,14 +360,17 @@
     transform: scale(0.6);
   }
 
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
   50% {
     filter: drop-shadow(0 0 6px rgba(var(--star-flare), 0.9));
-    opacity: 1;
   }
 
   100% {
     filter: drop-shadow(0 0 2px rgba(var(--star-glow), 0.55));
-    transform: scale(1);
   }
 }
 

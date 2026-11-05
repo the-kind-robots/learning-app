@@ -87,33 +87,41 @@
 
 
 (defn- star
-  "A star of today's lessons: gold for a lesson, purple for five, drawn alike and of one size. Each lights up once
-   as it mounts."
-  [purple? key]
-  ;; zprint: as written
-  [:svg
-   {:class         (if purple? "app-shell__star app-shell__star--purple" "app-shell__star")
-    :replicant/key key
-    :aria-hidden   "true"
-    :viewBox       "-2 -2 28 29"}
-   [:path.app-shell__star-lip {:d star-path :transform "translate(0 1.8)"}]
-   [:path.app-shell__star-body {:d star-path}]
-   [:path.app-shell__star-core {:d "M12 6.8l1.4 2.9 3.2.4-2.3 2.3.5 3.2L12 14l-2.8 1.6.5-3.2-2.3-2.3 3.2-.4z"}]
-   [:path.app-shell__star-sparkle {:d "M21.5 0.5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"}]])
+  "A star of today's lessons: gold for a lesson, purple for five, drawn alike and of one size. A star that comes
+   grows in, one that goes gathers away before it is removed (`app-shell.css`)."
+  [{:keys [color id]}]
+  (let [classes ["app-shell__star"
+                 (case color
+                   :star/purple "app-shell__star--purple"
+                   :star/gold   nil)]]
+    [:svg
+     {:aria-hidden   "true"
+      :class         classes
+      :replicant/key id
+      :replicant/unmounting {:class (conj classes "app-shell__star--leaving")}
+      :viewBox       "-2 -2 28 29"}
+     [:path.app-shell__star-lip
+      {:d star-path
+       :transform "translate(0 1.8)"}]
+     [:path.app-shell__star-body {:d star-path}]
+     [:path.app-shell__star-core {:d "M12 6.8l1.4 2.9 3.2.4-2.3 2.3.5 3.2L12 14l-2.8 1.6.5-3.2-2.3-2.3 3.2-.4z"}]
+     [:path.app-shell__star-sparkle {:d "M21.5 0.5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"}]]))
 
 
 (defn- stars-row
-  "Today's lessons as stars, from `application.presenter/stars`."
-  [{:keys [gold lessons purple purple-number]}]
+  "Today's lessons as stars, from `application.presenter/stars`: the row stands from the moment memory is loaded,
+   empty with no lesson, so a star passed later joins it and grows in."
+  [{:keys [lessons purple-number stars]}]
   [:div.app-shell__stars
-   {:role       "img"
-    :aria-label [:i18n :shell/lessons-today {:count lessons}]}
+   {:aria-label (when lessons
+                  [:i18n :shell/lessons-today {:count lessons}])
+    :role       (when lessons
+                  "img")}
+   (map star stars)
    (when purple-number
-     [:span.app-shell__star-number purple-number])
-   (for [index (range purple)]
-     (star true [:purple purple-number index]))
-   (for [index (range gold)]
-     (star false [:gold index]))])
+     [:span.app-shell__star-number
+      {:replicant/key :purple-number}
+      purple-number])])
 
 
 (defn shell

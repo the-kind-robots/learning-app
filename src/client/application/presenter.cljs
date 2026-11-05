@@ -11,22 +11,33 @@
 
 
 (defn stars
-  "Today's lessons as stars, nil for none: `:lessons` passed, `:gold` stars, and the purple stars five gold make,
-   as `:purple` stars, or from five on as one star after `:purple-number`."
+  "Today's lessons as stars: `:lessons` passed, nil for none; `:purple-number` from five purple stars on; and
+   `:stars`, newest first, gold then purple, each with its `:color` and an `:id` that stays while the star stays.
+   Five gold stars make one purple, the purple of their five; from five purple on, the number and the newest
+   purple stand for them. Only the count is drawn: a star that comes and the stars that go move by the view's
+   CSS, which lays the row from the right, so a star that comes stands after those that go."
   [lessons]
-  (when (pos? lessons)
-    (let [purple (quot lessons 5)]
-      (merge {:gold    (rem lessons 5)
-              :lessons lessons}
-             (if (>= purple 5)
-               {:purple 1 :purple-number purple}
-               {:purple purple})))))
+  (let [purple (quot lessons 5)
+        number (when (>= purple 5) purple)]
+    {:lessons       (when (pos? lessons) lessons)
+     :purple-number number
+     :stars         (reverse
+                     (concat
+                      (for [five (if number
+                                   [(dec purple)]
+                                   (range purple))]
+                        {:color :star/purple
+                         :id    [:purple five]})
+                      (for [index (range (rem lessons 5))]
+                        {:color :star/gold
+                         :id    [:gold purple index]})))}))
 
 
 (defn shell-props
   "What the shell shows: `:corner` (themes icon on home, close mark elsewhere, ADR-0015), `:page` (nil until
    memory is loaded), `:read-error?` (the learner's data could not be read), `:build-mark` (the bundle's,
-   empty in a release build), `:stars` (today's lessons, `stars`)."
+   empty in a release build), and `:stars` (today's lessons, `stars`, from the moment memory is loaded, so that a
+   star passed later joins a row already there)."
   [state]
   {:build-mark    build-identity/stamp
    :corner        (case (page state)
