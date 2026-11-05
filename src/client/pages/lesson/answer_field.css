@@ -89,10 +89,16 @@ textarea {
 
 /* A tile's word sits in a span that always has the width of its heaviest
    rendering: a hidden copy, zero high, props it open, so the letters a typed
-   prefix makes heavier do not move the tiles. */
+   prefix makes heavier do not move the tiles. Set from the start: a word
+   broken over two lines reads from one edge, and the 1-3 px the copy adds
+   stay at the end. */
 [part='tile'] > span {
   display: inline-block;
-  text-align: center;
+  max-width: 100%;
+  text-align: start;
+  /* Its baseline is the hidden copy's, at its bottom: on the baseline the
+     word would ride above the tile's middle. */
+  vertical-align: top;
 }
 
 [part='tile'] > span::after {

@@ -108,7 +108,7 @@
        (list
         [:h3.lesson__answer-header
          [:i18n :lesson/your-answer]]
-        [:p.lesson__answer-body
+        [:p.lesson__answer-body.lesson__answer-body--yours
          {:lang "de"}
          user-answer]))
      [:h3.lesson__answer-header
@@ -178,12 +178,16 @@
   [{:keys [kind prompt]} attrs]
   [:div.lesson__challenge
    attrs
-   [:h2.lesson__prompt prompt]
-   [:p.lesson__instruction
-    (case kind
-      :trial/example [:i18n :lesson/translate-sentence]
-      :trial/phrase  [:i18n :lesson/translate-phrase]
-      :trial/word    [:i18n :lesson/translate-word])]])
+   [:div.lesson__task
+    [:p.lesson__instruction
+     (case kind
+       :trial/example [:i18n :lesson/translate-sentence]
+       :trial/phrase  [:i18n :lesson/translate-phrase]
+       :trial/word    [:i18n :lesson/translate-word])]
+    ;; The language picks the hyphenation of a word too long for its line.
+    [:h2.lesson__prompt
+     {:lang "ru"}
+     prompt]]])
 
 
 (defn- past-footer
