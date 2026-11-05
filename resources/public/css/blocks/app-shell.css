@@ -158,7 +158,17 @@
   gap: 1px;
 }
 
+/* Both stars are drawn alike: a dark lip under the body, a lighter core, a
+   sparkle and a soft glow. A gold star takes shades of yellow, a purple one
+   shades of violet and a larger size. */
 .app-shell__star {
+  --star-lip: 196, 134, 0;
+  --star-body: var(--color-bee);
+  --star-core: 255, 228, 120;
+  --star-sparkle: 255, 212, 70;
+  --star-glow: 240, 176, 0;
+  --star-flare: 255, 200, 40;
+  filter: drop-shadow(0 0 2px rgba(var(--star-glow), 0.55));
   flex: none;
   height: 18px;
   stroke-linejoin: round;
@@ -166,41 +176,36 @@
   width: 18px;
 }
 
-.app-shell__star-lip {
-  fill: rgb(227, 162, 0);
-  stroke: rgb(227, 162, 0);
-}
-
-.app-shell__star-body {
-  fill: rgb(var(--color-bee));
-  stroke: rgb(var(--color-bee));
-}
-
 .app-shell__star--purple {
-  filter: drop-shadow(0 0 2px rgba(150, 100, 230, 0.55));
+  --star-lip: 75, 47, 120;
+  --star-body: 125, 79, 196;
+  --star-core: 180, 140, 240;
+  --star-sparkle: 230, 214, 255;
+  --star-glow: 150, 100, 230;
+  --star-flare: 170, 120, 255;
   height: 22px;
   margin-inline-end: 1px;
   width: 22px;
 }
 
-.app-shell__star--purple .app-shell__star-lip {
-  fill: rgb(75, 47, 120);
-  stroke: rgb(75, 47, 120);
+.app-shell__star-lip {
+  fill: rgb(var(--star-lip));
+  stroke: rgb(var(--star-lip));
 }
 
-.app-shell__star--purple .app-shell__star-body {
-  fill: rgb(125, 79, 196);
-  stroke: rgb(125, 79, 196);
+.app-shell__star-body {
+  fill: rgb(var(--star-body));
+  stroke: rgb(var(--star-body));
 }
 
 .app-shell__star-core {
-  fill: rgb(180, 140, 240);
-  stroke: rgb(180, 140, 240);
+  fill: rgb(var(--star-core));
+  stroke: rgb(var(--star-core));
   stroke-width: 1;
 }
 
 .app-shell__star-sparkle {
-  fill: rgb(230, 214, 255);
+  fill: rgb(var(--star-sparkle));
   stroke: none;
 }
 
@@ -211,51 +216,27 @@
   line-height: 1;
 }
 
-/* A star lights up once as it mounts: it fades in from a little smaller and
-   brighter. A purple one glows up and settles. */
+/* A star lights up once as it mounts: it grows in, glows up and settles. */
 @media (prefers-reduced-motion: no-preference) {
   .app-shell__star {
-    animation: app-shell-star-light 0.9s ease-out both;
-  }
-
-  .app-shell__star--purple {
     animation: app-shell-star-glow 1.4s ease-out both;
-  }
-}
-
-@keyframes app-shell-star-light {
-  0% {
-    filter: brightness(1.6);
-    opacity: 0;
-    transform: scale(0.7);
-  }
-
-  60% {
-    opacity: 1;
-    transform: scale(1.04);
-  }
-
-  100% {
-    filter: brightness(1);
-    opacity: 1;
-    transform: scale(1);
   }
 }
 
 @keyframes app-shell-star-glow {
   0% {
-    filter: drop-shadow(0 0 0 rgba(150, 100, 230, 0));
+    filter: drop-shadow(0 0 0 rgba(var(--star-glow), 0));
     opacity: 0;
     transform: scale(0.6);
   }
 
   50% {
-    filter: drop-shadow(0 0 6px rgba(170, 120, 255, 0.9));
+    filter: drop-shadow(0 0 6px rgba(var(--star-flare), 0.9));
     opacity: 1;
   }
 
   100% {
-    filter: drop-shadow(0 0 2px rgba(150, 100, 230, 0.55));
+    filter: drop-shadow(0 0 2px rgba(var(--star-glow), 0.55));
     transform: scale(1);
   }
 }
