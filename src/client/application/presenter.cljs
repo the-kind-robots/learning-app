@@ -49,8 +49,8 @@
         to   (page after)]
     (cond
       (or (nil? from) (nil? to)) nil
-      (= from to) (when-let [within (get-in pages/table [to :transitions :within])]
+      (= from to) (when-let [within (get-in (pages/page to) [:transitions :within])]
                     (within before after))
-      :else (or (get-in pages/table [to :transitions :in])
-                (get-in pages/table [from :transitions :out])
+      :else (or (get-in (pages/page to) [:transitions :in])
+                (get-in (pages/page from) [:transitions :out])
                 (if (= pages/home to) :transition/back :transition/deeper)))))

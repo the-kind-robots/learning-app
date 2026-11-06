@@ -1,5 +1,6 @@
 (ns pages.collections.view
   (:require
+   [application.pages :as pages]
    [application.shell :as shell]
    [pages.collections.presenter :as presenter]))
 
@@ -168,3 +169,12 @@
                         [:effect/save {:collections/editing-id nil}]
                         [:effect/prompt-create-collection [:i18n :collections/new-name]]]}}
         [:i18n :collections/add]]]]]))
+
+
+(defmethod pages/page :page/collections
+  [_]
+  {:hotkeys (constantly {"Escape" [[:action/close-screen]]})
+   :open    :action/open-collections
+   :path    "/collections"
+   :refresh :action/show-collections
+   :view    page})

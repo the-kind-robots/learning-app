@@ -178,7 +178,7 @@
          nil)]]
      (install-guide/render state)
      (sync-view/dialogs sync)
-     (if-let [view (:view (pages/table page))]
+     (if-let [view (:view (pages/page page))]
        (view state)
        (when read-error?
          [:div.app-shell__read-error

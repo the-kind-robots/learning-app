@@ -23,7 +23,7 @@ src/client/
 ├── collection_accents.cljs   # The order and colour of collection tiles, for the themes screen and the word dialog
 ├── application/presenter.cljs# Shell props (sync entry, install prompt, build mark), the screen change between renders
 ├── view_transition.cljs      # Screen changes as view transitions, on a phone only (ADR-0024)
-├── application/pages.cljs    # Every page once: path, open action, refresh, view
+├── application/pages.cljs    # The page multimethod; each page declares its method in its view
 ├── application/view.cljs     # The shell's markup
 ├── application/sync/         # The sync icon and menu: QR dialog, link, the form that asks to turn the sync on
 ├── application/settings/     # The settings the word mark opens: the learner's language
@@ -75,7 +75,7 @@ src/client/
 ├── use_cases/                # What the user can do: domain, and ports where a scenario needs them
 │   ├── collections.cljs  examples.cljs  lesson.cljs  settings.cljs  sync.cljs  vocabulary.cljs
 │
-├── pages/                    # Screens: actions, effects, presenter, view
+├── pages/                    # Screens: actions, effects, presenter, view (the view also declares the page: path, open, refresh, hotkeys)
 │   ├── home/                 # Search, autocomplete, add word
 │   ├── lesson/               # Lesson card, scoring, token popover, tiles element
 │   ├── words/                # Vocabulary list

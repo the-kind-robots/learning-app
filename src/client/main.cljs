@@ -13,13 +13,16 @@
    [pages.collections.view]
    [pages.home.actions]
    [pages.home.effects]
+   [pages.home.view]
    [pages.lesson.actions]
    [pages.lesson.answer-field]
    [pages.lesson.effects]
    [pages.lesson.page-panel]
    [pages.lesson.page-strip]
+   [pages.lesson.view]
    [pages.words.actions]
    [pages.words.effects]
+   [pages.words.view]
    [ports.account :as account]
    [ports.dictionary :as dictionary]
    [ports.examples-generator :as examples-generator]
@@ -42,7 +45,7 @@
         app-state          (atom {})
         world              (world/start!)
         page               (page/start!)
-        navigation         (navigation/start! {:home pages/home :routes pages/routes})
+        navigation         (navigation/start! {:home pages/home :routes (pages/routes)})
         ;; The service worker registers before render; the registration arrives later, as a promise.
         install            (install/start!)
         examples-generator (examples-generator/start!)
@@ -78,7 +81,7 @@
     ;; which `ports.account/check-incoming-auth!` has already handled.
     (navigation/follow! navigation
                         (fn [entered]
-                          (let [current-page (pages/table entered)]
+                          (let [current-page (pages/page entered)]
                             ;; The keyboard's mode belongs to the screen, so it is set once, as the screen is entered.
                             (page/overlay-keyboard! page (:keyboard-overlays? current-page))
                             (dispatch {}

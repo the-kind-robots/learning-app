@@ -129,11 +129,17 @@
      :word-taken?    word-taken?}))
 
 
+(defn vocabulary?
+  "Whether the vocabulary has words: only then the list shows its title, search and lesson button. An empty filter
+   keeps them."
+  [state]
+  (boolean (some-> (:words/total state) pos?)))
+
+
 (defn page-props
   "What the word list renders: the rows, the placeholder that replaces them, and whether the page chrome
-   applies. An empty vocabulary drops the chrome, an empty filter keeps it; while `total` is nil the list
-   shows nothing."
-  [{:words/keys [editing in-collection? more? rows search total]}]
+   applies; while `total` is nil the list shows nothing."
+  [{:words/keys [editing in-collection? more? rows search total] :as state}]
   {:editing        (some-> editing editing-props)
    :in-collection? (boolean in-collection?)
    :empty-state    (empty-state rows total)
@@ -141,4 +147,4 @@
    :known?         (some? total)
    :more?          more?
    :search         search
-   :vocabulary?    (boolean (some-> total pos?))})
+   :vocabulary?    (vocabulary? state)})
