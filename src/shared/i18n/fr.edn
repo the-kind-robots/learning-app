@@ -67,6 +67,11 @@
 
  :phrase/add                  "Ajouter une expression"
 
+ :retention/due               "à réviser"
+ :retention/excellent         "excellent"
+ :retention/good              "bien"
+ :retention/new               "nouveaux"
+
  :settings/language           "Langue"
  :settings/open               "Sprecha, paramètres"
  :settings/title              "Paramètres"
@@ -79,6 +84,11 @@
  :shell/read-error            "Impossible de lire les données de l’appareil. Rechargez la page."
  :shell/reload-build          "Recharger la version"
  :shell/word-mark             "Sprecha"
+
+ :stats/lessons               [:fn/str "Leçons terminées : {{:count}}"]
+ :stats/share                 "PARTAGER"
+ :stats/title                 "Statistiques"
+ :stats/words                 [:fn/str "Mots : {{:count}}"]
 
  :sync/cancel                 "Annuler"
  :sync/connect-device         "Connecter un appareil"

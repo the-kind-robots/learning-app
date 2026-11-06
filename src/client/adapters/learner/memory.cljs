@@ -336,6 +336,12 @@
        count))
 
 
+(defn lesson-times
+  "When each lesson was passed, ISO times in UTC, in no order."
+  [memory]
+  (vals (:lessons-passed memory)))
+
+
 (defn lessons-passed-since
   "How many lessons were passed at `since-iso`, an ISO time in UTC, or later."
   [memory since-iso]

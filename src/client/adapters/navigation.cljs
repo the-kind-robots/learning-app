@@ -19,14 +19,16 @@
 
 (defn move
   "How the app gets from where it is to `to`: nothing from home to home, a
-   push from home to a screen, a replace from a screen to a screen, and a step
-   back from a screen onto the home entry beneath it."
-  [{:keys [at-home? home to]}]
+   push from home to a screen, a push to a page that opens over screens
+   (ADR-0026), a replace from a screen to a screen, and a step back from a
+   screen onto the home entry beneath it."
+  [{:keys [at-home? home over-screens? to]}]
   (cond
     (and at-home? (= home to)) nil
-    at-home?    :push
-    (= home to) :back
-    :else       :replace))
+    at-home?      :push
+    over-screens? :push
+    (= home to)   :back
+    :else         :replace))
 
 
 (defn follow!
@@ -74,7 +76,10 @@
   [{:keys [home state] :as navigator} page]
   (if (:stepping-back @state)
     (swap! state update :stepping-back conj page)
-    (case (move {:at-home? (= (rfe/href home) (.. js/window -location -pathname)) :home home :to page})
+    (case (move {:at-home? (= (rfe/href home) (.. js/window -location -pathname))
+                 :home     home
+                 :over-screens? (-> (:router @state) (rf/match-by-name page) :data :over-screens?)
+                 :to       page})
       nil      nil
       :push    (rfe/push-state page)
       :replace (rfe/replace-state page)
@@ -88,3 +93,10 @@
                                                    (run! #(navigate! navigator %) queued)))
                                                #js {:once true})
                    (.back js/window.history)))))
+
+
+(defn back!
+  "Steps back to the entry beneath: the screen a page opened over screens was opened from (ADR-0026). The router
+   enters it with the `popstate`."
+  []
+  (.back js/window.history))

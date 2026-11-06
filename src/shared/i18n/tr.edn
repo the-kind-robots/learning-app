@@ -67,6 +67,11 @@
 
  :phrase/add                  "İfade ekle"
 
+ :retention/due               "tekrar zamanı"
+ :retention/excellent         "mükemmel"
+ :retention/good              "iyi"
+ :retention/new               "yeni"
+
  :settings/language           "Dil"
  :settings/open               "Sprecha, ayarlar"
  :settings/title              "Ayarlar"
@@ -79,6 +84,11 @@
  :shell/read-error            "Cihazdaki veriler okunamıyor. Sayfayı yenile."
  :shell/reload-build          "Derlemeyi yeniden yükle"
  :shell/word-mark             "Sprecha"
+
+ :stats/lessons               [:fn/str "Tamamlanan dersler: {{:count}}"]
+ :stats/share                 "PAYLAŞ"
+ :stats/title                 "İstatistikler"
+ :stats/words                 [:fn/str "Kelimeler: {{:count}}"]
 
  :sync/cancel                 "İptal"
  :sync/connect-device         "Cihaz bağla"

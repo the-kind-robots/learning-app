@@ -4,6 +4,7 @@
    [domain.collections :as collections]
    [domain.phrase :as phrase]
    [domain.retention :as retention]
+   [domain.statistics :as statistics]
    [domain.vocabulary :as vocabulary]
    [ports.learner :as learner]
    [ports.world :as world]
@@ -70,6 +71,16 @@
                                       {:memory memory :now-ms now-ms :weights retention/default-weights}))]
                         (assoc (select-keys word [:id :kind :translation :value]) :recall recall)))
                     page)}))
+
+
+(defn word-bins
+  "All the learner's words in ten bins by the percent the word list shows for each at `now-ms`
+   (`domain.statistics/word-bins`)."
+  [learner now-ms]
+  (->> (rows learner {} now-ms)
+       :words
+       (map :recall)
+       statistics/word-bins))
 
 
 (defn spelling-taken?

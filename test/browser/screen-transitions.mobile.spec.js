@@ -113,6 +113,53 @@ test.describe('Переходы между экранами на телефон�
     });
   });
 
+  test('ученик нажимает на звёзды → статистика въезжает справа, главная уходит влево', async ({ page }) => {
+    await test.step('Дано главная с уроком за сегодня', async () => {
+      await openHome(page);
+      await page.evaluate(async () => {
+        await db.bulk_docs(db.use('user-db'), [{ _id: 'lesson-seed-0', type: 'lesson', passed_at: new Date().toISOString() }]);
+      });
+      await page.goto('/home');
+      await expect(page.getByRole('button', { name: 'Статистика' })).toBeVisible();
+      await forgetTransitions(page);
+    });
+
+    await test.step('Когда он нажимает на звёзды', async () => {
+      await page.getByRole('button', { name: 'Статистика' }).click();
+    });
+
+    await test.step('Тогда экран статистики въезжает справа', async () => {
+      await expect(page).toHaveURL(/\/stats$/);
+      await expect.poll(() => transitions(page)).toEqual(DEEPER);
+    });
+  });
+
+  test('ученик закрывает статистику, открытую из списка слов → статистика уезжает вправо, список возвращается слева', async ({ page }) => {
+    await test.step('Дано урок сегодня и статистика, открытая из списка слов', async () => {
+      await openHome(page);
+      await page.evaluate(async () => {
+        await db.bulk_docs(db.use('user-db'), [{ _id: 'lesson-seed-0', type: 'lesson', passed_at: new Date().toISOString() }]);
+      });
+      await page.goto('/home');
+      await page.getByRole('button', { name: 'Список слов' }).click();
+      await expect(page.getByPlaceholder('Поиск')).toBeVisible();
+      await forgetTransitions(page);
+      await page.getByRole('button', { name: 'Статистика' }).click();
+      await expect(page).toHaveURL(/\/stats$/);
+      await expect.poll(() => transitions(page)).toEqual(DEEPER);
+      await forgetTransitions(page);
+    });
+
+    await test.step('Когда он нажимает «Закрыть»', async () => {
+      await page.getByRole('button', { name: 'Закрыть' }).click();
+    });
+
+    await test.step('Тогда статистика уезжает вправо, и он в списке слов', async () => {
+      await expect(page.getByPlaceholder('Поиск')).toBeVisible();
+      await expect.poll(() => transitions(page)).toEqual(BACK);
+    });
+  });
+
   const WAYS_BACK = [
     ['закрывает список слов крестиком', (page) => page.getByRole('button', { name: 'Закрыть' }).click()],
     ['возвращается из списка слов кнопкой «Назад» браузера', (page) => page.goBack()],

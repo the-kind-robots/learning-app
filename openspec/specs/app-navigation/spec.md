@@ -6,7 +6,7 @@ Define how a screen is closed and what the browser's Back does across the app.
 ## Requirements
 
 ### Requirement: Every screen but home closes from the corner
-The words, lesson and themes screens SHALL each carry one close control (✕), labelled «Закрыть», in the top-right corner of the shell bar — the control the themes screen carries. The home screen SHALL carry no close control. Closing a screen SHALL return home, the same way for every screen; what leaving a screen does to that screen's own work belongs to the screen. No screen SHALL carry a second control of its own that leaves it for home.
+The words, lesson, themes and statistics screens SHALL each carry one close control (✕), labelled «Закрыть», in the top-right corner of the shell bar — the control the themes screen carries. The home screen SHALL carry no close control. Closing a screen SHALL return home, the same way for every screen but the statistics, which SHALL return to the screen they were opened from; what leaving a screen does to that screen's own work belongs to the screen. No screen SHALL carry a second control of its own that leaves it for home.
 
 #### Scenario: A close control on each screen but home
 - **WHEN** the words, lesson or themes screen is on display
@@ -40,7 +40,7 @@ The words screen SHALL show neither a back button nor a visible heading; the row
 - **AND** «Начать урок» stays at the bottom of the screen, behind the keyboard
 
 ### Requirement: Home has no in-app screen behind it
-The browser history SHALL hold the home screen and at most one other app screen above it. A screen opened from home SHALL add one entry; a screen opened from another screen SHALL take that screen's entry; reaching home by any in-app way — closing a screen, finishing a lesson, choosing a collection — SHALL return to the home entry beneath. A screen the app is opened on directly SHALL get a home entry beneath it. Back SHALL therefore take a screen to home, and Back on home SHALL leave the app rather than show another app screen. The word mark opens the settings (interface-language, Requirement: The learner picks the interface language) and changes no screen.
+The browser history SHALL hold the home screen and at most one other app screen above it, and the statistics over that screen when they were opened from it (ADR-0026). A screen opened from home SHALL add one entry; a screen opened from another screen SHALL take that screen's entry, but the statistics SHALL add one entry over the screen they are opened from, and leaving them by ✕, `Escape` or Back SHALL return to it; reaching home by any in-app way — closing a screen, finishing a lesson, choosing a collection — SHALL return to the home entry beneath. A screen the app is opened on directly SHALL get a home entry beneath it. Back SHALL therefore take a screen to home, and Back on home SHALL leave the app rather than show another app screen. The word mark opens the settings (interface-language, Requirement: The learner picks the interface language) and changes no screen.
 
 #### Scenario: Back from a screen
 - **WHEN** the user opens the words screen from home and presses the browser's Back
@@ -57,6 +57,15 @@ The browser history SHALL hold the home screen and at most one other app screen 
 #### Scenario: Opened directly on a screen
 - **WHEN** the app is opened at `/words` and the user presses the browser's Back
 - **THEN** the home screen is on display
+
+#### Scenario: Back from the statistics opened from a screen
+- **WHEN** the user opens the words screen from home, opens the statistics from it, and presses the browser's Back
+- **THEN** the words screen is on display
+- **AND** a second Back shows the home screen
+
+#### Scenario: Closing the statistics opened from a screen
+- **WHEN** the user opens the collections from home, opens the statistics from them, and taps «Закрыть»
+- **THEN** the collections screen is on display
 
 ### Requirement: A double click acts once
 The second and later clicks of a series of clicks — a double click, a quick second tap on a phone — SHALL do nothing: a series is one activation of the control it started on. A click made from the keyboard is not part of a series.

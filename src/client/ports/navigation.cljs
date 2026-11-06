@@ -8,6 +8,9 @@
   (navigate
     [n page]
     "Moves to `page`. A step back enters home first, with the `on-enter` given to `follow!`, so home is on screen in the task of the tap.")
+  (back
+    [n]
+    "Steps back to the screen beneath, as the browser's Back does.")
   (follow!
     [n on-enter]
     "Starts the router and calls `on-enter` with the page of every route entered."))
@@ -20,4 +23,5 @@
   (let [navigator (navigation/navigator routing)]
     (reify Navigation
       (navigate [_ page] (navigation/navigate! navigator page))
+      (back [_] (navigation/back!))
       (follow! [_ on-enter] (navigation/follow! navigator on-enter)))))

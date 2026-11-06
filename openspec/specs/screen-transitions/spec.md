@@ -19,6 +19,11 @@ On a phone, a window narrower than 700 px, opening a screen other than the lesso
 - **WHEN** the user taps «Открыть наборы» on home on a phone
 - **THEN** the collections screen enters from the right and home moves left behind it
 
+#### Scenario: Opening the statistics
+
+- **WHEN** the user taps today's stars on home on a phone
+- **THEN** the statistics screen enters from the right and home moves left behind it
+
 ### Requirement: Going back slides the screen out to the right
 
 On a phone, returning to home from a screen other than the lesson SHALL slide that screen out to the right over 200 ms while home comes back from the left. A collection picked on the collections screen SHALL return the same way; home's heading SHALL already show the picked collection, with no motion of its own.

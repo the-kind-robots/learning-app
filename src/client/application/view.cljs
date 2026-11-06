@@ -128,7 +128,7 @@
   "The whole page: the bar across the top, the dialogs, the screen the state
    is on, and the status line."
   [state]
-  (let [{:keys [build-mark corner page read-error? show-install? stars]}
+  (let [{:keys [build-mark corner page read-error? show-install? stars stars-button?]}
         (presenter/shell-props state)
         sync (sync-presenter/props state)]
     (list
@@ -153,8 +153,16 @@
        (sync-view/sync-button sync)]
       ;; The middle of the bar, kept for what the learner should see at a glance: stars, progress, a notice.
       [:div.app-shell__info-bar
+       ;; Outside a lesson a button lies over the stars and opens the statistics. It is their sibling, so the
+       ;; stars stay mounted when it comes and goes, and do not light up again.
        (when stars
-         (stars-row stars))
+         [:div.app-shell__stars-slot
+          (stars-row stars)
+          (when stars-button?
+            [:button.app-shell__stars-button
+             {:aria-label [:i18n :stats/title]
+              :on         {:click [[:effect/navigate :page/stats]]}
+              :type       "button"}])])
        ;; Which bundle the page loaded, and the tap that reloads onto the newest one.
        (when ^boolean goog/DEBUG
          [:button.app-shell__build-mark

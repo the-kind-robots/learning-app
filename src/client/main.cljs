@@ -20,6 +20,9 @@
    [pages.lesson.page-panel]
    [pages.lesson.page-strip]
    [pages.lesson.view]
+   [pages.stats.actions]
+   [pages.stats.effects]
+   [pages.stats.view]
    [pages.words.actions]
    [pages.words.effects]
    [pages.words.view]
@@ -30,6 +33,7 @@
    [ports.learner :as learner]
    [ports.navigation :as navigation]
    [ports.page :as page]
+   [ports.sharing :as sharing]
    [ports.world :as world]
    [replicant.dom :as r]))
 
@@ -62,6 +66,7 @@
                             :learner    learner
                             :navigation navigation
                             :page       page
+                            :sharing    (sharing/start!)
                             :world      world}
         system             {:app-state    app-state
                             :capabilities capabilities}

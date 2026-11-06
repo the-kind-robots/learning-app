@@ -111,6 +111,12 @@
   (memory/matching-words (memory learner) coll query))
 
 
+(defn lesson-times
+  "When the learner passed each lesson, ISO times in UTC, in no order."
+  [learner]
+  (memory/lesson-times (memory learner)))
+
+
 (defn lessons-passed-since
   "How many lessons the learner passed at `since-iso`, an ISO time in UTC, or later."
   [learner since-iso]

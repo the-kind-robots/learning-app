@@ -54,6 +54,11 @@
     (navigation/navigate (:navigation capabilities) page)))
 
 
+(nxr/register-effect! :effect/go-back
+  (fn go-back [{:keys [capabilities]} _]
+    (navigation/back (:navigation capabilities))))
+
+
 (nxr/register-effect! :effect/sync
   ;; The result reaches the screen through memory's change feed; nothing is reloaded here.
   (fn sync [{:keys [capabilities]} _ & [reason]]
@@ -230,10 +235,13 @@
     [[:effect/navigate :page/collections]]))
 
 
-;; What leaving does to a screen's work belongs to its route; the lesson ends on its `:stop`.
+;; What leaving does to a screen's work belongs to its route; the lesson ends on its `:stop`. A page opened over
+;; screens closes back to the screen it was opened from (ADR-0026).
 (nxr/register-action! :action/close-screen
-  (fn close-screen [_]
-    [[:action/go-to-home]]))
+  (fn close-screen [state]
+    (if (some-> state :page/current pages/page :over-screens?)
+      [[:effect/go-back]]
+      [[:action/go-to-home]])))
 
 
 ;; An open menu, card or dialog takes the keys: a hotkey prevented its `Escape`, so the screen closed and the menu

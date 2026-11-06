@@ -155,6 +155,28 @@
   z-index: 1;
 }
 
+/* The stars and, outside a lesson, the button that lies over them and opens
+   the statistics: as wide as the stars, 44px tall. */
+.app-shell__stars-slot {
+  display: flex;
+  position: relative;
+}
+
+.app-shell__stars-button {
+  background: none;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  inset: -8px -4px;
+  padding: 0;
+  position: absolute;
+  touch-action: manipulation;
+}
+
+.app-shell__stars-button:focus-visible {
+  outline: 2px solid rgb(var(--color-macaw));
+}
+
 /* Today's lessons: gold stars, five of them one purple star, and from five
    purple on their number before one. At most four purple and four gold
    stand in a row, so the row stays narrow on a phone. The bar's line is the
