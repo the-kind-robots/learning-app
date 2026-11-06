@@ -81,13 +81,10 @@
         [:i18n :stats/share]]]]]))
 
 
-;; Opened over any screen; leaving it goes back to that screen (ADR-0026).
 (defmethod pages/page :page/stats
   [_]
-  {:hotkeys       (constantly {"Escape" [[:action/close-screen]]})
-   :open          :action/show-stats
-   :over-screens? true
-   :path          "/stats"
-   :refresh       :action/show-stats
-   :transitions   {:out :transition/back}
-   :view          page})
+  {:hotkeys (constantly {"Escape" [[:action/close-page]]})
+   :open    :action/show-stats
+   :path    "/stats"
+   :refresh :action/show-stats
+   :view    page})

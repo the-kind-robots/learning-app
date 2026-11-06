@@ -18,7 +18,7 @@
    {:type       "button"
     :aria-label [:i18n :shell/open-collections]
     :title      [:i18n :collections/title]
-    :on         {:click [[:action/go-to-collections]]}}
+    :on         {:click [[:action/open-page :page/collections]]}}
    ;; The box is the drawing, so the bar places the drawing itself.
    ;; zprint: as written
    [:svg.app-shell__corner-icon-svg
@@ -35,7 +35,7 @@
    {:type       "button"
     :aria-label [:i18n :dialog/close]
     :title      [:i18n :dialog/close]
-    :on         {:click [[:action/close-screen]]}}
+    :on         {:click [[:action/close-page]]}}
    ;; The box is the drawing with its round caps, so the bar places the drawing itself.
    [:svg.app-shell__corner-icon-svg
     {:aria-hidden "true"
@@ -161,7 +161,7 @@
           (when stars-button?
             [:button.app-shell__stars-button
              {:aria-label [:i18n :stats/title]
-              :on         {:click [[:effect/navigate :page/stats]]}
+              :on         {:click [[:action/open-page :page/stats]]}
               :type       "button"}])])
        ;; Which bundle the page loaded, and the tap that reloads onto the newest one.
        (when ^boolean goog/DEBUG

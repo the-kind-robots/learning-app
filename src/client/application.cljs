@@ -49,14 +49,14 @@
     (log/warn id data)))
 
 
-(nxr/register-effect! :effect/navigate
-  (fn navigate-effect [{:keys [capabilities]} _ page]
-    (navigation/navigate (:navigation capabilities) page)))
+(nxr/register-effect! :effect/record-windows
+  (fn record-windows [{:keys [capabilities]} _ from to]
+    (navigation/record! (:navigation capabilities) from to)))
 
 
-(nxr/register-effect! :effect/go-back
-  (fn go-back [{:keys [capabilities]} _]
-    (navigation/back (:navigation capabilities))))
+(nxr/register-effect! :effect/overlay-keyboard
+  (fn overlay-keyboard [{:keys [capabilities]} _ overlays?]
+    (page/overlay-keyboard! (:page capabilities) overlays?)))
 
 
 (nxr/register-effect! :effect/sync
@@ -230,18 +230,42 @@
     [[:effect/select-all]]))
 
 
-(nxr/register-action! :action/go-to-collections
-  (fn go-to-collections [_]
-    [[:effect/navigate :page/collections]]))
+(defn- enter-windows
+  "The effects that put the stack `windows` on display and enter its top window; none when it is on display
+   already, as it is when the `popstate` of the app's own step back brings it."
+  [state windows]
+  (when (not= windows (:page/windows state))
+    (let [entered (pages/page (peek windows))]
+      ;; The keyboard's mode belongs to the screen, so it is set as the screen is entered. The windows go before
+      ;; the entry: the screen's change, deeper or back, is read from them.
+      [[:effect/overlay-keyboard (:keyboard-overlays? entered)]
+       [:effect/save {:page/windows windows}]
+       [:effect/enter (:open entered)]
+       [:effect/after-paint [[:effect/sync]]]])))
 
 
-;; What leaving does to a screen's work belongs to its route; the lesson ends on its `:stop`. A page opened over
-;; screens closes back to the screen it was opened from (ADR-0026).
-(nxr/register-action! :action/close-screen
-  (fn close-screen [state]
-    (if (some-> state :page/current pages/page :over-screens?)
-      [[:effect/go-back]]
-      [[:action/go-to-home]])))
+(defn- open-page
+  "The effects that open `page` over the window on display, or take the windows above it off when it is open
+   beneath."
+  [state page]
+  (let [windows (:page/windows state)
+        opened  (conj (vec (take-while #(not= page %) windows)) page)]
+    (into [[:effect/record-windows windows opened]] (enter-windows state opened))))
+
+
+;; The open windows are a stack, home at its bottom (ADR-0026): `:page/windows`, from which the history is
+;; written. A tap opens a page; the start and every entry the browser steps to bring a whole stack.
+(nxr/register-action! :action/open-page open-page)
+
+
+(nxr/register-action! :action/enter-windows enter-windows)
+
+
+;; The window on display comes off and the one beneath shows; on home, nothing.
+(nxr/register-action! :action/close-page
+  (fn close-page [state]
+    (when-let [beneath (peek (pop (:page/windows state)))]
+      (open-page state beneath))))
 
 
 ;; An open menu, card or dialog takes the keys: a hotkey prevented its `Escape`, so the screen closed and the menu

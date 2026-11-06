@@ -170,7 +170,7 @@
           :class       (when empty-vocab? "home__words-button--hidden")
           :aria-hidden (when empty-vocab? "true")
           :tabindex    (when empty-vocab? "-1")
-          :on          {:click [[:action/go-to-words]]}}
+          :on          {:click [[:action/open-page :page/words]]}}
          [:i18n :home/words]]]
 
        (add-form form)]]
@@ -181,7 +181,7 @@
        [:i18n :lesson/title]]
       [:div.page-footer__action
        [:button.home__lesson-button.big-button.green-button
-        {:on {:click [[:action/go-to-lesson]]}}
+        {:on {:click [[:action/open-page :page/lesson]]}}
         [:i18n :lesson/start]]]]]))
 
 
@@ -189,10 +189,10 @@
   "The actions of each keystroke on home: the buttons it shows, `Alt+KeyT` the themes, `Alt+Enter` the lesson,
    `Alt+KeyW` the words."
   [state]
-  (merge {"Alt+KeyT" [[:action/go-to-collections]]}
+  (merge {"Alt+KeyT" [[:action/open-page :page/collections]]}
          (when (presenter/vocabulary? state)
-           {"Alt+Enter" [[:action/go-to-lesson]]
-            "Alt+KeyW"  [[:action/go-to-words]]})))
+           {"Alt+Enter" [[:action/open-page :page/lesson]]
+            "Alt+KeyW"  [[:action/open-page :page/words]]})))
 
 
 ;; The keyboard covers the lesson button fixed at the bottom.

@@ -59,10 +59,10 @@ The client runtime MUST start dependencies in declared order and stop them in re
 - **THEN** its start function receives a map containing `{:db <started-sqlite-value>}`
 - **AND** the adapter start function does not hard-code the global `:db/sqlite` key
 
-#### Scenario: Router starts after runtime dependencies
-- **WHEN** the frontend router starts
+#### Scenario: The history is followed after runtime dependencies
+- **WHEN** the app starts following the browser history
 - **THEN** app store, migrated PouchDB handle, dictionary port handle, app capabilities, Nexus dispatch, and rendering are already initialized
-- **AND** route controller effects can read capabilities safely during the first page transition
+- **AND** the entry of the first window can read capabilities safely
 
 #### Scenario: Startup failure cleans up partial system
 - **WHEN** a component fails during startup after other components already started

@@ -6,7 +6,7 @@ Define how a screen is closed and what the browser's Back does across the app.
 ## Requirements
 
 ### Requirement: Every screen but home closes from the corner
-The words, lesson, themes and statistics screens SHALL each carry one close control (✕), labelled «Закрыть», in the top-right corner of the shell bar — the control the themes screen carries. The home screen SHALL carry no close control. Closing a screen SHALL return home, the same way for every screen but the statistics, which SHALL return to the screen they were opened from; what leaving a screen does to that screen's own work belongs to the screen. No screen SHALL carry a second control of its own that leaves it for home.
+The words, lesson, themes and statistics screens SHALL each carry one close control (✕), labelled «Закрыть», in the top-right corner of the shell bar — the control the themes screen carries. The home screen SHALL carry no close control. Closing a screen SHALL take it off the stack of open windows and show the window beneath it (Requirement: The open windows are a stack); what leaving a screen does to that screen's own work belongs to the screen. No screen SHALL carry a second control of its own that leaves it for home.
 
 #### Scenario: A close control on each screen but home
 - **WHEN** the words, lesson or themes screen is on display
@@ -14,12 +14,17 @@ The words, lesson, themes and statistics screens SHALL each carry one close cont
 - **AND** on the home screen there is none
 
 #### Scenario: Closing the words screen
-- **WHEN** the user taps «Закрыть» on the words screen
+- **WHEN** the user taps «Закрыть» on the words screen opened from home
 - **THEN** the home screen is on display
 
 #### Scenario: Closing an active lesson
-- **WHEN** the user taps «Закрыть» during a lesson
+- **WHEN** the user taps «Закрыть» during a lesson started from home
 - **THEN** the home screen is on display
+
+#### Scenario: Closing a lesson started from the words screen
+- **WHEN** the user starts a lesson from the words screen and taps «Закрыть» in it
+- **THEN** the words screen is on display
+- **AND** «Закрыть» on it shows the home screen
 
 ### Requirement: The words screen shows no heading and no back button
 The words screen SHALL show neither a back button nor a visible heading; the rows start under the shell bar with a gap. With the keyboard closed, its search field SHALL sit at the foot of the screen, directly above the lesson button and as wide as it. Where the browser lets the keyboard overlay the page, the open keyboard SHALL cover the lesson button, which stays at the bottom of the screen, and the search field SHALL sit directly above the keyboard. A browser that cannot overlay the keyboard MAY carry the search field and the lesson button above it together. The screen SHALL keep the level-one heading «Мои слова» for assistive technology, visually hidden.
@@ -38,34 +43,6 @@ The words screen SHALL show neither a back button nor a visible heading; the row
 - **WHEN** the user focuses the search field on a phone whose browser overlays the keyboard, and the keyboard opens
 - **THEN** the search field stays on screen directly above the keyboard
 - **AND** «Начать урок» stays at the bottom of the screen, behind the keyboard
-
-### Requirement: Home has no in-app screen behind it
-The browser history SHALL hold the home screen and at most one other app screen above it, and the statistics over that screen when they were opened from it (ADR-0026). A screen opened from home SHALL add one entry; a screen opened from another screen SHALL take that screen's entry, but the statistics SHALL add one entry over the screen they are opened from, and leaving them by ✕, `Escape` or Back SHALL return to it; reaching home by any in-app way — closing a screen, finishing a lesson, choosing a collection — SHALL return to the home entry beneath. A screen the app is opened on directly SHALL get a home entry beneath it. Back SHALL therefore take a screen to home, and Back on home SHALL leave the app rather than show another app screen. The word mark opens the settings (interface-language, Requirement: The learner picks the interface language) and changes no screen.
-
-#### Scenario: Back from a screen
-- **WHEN** the user opens the words screen from home and presses the browser's Back
-- **THEN** the home screen is on display
-
-#### Scenario: Back after closing a screen
-- **WHEN** the user opens the words screen from home, closes it, and presses the browser's Back on home
-- **THEN** the words screen is not shown and the app leaves home for the page before it
-
-#### Scenario: A screen opened from another screen
-- **WHEN** the user opens the words screen from home, starts a lesson from it, and presses the browser's Back
-- **THEN** the home screen is on display
-
-#### Scenario: Opened directly on a screen
-- **WHEN** the app is opened at `/words` and the user presses the browser's Back
-- **THEN** the home screen is on display
-
-#### Scenario: Back from the statistics opened from a screen
-- **WHEN** the user opens the words screen from home, opens the statistics from it, and presses the browser's Back
-- **THEN** the words screen is on display
-- **AND** a second Back shows the home screen
-
-#### Scenario: Closing the statistics opened from a screen
-- **WHEN** the user opens the collections from home, opens the statistics from them, and taps «Закрыть»
-- **THEN** the collections screen is on display
 
 ### Requirement: A double click acts once
 The second and later clicks of a series of clicks — a double click, a quick second tap on a phone — SHALL do nothing: a series is one activation of the control it started on. A click made from the keyboard is not part of a series.
@@ -213,3 +190,32 @@ The big button at the bottom of a screen — «НАЧАТЬ УРОК» on home a
 #### Scenario: The same on a phone
 - **WHEN** a learner on a phone does the same
 - **THEN** the five buttons have the same size and position
+
+### Requirement: The open windows are a stack
+The browser history SHALL hold the open windows as a stack with the home screen at its bottom (ADR-0026). Opening a screen SHALL lay it over the window on display, unless it is open already beneath: then the windows above it SHALL come off, so no screen is open twice. Closing a screen — ✕, `Escape`, «ЗАКОНЧИТЬ» at the end of a lesson — and the browser's Back SHALL take the window on display off and show the one beneath, and Back on home SHALL leave the app. Going home by an in-app way — choosing a collection, the word list's way to add a word — SHALL take every window above home off. A screen the app is opened on directly SHALL have home beneath it. A reload SHALL keep the stack. The word mark opens the settings (interface-language, Requirement: The learner picks the interface language) and changes no screen.
+
+#### Scenario: Back from a screen
+- **WHEN** the user opens the words screen from home and presses the browser's Back
+- **THEN** the home screen is on display
+
+#### Scenario: Back after closing a screen
+- **WHEN** the user opens the words screen from home, closes it, and presses the browser's Back on home
+- **THEN** the words screen is not shown and the app leaves home for the page before it
+
+#### Scenario: A screen opened from another screen
+- **WHEN** the user opens the words screen from home, starts a lesson from it, and presses the browser's Back
+- **THEN** the words screen is on display
+- **AND** a second Back shows the home screen
+
+#### Scenario: Opened directly on a screen
+- **WHEN** the app is opened at `/words` and the user presses the browser's Back
+- **THEN** the home screen is on display
+
+#### Scenario: Back from the statistics opened from a screen
+- **WHEN** the user opens the words screen from home, opens the statistics from it, and presses the browser's Back
+- **THEN** the words screen is on display
+- **AND** a second Back shows the home screen
+
+#### Scenario: Closing the statistics opened from a screen
+- **WHEN** the user opens the collections from home, opens the statistics from them, and taps «Закрыть»
+- **THEN** the collections screen is on display

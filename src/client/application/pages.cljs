@@ -11,10 +11,8 @@
    resizes it).
    `:transitions` is how the screen moves on a phone (ADR-0024): `:in` coming on, `:out` going off, `:within` a
    function of the states before and after a render that stays on it, giving the transition or nil. Absent, the
-   screen slides deeper and back.
-   `:over-screens?`: the page opens over the screen it is opened from, and closing it goes back to that screen
-   (ADR-0026); any other screen replaces the one it is opened from and closes to home (ADR-0015).
-   Nil before a page is entered."
+   screen slides deeper as it opens over another and back as it is taken off (ADR-0026). Nil before a page is
+   entered."
   identity)
 
 
@@ -24,16 +22,15 @@
 
 
 (def home
-  "The page the history rests on (ADR-0015): Back from any other page lands on it."
+  "The page at the bottom of the stack of windows (ADR-0026): every other opens over it."
   :page/home)
 
 
-(defn routes
-  "The paths and the page names, and whether a page opens over the screen it is opened from, as data for the
-   navigation port; after the pages have declared themselves."
+(defn paths
+  "The path of each page, as data for the navigation port; after the pages have declared themselves."
   []
   (->> (dissoc (methods page) :default)
        keys
-       (mapv (fn [page-name]
-               (let [{:keys [over-screens? path]} (page page-name)]
-                 [path {:name page-name :over-screens? (boolean over-screens?)}])))))
+       (map (fn [page-name]
+              [page-name (:path (page page-name))]))
+       (into {})))

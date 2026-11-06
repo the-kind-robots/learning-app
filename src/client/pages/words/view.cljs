@@ -235,7 +235,7 @@
       :empty/no-matches [:i18n :words/no-matches-hint])]
    (case kind
      :empty/first-run  [:button.vocabulary__empty-state-cta
-                        {:on {:click [[:action/go-to-home]]}}
+                        {:on {:click [[:action/open-page :page/home]]}}
                         [:i18n :word/add]]
      :empty/no-matches nil)])
 
@@ -292,7 +292,7 @@
         [:footer.vocabulary__footer.page-footer
          [:div.page-footer__action
           [:button.vocabulary__start.big-button.green-button
-           {:on {:click [[:action/go-to-lesson]]}}
+           {:on {:click [[:action/open-page :page/lesson]]}}
            [:i18n :lesson/start]]]]))]))
 
 
@@ -300,9 +300,9 @@
   "The actions of each keystroke on the words list: `Escape` leaves it, `Alt+Enter` starts the lesson its button
    shows."
   [state]
-  (merge {"Escape" [[:action/close-screen]]}
+  (merge {"Escape" [[:action/close-page]]}
          (when (presenter/vocabulary? state)
-           {"Alt+Enter" [[:action/go-to-lesson]]})))
+           {"Alt+Enter" [[:action/open-page :page/lesson]]})))
 
 
 ;; The search bar closes the column on the keyboard's inset.

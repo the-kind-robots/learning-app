@@ -7,11 +7,6 @@
    [use-cases.vocabulary :as vocabulary]))
 
 
-(nxr/register-action! :action/go-to-lesson
-  (fn go-to-lesson [_]
-    [[:effect/navigate :page/lesson]]))
-
-
 (nxr/register-effect! :effect/check-answer
   ;; The answer is graded and shown at once, an example's word hints with it; a word's review and the lesson
   ;; passed are written after.

@@ -84,7 +84,8 @@ test.describe('Переходы между экранами', () => {
         ['темы → главная', CLOSE, HOME_DATA],
         ['главная → слова', '#home-words-button', WORD_ROW],
         ['слова → урок', '.vocabulary__start', FIRST_TRIAL],
-        ['урок → главная', CLOSE, HOME_DATA],
+        ['урок → слова', CLOSE, WORD_ROW],
+        ['слова → главная', CLOSE, HOME_DATA],
       ];
       for (const [name, click, data] of transitions) {
         // Then: the target's data is in the page by the first frame.

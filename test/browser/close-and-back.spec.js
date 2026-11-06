@@ -1,8 +1,9 @@
 const { test, expect, docsOfType } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
 
-// Every screen but home closes from the corner, and home has no app screen
-// behind it (#411, ADR-0015).
+// Every screen but home closes from the corner, and the open windows are a
+// stack with home at its bottom: closing one shows the one beneath (#411,
+// ADR-0015, #789, ADR-0026).
 
 const close = (page) => page.getByRole('button', { name: 'Закрыть' });
 const homeHeading = (page) => page.getByRole('heading', { name: 'Главная' });
@@ -68,7 +69,7 @@ test.describe('Закрытие экранов и кнопка «Назад»', 
     }
   });
 
-  test('пользователь закрывает экран или жмёт «Назад» → под любым экраном только главная, а за ней страница до приложения', async ({ page }) => {
+  test('пользователь закрывает окно или жмёт «Назад» → под ним окно, из которого его открыли, на дне главная, а за ней страница до приложения', async ({ page }) => {
     await test.step('Дано главная, открытая после другой страницы, и слово «Haus»', async () => {
       await openAppAfterAnotherPage(page);
       await addWord(page, 'Haus', 'дом');
@@ -107,8 +108,39 @@ test.describe('Закрытие экранов и кнопка «Назад»', 
       await expect(page.getByRole('progressbar', { name: 'Прогресс урока' })).toBeVisible();
     });
 
-    await test.step('Тогда урок занял место слов: «Назад» ведёт на главную', async () => {
+    await test.step('Тогда урок лёг поверх слов: «Назад» ведёт к словам, ещё один «Назад» — на главную', async () => {
       await page.goBack();
+      await expect(page).toHaveURL(/\/words$/);
+      await expect(page.getByRole('listitem').filter({ hasText: 'Haus' })).toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(/\/home$/);
+      await expect(homeHeading(page)).toBeVisible();
+    });
+  });
+
+  test('ученик начинает урок из списка слов и закрывает его ✕ → список слов, а его ✕ — главная', async ({ page }) => {
+    await test.step('Дано слово «Haus» и урок, начатый из списка слов', async () => {
+      await page.goto('/home');
+      await addWord(page, 'Haus', 'дом');
+      await openWords(page);
+      await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
+      await expect(page.getByRole('progressbar', { name: 'Прогресс урока' })).toBeVisible();
+    });
+
+    await test.step('Когда он закрывает урок ✕', async () => {
+      await close(page).click();
+    });
+
+    await test.step('Тогда он в списке слов', async () => {
+      await expect(page).toHaveURL(/\/words$/);
+      await expect(page.getByRole('listitem').filter({ hasText: 'Haus' })).toBeVisible();
+    });
+
+    await test.step('Когда он закрывает и список ✕', async () => {
+      await close(page).click();
+    });
+
+    await test.step('Тогда он на главной', async () => {
       await expect(page).toHaveURL(/\/home$/);
       await expect(homeHeading(page)).toBeVisible();
     });
