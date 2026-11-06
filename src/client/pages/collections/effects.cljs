@@ -27,14 +27,14 @@
 
 
 (def max-scroll-px
-  "A touch that scrolled the page more than this was a scroll."
+  "A touch under which the card moved on the screen more than this was a scroll."
   2)
 
 
 (defn recoverable?
-  "True when a cancelled touch travelled at most `max-move-px` and the page
-   scrolled at most `max-scroll-px` between pointerdown and the lift. A
-   gesture with no move seen has travelled 0."
+  "True when a cancelled touch travelled at most `max-move-px` and its card
+   moved at most `max-scroll-px` on the screen between pointerdown and the
+   lift. A gesture with no move seen has travelled 0."
   [{:keys [moved-px scroll-delta]}]
   (and (<= (or moved-px 0) max-move-px)
        (<= (js/Math.abs (or scroll-delta 0)) max-scroll-px)))
@@ -43,15 +43,10 @@
 (defn on-lift
   "The gesture, when the finger of a cancelled touch lifts, that counts as
    its tap, `:fired?` set — or nil when it does not: the gesture already
-   fired, the finger moved, or the page scrolled."
+   fired, the finger moved, or the list scrolled."
   [gesture]
   (when (and (not (:fired? gesture)) (recoverable? gesture))
     (assoc gesture :fired? true)))
-
-
-(defn- scroll-top
-  []
-  (or (some-> js/document .-scrollingElement .-scrollTop) 0))
 
 
 (defn- swallow-next-click!
@@ -79,9 +74,12 @@
    A fired gesture swallows the click that may follow."
   [{:keys [dispatch dispatch-data]} card-id tap-actions on-long-press]
   (let [event     (:replicant/dom-event dispatch-data)
+        ;; Whatever scrolls the list, a scroll moves the card on the screen.
+        ^js card  (:replicant/node dispatch-data)
+        card-top  #(.-top (.getBoundingClientRect card))
         start-x   (.-clientX event)
         start-y   (.-clientY event)
-        start-st  (scroll-top)
+        start-top (card-top)
         gesture   (volatile! {:moved-px 0})
         listeners (js/AbortController.)
         timer     (when on-long-press
@@ -119,7 +117,7 @@
               (when (:cancelled? @gesture)
                 (moved-to (touch e))
                 (finish)
-                (when-let [tap (on-lift (assoc @gesture :scroll-delta (- (scroll-top) start-st)))]
+                (when-let [tap (on-lift (assoc @gesture :scroll-delta (- (card-top) start-top)))]
                   (vreset! gesture tap)
                   (when ^boolean goog/DEBUG
                     (instrumentation/trace! "tap-recovered"

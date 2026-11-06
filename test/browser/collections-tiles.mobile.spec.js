@@ -61,6 +61,8 @@ test.describe('Плитки тем на телефоне', () => {
     });
 
     await test.step('Когда он листает вниз', async () => {
+      // The tiles scroll between the bar and the footer: the wheel turns over them.
+      await page.mouse.move(195, 400);
       await page.mouse.wheel(0, 400);
       await expect(page.getByRole('button', { name: 'Thema 00 0', exact: true })).not.toBeInViewport();
     });

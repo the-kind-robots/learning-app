@@ -277,7 +277,7 @@ A tile other than «Всё подряд» SHALL be dragged when the pointer, sti
 - **AND** the tile let go above the first collection stands second
 
 ### Requirement: The footer's button creates a collection
-The system SHALL show along the bottom of the themes screen the footer every screen with a main button has, always on screen, with the main button «ДОБАВИТЬ НАБОР», which opens the name prompt; confirming with a non-blank name creates the collection. No floating button SHALL stand over the tiles. The grid SHALL keep a bottom inset so the footer covers no tile.
+The system SHALL show along the bottom of the themes screen the footer every screen with a main button has, always on screen, with the main button «ДОБАВИТЬ НАБОР», which opens the name prompt; confirming with a non-blank name creates the collection. No floating button SHALL stand over the tiles. The tiles SHALL scroll on their own between the shell bar and the footer, the page itself never scrolling, so the footer covers no tile and no scrollbar narrows the screen or its main button.
 
 #### Scenario: Creating from the footer's button
 - **WHEN** the user taps «ДОБАВИТЬ НАБОР» and confirms a non-blank name
@@ -286,3 +286,8 @@ The system SHALL show along the bottom of the themes screen the footer every scr
 #### Scenario: The last tile clear of the footer
 - **WHEN** the user on a phone scrolls the themes screen to its end
 - **THEN** every tile and «ДОБАВИТЬ НАБОР» are wholly in view
+
+#### Scenario: Only the tiles scroll
+- **WHEN** the user on a computer scrolls more collections than fit on the screen
+- **THEN** the tiles move between the shell bar and the footer while the page stays put
+- **AND** «ДОБАВИТЬ НАБОР» stands where «НАЧАТЬ УРОК» stands on home, as wide

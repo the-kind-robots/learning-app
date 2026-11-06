@@ -43,4 +43,4 @@ async function twoWordsOnHome(page) {
   await addWord(page, 'Hund', 'собака');
 }
 
-module.exports = { mainButtonBoxes, twoWordsOnHome };
+module.exports = { mainButtonBoxes, settledBox, twoWordsOnHome };

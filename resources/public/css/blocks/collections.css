@@ -7,15 +7,27 @@
  * across that break, which is also what keeps `position: relative` on the
  * tile and on its rows meaning what it means anywhere else.
  */
+/*
+ * The screen scrolls between the shell bar and the footer, not as a page: a
+ * page's scrollbar, showing up as the tiles outgrew the window, narrowed the
+ * window and the main button with it. The scrollbar's room is kept on both
+ * edges whether it shows or not, as on the words list. The footer is its
+ * 16px padding, the 50px button and its 16px padding, over the safe area.
+ */
 .switcher {
   --tile-gap: 10px;
 
+  bottom: calc(82px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
-  min-height: 100svh;
-  /* The bottom inset keeps the footer off the last row: its 86px and the air of a tile row. */
-  padding-block: calc(var(--app-bar-height) + 20px) calc(106px + env(safe-area-inset-bottom, 0px));
-  padding-inline: 16px;
+  inset-inline: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 16px;
+  position: fixed;
+  scrollbar-gutter: stable both-edges;
+  top: var(--app-bar-height);
 }
 
 

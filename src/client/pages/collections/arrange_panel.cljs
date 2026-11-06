@@ -10,8 +10,8 @@
 ;; may be dragged, and then the page does not scroll under that touch from its first move.
 ;;
 ;; While a child is carried it has `lifted` and follows the pointer by a transform, its place left empty; the
-;; child it would land by has `caret`, `before` or `after`. A pointer held near the top or bottom of the
-;; window scrolls the page. On release the element fires `arrange` with `detail.order`, the `sort-key`s in the
+;; child it would land by has `caret`, `before` or `after`. A pointer held near the top or bottom of the area
+;; the element scrolls in, its nearest scrolling ancestor, scrolls that area. On release the element fires `arrange` with `detail.order`, the `sort-key`s in the
 ;; new order, and moves nothing itself: the page puts the children in that order, and the element slides
 ;; them from where they stood to where they are then. A drag swallows the click that follows it.
 ;;
@@ -24,12 +24,12 @@
 
 
 (def ^:private edge-px
-  "How near the top or bottom of the window a pointer scrolls the page."
+  "How near the top or bottom of the scrolling area a pointer scrolls it."
   56)
 
 
 (def ^:private edge-scroll-px
-  "How far a frame scrolls the page with the pointer at the very edge."
+  "How far a frame scrolls the area with the pointer at the very edge."
   14)
 
 
@@ -55,9 +55,14 @@
       :else (recur (.-parentNode node)))))
 
 
-(defn- scroll-top
-  []
-  (or (some-> js/document .-scrollingElement .-scrollTop) 0))
+(defn- scroller
+  "The nearest ancestor of `el` that scrolls, or the document's scrolling element."
+  [^js el]
+  (or (->> (iterate (fn [^js node] (.-parentElement node)) (.-parentElement el))
+           (take-while some?)
+           (filter (fn [^js node] (#{"auto" "scroll"} (.-overflowY (js/getComputedStyle node)))))
+           first)
+      (.-scrollingElement js/document)))
 
 
 (defn- swallow-next-click!
@@ -114,7 +119,8 @@
    `:put-back` returns it to its place and fires nothing. The caret stands by the child under the pointer, or
    the nearest one between children."
   [^js el ^js child start-x start-y]
-  (let [start-st    (scroll-top)
+  (let [^js area    (scroller el)
+        start-st    (.-scrollTop area)
         pointer     (volatile! [start-x start-y])
         frame       (volatile! nil)
         children    (array-seq (.-children el))
@@ -133,7 +139,7 @@
         ;; The rects were read at the lift; the pointer is put where it is in the page as it was then.
         place!      (fn []
                       (let [[x window-y] @pointer
-                            y            (+ window-y (- (scroll-top) start-st))
+                            y            (+ window-y (- (.-scrollTop area) start-st))
                             centre-y     (fn [{:keys [top height]}] (+ top (/ height 2)))
                             ;; A centre nearer than the one under the pointer can stand in the next column.
                             nearest      (or (some (fn [{:keys [left top width height] :as other}]
@@ -154,19 +160,21 @@
                           (hide-caret!)
                           (.setAttribute beside "caret" (name side))
                           (vreset! target [beside side]))))
-        ;; Up is negative; nothing away from the edges.
+        ;; Up is negative; nothing away from the edges of the area seen, the scroller's rect within the window.
         edge-scroll (fn []
                       (let [window-y (second @pointer)
-                            bottom   (- js/window.innerHeight edge-px)]
+                            rect     (.getBoundingClientRect area)
+                            top      (+ (max 0 (.-top rect)) edge-px)
+                            bottom   (- (min js/window.innerHeight (.-bottom rect)) edge-px)]
                         (cond
-                          (< window-y edge-px) (- (* edge-scroll-px (min 1 (/ (- edge-px window-y) edge-px))))
-                          (> window-y bottom)  (* edge-scroll-px (min 1 (/ (- window-y bottom) edge-px)))
-                          :else                0)))
+                          (< window-y top)    (- (* edge-scroll-px (min 1 (/ (- top window-y) edge-px))))
+                          (> window-y bottom) (* edge-scroll-px (min 1 (/ (- window-y bottom) edge-px)))
+                          :else               0)))
         scroll!     (fn scroll! []
                       (let [step (edge-scroll)]
                         (if (zero? step)
                           (vreset! frame nil)
-                          (do (js/window.scrollBy 0 step)
+                          (do (.scrollBy area 0 step)
                               (place!)
                               (vreset! frame (js/requestAnimationFrame scroll!))))))
         put-back!   (fn []

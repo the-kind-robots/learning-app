@@ -57,6 +57,9 @@ async function centre(locator) {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
+// How far the collections are scrolled, between the shell bar and the footer.
+const listScrolled = (page) => page.evaluate(() => document.querySelector('.switcher').scrollTop);
+
 // Counts what the pointer stream did, from before any app listener sees it.
 // `suppress` names event types stopped at the window before the page sees
 // them, to shape the stream into the one a phone sends.
@@ -175,8 +178,7 @@ test.describe('Темы на телефоне: касания', () => {
       await expect(page.getByRole('heading', { name: 'Наборы' })).toBeAttached();
       // Without the cancel this would prove nothing about the recovery.
       expect(await page.evaluate(() => window.__pointer.cancels)).toBeGreaterThan(0);
-      // The document is what scrolls on this screen.
-      expect(await page.evaluate(() => document.scrollingElement.scrollTop)).toBeGreaterThan(100);
+      expect(await listScrolled(page)).toBeGreaterThan(100);
     });
   });
 
@@ -419,7 +421,7 @@ test.describe('Темы на телефоне: касания', () => {
       const from = await centre(bahn);
       await finger.down(from.x, from.y);
       await expect(page.getByRole('button', { name: 'Удалить набор «Bahn»' })).toHaveCSS('opacity', '1');
-      scrolled = await page.evaluate(() => document.scrollingElement.scrollTop);
+      scrolled = await listScrolled(page);
       const to = await alltag.boundingBox();
       await slide(finger, from, { x: to.x + to.width / 2, y: to.y + 4 });
       await finger.up();
@@ -428,7 +430,7 @@ test.describe('Темы на телефоне: касания', () => {
     await test.step('Тогда «Bahn» стоит перед «Alltag», а экран не сдвинулся', async () => {
       await expect(tileNames(page).nth(1)).toHaveText('Bahn');
       await expect(tileNames(page).nth(2)).toHaveText('Alltag');
-      expect(await page.evaluate(() => document.scrollingElement.scrollTop)).toBe(scrolled);
+      expect(await listScrolled(page)).toBe(scrolled);
     });
   });
 
@@ -440,7 +442,7 @@ test.describe('Темы на телефоне: касания', () => {
     await test.step('Дано экран тем прокручен вниз до последней темы', async () => {
       await openCollections(page);
       await last.scrollIntoViewIfNeeded();
-      expect(await page.evaluate(() => document.scrollingElement.scrollTop)).toBeGreaterThan(0);
+      expect(await listScrolled(page)).toBeGreaterThan(0);
     });
 
     await test.step('Когда он берёт последнюю тему долгим нажатием и держит палец у верхнего края', async () => {
@@ -452,7 +454,7 @@ test.describe('Темы на телефоне: касания', () => {
     });
 
     await test.step('Тогда экран сам доезжает до начала', async () => {
-      await expect.poll(() => page.evaluate(() => document.scrollingElement.scrollTop)).toBe(0);
+      await expect.poll(() => listScrolled(page)).toBe(0);
     });
 
     await test.step('Когда он ведёт палец выше «Alltag» и отпускает', async () => {
