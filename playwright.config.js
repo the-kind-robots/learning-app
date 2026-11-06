@@ -4,6 +4,8 @@ const { defineConfig } = require('@playwright/test');
 // (see test/browser/README.md); never against the shared dev stand.
 module.exports = defineConfig({
   testDir: './test/browser',
+  // Runs from different worktrees queue on this machine (#784).
+  globalSetup: require.resolve('./test/browser/machine-lock.js'),
   // Tests are order-independent (fresh context each), so a long file is spread
   // over workers instead of being one worker's serial tail.
   fullyParallel: true,
