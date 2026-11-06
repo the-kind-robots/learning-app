@@ -28,4 +28,12 @@ async function answerWordThenShowExample(page, { missFirst, example = { translat
   await expect(prompt(page, example.translation)).toBeVisible();
 }
 
-module.exports = { answerWordThenShowExample, prompt, next, tray, bank };
+// A wheel turned sideways over the strip, one trial back: how a mouse or a trackpad goes back on desktop, where a
+// screen changes without a view transition.
+async function wheelBack(page) {
+  const box = await page.locator('page-strip').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(-box.width, 0);
+}
+
+module.exports = { answerWordThenShowExample, field, check, prompt, next, tray, bank, wheelBack };

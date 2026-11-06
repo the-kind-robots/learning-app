@@ -236,11 +236,13 @@
     [[:action/go-to-home]]))
 
 
-;; The lesson has none: `Escape` would end it.
+;; An open menu, card or dialog takes the keys: a hotkey prevented its `Escape`, so the screen closed and the menu
+;; stayed, and its arrows, so the caret in a dialog's field stood still while the screen behind it moved.
 (nxr/register-action! :action/press-hotkey
-  (fn press-hotkey [state keystroke]
-    (when-let [actions (some-> (pages/table (:page/current state)) :hotkeys (apply [state]) (get keystroke))]
-      (into [[:effect/prevent-default]] actions))))
+  (fn press-hotkey [state keystroke overlay-open?]
+    (when-not overlay-open?
+      (when-let [actions (some-> (pages/table (:page/current state)) :hotkeys (apply [state]) (get keystroke))]
+        (into [[:effect/prevent-default]] actions)))))
 
 
 ;;
@@ -276,6 +278,12 @@
            (when (.-shiftKey event) "Shift+")
            (when (.-metaKey event) "Meta+")
            (.-code event)))))
+
+
+(nxr/register-placeholder! :document/overlay-open?
+  ;; A popover (a menu, a card) or a modal dialog is open.
+  (fn [_]
+    (some? (js/document.querySelector ":popover-open, :modal"))))
 
 
 (nxr/register-placeholder! :event.keyboard/ctrl?
@@ -408,7 +416,7 @@
    "keydown"
    (fn [event]
      (dispatch {:replicant/dom-event event}
-               [[:action/press-hotkey [:event.keyboard/keystroke]]]))))
+               [[:action/press-hotkey [:event.keyboard/keystroke] [:document/overlay-open?]]]))))
 
 
 (defn start-rendering!

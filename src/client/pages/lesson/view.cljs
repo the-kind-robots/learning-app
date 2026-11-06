@@ -25,8 +25,27 @@
      correct-answer]))
 
 
+(defn- next-button
+  "The main button once the current trial is answered, and over a trial left behind: «ДАЛЕЕ», or «ЕЩЁ УРОК» once
+   the lesson is over."
+  [finished?]
+  ;; A native button already clicks on Enter; a keydown handler clicking it again advanced the lesson twice.
+  [:button.big-button
+   {:id   "lesson-main-button"
+    :type "button"
+    :on   {:click [[:action/press-next]]}}
+   (if finished?
+     [:i18n :lesson/again]
+     [:i18n :lesson/next])])
+
+
+;; The footers are the current trial's. Over a trial left behind, a footer's text is inert, under that trial's
+;; answer, and its main button is `next-button`: the same element as its own wherever it can be, so paging keeps
+;; the focus on it.
+
+
 (defn- input-footer
-  [{:keys [correct-answer max-length]}]
+  [{:keys [correct-answer current-shown? max-length]}]
   [:footer#lesson-footer
    {:replicant/key      :input
     :replicant/on-mount [[:action/focus-lesson-input]
@@ -38,6 +57,7 @@
                    [:action/check-answer [:event.form.field/value "answer"]]]}}
     [:answer-field.lesson__input
      {:id             "lesson-answer"
+      :inert          (not current-shown?)
       :name           "answer"
       :autocapitalize "none"
       :autocomplete   "off"
@@ -56,46 +76,43 @@
                                   {:key   [:event.keyboard/key]
                                    :ctrl? [:event.keyboard/ctrl?]}]]}}]
     [:div.lesson__action.page-footer__action
-     [:button.big-button
-      {:type "submit"}
-      [:i18n :lesson/check]]]]])
+     ;; Keyed apart from the button over a trial left behind: back on this trial, the focus goes with that one, so
+     ;; a second `Enter` does not check an empty answer.
+     (if current-shown?
+       [:button.big-button
+        {:replicant/key :check
+         :id   "lesson-main-button"
+         :type "submit"}
+        [:i18n :lesson/check]]
+       ;; A trial waiting for its answer: the lesson is not over.
+       (next-button false))]]])
 
 
 (defn- success-footer
-  [{:keys [finished?] :as props}]
+  [{:keys [current-shown? finished?] :as props}]
   [:footer#lesson-footer
    {:replicant/key      :success
-    :replicant/on-mount [[:action/focus-continue-button
-                          (if finished? "#lesson-again" "#lesson-next")]]}
+    :replicant/on-mount [[:effect/focus "lesson-main-button"]]}
    [:div.lesson__footer.lesson__footer--success.page-footer
     [:div.lesson__answer
+     {:inert (not current-shown?)}
      [:h3.lesson__answer-header
       [:i18n :lesson/correct]]
      (answer-body props)]
     [:form
      {:on {:submit [[:effect/prevent-default]]}}
      [:div.lesson__action.page-footer__action
-      ;; A native button already clicks on Enter; a keydown handler clicking it again advanced the lesson twice.
-      (if finished?
-        [:button.big-button
-         {:id   "lesson-again"
-          :type "button"
-          :on   {:click [[:action/next-lesson]]}}
-         [:i18n :lesson/again]]
-        [:button.big-button
-         {:id   "lesson-next"
-          :type "button"
-          :on   {:click [[:action/next-trial]]}}
-         [:i18n :lesson/next]])]]]])
+      (next-button finished?)]]]])
 
 
 (defn- error-footer
-  [{:keys [user-answer] :as props}]
+  [{:keys [current-shown? user-answer] :as props}]
   [:footer#lesson-footer
    {:replicant/key      :error
-    :replicant/on-mount [[:action/focus-continue-button "#lesson-next"]]}
+    :replicant/on-mount [[:effect/focus "lesson-main-button"]]}
    [:div.lesson__footer.lesson__footer--error.page-footer
     [:div.lesson__answer
+     {:inert (not current-shown?)}
      (when user-answer
        (list
         [:h3.lesson__answer-header
@@ -107,11 +124,7 @@
       [:i18n :lesson/correct-answer]]
      (answer-body props)]
     [:div.lesson__action.page-footer__action
-     [:button.big-button
-      {:id   "lesson-next"
-       :type "button"
-       :on   {:click [[:action/next-trial]]}}
-      [:i18n :lesson/next]]]]])
+     (next-button false)]]])
 
 
 (defn- hint-card
@@ -214,7 +227,7 @@
 
     :else
     (let [answer-hint (presenter/answer-hint-props state)
-          {:keys [back? current-page current-shown? finished? first-shown? page pages previous-page viewed-answer]}
+          {:keys [current-page current-shown? finished? page pages viewed-answer]}
           (presenter/strip-props state)]
       [:div.lesson
        (when answer-hint (answer-hint-popover answer-hint))
@@ -222,14 +235,6 @@
         [:i18n :lesson/title]]
        ;; The lesson is closed by the shell's corner ✕ (`:action/close-screen`).
        [:header.lesson__header
-        ;; A finger swipes the strip; a mouse has this arrow, so it shows on fine pointers only.
-        (when back?
-          [:button.lesson__back
-           {:type       "button"
-            :aria-label [:i18n :lesson/previous-trial]
-            :disabled   first-shown?
-            :on         {:click [[:action/view-trial previous-page current-page]]}}
-           "‹"])
         (progress state {})]
        [:main.lesson__body
         ;; The trials answered, then the current one; `pages.lesson.page-strip` scrolls to `page`.
@@ -242,10 +247,10 @@
             {:replicant/key [current? (:page props)]
              :aria-hidden   (not shown?)}
             (challenge props (when current? {:id "lesson-challenge"}))]))]
-       ;; Only the challenge moves with the strip: a past trial's answer is a strip along the bottom; the
-       ;; current panel, hidden meanwhile, keeps its place and its typed answer. `pages.lesson.page-panel`
-       ;; gives the CSS the height of the panel shown, for the colour behind them; the panel shown is its last
-       ;; child that is not inert, so the way home comes first.
+       ;; Only the challenge moves with the strip: a past trial's answer is a strip along the bottom, over the
+       ;; current trial's text, which keeps its place and its typed answer; the main button below is one.
+       ;; `pages.lesson.page-panel` gives the CSS the height of the panel shown, for the colour behind them; the
+       ;; panel shown is its last child that is not inert, so the way home comes first.
        [:page-panel.lesson__panel
         {:page (when-not current-shown? page)}
         ;; At the end of a lesson the way home, one for every panel: it travels with the panel's edge.
@@ -257,15 +262,14 @@
              :on   {:click [[:action/go-to-home]]}}
             [:i18n :lesson/finish]]])
         [:div.lesson__panel-current
-         {:inert (not current-shown?)}
          (let [footer-props (presenter/footer-props state)]
            (if footer-props
              (case (:variant footer-props)
                :success (success-footer footer-props)
                :error   (error-footer footer-props))
              (input-footer (presenter/input-props state))))]
-        ;; A past trial's panel: its answer is one per page, so the answer leaving fades where it stood while the
-        ;; next appears; leaving for the current one, the panel fades too, inert at once.
+        ;; A past trial's answer, one per page: the one leaving fades where it stood while the next appears; leaving
+        ;; for the current trial, the strip fades too, inert at once.
         (when-let [{:keys [attempts first-try?]} viewed-answer]
           [:div.lesson__footer.lesson__footer--success.lesson__footer--past.page-footer
            {:replicant/unmounting {:class "lesson__footer--leaving"
@@ -277,14 +281,22 @@
              (if first-try?
                [:i18n :lesson/correct]
                [:i18n :lesson/attempts {:count attempts}])]
-            (answer-body viewed-answer)]
-           [:div.lesson__action.page-footer__action
-            (if finished?
-              [:button.big-button
-               {:type "button"
-                :on   {:click [[:action/next-lesson]]}}
-               [:i18n :lesson/again]]
-              [:button.big-button
-               {:type "button"
-                :on   {:click [[:action/view-trial current-page current-page]]}}
-               [:i18n :lesson/next]])]])]])))
+            (answer-body viewed-answer)]])]])))
+
+
+(defn hotkeys
+  "The lesson's keys: `Escape` ends a lesson that is over; the arrows page the trials, but not while the current
+   one waits for its answer, the caret of its field theirs; on a past trial `Ctrl`+`Enter` presses the main button,
+   as a plain `Enter` does on it, focused."
+  [state]
+  (when (:lesson/state state)
+    (let [{:keys [answered? current-page current-shown? finished? first-shown? next-page previous-page]}
+          (presenter/paging-props state)]
+      (merge
+       (when finished?
+         {"Escape" [[:action/go-to-home]]})
+       (when (and (not first-shown?) (or answered? (not current-shown?)))
+         {"ArrowLeft" [[:action/view-trial previous-page current-page]]})
+       (when-not current-shown?
+         {"ArrowRight" [[:action/view-trial next-page current-page]]
+          "Ctrl+Enter" [[:action/press-next]]})))))

@@ -23,13 +23,16 @@
 
 (nxr/register-action! :action/view-trial
   ;; The strip goes to `page`: a past trial, or the current one at `current-page` (viewed: nil). A hint open
-  ;; over the other closes.
+  ;; over the other closes. On a past trial the main button takes the focus, so `Enter` presses it: the field of
+  ;; a trial waiting for its answer, inert meanwhile, lost it.
   (fn view-trial [state page current-page]
     (let [viewed (when (< page current-page) page)]
       (when (not= viewed (:lesson/viewed-trial state))
-        [[:effect/save
-          {:lesson/open-hint-index nil
-           :lesson/viewed-trial    viewed}]]))))
+        (cond-> [[:effect/save
+                  {:lesson/open-hint-index nil
+                   :lesson/viewed-trial    viewed}]]
+          viewed
+          (conj [:effect/focus "lesson-main-button"]))))))
 
 
 (nxr/register-action! :action/open-lesson
@@ -39,12 +42,6 @@
     [[:effect/save
       (shown (when (= :status/loaded (:learner/status state))
                (lesson/start learner language active-collection {:random random} now-ms)))]]))
-
-
-(nxr/register-action! :action/next-lesson
-  ;; A new lesson on the screen already showing one: the route stays, so it is drawn here, not by the route.
-  (fn next-lesson [_]
-    [[:effect/enter :action/open-lesson]]))
 
 
 (nxr/register-action! :action/update-lesson
@@ -73,11 +70,23 @@
       [[:effect/log-warning :lesson/check-answer-missing {:answer answer}]])))
 
 
-(nxr/register-action! :action/next-trial
-  (fn next-trial [state]
-    (let [from (:lesson/state state)]
-      (when-let [lesson-state (some-> from lesson/next-trial)]
-        [[:action/update-lesson from lesson-state]]))))
+(nxr/register-action! :action/press-next
+  ;; «ДАЛЕЕ», or «ЕЩЁ УРОК» once nothing is left: from a past trial back to the current one (a hint open over
+  ;; it closes), otherwise on to the next trial. With no trial left, a new lesson: the route stays, so it is
+  ;; drawn here, not by the route.
+  (fn press-next [state]
+    (let [to (some-> state :lesson/state lesson/next-trial)]
+      (cond
+        (nil? to)
+        [[:effect/enter :action/open-lesson]]
+
+        (:lesson/viewed-trial state)
+        [[:effect/save
+          {:lesson/open-hint-index nil
+           :lesson/viewed-trial    nil}]]
+
+        :else
+        [[:effect/save (shown {:lesson-state to})]]))))
 
 
 (nxr/register-action! :action/open-answer-hint
@@ -107,8 +116,3 @@
 (nxr/register-action! :action/focus-lesson-input
   (fn focus-lesson-input [_]
     [[:effect/mobile-autofocus "lesson-answer"]]))
-
-
-(nxr/register-action! :action/focus-continue-button
-  (fn focus-continue-button [_ selector]
-    [[:effect/focus-child selector]]))

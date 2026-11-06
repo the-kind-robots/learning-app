@@ -87,7 +87,7 @@ An address whose query is not valid percent-encoding SHALL open the screen of it
 
 ### Requirement: The words and themes screens open and close from the keyboard
 
-On the home screen `Alt`+`W` SHALL open the words screen and `Alt`+`T` the themes screen, wherever the focus sits, read by the key's place so that any keyboard layout works. Each SHALL do nothing where its button is not shown: `Alt`+`W` with an empty vocabulary, both on any other screen. `Escape` on the words or themes screen SHALL close it, as its corner ✕ does, unless a dialog is open: then `Escape` closes only the dialog.
+On the home screen `Alt`+`W` SHALL open the words screen and `Alt`+`T` the themes screen, wherever the focus sits, read by the key's place so that any keyboard layout works. Each SHALL do nothing where its button is not shown: `Alt`+`W` with an empty vocabulary, both on any other screen. `Escape` on the words or themes screen SHALL close it, as its corner ✕ does, unless a dialog or a menu is open: then `Escape` closes only the dialog or the menu. While a menu or a dialog is open no screen's hotkey SHALL act.
 
 #### Scenario: Alt+W from the word field
 
@@ -113,6 +113,11 @@ On the home screen `Alt`+`W` SHALL open the words screen and `Alt`+`T` the theme
 
 - **WHEN** the word dialog is open and the learner presses Escape
 - **THEN** the dialog closes and the words screen stays
+
+#### Scenario: Escape in the settings menu
+
+- **WHEN** the settings menu is open over the words screen and the learner presses Escape
+- **THEN** the menu closes and the words screen stays
 
 ### Requirement: The words screen opens with the cursor in its search field
 

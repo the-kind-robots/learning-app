@@ -409,7 +409,7 @@ Where items gain equally, which of them the lesson takes SHALL be decided at ran
 - **AND** they are not the ones the vocabulary happens to be listed first
 
 ### Requirement: The learner looks back at the trials already answered
-The lesson SHALL keep, in the order they were answered, the trials it has left behind — one entry for each trial answered right, never one for a wrong attempt — each with the number of attempts it took. The lesson screen SHALL lay its trials out as a horizontal strip: the trials left behind, then the current one. The learner SHALL go back one trial by swiping right, and on a screen with a fine pointer also by an arrow beside the progress bar; the strip SHALL stop on each trial. Only the challenge SHALL move with the strip: the current trial's panel SHALL keep its place, hidden while a trial left behind is shown, and that trial's panel SHALL lie over it along the bottom at its own height, its button where the current one is. When the trial shown changes, the panel's edge SHALL travel to the new height smoothly, never at once, while the text stays where it stands: the text shown SHALL fade first, and the new text SHALL appear in its place once the edge has nearly arrived, never cut by the edge; the button SHALL neither move nor fade. With reduced motion asked for, the change SHALL be instant. On a trial left behind the panel SHALL be green and show "Правильно!" when it took one attempt, otherwise "Попыток: N", and the correct answer with the hinted words of an example tappable; its button "Далее" SHALL return to the current trial. Once the last trial is answered the strip SHALL still go back, and a past trial's panel SHALL offer what the final trial's does: «ЕЩЁ УРОК» as its main button, starting a new lesson, and «ЗАКОНЧИТЬ» as a quiet button on the line of its verdict, finishing the lesson; while the trial shown changes, «ЗАКОНЧИТЬ» SHALL keep its place on that line, travelling with the panel's edge, never fading.
+The lesson SHALL keep, in the order they were answered, the trials it has left behind — one entry for each trial answered right, never one for a wrong attempt — each with the number of attempts it took. The lesson screen SHALL lay its trials out as a horizontal strip: the trials left behind, then the current one. The learner SHALL go back one trial by swiping right, or by scrolling sideways with a wheel or a trackpad; the strip SHALL stop on each trial. No arrow SHALL stand beside the progress bar. On a keyboard `ArrowLeft` SHALL show the trial before the one shown and `ArrowRight` the one after it, stopping at the first trial and at the current one; while the current trial is shown waiting for its answer, the arrows SHALL stay with the answer field. While a trial left behind is shown, `Enter` and `Ctrl`+`Enter` SHALL press its main button. Only the challenge SHALL move with the strip: the current trial's text SHALL keep its place, hidden while a trial left behind is shown, and that trial's answer SHALL lie over it along the bottom at its own height, above the main button. The panel SHALL have one main button whichever trial is shown, and paging SHALL keep the focus on it; back on a current trial waiting for its answer, the focus SHALL leave it, so a second `Enter` does not check an empty answer. When the trial shown changes, the panel's edge SHALL travel to the new height smoothly, never at once, while the text stays where it stands: the text shown SHALL fade first, and the new text SHALL appear in its place once the edge has nearly arrived, never cut by the edge; the button SHALL neither move nor fade. With reduced motion asked for, the change SHALL be instant. On a trial left behind the panel SHALL be green and show "Правильно!" when it took one attempt, otherwise "Попыток: N", and the correct answer with the hinted words of an example tappable; the main button "Далее" SHALL return to the current trial. Once the last trial is answered the strip SHALL still go back, and a past trial's panel SHALL offer what the final trial's does: «ЕЩЁ УРОК» as its main button, starting a new lesson, and «ЗАКОНЧИТЬ» as a quiet button on the line of its verdict, finishing the lesson; while the trial shown changes, «ЗАКОНЧИТЬ» SHALL keep its place on that line, travelling with the panel's edge, never fading.
 
 #### Scenario: Swiping back to a trial answered right at the first try
 - **WHEN** the learner has answered a trial right and moved on, and swipes back to it
@@ -429,8 +429,22 @@ The lesson SHALL keep, in the order they were answered, the trials it has left b
 - **THEN** the typed text is still in the answer field
 
 #### Scenario: Going back on desktop
-- **WHEN** the learner on desktop presses the arrow beside the progress bar
+- **WHEN** the learner on desktop turns the wheel sideways over the strip
 - **THEN** the strip goes back one trial
+- **AND** no arrow stands beside the progress bar
+
+#### Scenario: Paging with the arrow keys
+- **WHEN** the learner has answered a trial and the current one, and presses `ArrowLeft`
+- **THEN** the trial before is shown, and one more `ArrowLeft` keeps it
+- **AND** `ArrowRight` shows the current trial again
+
+#### Scenario: The arrows stay with the answer field
+- **WHEN** the current trial waits for an answer typed in its field and the learner presses `ArrowLeft`
+- **THEN** the current trial stays shown
+
+#### Scenario: Enter returns from a trial left behind
+- **WHEN** the learner on a trial left behind presses `Enter`, or `Ctrl`+`Enter`
+- **THEN** the current trial is shown, as "Далее" would show it
 
 #### Scenario: After the last trial
 - **WHEN** the learner has answered the last trial right and goes back to a trial before it
@@ -455,7 +469,7 @@ The lesson SHALL keep, in the order they were answered, the trials it has left b
 - **THEN** «ЗАКОНЧИТЬ» stays on the line of the verdict, moving with the panel's edge, and shows all the while
 
 ### Requirement: The end of a lesson offers one more
-When the final trial of a lesson is answered correctly, the footer SHALL offer «ЕЩЁ УРОК» as its main button, focused, standing exactly where «ДАЛЕЕ» stands after any other trial, and «ЗАКОНЧИТЬ» as a quiet button on the line of «Правильно!», at its end. «ЕЩЁ УРОК» SHALL start a new lesson at once, on the lesson screen. «ЗАКОНЧИТЬ» SHALL show the home screen.
+When the final trial of a lesson is answered correctly, the footer SHALL offer «ЕЩЁ УРОК» as its main button, focused, standing exactly where «ДАЛЕЕ» stands after any other trial, and «ЗАКОНЧИТЬ» as a quiet button on the line of «Правильно!», at its end. «ЕЩЁ УРОК» SHALL start a new lesson at once, on the lesson screen. «ЗАКОНЧИТЬ» SHALL show the home screen. From then on, on whichever trial is shown, `Escape` SHALL do what «ЗАКОНЧИТЬ» does, unless a word's card, a menu or a dialog is open over the lesson: then `Escape` closes only that. Before the final trial is answered `Escape` SHALL leave the lesson as it is.
 
 #### Scenario: The main button does not move
 - **WHEN** a learner answers the last but one trial and then the final trial correctly, with answers of the same length
@@ -469,6 +483,18 @@ When the final trial of a lesson is answered correctly, the footer SHALL offer �
 #### Scenario: Finishing after the last trial
 - **WHEN** a learner answers the final trial correctly and activates «ЗАКОНЧИТЬ»
 - **THEN** the home screen is on display
+
+#### Scenario: Escape after the last trial
+- **WHEN** a learner answers the final trial correctly and presses `Escape`
+- **THEN** the home screen is on display
+
+#### Scenario: Escape over a word's card or a dialog after the last trial
+- **WHEN** a learner answers the final trial correctly, opens a word's card or the «Сохранить мои слова» dialog, and presses `Escape`
+- **THEN** only the card or the dialog closes, and the lesson stays on display
+
+#### Scenario: Escape mid-lesson
+- **WHEN** a learner presses `Escape` before the final trial is answered
+- **THEN** the lesson stays on display
 
 ### Requirement: A passed lesson is recorded
 The system SHALL record a lesson as passed when its final trial is answered correctly, once per lesson, in the learner's data with the time it was passed. The record SHALL replicate with the account like the reviews do, and SHALL never be changed afterwards. A lesson left before its end SHALL record nothing.

@@ -82,7 +82,6 @@
 .lesson__header {
   align-items: flex-start;
   display: flex;
-  gap: 12px;
   margin: 0 auto;
   max-width: 600px;
   /* The row under the progress bar is a blank that gives way to a taller
@@ -91,8 +90,6 @@
   /* top: clears the shell bar; the air under it is part of the blank that
      gives way. */
   padding: var(--app-bar-height) 16px 0;
-  /* The anchor of the back arrow. */
-  position: relative;
   width: 100%;
 }
 
@@ -183,44 +180,14 @@
   scroll-snap-stop: always;
 }
 
-/* Steps the strip back; a finger swipes instead, so it is there for a mouse.
-   It stands left of the header, out of its flow: the bar keeps its width when
-   the arrow appears. */
-.lesson__back {
-  background: none;
-  border: 0;
-  bottom: 0;
-  color: rgb(var(--color-wolf));
-  cursor: pointer;
-  display: none;
-  font: 700 28px/1 Nunito, sans-serif;
-  height: 44px;
-  margin-block: auto;
-  position: absolute;
-  right: 100%;
-  top: var(--app-bar-height);
-  width: 44px;
-}
-
-.lesson__back:disabled {
-  cursor: default;
-  opacity: 0.35;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .lesson__back {
-    display: block;
-  }
-}
-
-/* The panel stays put: the current one keeps its place, hidden, so the
-   challenge does not move and its answer is kept; a past trial's answer is a
-   strip of its own height along the bottom, its button where the current one
-   is. The colour behind them is the panel's own, as tall as the one shown
+/* The panel stays put: the current trial's text keeps its place, hidden, so
+   the challenge does not move and its answer is kept; a past trial's answer is
+   a strip of its own height above the main button, which is one. The colour
+   behind them is the panel's own, as tall as the one shown
    (`--page-panel-height`, kept by `<page-panel>`): one painter, so it cannot
    flicker. While the trial shown changes (`easing`) its height and colour
    travel, the text fades where it stands and the new text appears in its place
-   (#747). The buttons are never faded. */
+   (#747). The button is never faded. */
 .lesson__panel {
   --lesson-panel-colour: transparent;
 
@@ -244,13 +211,17 @@
     background-color 168ms ease;
 }
 
-.lesson__panel:has(> .lesson__footer--past:not([inert])),
-.lesson__panel:has(> .lesson__panel-current:not([inert]) .lesson__footer--success) {
+.lesson__panel:has(> .lesson__panel-current .lesson__footer--success) {
   --lesson-panel-colour: rgb(var(--color-sea-sponge));
 }
 
-.lesson__panel:has(> .lesson__panel-current:not([inert]) .lesson__footer--error) {
+.lesson__panel:has(> .lesson__panel-current .lesson__footer--error) {
   --lesson-panel-colour: rgb(var(--color-walking-fish));
+}
+
+/* A past trial is green, whatever the current one is. */
+.lesson__panel:has(> .lesson__footer--past:not([inert])) {
+  --lesson-panel-colour: rgb(var(--color-sea-sponge));
 }
 
 .lesson__panel .lesson__footer--success,
@@ -258,39 +229,37 @@
   background: none;
 }
 
-/* Over the panel's colour. While hidden it stays shown until its parts have
-   faded: all but the button, over the first 30%; they come back from 45%. */
+/* Over the panel's colour. While a past trial is shown its text, inert, fades
+   over the first 30%, then hides; it comes back from 45%. */
 .lesson__panel-current {
   position: relative;
-}
-
-.lesson__panel-current[inert] {
-  transition: visibility 0s linear 84ms;
-  visibility: hidden;
 }
 
 .lesson__panel-current :is(.lesson__answer, .lesson__input) {
   transition: opacity 154ms ease-out 126ms;
 }
 
-.lesson__panel-current[inert] :is(.lesson__answer, .lesson__input) {
+.lesson__panel-current :is(.lesson__answer, .lesson__input)[inert] {
   opacity: 0;
-  transition: opacity 84ms ease-out;
-}
-
-/* Its button goes at once: the past trial's stands in its place. */
-.lesson__panel-current[inert] .lesson__action {
+  transition:
+    opacity 84ms ease-out,
+    visibility 0s linear 84ms;
   visibility: hidden;
 }
 
-.lesson__footer--past {
-  bottom: 0;
+/* Above the main button: its bottom on the button's gap. */
+.lesson__panel > .lesson__footer--past {
+  bottom: calc(
+    var(--page-footer-padding-bottom) + env(safe-area-inset-bottom) +
+    var(--web-ui_button-height, 50px) + var(--page-footer-gap)
+  );
   inset-inline: 0;
+  padding-bottom: 0;
   position: absolute;
 }
 
 /* A past trial's answer appears from 45%; the one leaving fades over the
-   first 30% where it stood, out of the flow, its bottom on the button's gap. */
+   first 30% where it stood, out of the flow. */
 .lesson__footer--past .lesson__answer {
   transition: opacity 154ms ease-out 126ms;
 }
@@ -302,10 +271,7 @@
 }
 
 .lesson__footer--past .lesson__answer--leaving {
-  bottom: calc(
-    var(--page-footer-padding-bottom) + env(safe-area-inset-bottom) +
-    var(--web-ui_button-height, 50px) + var(--page-footer-gap)
-  );
+  bottom: 0;
   inset-inline: var(--page-footer-padding-x);
   opacity: 0;
   position: absolute;
@@ -313,15 +279,10 @@
   width: auto;
 }
 
-/* A past panel leaving for the current one fades with its answer; its button
-   goes at once, so the current one shows. */
+/* A past trial's answer leaving for the current trial fades. */
 .lesson__footer--leaving {
   opacity: 0;
   transition: opacity 84ms ease-out;
-}
-
-.lesson__footer--leaving .lesson__action {
-  visibility: hidden;
 }
 
 /* At the end of a lesson the way home: one for the whole panel, at the end of
@@ -347,9 +308,8 @@
 @media (prefers-reduced-motion: reduce) {
   .lesson__panel[easing]::before,
   .lesson__panel[easing] > .lesson__panel-finish,
-  .lesson__panel-current[inert],
   .lesson__panel-current :is(.lesson__answer, .lesson__input),
-  .lesson__panel-current[inert] :is(.lesson__answer, .lesson__input),
+  .lesson__panel-current :is(.lesson__answer, .lesson__input)[inert],
   .lesson__footer--past .lesson__answer,
   .lesson__footer--past .lesson__answer--leaving,
   .lesson__footer--leaving {
@@ -571,8 +531,10 @@
   color: rgb(var(--color-tree-frog));
 }
 
-/* The main button after an answer takes the panel's colour (#765). */
-.lesson__footer--success .big-button {
+/* The main button after an answer takes the panel's colour (#765), and over a
+   past trial that trial's green. */
+.lesson__footer--success .big-button,
+.lesson__panel:has(> .lesson__footer--past:not([inert])) .big-button {
   --web-ui_button-background-color: rgb(var(--color-owl));
   --web-ui_button-border-color: rgb(var(--color-tree-frog));
 }

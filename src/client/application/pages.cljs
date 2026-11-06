@@ -6,7 +6,7 @@
    [domain.lesson :as lesson]
    [pages.collections.view]
    [pages.home.view]
-   [pages.lesson.view]
+   [pages.lesson.view :as pages.lesson]
    [pages.words.view]))
 
 
@@ -39,7 +39,8 @@
                                  [[:action/show-home context]])
                       :view    pages.home.view/page}
    ;; A lesson is a mode, not a step deeper: it fades in and out. Within it, «ДАЛЕЕ» moves the trial.
-   :page/lesson      {:keyboard-overlays? true
+   :page/lesson      {:hotkeys     pages.lesson/hotkeys
+                      :keyboard-overlays? true
                       :open        :action/open-lesson
                       :path        "/lesson"
                       :refresh     (fn [state _]
@@ -52,13 +53,12 @@
                                               (when (and (lesson/last-result (:lesson/state before))
                                                          (nil? (lesson/last-result (:lesson/state after))))
                                                 :transition/next-trial))}
-                      :view        pages.lesson.view/page}
-   ;; An open word dialog takes `Escape` itself and covers the lesson button; an empty vocabulary hides it.
+                      :view        pages.lesson/page}
+   ;; An empty vocabulary hides the lesson button.
    :page/words       {:hotkeys (fn [state]
-                                 (when-not (:words/editing state)
-                                   (merge {"Escape" [[:action/close-screen]]}
-                                          (when (some-> (:words/total state) pos?)
-                                            {"Alt+Enter" [[:action/go-to-lesson]]}))))
+                                 (merge {"Escape" [[:action/close-screen]]}
+                                        (when (some-> (:words/total state) pos?)
+                                          {"Alt+Enter" [[:action/go-to-lesson]]})))
                       :keyboard-overlays? true
                       :open    :action/open-words
                       :path    "/words"
