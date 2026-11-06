@@ -1,6 +1,7 @@
 (ns pages.words.view
   (:require
    [application.pages :as pages]
+   [application.presenter :as application]
    [clojure.string :as str]
    [pages.words.presenter :as presenter]))
 
@@ -298,11 +299,13 @@
 
 (defn hotkeys
   "The actions of each keystroke on the words list: `Escape` leaves it, `Alt+Enter` starts the lesson its button
-   shows."
+   shows, `Alt+KeyS` opens the statistics the stars show."
   [state]
   (merge {"Escape" [[:action/close-page]]}
          (when (presenter/vocabulary? state)
-           {"Alt+Enter" [[:action/open-page :page/lesson]]})))
+           {"Alt+Enter" [[:action/open-page :page/lesson]]})
+         (when (application/stars-button? state)
+           {"Alt+KeyS" [[:action/open-page :page/stats]]})))
 
 
 ;; The search bar closes the column on the keyboard's inset.

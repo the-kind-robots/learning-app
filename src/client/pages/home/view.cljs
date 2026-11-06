@@ -1,6 +1,7 @@
 (ns pages.home.view
   (:require
    [application.pages :as pages]
+   [application.presenter :as application]
    [pages.home.presenter :as presenter]))
 
 
@@ -187,12 +188,14 @@
 
 (defn hotkeys
   "The actions of each keystroke on home: the buttons it shows, `Alt+KeyT` the themes, `Alt+Enter` the lesson,
-   `Alt+KeyW` the words."
+   `Alt+KeyW` the words, `Alt+KeyS` the statistics."
   [state]
   (merge {"Alt+KeyT" [[:action/open-page :page/collections]]}
          (when (presenter/vocabulary? state)
            {"Alt+Enter" [[:action/open-page :page/lesson]]
-            "Alt+KeyW"  [[:action/open-page :page/words]]})))
+            "Alt+KeyW"  [[:action/open-page :page/words]]})
+         (when (application/stars-button? state)
+           {"Alt+KeyS" [[:action/open-page :page/stats]]})))
 
 
 ;; The keyboard covers the lesson button fixed at the bottom.

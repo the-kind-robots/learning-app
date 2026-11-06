@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { test, expect } = require('./fixtures');
+const { test, expect, nothingHappensFor } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
 
 // The statistics a tap on today's stars opens (#778): the words by memory, the lessons by day, and a picture to
@@ -7,6 +7,7 @@ const { addWord } = require('./add-form.shared');
 
 const statsButton = (page) => page.getByRole('button', { name: 'Статистика' });
 const days = (page) => page.locator('.statistics__day');
+const wordField = (page) => page.getByLabel('Слово (немецкий)');
 
 // Lessons passed, written straight into the user database: `ages` are how many local days before today each was
 // passed, now for 0, at noon for another day, so no change of the clocks moves a lesson to a day beside it.
@@ -54,6 +55,83 @@ test.describe('Статистика', () => {
 
     await test.step('Когда он нажимает Escape', async () => {
       await page.keyboard.press('Escape');
+    });
+
+    await test.step('Тогда он на главной', async () => {
+      await expect(page).toHaveURL(/\/home$/);
+    });
+  });
+
+  test('ученик жмёт Alt+S в поле слова на главной → статистика, в поле ничего не напечатано', async ({ page }) => {
+    await test.step('Дано урок сегодня, курсор в поле слова', async () => {
+      await homeWithLessons(page, [0]);
+      await wordField(page).focus();
+    });
+
+    await test.step('Когда он жмёт Alt+S', async () => {
+      await page.keyboard.press('Alt+KeyS');
+    });
+
+    await test.step('Тогда на экране статистика', async () => {
+      await expect(page).toHaveURL(/\/stats$/);
+      await expect(page.getByRole('heading', { name: 'Уроков пройдено: 1' })).toBeVisible();
+    });
+
+    await test.step('Когда он нажимает Escape', async () => {
+      await page.keyboard.press('Escape');
+    });
+
+    await test.step('Тогда он на главной, поле слова пустое', async () => {
+      await expect(page).toHaveURL(/\/home$/);
+      await expect(wordField(page)).toHaveValue('');
+    });
+  });
+
+  test('ученик жмёт Alt+S в поиске слов и в темах → статистика, Escape возвращает на тот же экран', async ({ page }) => {
+    await test.step('Дано слово, урок сегодня и открытый список слов, курсор в поиске', async () => {
+      await page.goto('/home');
+      await addWord(page, 'Haus', 'дом');
+      await seedLessons(page, [0]);
+      await page.reload();
+      await page.getByRole('button', { name: 'Список слов' }).click();
+      await expect(page).toHaveURL(/\/words$/);
+      await page.getByPlaceholder('Поиск').focus();
+    });
+
+    await test.step('Когда он жмёт Alt+S, затем Escape', async () => {
+      await page.keyboard.press('Alt+KeyS');
+      await expect(page).toHaveURL(/\/stats$/);
+      await page.keyboard.press('Escape');
+    });
+
+    await test.step('Тогда он в списке слов, поиск пустой', async () => {
+      await expect(page).toHaveURL(/\/words$/);
+      await expect(page.getByPlaceholder('Поиск')).toHaveValue('');
+    });
+
+    await test.step('Когда он уходит в темы и жмёт Alt+S, затем Escape', async () => {
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'Открыть наборы' }).click();
+      await expect(page).toHaveURL(/\/collections$/);
+      await page.keyboard.press('Alt+KeyS');
+      await expect(page).toHaveURL(/\/stats$/);
+      await page.keyboard.press('Escape');
+    });
+
+    await test.step('Тогда он в темах', async () => {
+      await expect(page).toHaveURL(/\/collections$/);
+    });
+  });
+
+  test('ученик без уроков сегодня жмёт Alt+S на главной → остаётся на главной', async ({ page }) => {
+    await test.step('Дано главная без уроков сегодня', async () => {
+      await page.goto('/home');
+      await wordField(page).focus();
+    });
+
+    await test.step('Когда он жмёт Alt+S', async () => {
+      await page.keyboard.press('Alt+KeyS');
+      await nothingHappensFor(page, 500);
     });
 
     await test.step('Тогда он на главной', async () => {
