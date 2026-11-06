@@ -8,7 +8,7 @@
    [client.support.db-seed :as db-seed]
    [client.support.learner :as test-learner]
    [client.support.time :as time]
-   [cljs.test :refer-macros [deftest is use-fixtures]]
+   [cljs.test :refer-macros [are deftest is use-fixtures]]
    [db :as db]
    [domain.retention :as retention]
    [use-cases.vocabulary :as sut]
@@ -166,3 +166,65 @@
           (is (= expected actual))
           (is (= (select-keys expected (take 2 word-ids))
                  (into {} (map (juxt :id :recall)) subset)))))))))
+
+
+(def ^:private searchable-words
+  [{:value "Straße" :translation "улица"}
+   {:value "Straßenbahn" :translation "трамвай"}
+   {:value "Äpfel" :translation "яблоки"}
+   {:value "Wort" :translation "слово"}
+   {:value "Wolke" :translation "облако"}
+   {:value "Woche" :translation "неделя"}])
+
+
+(defn- found
+  "The values of the words `memory` lists for the filter `search`."
+  [memory search]
+  (mapv :value (:words (sut/rows (test-learner/of-memory memory) {:search search} (time/now-ms)))))
+
+
+(deftest the-filter-finds-a-word-by-its-value-or-a-translation-in-any-spelling
+  (async-testing "ß and umlauts match their spelled-out forms, case does not matter"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (await (db-seed/seed-vocabulary! (:user/db dbs) searchable-words))
+      (let [memory (await (db-seed/memory-of (:user/db dbs)))]
+        (are [search values] (= values (sort (found memory search)))
+         "трамвай" ["Straßenbahn"]
+         "STRASSE" ["Straße" "Straßenbahn"]
+         "straße"  ["Straße" "Straßenbahn"]
+         "aepfel"  ["Äpfel"]
+         "apfel"   ["Äpfel"]
+         "äpf"     ["Äpfel"]
+         "nichts"  []))))))
+
+
+(deftest a-longer-filter-on-the-same-memory-finds-what-a-fresh-one-would
+  (async-testing "w, wo, wor narrow in turn; an unrelated query after them is not cut by them"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (await (db-seed/seed-vocabulary! (:user/db dbs) searchable-words))
+      (let [memory (await (db-seed/memory-of (:user/db dbs)))
+            typed  (mapv #(sort (found memory %)) ["w" "wo" "wor" "wo" "str" "wor"])]
+        (is (= [["Woche" "Wolke" "Wort"]
+                ["Woche" "Wolke" "Wort"]
+                ["Wort"]
+                ["Woche" "Wolke" "Wort"]
+                ["Straße" "Straßenbahn"]
+                ["Wort"]]
+               typed)))))))
+
+
+(deftest a-word-added-after-a-filter-shows-in-the-next-one
+  (async-testing "a new memory is searched whole, even by a longer query of the same text"
+    (with-test-dbs
+     (^:async fn
+      [dbs]
+      (await (db-seed/seed-vocabulary! (:user/db dbs) searchable-words))
+      (let [before (await (db-seed/memory-of (:user/db dbs)))
+            _ (found before "wo")
+            _ (await (db-seed/seed-vocabulary! (:user/db dbs) [{:value "Wolf" :translation "волк"}]))
+            after  (await (db-seed/memory-of (:user/db dbs)))]
+        (is (= ["Wolf" "Wolke"] (sort (found after "wol")))))))))
