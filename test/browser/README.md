@@ -16,7 +16,8 @@ npx playwright test --max-failures=1            # use locally while iterating
 npx playwright test --debug                     # inspector; trace:
 npx playwright show-trace test-results/<dir>/trace.zip
 ```
-Reporter is `line` locally. Traces `retain-on-failure`. CI: four `Browser Tests i/4` shards,
+Local runs queue machine-wide, one at a time (`machine-lock.js`, #784); a waiting run
+says whose run it waits for. Reporter is `line` locally. Traces `retain-on-failure`. CI: four `Browser Tests i/4` shards,
 `mobile` run after its shard's `desktop` with `--no-deps` (a sharded run would copy all of
 `desktop` into each shard); `Browser Tests` is their aggregate. `fullyParallel`: no test may
 rely on another in its file.

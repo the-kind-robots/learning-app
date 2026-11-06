@@ -79,6 +79,7 @@ PRs merge by squash, so this governs the branch history the reviewer reads, not 
 - Hand subagents file paths, not pasted contents (e.g. "review `openspec/changes/<x>/VERIFY.md`").
 - Run `openspec validate` once, right before archive — not after every edit.
 - Browser suite while iterating: `npx playwright test <spec> --max-failures=1`. The local reporter is `line`.
+- Locally run only the specs the change touches, and only when it touches the runtime (graph, sync, queue, SW). The full suite is CI's: it runs there in five minutes. Local runs queue on the machine, one at a time (#784): a full local suite holds every other session.
 
 # Tests
 
