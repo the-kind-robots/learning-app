@@ -96,7 +96,8 @@ systemctl --user start learning-app-stand@<branch>.service
 It refuses when the main checkout has uncommitted changes; otherwise it
 detaches the checkout onto `origin/<branch>`, restarts the backend if server
 code changed, and returns once the watch has rebuilt. Background sessions use
-it when asked; `git switch master` brings the checkout back.
+it when asked; `git switch master` brings the checkout back. What it said,
+including why it refused: `journalctl --user -t learning-app-stand`.
 
 ## Daily workflow
 
