@@ -43,9 +43,17 @@
 
 (defn check-incoming-auth!
   "Handles an incoming `#key=` or `#invite=` credential in the address. It runs before the learner's databases
-   open: a key from another account wipes the local data, which then opens fresh."
+   open: a key from another account wipes the local data, which then opens fresh. Resolves with the link when
+   Telegram's browser opened it and it was left for another browser, nil otherwise."
   []
   (account/check-incoming-auth! nil))
+
+
+(defn open-recovery-link!
+  "Joins the account of a pasted recovery link: the app starts again and adopts it as if the link had been
+   opened. Answers false, changing nothing, for a text that is not a recovery link."
+  [text]
+  (account/open-recovery-link! text))
 
 
 (def ^:private first-pass-wait-ms

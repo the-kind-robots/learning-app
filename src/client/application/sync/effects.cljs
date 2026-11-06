@@ -33,6 +33,26 @@
           (log/error :effect/request-sync {:error (str err)}))))))
 
 
+(nxr/register-effect! :effect/paste-recovery-link
+  ;; `prompt-message` and `refused-message` are the texts the view wants shown.
+  (fn paste-recovery-link
+    [_ _ {:keys [prompt-message refused-message]}]
+    (when-let [text (js/prompt prompt-message)]
+      (when-not (account/open-recovery-link! text)
+        (js/alert refused-message)))))
+
+
+(nxr/register-effect! :effect/copy-held-link
+  ;; `copied-message` is the text the view wants shown.
+  (fn ^:async copy-held-link
+    [_ _ {:keys [copied-message link]}]
+    (try
+      (await (.. js/navigator -clipboard (writeText link)))
+      (js/alert copied-message)
+      (catch js/Error err
+        (log/error :effect/copy-held-link {:error (str err)})))))
+
+
 (nxr/register-effect! :effect/open-sync-qr
   (fn ^:async open-sync-qr
     [{:keys [capabilities dispatch]} _]

@@ -56,8 +56,10 @@
         ;; The dictionary opens SQLite while the learner opens PouchDB; neither waits for the other.
         ;; The account's sync writes the session cookie. Its `initialized` is a promise: memory loaded,
         ;; first sync pass done.
+        incoming-auth      (account/check-incoming-auth!)
         [dictionary learner] (await (js/Promise.all #js [(dictionary/start!)
-                                                         (.then (account/check-incoming-auth!) #(learner/start!))]))
+                                                         (.then incoming-auth #(learner/start!))]))
+        held-link          (await incoming-auth)
         account            (await (account/start! {:learner learner :page page :world world}))
         capabilities       {:account    account
                             :dictionary dictionary
@@ -82,6 +84,11 @@
      #(swap! app-state assoc :pwa/install-available? true)
      #(swap! app-state assoc :pwa/install-available? false))
     (account/on-status account #(swap! app-state assoc :sync/status %))
+    ;; Telegram's browser opened a credential link and the app left it alone: a dialog says where to open it.
+    (when held-link
+      (swap! app-state assoc
+        :app/held-link held-link
+        :app/sync-open :sync-open/held-link))
     ;; After render, so the first window has a screen to compute. Following the history reads the address,
     ;; which `ports.account/check-incoming-auth!` has already handled.
     (navigation/follow! navigation #(dispatch {} [[:action/enter-windows %]]))))

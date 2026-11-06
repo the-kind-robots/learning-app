@@ -445,3 +445,176 @@ test.describe('Сохранить мои слова', () => {
     });
   });
 });
+
+test.describe('Ссылка восстановления', () => {
+  const home = (page) => page.getByRole('heading', { name: 'Главная' });
+  const syncMenu = (page) => page.getByRole('dialog', { name: 'Синхронизация' });
+  const pasteItem = (page) => syncMenu(page).getByRole('button', { name: 'Вставить ссылку восстановления' });
+  const connectItem = (page) => syncMenu(page).getByRole('button', { name: 'Подключить устройство' });
+
+  const answerAccount = async (page) => {
+    await stubAccountCopy(page.context());
+    await page.route('**/api/identity/account', (route) =>
+      route.fulfill({ json: { id: 7 } }));
+  };
+
+  // Pastes `text` into the prompt the paste item asks with.
+  const pasteRecoveryLink = async (page, text) => {
+    page.once('dialog', (dialog) => dialog.accept(text));
+    await syncButton(page).click();
+    await pasteItem(page).click();
+  };
+
+  test('пользователь без аккаунта открывает меню синхронизации → в нём вставка ссылки восстановления, действий аккаунта нет', async ({ page }) => {
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await page.goto('/home');
+      await expect(home(page)).toBeVisible();
+    });
+
+    await test.step('Когда он открывает меню «Синхронизация»', async () => {
+      await syncButton(page).click();
+    });
+
+    await test.step('Тогда в меню есть «Вставить ссылку восстановления» и нет «Подключить устройство»', async () => {
+      await expect(pasteItem(page)).toBeVisible();
+      await expect(connectItem(page)).toHaveCount(0);
+    });
+  });
+
+  test('пользователь без аккаунта вставляет ссылку восстановления → устройство входит в аккаунт', async ({ page }) => {
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await answerAccount(page);
+      await page.goto('/home');
+      await expect(home(page)).toBeVisible();
+    });
+
+    await test.step('Когда он вставляет ссылку восстановления', async () => {
+      await pasteRecoveryLink(page, 'https://sprecha.de/#key=test-token');
+      await expect(syncButton(page)).toHaveCSS('color', GREEN);
+    });
+
+    await test.step('Тогда меню предлагает «Подключить устройство»', async () => {
+      await syncButton(page).click();
+      await expect(connectItem(page)).toBeVisible();
+      await expect(pasteItem(page)).toHaveCount(0);
+    });
+  });
+
+  test('пользователь без аккаунта вставляет ссылку из QR подключения → подключение подтверждено', async ({ page }) => {
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await answerAccount(page);
+      await page.goto('/home');
+      await expect(home(page)).toBeVisible();
+    });
+
+    await test.step('Когда он вставляет ссылку с меткой подключения', async () => {
+      await pasteRecoveryLink(page, 'https://sprecha.de/#key=test-token&pair=nonce-1');
+      await expect(syncButton(page)).toHaveCSS('color', GREEN);
+    });
+
+    await test.step('Тогда на устройстве записана квитанция подключения', async () => {
+      const receipt = await page.evaluate(() =>
+        db.use('user-db').get('pairing:nonce-1').then((doc) => doc.type, () => null));
+      expect(receipt).toBe('pairing');
+    });
+  });
+
+  test('пользователь открывает приложение, установленное из Safari с аккаунтом → устройство в аккаунте', async ({ page }) => {
+    await test.step('Дано устройство без аккаунта, но с кукой аккаунта, как её переносит iOS при установке', async () => {
+      await answerAccount(page);
+      await page.goto('/home');
+      await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+      await page.evaluate(() => {
+        document.cookie = 'auth-token=test-token; Max-Age=60; path=/; SameSite=Lax; Secure';
+      });
+    });
+
+    await test.step('Когда он открывает приложение', async () => {
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Главная' })).toBeVisible();
+    });
+
+    await test.step('Тогда меню предлагает «Подключить устройство»', async () => {
+      await syncButton(page).click();
+      await expect(connectItem(page)).toBeVisible();
+    });
+  });
+
+  test('пользователь открывает ссылку восстановления в браузере Telegram → окно «Откройте ссылку в Safari», ссылка копируется целиком', async ({ page, context }) => {
+    const link = '/#key=test-token&pair=nonce-1';
+
+    await test.step('Дано браузер Telegram', async () => {
+      await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+      await page.addInitScript(() => { window.TelegramWebviewProxy = { postEvent() {} }; });
+      await answerAccount(page);
+    });
+
+    await test.step('Когда он открывает ссылку восстановления', async () => {
+      await page.goto(link);
+    });
+
+    await test.step('Тогда он видит окно «Откройте ссылку в Safari»', async () => {
+      await expect(page.getByRole('heading', { name: 'Откройте ссылку в Safari' })).toBeVisible();
+    });
+
+    await test.step('Когда он нажимает «Скопировать ссылку»', async () => {
+      page.once('dialog', (alert) => alert.accept());
+      await page.getByRole('button', { name: 'Скопировать ссылку' }).click();
+    });
+
+    await test.step('Тогда в буфере вся ссылка, а устройство так и не вошло в аккаунт', async () => {
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain('#key=test-token&pair=nonce-1');
+      await page.getByRole('button', { name: 'Закрыть' }).click();
+      await syncButton(page).click();
+      await expect(pasteItem(page)).toBeVisible();
+    });
+  });
+
+  test('пользователь открывает инвайт в браузере Telegram → инвайт не тратится', async ({ page }) => {
+    let provisions = 0;
+
+    await test.step('Дано браузер Telegram', async () => {
+      await page.addInitScript(() => { window.TelegramWebviewProxy = { postEvent() {} }; });
+      await page.route('**/api/identity/provision', (route) => {
+        provisions += 1;
+        return route.fulfill({ json: { id: 7, token: 'test-token' } });
+      });
+    });
+
+    await test.step('Когда он открывает инвайт', async () => {
+      await page.goto('/#invite=test-invite');
+    });
+
+    await test.step('Тогда он видит окно «Откройте ссылку в Safari», и инвайт не отправлен', async () => {
+      await expect(page.getByRole('heading', { name: 'Откройте ссылку в Safari' })).toBeVisible();
+      expect(provisions).toBe(0);
+    });
+  });
+
+  test('пользователь без аккаунта вставляет не ссылку → сообщение, аккаунта нет', async ({ page }) => {
+    let message;
+
+    await test.step('Дано пользователь без аккаунта на главной', async () => {
+      await page.goto('/home');
+      await expect(home(page)).toBeVisible();
+    });
+
+    await test.step('Когда он вставляет текст, который не ссылка восстановления', async () => {
+      page.once('dialog', (prompt) => {
+        page.once('dialog', (alert) => {
+          message = alert.message();
+          alert.accept();
+        });
+        prompt.accept('привет');
+      });
+      await syncButton(page).click();
+      await pasteItem(page).click();
+    });
+
+    await test.step('Тогда он видит «Это не ссылка восстановления», и меню по-прежнему без аккаунта', async () => {
+      await expect.poll(() => message).toBe('Это не ссылка восстановления');
+      await syncButton(page).click();
+      await expect(pasteItem(page)).toBeVisible();
+    });
+  });
+});
