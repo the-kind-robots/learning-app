@@ -68,6 +68,12 @@
      :word        (:home/word state)}))
 
 
+(defn vocabulary?
+  "Whether the vocabulary has words: only then home shows the lesson and words buttons."
+  [state]
+  (not (:home/empty-vocab? state)))
+
+
 (defn page-props
   [state]
   {;; {:id ... :name ...} for a named collection, nil when the implicit main
@@ -75,5 +81,5 @@
    :active-collection (when-let [id (:home/active-coll-id state)]
                         {:id   id
                          :name (:home/active-coll-name state)})
-   :empty-vocab? (boolean (:home/empty-vocab? state))
+   :empty-vocab? (not (vocabulary? state))
    :form (form-props state)})

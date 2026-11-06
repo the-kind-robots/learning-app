@@ -1,5 +1,6 @@
 (ns pages.lesson.view
   (:require
+   [application.pages :as pages]
    [pages.lesson.presenter :as presenter]))
 
 
@@ -300,3 +301,19 @@
        (when-not current-shown?
          {"ArrowRight" [[:action/view-trial next-page current-page]]
           "Ctrl+Enter" [[:action/press-next]]})))))
+
+
+;; A lesson is a mode, not a step deeper: it fades in and out. Within it, «ДАЛЕЕ» moves the trial.
+(defmethod pages/page :page/lesson
+  [_]
+  {:hotkeys     hotkeys
+   :keyboard-overlays? true
+   :open        :action/open-lesson
+   :path        "/lesson"
+   :refresh     :action/show-lesson
+   :transitions {:in     :transition/fade-in
+                 :out    :transition/fade-out
+                 :within (fn [before after]
+                           (when (presenter/next-trial? before after)
+                             :transition/next-trial))}
+   :view        page})

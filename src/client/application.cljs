@@ -95,8 +95,8 @@
 (nxr/register-action! :action/refresh-page
   ;; The screen on display computed again from memory, after the load and after the reader's own change.
   (fn refresh-page [state context]
-    (when-let [refresh (:refresh (pages/table (:page/current state)))]
-      (refresh state context))))
+    (when-let [refresh (:refresh (pages/page (:page/current state)))]
+      [[refresh context]])))
 
 
 (nxr/register-effect! :effect/announce
@@ -241,7 +241,7 @@
 (nxr/register-action! :action/press-hotkey
   (fn press-hotkey [state keystroke overlay-open?]
     (when-not overlay-open?
-      (when-let [actions (some-> (pages/table (:page/current state)) :hotkeys (apply [state]) (get keystroke))]
+      (when-let [actions (some-> (pages/page (:page/current state)) :hotkeys (apply [state]) (get keystroke))]
         (into [[:effect/prevent-default]] actions)))))
 
 

@@ -1,5 +1,6 @@
 (ns pages.home.view
   (:require
+   [application.pages :as pages]
    [pages.home.presenter :as presenter]))
 
 
@@ -182,3 +183,24 @@
        [:button.home__lesson-button.big-button.green-button
         {:on {:click [[:action/go-to-lesson]]}}
         [:i18n :lesson/start]]]]]))
+
+
+(defn hotkeys
+  "The actions of each keystroke on home: the buttons it shows, `Alt+KeyT` the themes, `Alt+Enter` the lesson,
+   `Alt+KeyW` the words."
+  [state]
+  (merge {"Alt+KeyT" [[:action/go-to-collections]]}
+         (when (presenter/vocabulary? state)
+           {"Alt+Enter" [[:action/go-to-lesson]]
+            "Alt+KeyW"  [[:action/go-to-words]]})))
+
+
+;; The keyboard covers the lesson button fixed at the bottom.
+(defmethod pages/page :page/home
+  [_]
+  {:hotkeys hotkeys
+   :keyboard-overlays? true
+   :open    :action/open-home
+   :path    "/home"
+   :refresh :action/show-home
+   :view    page})

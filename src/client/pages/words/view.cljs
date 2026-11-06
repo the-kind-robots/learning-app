@@ -1,5 +1,6 @@
 (ns pages.words.view
   (:require
+   [application.pages :as pages]
    [clojure.string :as str]
    [pages.words.presenter :as presenter]))
 
@@ -293,3 +294,23 @@
           [:button.vocabulary__start.big-button.green-button
            {:on {:click [[:action/go-to-lesson]]}}
            [:i18n :lesson/start]]]]))]))
+
+
+(defn hotkeys
+  "The actions of each keystroke on the words list: `Escape` leaves it, `Alt+Enter` starts the lesson its button
+   shows."
+  [state]
+  (merge {"Escape" [[:action/close-screen]]}
+         (when (presenter/vocabulary? state)
+           {"Alt+Enter" [[:action/go-to-lesson]]})))
+
+
+;; The search bar closes the column on the keyboard's inset.
+(defmethod pages/page :page/words
+  [_]
+  {:hotkeys hotkeys
+   :keyboard-overlays? true
+   :open    :action/open-words
+   :path    "/words"
+   :refresh :action/show-words
+   :view    page})

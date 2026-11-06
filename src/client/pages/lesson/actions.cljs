@@ -44,6 +44,14 @@
                (lesson/start learner language active-collection {:random random} now-ms)))]]))
 
 
+(nxr/register-action! :action/show-lesson
+  ;; A lesson under way is not computed again; one entered while memory loaded is drawn once it is in place.
+  (fn show-lesson [state _]
+    (when (and (nil? (:lesson/state state))
+               (not (:lesson/empty? state)))
+      [[:effect/enter :action/open-lesson]])))
+
+
 (nxr/register-action! :action/update-lesson
   (fn update-lesson [state from lesson-state]
     (when (= from (:lesson/state state))

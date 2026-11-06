@@ -13,6 +13,13 @@
    :prompt (:prompt trial)})
 
 
+(defn next-trial?
+  "Whether the render from `before` to `after` moved the lesson on to its next trial: an answered one is gone."
+  [before after]
+  (and (some? (lesson/last-result (:lesson/state before)))
+       (nil? (lesson/last-result (:lesson/state after)))))
+
+
 (defn paging-props
   "Props for paging the trials: the `:page` shown, the pages either side of it and the `:current-page`; whether
    the first trial is shown, and whether the current one is; whether the current trial is answered (`:answered?`)
