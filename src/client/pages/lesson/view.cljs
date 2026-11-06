@@ -89,6 +89,19 @@
        (next-button false))]]])
 
 
+(defn- checked-field
+  "The field of a checked example: the tiles as they were placed, no longer movable. Over a trial left behind it
+   keeps its place, hidden, as the field does."
+  [{:keys [current-shown? placed-tiles]}]
+  (when placed-tiles
+    (into [:ol.lesson__checked-field
+           {:aria-label [:i18n :lesson/tray]
+            :inert      (not current-shown?)
+            :lang       "de"}]
+          (map (fn [tile] [:li.lesson__checked-tile tile]))
+          placed-tiles)))
+
+
 (defn- success-footer
   [{:keys [current-shown? finished?] :as props}]
   [:footer#lesson-footer
@@ -227,7 +240,8 @@
       [:i18n :lesson/title]]]
 
     :else
-    (let [answer-hint (presenter/answer-hint-props state)
+    (let [answer-hint  (presenter/answer-hint-props state)
+          footer-props (presenter/footer-props state)
           {:keys [current-page current-shown? finished? page pages viewed-answer]}
           (presenter/strip-props state)]
       [:div.lesson
@@ -263,13 +277,14 @@
              :type "button"
              :on   {:click [[:action/close-page]]}}
             [:i18n :lesson/finish]]])
+        ;; Where the field stood, above the panel's colour: the panel shown starts at the verdict.
+        (checked-field footer-props)
         [:div.lesson__panel-current
-         (let [footer-props (presenter/footer-props state)]
-           (if footer-props
-             (case (:variant footer-props)
-               :success (success-footer footer-props)
-               :error   (error-footer footer-props))
-             (input-footer (presenter/input-props state))))]
+         (if footer-props
+           (case (:variant footer-props)
+             :success (success-footer footer-props)
+             :error   (error-footer footer-props))
+           (input-footer (presenter/input-props state)))]
         ;; A past trial's answer, one per page: the one leaving fades where it stood while the next appears; leaving
         ;; for the current trial, the strip fades too, inert at once.
         (when-let [{:keys [attempts first-try?]} viewed-answer]

@@ -1,7 +1,8 @@
 (ns pages.lesson.presenter
   (:require
    [clojure.string :as str]
-   [domain.lesson :as lesson]))
+   [domain.lesson :as lesson]
+   [pages.lesson.answer-field :as answer-field]))
 
 
 (defn- trial-challenge
@@ -95,11 +96,19 @@
   [state]
   (let [lesson-state (:lesson/state state)]
     (when-let [{:keys [answer correct?]} (lesson/last-result lesson-state)]
-      (merge (answer-props state (lesson/current-trial lesson-state))
-             {:variant        (if correct? :success :error)
-              :user-answer    (when-not (str/blank? answer) answer)
-              :current-shown? (nil? (:lesson/viewed-trial state))
-              :finished?      (lesson/finished? lesson-state)}))))
+      (let [trial (lesson/current-trial lesson-state)]
+        (merge (answer-props state trial)
+               {:variant        (if correct? :success :error)
+                ;; The tiles were joined by spaces into the answer: cut as the field cuts a sentence, it gives them
+                ;; back in tray order.
+                :placed-tiles   (when (lesson/example-trial? trial)
+                                  (answer-field/words-of answer))
+                ;; An example's answer is its placed tiles, above the panel: written out again it would push the
+                ;; prompt off a phone's screen.
+                :user-answer    (when-not (or (str/blank? answer) (lesson/example-trial? trial))
+                                  answer)
+                :current-shown? (nil? (:lesson/viewed-trial state))
+                :finished?      (lesson/finished? lesson-state)})))))
 
 
 (defn strip-props
