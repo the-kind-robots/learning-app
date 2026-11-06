@@ -8,11 +8,6 @@
 (def ^:private empty-suggestions nil)
 
 
-(nxr/register-action! :action/go-to-home
-  (fn go-to-home [_]
-    [[:effect/navigate :page/home]]))
-
-
 (defn content
   "What home shows of the learner's data: the active collection's heading and whether there is anything to study."
   [_ {collection :active-collection :keys [learner]}]
@@ -31,17 +26,15 @@
 
 
 (nxr/register-action! :action/open-home
-  ;; Home is computed from memory in the task of the tap. Entering home again while it is on display
-  ;; (the `popstate` of a step back) leaves the form alone.
+  ;; Home is computed from memory in the task of the tap, with an empty form.
   (fn open-home [state context]
-    (let [shown? (= :page/home (:page/current state))]
-      (cond-> [[:effect/save
-                (merge (when-not shown? fresh-form)
-                       {:page/current :page/home}
-                       (content state context))]]
-        ;; Only Safari measures a height here; where `field-sizing` works the browser has forgotten the old height.
-        (not shown?) (conj [:effect/clear-autogrow "new-word-value"]
-                           [:effect/clear-autogrow "new-word-translation"])))))
+    [[:effect/save
+      (merge fresh-form
+             {:page/current :page/home}
+             (content state context))]
+     ;; Only Safari measures a height here; where `field-sizing` works the browser has forgotten the old height.
+     [:effect/clear-autogrow "new-word-value"]
+     [:effect/clear-autogrow "new-word-translation"]]))
 
 
 (nxr/register-action! :action/show-home

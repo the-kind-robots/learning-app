@@ -20,6 +20,9 @@
    [pages.lesson.page-panel]
    [pages.lesson.page-strip]
    [pages.lesson.view]
+   [pages.stats.actions]
+   [pages.stats.effects]
+   [pages.stats.view]
    [pages.words.actions]
    [pages.words.effects]
    [pages.words.view]
@@ -30,6 +33,7 @@
    [ports.learner :as learner]
    [ports.navigation :as navigation]
    [ports.page :as page]
+   [ports.sharing :as sharing]
    [ports.world :as world]
    [replicant.dom :as r]))
 
@@ -45,7 +49,7 @@
         app-state          (atom {})
         world              (world/start!)
         page               (page/start!)
-        navigation         (navigation/start! {:home pages/home :routes (pages/routes)})
+        navigation         (navigation/start! {:home pages/home :paths (pages/paths)})
         ;; The service worker registers before render; the registration arrives later, as a promise.
         install            (install/start!)
         examples-generator (examples-generator/start!)
@@ -62,6 +66,7 @@
                             :learner    learner
                             :navigation navigation
                             :page       page
+                            :sharing    (sharing/start!)
                             :world      world}
         system             {:app-state    app-state
                             :capabilities capabilities}
@@ -77,16 +82,9 @@
      #(swap! app-state assoc :pwa/install-available? true)
      #(swap! app-state assoc :pwa/install-available? false))
     (account/on-status account #(swap! app-state assoc :sync/status %))
-    ;; After render, so the first route has a screen to compute. Starting the router reads the address,
+    ;; After render, so the first window has a screen to compute. Following the history reads the address,
     ;; which `ports.account/check-incoming-auth!` has already handled.
-    (navigation/follow! navigation
-                        (fn [entered]
-                          (let [current-page (pages/page entered)]
-                            ;; The keyboard's mode belongs to the screen, so it is set once, as the screen is entered.
-                            (page/overlay-keyboard! page (:keyboard-overlays? current-page))
-                            (dispatch {}
-                                      [[:effect/enter (:open current-page)]
-                                       [:effect/after-paint [[:effect/sync]]]]))))))
+    (navigation/follow! navigation #(dispatch {} [[:action/enter-windows %]]))))
 
 
 (defn ^:async ^:export start

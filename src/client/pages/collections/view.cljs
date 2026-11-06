@@ -173,7 +173,7 @@
 
 (defmethod pages/page :page/collections
   [_]
-  {:hotkeys (constantly {"Escape" [[:action/close-screen]]})
+  {:hotkeys (constantly {"Escape" [[:action/close-page]]})
    :open    :action/open-collections
    :path    "/collections"
    :refresh :action/show-collections

@@ -210,7 +210,7 @@
        [:i18n :lesson/empty-hint]]
       [:button.lesson__empty-state-cta
        {:type "button"
-        :on   {:click [[:action/go-to-words]]}}
+        :on   {:click [[:action/open-page :page/words]]}}
        [:i18n :lesson/add-words]]]]]])
 
 
@@ -234,7 +234,7 @@
        (when answer-hint (answer-hint-popover answer-hint))
        [:h1.lesson__title.visually-hidden
         [:i18n :lesson/title]]
-       ;; The lesson is closed by the shell's corner ✕ (`:action/close-screen`).
+       ;; The lesson is closed by the shell's corner ✕ (`:action/close-page`).
        [:header.lesson__header
         (progress state {})]
        [:main.lesson__body
@@ -254,13 +254,14 @@
        ;; panel shown is its last child that is not inert, so the way home comes first.
        [:page-panel.lesson__panel
         {:page (when-not current-shown? page)}
-        ;; At the end of a lesson the way home, one for every panel: it travels with the panel's edge.
+        ;; At the end of a lesson the way out, to the window beneath, one for every panel: it travels with the
+        ;; panel's edge.
         (when finished?
           [:div.lesson__panel-finish
            [:button.lesson__finish
             {:id   "lesson-finish"
              :type "button"
-             :on   {:click [[:action/go-to-home]]}}
+             :on   {:click [[:action/close-page]]}}
             [:i18n :lesson/finish]]])
         [:div.lesson__panel-current
          (let [footer-props (presenter/footer-props state)]
@@ -295,7 +296,7 @@
           (presenter/paging-props state)]
       (merge
        (when finished?
-         {"Escape" [[:action/go-to-home]]})
+         {"Escape" [[:action/close-page]]})
        (when (and (not first-shown?) (or answered? (not current-shown?)))
          {"ArrowLeft" [[:action/view-trial previous-page current-page]]})
        (when-not current-shown?

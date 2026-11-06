@@ -4,6 +4,7 @@
    [domain.examples :as examples]
    [domain.lesson :as lesson]
    [domain.retention :as retention]
+   [domain.statistics :as statistics]
    [domain.vocabulary :as vocabulary]
    [ports.learner :as learner]
    [ports.page :as page]
@@ -54,6 +55,13 @@
                       :created-at
                       (world/clock world :now-iso))]
     (await (learner/insert! learner :entity/review review))))
+
+
+(defn lesson-days
+  "The learner's lessons by local day, from the first lesson's to that of `now-ms`
+   (`domain.statistics/lesson-days`)."
+  [learner now-ms]
+  (statistics/lesson-days (learner/lesson-times learner) now-ms))
 
 
 (defn token-info

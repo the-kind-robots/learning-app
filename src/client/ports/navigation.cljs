@@ -1,23 +1,22 @@
 (ns ports.navigation
-  "Moving between the app's screens: the router and the browser history. `adapters.navigation` does the work."
+  "The browser history, written from the stack of the open windows. `adapters.navigation` does the work."
   (:require
    [adapters.navigation :as navigation]))
 
 
 (defprotocol Navigation
-  (navigate
-    [n page]
-    "Moves to `page`. A step back enters home first, with the `on-enter` given to `follow!`, so home is on screen in the task of the tap.")
+  (record!
+    [n from to]
+    "Makes the history end at the stack `to`, which follows `from`: a window more pushes an entry, fewer step back.")
   (follow!
-    [n on-enter]
-    "Starts the router and calls `on-enter` with the page of every route entered."))
+    [n on-windows]
+    "Calls `on-windows` with the stack of the entry the app opens on, then with that of every entry the browser steps to, the app's own step back included."))
 
 
 (defn start!
-  "The navigation over `routes`, a table of paths and page names, and the `home` page the history rests on. The
-   router starts later, with `follow!`."
+  "The navigation over `paths`, the path of each page, and the `home` page at the bottom of every stack. It reads
+   the address later, with `follow!`."
   [routing]
-  (let [navigator (navigation/navigator routing)]
-    (reify Navigation
-      (navigate [_ page] (navigation/navigate! navigator page))
-      (follow! [_ on-enter] (navigation/follow! navigator on-enter)))))
+  (reify Navigation
+    (record! [_ from to] (navigation/record! routing from to))
+    (follow! [_ on-windows] (navigation/follow! routing on-windows))))

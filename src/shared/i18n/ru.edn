@@ -67,6 +67,11 @@
 
  :phrase/add                  "Добавить фразу"
 
+ :retention/due               "пора повторить"
+ :retention/excellent         "отлично"
+ :retention/good              "хорошо"
+ :retention/new               "новые"
+
  :settings/language           "Язык"
  :settings/open               "Шпреха, настройки"
  :settings/title              "Настройки"
@@ -79,6 +84,11 @@
  :shell/read-error            "Не получается прочитать данные на устройстве. Перезагрузите страницу."
  :shell/reload-build          "Перезагрузить сборку"
  :shell/word-mark             "Шпреха"
+
+ :stats/lessons               [:fn/str "Уроков пройдено: {{:count}}"]
+ :stats/share                 "ПОДЕЛИТЬСЯ"
+ :stats/title                 "Статистика"
+ :stats/words                 [:fn/str "Слов: {{:count}}"]
 
  :sync/cancel                 "Отмена"
  :sync/connect-device         "Подключить устройство"

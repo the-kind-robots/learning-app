@@ -23,11 +23,6 @@
       (reset! sentinel-watch nil))))
 
 
-(nxr/register-action! :action/go-to-words
-  (fn go-to-words [_]
-    [[:effect/navigate :page/words]]))
-
-
 (nxr/register-effect! :effect/scroll-words-to-top
   (fn scroll-words-to-top [_ _]
     (when-let [node (js/document.querySelector ".vocabulary__list")]

@@ -1,0 +1,229 @@
+/* The statistics: the words by memory, then the lessons by day, and the
+   share button in the usual footer, fixed at the foot of the screen. */
+.statistics {
+  --statistics-footer-height: calc(50px + 16px + 16px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  font-family: Nunito, sans-serif;
+  color: rgb(var(--color-black-text));
+  padding: var(--app-bar-height) 0 var(--statistics-footer-height);
+}
+
+.statistics__content {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  margin-inline: auto;
+  max-width: 600px;
+  padding: 20px 16px 24px;
+}
+
+.statistics__section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.statistics__heading {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0;
+}
+
+/* The words: a column per tenth of memory, as high as its share of the
+   tallest, its colour at half opacity, the count inside at its top. */
+.statistics__bins {
+  align-items: end;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  height: 160px;
+}
+
+.statistics__bin {
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  min-height: 26px;
+  padding-top: 5px;
+  position: relative;
+}
+
+.statistics__bin-fill {
+  border-radius: 10px;
+  inset: 0;
+  opacity: .5;
+  position: absolute;
+}
+
+.statistics__bin-count {
+  color: rgb(48, 48, 48);
+  font-size: 12px;
+  font-weight: 800;
+  position: relative;
+}
+
+/* The four groups as shares of one strip, then their counts. */
+.statistics__strip {
+  display: flex;
+  gap: 3px;
+  height: 12px;
+}
+
+.statistics__strip-part {
+  border-radius: 6px;
+  flex-basis: 0;
+}
+
+.statistics__groups {
+  display: grid;
+  gap: 10px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.statistics__group {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+}
+
+.statistics__group-dot {
+  align-self: center;
+  border-radius: 50%;
+  flex: none;
+  height: 10px;
+  width: 10px;
+}
+
+.statistics__group-words {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.statistics__group-name {
+  color: rgb(107, 107, 107);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* The lessons: a column per day, edge to edge, scrolled sideways. The
+   month's name sticks to the left edge while its days are in view. */
+.statistics__days {
+  display: flex;
+  gap: 4px;
+  margin-inline: -16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-inline: 16px;
+  scrollbar-width: none;
+}
+
+.statistics__days::-webkit-scrollbar {
+  display: none;
+}
+
+.statistics__month {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+
+.statistics__month-name {
+  background: rgb(240, 240, 240);
+  border-radius: 999px;
+  color: rgb(75, 75, 75);
+  font-size: 13px;
+  font-weight: 800;
+  left: 0;
+  margin-bottom: 6px;
+  padding: 2px 10px;
+  position: sticky;
+  width: max-content;
+}
+
+.statistics__month-days {
+  display: flex;
+  gap: 4px;
+}
+
+.statistics__day {
+  align-items: center;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 22px;
+}
+
+/* The count sits in the 16px on top, so the busiest day's column fills the
+   rest. 4px wider than the day, so the baselines of neighbours meet. */
+.statistics__day-bar {
+  align-items: center;
+  border-bottom: 2px solid rgb(var(--color-swan));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  height: 150px;
+  justify-content: flex-end;
+  padding-top: 16px;
+  width: calc(100% + 4px);
+}
+
+.statistics__day-lessons {
+  color: rgb(107, 107, 107);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.statistics__day-fill {
+  background: rgb(var(--color-bee));
+  border-radius: 4px 4px 0 0;
+  opacity: .5;
+  width: 22px;
+}
+
+.statistics__day-fill--purple {
+  background: rgb(125, 79, 196);
+}
+
+.statistics__day-date {
+  border-radius: 9px;
+  color: rgb(107, 107, 107);
+  font-size: 11px;
+  font-weight: 600;
+  height: 18px;
+  line-height: 18px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.statistics__day-date--today {
+  background: rgb(60, 60, 60);
+  color: rgb(var(--color-snow));
+  font-weight: 800;
+}
+
+.statistics__day-weekday {
+  color: rgb(75, 75, 75);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.statistics__day-weekday--weekend {
+  color: rgb(118, 118, 118);
+}
+
+.statistics__footer {
+  --page-footer-gap: 0px;
+  background: rgb(var(--color-polar));
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+}

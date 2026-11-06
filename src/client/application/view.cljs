@@ -18,7 +18,7 @@
    {:type       "button"
     :aria-label [:i18n :shell/open-collections]
     :title      [:i18n :collections/title]
-    :on         {:click [[:action/go-to-collections]]}}
+    :on         {:click [[:action/open-page :page/collections]]}}
    ;; The box is the drawing, so the bar places the drawing itself.
    ;; zprint: as written
    [:svg.app-shell__corner-icon-svg
@@ -35,7 +35,7 @@
    {:type       "button"
     :aria-label [:i18n :dialog/close]
     :title      [:i18n :dialog/close]
-    :on         {:click [[:action/close-screen]]}}
+    :on         {:click [[:action/close-page]]}}
    ;; The box is the drawing with its round caps, so the bar places the drawing itself.
    [:svg.app-shell__corner-icon-svg
     {:aria-hidden "true"
@@ -128,7 +128,7 @@
   "The whole page: the bar across the top, the dialogs, the screen the state
    is on, and the status line."
   [state]
-  (let [{:keys [build-mark corner page read-error? show-install? stars]}
+  (let [{:keys [build-mark corner page read-error? show-install? stars stars-button?]}
         (presenter/shell-props state)
         sync (sync-presenter/props state)]
     (list
@@ -153,8 +153,16 @@
        (sync-view/sync-button sync)]
       ;; The middle of the bar, kept for what the learner should see at a glance: stars, progress, a notice.
       [:div.app-shell__info-bar
+       ;; Outside a lesson a button lies over the stars and opens the statistics. It is their sibling, so the
+       ;; stars stay mounted when it comes and goes, and do not light up again.
        (when stars
-         (stars-row stars))
+         [:div.app-shell__stars-slot
+          (stars-row stars)
+          (when stars-button?
+            [:button.app-shell__stars-button
+             {:aria-label [:i18n :stats/title]
+              :on         {:click [[:action/open-page :page/stats]]}
+              :type       "button"}])])
        ;; Which bundle the page loaded, and the tap that reloads onto the newest one.
        (when ^boolean goog/DEBUG
          [:button.app-shell__build-mark

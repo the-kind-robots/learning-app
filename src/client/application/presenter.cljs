@@ -36,25 +36,28 @@
 (defn shell-props
   "What the shell shows: `:corner` (themes icon on home, close mark elsewhere, ADR-0015), `:page` (nil until
    memory is loaded), `:read-error?` (the learner's data could not be read), `:build-mark` (the bundle's,
-   empty in a release build), and `:stars` (today's lessons, `stars`, from the moment memory is loaded, so that a
-   star passed later joins a row already there)."
+   empty in a release build), `:stars` (today's lessons, `stars`, from the moment memory is loaded, so that a
+   star passed later joins a row already there), and whether they are a button that opens the statistics
+   (`:stars-button?`: with a lesson today, outside a lesson and the statistics)."
   [state]
   {:build-mark    build-identity/stamp
    :corner        (case (page state)
                     :page/home :collections
-                    (:page/collections :page/lesson :page/words) :close
+                    (:page/collections :page/lesson :page/stats :page/words) :close
                     nil)
    :page          (page state)
    :read-error?   (= :status/unreadable (:learner/status state))
    :show-install? (boolean (:pwa/install-available? state))
    :stars         (when (page state)
-                    (stars (:learner/lessons-today state 0)))})
+                    (stars (:learner/lessons-today state 0)))
+   :stars-button? (and (pos? (:learner/lessons-today state 0))
+                       (contains? #{:page/collections :page/home :page/words} (page state)))})
 
 
 (defn screen-change
   "The transition from the screen of `before` to that of `after`, by the pages' `:transitions`: the screen's
-   `:within` when it stays, else the `:in` of the one coming on, the `:out` of the one going off, or back to home
-   or deeper. Nil when either is not drawn yet."
+   `:within` when it stays, else the `:in` of the one coming on, the `:out` of the one going off, or deeper when
+   the window left stays open beneath, back when it was taken off. Nil when either is not drawn yet."
   [before after]
   (let [from (page before)
         to   (page after)]
@@ -64,4 +67,6 @@
                     (within before after))
       :else (or (get-in (pages/page to) [:transitions :in])
                 (get-in (pages/page from) [:transitions :out])
-                (if (= pages/home to) :transition/back :transition/deeper)))))
+                (if (some #{from} (:page/windows after))
+                  :transition/deeper
+                  :transition/back)))))

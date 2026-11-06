@@ -245,4 +245,4 @@
   (fn switch-active-collection
     [{{:keys [learner]} :capabilities :keys [dispatch]} _ collection-id]
     (collections/switch-active! learner collection-id)
-    (dispatch [[:action/go-to-home]])))
+    (dispatch [[:action/open-page :page/home]])))

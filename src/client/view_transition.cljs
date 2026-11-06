@@ -15,7 +15,7 @@
 
 
 (defonce ^:private _browser-back
-  ;; Registered at load, before the router's own listener, so the flag is up by the time the router renders.
+  ;; Registered at load, before the navigation's own listener, so the flag is up by the time the window renders.
   (js/window.addEventListener "popstate"
                               (fn [^js event]
                                 (when (.-hasUAVisualTransition event)

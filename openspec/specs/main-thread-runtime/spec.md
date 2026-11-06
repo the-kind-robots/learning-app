@@ -17,7 +17,7 @@ The system SHALL initialise the application from a main-thread ClojureScript ent
 - **AND** it starts the dictionary worker proxy and stable dictionary port handle
 - **AND** it starts the example fetcher component through the runtime lifecycle, after the component that writes the session cookie; the fetcher sends nothing before it is ready (`specs/example-backfill/spec.md`)
 - **AND** it installs Nexus dispatch, Replicant rendering, document listeners, PWA init, and passive Service Worker registration
-- **AND** it starts the frontend router last
+- **AND** it starts following the browser history last
 
 ### Requirement: Replicant renders all UI from state
 The system SHALL use Replicant to diff and apply hiccup data to the DOM; the Service Worker SHALL NOT render application UI or route-specific HTML at runtime, but it MAY return a cached static app shell document for navigation fallback. The first render SHALL happen as the `learner-data-memory` requirement "The app opens on a splash until memory is loaded" states; from then on renders SHALL follow store changes without reordering effects: every store change renders, a write that changes nothing renders nothing, and a store write outside any dispatch renders immediately. Several changes inside one dispatch MAY render several times — extra renders inside a synchronous dispatch cost diffing, not paints (#213).
@@ -68,11 +68,11 @@ The system SHALL use Nexus as the mechanism for mutating app state; UI events em
 - **AND** registered effect handlers can access app capabilities through effect context or the runtime app context
 - **AND** the effect handler writes its result into the app-state store when state changes are needed
 
-#### Scenario: Navigation route loads page data
-- **WHEN** the browser route changes to `/home`, `/words`, `/lesson` or `/collections`
-- **THEN** the `reitit.frontend` controller dispatches the page's entry through runtime dispatch
+#### Scenario: An entered window loads its page data
+- **WHEN** the open windows change: a tap, a close, the browser's Back or Forward, the app's start
+- **THEN** the window on top is entered once, through runtime dispatch
 - **AND** the entry computes the page slice from the learner's data in app state, synchronously, without a storage read
-- **AND** Replicant renders the page view in the same task, except for the route entered at boot, which is first rendered as the `learner-data-memory` requirement "The app opens on a splash until memory is loaded" states
+- **AND** Replicant renders the page view in the same task, except for the window entered at boot, which is first rendered as the `learner-data-memory` requirement "The app opens on a splash until memory is loaded" states
 
 ### Requirement: App state uses namespaced page slices
 The system SHALL maintain app state as namespaced flat page slices keyed by `:app/page`, page-specific keys, and modal keys.

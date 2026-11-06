@@ -67,6 +67,11 @@
 
  :phrase/add                  "Add phrase"
 
+ :retention/due               "due"
+ :retention/excellent         "excellent"
+ :retention/good              "good"
+ :retention/new               "new"
+
  :settings/language           "Language"
  :settings/open               "Sprecha, settings"
  :settings/title              "Settings"
@@ -79,6 +84,11 @@
  :shell/read-error            "Can't read data on this device. Reload the page."
  :shell/reload-build          "Reload build"
  :shell/word-mark             "Sprecha"
+
+ :stats/lessons               [:fn/str "Lessons passed: {{:count}}"]
+ :stats/share                 "SHARE"
+ :stats/title                 "Statistics"
+ :stats/words                 [:fn/str "Words: {{:count}}"]
 
  :sync/cancel                 "Cancel"
  :sync/connect-device         "Connect a device"
