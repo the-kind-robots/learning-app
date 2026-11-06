@@ -20,6 +20,16 @@
        (mapv (fn [value] {:lang "ru" :value value}))))
 
 
+(defn translations-text
+  "The dictionary's `translations` as the field shows them: one a line, trimmed, the way `parse-translations`
+   reads them back."
+  [translations]
+  (->> translations
+       (map str/trim)
+       (remove str/blank?)
+       (str/join "\n")))
+
+
 (defn russian-translations
   "The texts of the Russian translations of `word`, in order."
   [word]
