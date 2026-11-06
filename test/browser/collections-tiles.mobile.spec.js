@@ -27,11 +27,11 @@ test.describe('Плитки тем на телефоне', () => {
       await page.getByRole('button', { name: 'Открыть наборы' }).click();
     });
 
-    await test.step('Тогда все плитки и кнопка «Новый набор» целиком в видимой области', async () => {
+    await test.step('Тогда все плитки и кнопка «ДОБАВИТЬ НАБОР» целиком в видимой области', async () => {
       for (const name of names) {
         await expect(page.getByRole('button', { name: name + ' 0', exact: true })).toBeInViewport({ ratio: 1 });
       }
-      await expect(page.getByRole('button', { name: 'Новый набор' })).toBeInViewport({ ratio: 1 });
+      await expect(page.getByRole('button', { name: 'ДОБАВИТЬ НАБОР' })).toBeInViewport({ ratio: 1 });
     });
 
     await test.step('Тогда ни одна плитка не разорвана между колонками', async () => {
@@ -61,6 +61,8 @@ test.describe('Плитки тем на телефоне', () => {
     });
 
     await test.step('Когда он листает вниз', async () => {
+      // The tiles scroll between the bar and the footer: the wheel turns over them.
+      await page.mouse.move(195, 400);
       await page.mouse.wheel(0, 400);
       await expect(page.getByRole('button', { name: 'Thema 00 0', exact: true })).not.toBeInViewport();
     });

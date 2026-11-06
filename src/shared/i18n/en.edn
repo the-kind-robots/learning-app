@@ -2,10 +2,10 @@
 ;; value from the markup's `[:i18n :key {:param …}]`.
 {:language/name               "English"
 
+ :collections/add             "ADD COLLECTION"
  :collections/all             "Everything"
  :collections/delete          [:fn/str "Delete collection “{{:name}}”"]
  :collections/deleted         [:fn/str "Collection “{{:name}}” deleted"]
- :collections/new             "New collection"
  :collections/new-name        "Name of the new collection:"
  :collections/title           "Collections"
 

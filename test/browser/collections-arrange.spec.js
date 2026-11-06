@@ -159,9 +159,9 @@ test.describe('Порядок тем', () => {
       await openCollections(page);
     });
 
-    await test.step('Когда он создаёт тему «A» кнопкой «+»', async () => {
+    await test.step('Когда он создаёт тему «A» кнопкой «ДОБАВИТЬ НАБОР»', async () => {
       page.once('dialog', (dialog) => dialog.accept('A'));
-      await page.getByRole('button', { name: 'Новый набор' }).click();
+      await page.getByRole('button', { name: 'ДОБАВИТЬ НАБОР' }).click();
     });
 
     await test.step('Тогда «A» стоит последней', async () => {

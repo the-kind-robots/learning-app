@@ -2,10 +2,10 @@
 ;; apps do. Turkish nouns take no plural after a number, so no text needs a plural form.
 {:language/name               "Türkçe"
 
+ :collections/add             "SET EKLE"
  :collections/all             "Tümü"
  :collections/delete          [:fn/str "“{{:name}}” setini sil"]
  :collections/deleted         [:fn/str "“{{:name}}” seti silindi"]
- :collections/new             "Yeni set"
  :collections/new-name        "Yeni setin adı:"
  :collections/title           "Setler"
 
