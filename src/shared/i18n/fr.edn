@@ -5,8 +5,11 @@
  :collections/add             "AJOUTER UNE COLLECTION"
  :collections/all             "Tous les mots"
  :collections/delete          [:fn/str "Supprimer la collection « {{:name}} »"]
+ :collections/delete-confirm  [:fn/str "Supprimer la collection « {{:name}} » ? Les mots restent dans le dictionnaire."]
  :collections/deleted         [:fn/str "Collection « {{:name}} » supprimée"]
  :collections/new-name        "Nom de la nouvelle collection :"
+ :collections/restore         [:fn/str "Rétablir la collection « {{:name}} »"]
+ :collections/restored        [:fn/str "Collection « {{:name}} » rétablie"]
  :collections/title           "Collections"
 
  :dialog/close                "Fermer"

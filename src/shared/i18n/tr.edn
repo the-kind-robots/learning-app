@@ -5,8 +5,11 @@
  :collections/add             "SET EKLE"
  :collections/all             "Tümü"
  :collections/delete          [:fn/str "“{{:name}}” setini sil"]
+ :collections/delete-confirm  [:fn/str "“{{:name}}” seti silinsin mi? Kelimeler sözlükte kalır."]
  :collections/deleted         [:fn/str "“{{:name}}” seti silindi"]
  :collections/new-name        "Yeni setin adı:"
+ :collections/restore         [:fn/str "“{{:name}}” setini geri getir"]
+ :collections/restored        [:fn/str "“{{:name}}” seti geri geldi"]
  :collections/title           "Setler"
 
  :dialog/close                "Kapat"

@@ -31,16 +31,28 @@
    :tap        tap})
 
 
+(defn- deleted?
+  "Whether `collection` was deleted on this visit and stands as its trace."
+  [state collection]
+  (some #(= (:id collection) (:id %)) (:collections/deleted state)))
+
+
 (defn- collection-target
-  [state {:keys [id name word-ids]} shown-name]
-  (target state
-          {:id         id
-           :name       shown-name
-           :lang       name-lang
-           :count      (count word-ids)
-           :active?    (= id (:collections/active-id state))
-           :deletable? true
-           :tap        [[:action/handle-tab-click id]]}))
+  "The target of a collection, or its trace when it was deleted on this visit."
+  [state {:keys [id name word-ids] :as collection} shown-name]
+  (if (deleted? state collection)
+    {:id     id
+     :name   shown-name
+     :lang   name-lang
+     :trace? true}
+    (target state
+            {:id         id
+             :name       shown-name
+             :lang       name-lang
+             :count      (count word-ids)
+             :active?    (= id (:collections/active-id state))
+             :deletable? true
+             :tap        [[:action/handle-tab-click id]]})))
 
 
 (defn- main-tile
@@ -64,11 +76,12 @@
 
 
 (defn- union-count
-  "How many distinct word ids `collections` hold together. A JS Set, since
-   the ids are strings that V8 has already hashed."
-  [collections]
+  "How many distinct word ids `collections` hold together, those deleted on this visit aside. A JS Set,
+   since the ids are strings that V8 has already hashed."
+  [state collections]
   (let [seen (js/Set.)]
     (doseq [collection collections
+            :when      (not (deleted? state collection))
             word-id    (:word-ids collection)]
       (.add seen word-id))
     (.-size seen)))
@@ -80,11 +93,11 @@
   [state {:keys [name parent children]}]
   (let [head (if parent
                (assoc (collection-target state parent name)
-                      :count     (union-count (cons parent children))
+                      :count     (union-count state (cons parent children))
                       :tappable? true)
                {:name      name
                 :lang      name-lang
-                :count     (union-count children)
+                :count     (union-count state children)
                 :tappable? false})]
     {:folder? true
      :head    head
@@ -97,9 +110,10 @@
 (defn tiles
   "Every tile in reading order: «Всё подряд», then collections and folders in the learner's order, each with
    its colour and its key. A tile but «Всё подряд» can be dragged by its `:sort-key`, by a touch once
-   `:armed?`: when a target of it is in its editing state."
+   `:armed?`: when a target of it is in its editing state. A collection deleted on this visit keeps its
+   place and colour as its trace."
   [state]
-  (->> (colours/reading-order (:collections/items state))
+  (->> (colours/reading-order (concat (:collections/items state) (:collections/deleted state)))
        (map (fn [{:keys [accent folder? key] :as entry}]
               (let [{:keys [head rows] :as tile} (if folder?
                                                    (folder-tile state entry)
