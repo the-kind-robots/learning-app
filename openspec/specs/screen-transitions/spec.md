@@ -1,7 +1,7 @@
 # screen-transitions Specification
 
 ## Purpose
-How a screen change moves on a phone: depth slides, the lesson fades through, the next trial slides, a deleted collection closes its gap (ADR-0024).
+How a screen change moves on a phone: depth slides, the lesson fades through, the next trial slides, a deleted collection closes its gap, a new one opens one (ADR-0024).
 
 ## Requirements
 
@@ -84,6 +84,15 @@ On a phone, deleting a collection SHALL shrink its tile away while the tiles aft
 
 - **WHEN** the user deletes a collection on the collections screen on a phone
 - **THEN** its tile shrinks away and the tiles after it glide into the gap
+
+### Requirement: A new collection's tile grows in its place
+
+On a phone, creating a collection SHALL grow its tile from smaller in its place while the tiles after it glide apart to make room, over 240 ms — the reverse of a deletion.
+
+#### Scenario: Creating a collection
+
+- **WHEN** the user creates a collection with «ДОБАВИТЬ НАБОР» on the collections screen on a phone
+- **THEN** its tile grows in its place and the tiles after it glide aside
 
 ### Requirement: Screens change at once where motion is not wanted
 
