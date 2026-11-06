@@ -268,15 +268,6 @@
       (open-page state beneath))))
 
 
-;; An open menu, card or dialog takes the keys: a hotkey prevented its `Escape`, so the screen closed and the menu
-;; stayed, and its arrows, so the caret in a dialog's field stood still while the screen behind it moved.
-(nxr/register-action! :action/press-hotkey
-  (fn press-hotkey [state keystroke overlay-open?]
-    (when-not overlay-open?
-      (when-let [actions (some-> (pages/page (:page/current state)) :hotkeys (apply [state]) (get keystroke))]
-        (into [[:effect/prevent-default]] actions)))))
-
-
 ;;
 ;; Placeholder
 ;;
@@ -300,22 +291,6 @@
 (nxr/register-placeholder! :event.keyboard/key
   (fn [dispatch-data]
     (some-> (:replicant/dom-event dispatch-data) .-key)))
-
-
-(nxr/register-placeholder! :event.keyboard/keystroke
-  (fn [dispatch-data]
-    (when-let [^js event (:replicant/dom-event dispatch-data)]
-      (str (when (.-ctrlKey event) "Ctrl+")
-           (when (.-altKey event) "Alt+")
-           (when (.-shiftKey event) "Shift+")
-           (when (.-metaKey event) "Meta+")
-           (.-code event)))))
-
-
-(nxr/register-placeholder! :document/overlay-open?
-  ;; A popover (a menu, a card) or a modal dialog is open.
-  (fn [_]
-    (some? (js/document.querySelector ":popover-open, :modal"))))
 
 
 (nxr/register-placeholder! :event.keyboard/ctrl?
@@ -440,15 +415,27 @@
    #js {:capture true}))
 
 
-;; The keystroke's target is `body` when nothing has focus; the page table says what it does on the screen shown.
+;; A key does on the screen shown what its page's `:hotkeys` say, as a button does its `:on` actions; its target is
+;; `body` when nothing has focus. An open menu, card or dialog takes the keys: a hotkey prevented its `Escape`, so
+;; the screen closed and the menu stayed, and its arrows, so the caret in a dialog's field stood still while the
+;; screen behind it moved.
 (defn listen-for-hotkeys!
-  "Hands every keydown on the document to `:action/press-hotkey`."
-  [dispatch]
+  "Dispatches the actions the page on display gives a key pressed on the document, unless a menu, a card or a
+   dialog is open."
+  [system dispatch]
   (js/document.addEventListener
    "keydown"
-   (fn [event]
-     (dispatch {:replicant/dom-event event}
-               [[:action/press-hotkey [:event.keyboard/keystroke] [:document/overlay-open?]]]))))
+   (fn [^js event]
+     (when-not (js/document.querySelector ":popover-open, :modal")
+       (let [state     (state system)
+             keystroke (str (when (.-ctrlKey event) "Ctrl+")
+                            (when (.-altKey event) "Alt+")
+                            (when (.-shiftKey event) "Shift+")
+                            (when (.-metaKey event) "Meta+")
+                            (.-code event))]
+         (when-let [actions (some-> (pages/page (:page/current state)) :hotkeys (apply [state]) (get keystroke))]
+           (.preventDefault event)
+           (dispatch {:replicant/dom-event event} actions)))))))
 
 
 (defn start-rendering!
@@ -457,7 +444,7 @@
    once memory is loaded."
   [{:keys [capabilities] :as system} dispatch]
   (guard-double-clicks!)
-  (listen-for-hotkeys! dispatch)
+  (listen-for-hotkeys! system dispatch)
   ;; The load renders the slice the route entry computed from empty memory, then the refresh
   ;; renders from memory in the same task, so only the second paints over the splash.
   ;; The refresh is a microtask: a watch that saved would show the render watch the load's
