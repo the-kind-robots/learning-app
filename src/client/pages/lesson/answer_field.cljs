@@ -106,7 +106,7 @@
   {"bank-label" "#bank" "hint-label" "#hint" "tray-label" "#tray"})
 
 
-(defn- words-of
+(defn words-of
   "The words of `sentence`, in order, with their case and without the
    punctuation at their edges. A sign written apart joins the word before it:
    «1000 €» is one word."
