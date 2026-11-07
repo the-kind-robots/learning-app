@@ -1,6 +1,7 @@
 (ns pages.collections.view
   (:require
    [application.pages :as pages]
+   [application.presenter :as application]
    [application.shell :as shell]
    [pages.collections.presenter :as presenter]))
 
@@ -171,9 +172,18 @@
         [:i18n :collections/add]]]]]))
 
 
+(defn hotkeys
+  "The actions of each keystroke on the themes: `Escape` leaves them, `Alt+KeyS` opens the statistics the stars
+   show."
+  [state]
+  (merge {"Escape" [[:action/close-page]]}
+         (when (application/stars-button? state)
+           {"Alt+KeyS" [[:action/open-page :page/stats]]})))
+
+
 (defmethod pages/page :page/collections
   [_]
-  {:hotkeys (constantly {"Escape" [[:action/close-page]]})
+  {:hotkeys hotkeys
    :open    :action/open-collections
    :path    "/collections"
    :refresh :action/show-collections

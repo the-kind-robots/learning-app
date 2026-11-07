@@ -33,12 +33,19 @@
                          :id    [:gold purple index]})))}))
 
 
+(defn stars-button?
+  "Whether today's stars are a button that opens the statistics: with a lesson today, outside a lesson and the
+   statistics."
+  [state]
+  (and (pos? (:learner/lessons-today state 0))
+       (contains? #{:page/collections :page/home :page/words} (page state))))
+
+
 (defn shell-props
   "What the shell shows: `:corner` (themes icon on home, close mark elsewhere, ADR-0015), `:page` (nil until
    memory is loaded), `:read-error?` (the learner's data could not be read), `:build-mark` (the bundle's,
    empty in a release build), `:stars` (today's lessons, `stars`, from the moment memory is loaded, so that a
-   star passed later joins a row already there), and whether they are a button that opens the statistics
-   (`:stars-button?`: with a lesson today, outside a lesson and the statistics)."
+   star passed later joins a row already there), and whether they are a button (`:stars-button?`)."
   [state]
   {:build-mark    build-identity/stamp
    :corner        (case (page state)
@@ -50,8 +57,7 @@
    :show-install? (boolean (:pwa/install-available? state))
    :stars         (when (page state)
                     (stars (:learner/lessons-today state 0)))
-   :stars-button? (and (pos? (:learner/lessons-today state 0))
-                       (contains? #{:page/collections :page/home :page/words} (page state)))})
+   :stars-button? (stars-button? state)})
 
 
 (defn screen-change
