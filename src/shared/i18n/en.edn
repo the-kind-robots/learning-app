@@ -83,6 +83,7 @@
  :shell/open-collections      "Open collections"
  :shell/read-error            "Can't read data on this device. Reload the page."
  :shell/reload-build          "Reload build"
+ :shell/with-hotkey           [:fn/str "{{:name}} · {{:hotkey}}"]
  :shell/word-mark             "Sprecha"
 
  :stats/lessons               [:fn/str "Lessons passed: {{:count}}"]

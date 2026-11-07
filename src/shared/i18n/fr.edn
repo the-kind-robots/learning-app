@@ -83,6 +83,7 @@
  :shell/open-collections      "Ouvrir les collections"
  :shell/read-error            "Impossible de lire les données de l’appareil. Rechargez la page."
  :shell/reload-build          "Recharger la version"
+ :shell/with-hotkey           [:fn/str "{{:name}} · {{:hotkey}}"]
  :shell/word-mark             "Sprecha"
 
  :stats/lessons               [:fn/str "Leçons terminées : {{:count}}"]

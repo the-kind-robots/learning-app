@@ -1,7 +1,7 @@
 (ns i18n
-  "The interface's text. Markup says `[:i18n :key params]` where text goes; `interpolate` puts the
-   text of a language there. A language is one dictionary, `i18n/<language>.edn`: adding the file adds the
-   language, its `:language/name` names it in the settings."
+  "The interface's text. Markup says `[:i18n :key params]` where text goes, and a parameter can be such a text
+   too; `interpolate` puts the text of a language there. A language is one dictionary, `i18n/<language>.edn`:
+   adding the file adds the language, its `:language/name` names it in the settings."
   #?(:cljs (:require-macros [i18n.files :as files]))
   (:require
    #?(:clj [clojure.edn :as edn])
@@ -71,12 +71,13 @@
     (and (vector? markup) (= :i18n (first markup)))
     (let [[_ k params] markup]
       ;; A key the language has not translated yet reads in Russian, so a dictionary can grow key by key.
+      ;; A parameter can be a text of its own, read in the same language.
       (m1p/lookup nil
                   (if (contains? dictionary k)
                     dictionary
                     (dictionaries "ru"))
                   k
-                  params))
+                  (interpolated dictionary params)))
 
     (or (vector? markup) (map? markup))
     (reduce-kv (fn [coll k v]

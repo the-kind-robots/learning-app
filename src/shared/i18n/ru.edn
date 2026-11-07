@@ -83,6 +83,7 @@
  :shell/open-collections      "Открыть наборы"
  :shell/read-error            "Не получается прочитать данные на устройстве. Перезагрузите страницу."
  :shell/reload-build          "Перезагрузить сборку"
+ :shell/with-hotkey           [:fn/str "{{:name}} · {{:hotkey}}"]
  :shell/word-mark             "Шпреха"
 
  :stats/lessons               [:fn/str "Уроков пройдено: {{:count}}"]

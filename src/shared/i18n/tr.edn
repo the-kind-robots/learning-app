@@ -83,6 +83,7 @@
  :shell/open-collections      "Setleri aç"
  :shell/read-error            "Cihazdaki veriler okunamıyor. Sayfayı yenile."
  :shell/reload-build          "Derlemeyi yeniden yükle"
+ :shell/with-hotkey           [:fn/str "{{:name}} · {{:hotkey}}"]
  :shell/word-mark             "Sprecha"
 
  :stats/lessons               [:fn/str "Tamamlanan dersler: {{:count}}"]

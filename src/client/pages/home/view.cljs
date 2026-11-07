@@ -170,7 +170,9 @@
          {:type        "button"
           :class       (when empty-vocab? "home__words-button--hidden")
           :aria-hidden (when empty-vocab? "true")
+          :aria-keyshortcuts "Alt+W"
           :tabindex    (when empty-vocab? "-1")
+          :title       [:i18n :shell/with-hotkey {:hotkey "Alt+W" :name [:i18n :home/words]}]
           :on          {:click [[:action/open-page :page/words]]}}
          [:i18n :home/words]]]
 
@@ -182,7 +184,9 @@
        [:i18n :lesson/title]]
       [:div.page-footer__action
        [:button.home__lesson-button.big-button.green-button
-        {:on {:click [[:action/open-page :page/lesson]]}}
+        {:aria-keyshortcuts "Alt+Enter"
+         :on    {:click [[:action/open-page :page/lesson]]}
+         :title [:i18n :shell/with-hotkey {:hotkey "Alt+Enter" :name [:i18n :lesson/start]}]}
         [:i18n :lesson/start]]]]]))
 
 
