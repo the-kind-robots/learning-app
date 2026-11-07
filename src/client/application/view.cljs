@@ -16,8 +16,9 @@
   []
   [:button.app-shell__corner-icon
    {:type       "button"
+    :aria-keyshortcuts "Alt+T"
     :aria-label [:i18n :shell/open-collections]
-    :title      [:i18n :collections/title]
+    :title      [:i18n :shell/with-hotkey {:hotkey "Alt+T" :name [:i18n :collections/title]}]
     :on         {:click [[:action/open-page :page/collections]]}}
    ;; The box is the drawing, so the bar places the drawing itself.
    ;; zprint: as written
@@ -30,11 +31,14 @@
 
 
 (defn- close-icon
-  []
+  [escape-closes?]
   [:button.app-shell__corner-icon
    {:type       "button"
+    :aria-keyshortcuts (when escape-closes? "Escape")
     :aria-label [:i18n :dialog/close]
-    :title      [:i18n :dialog/close]
+    :title      (if escape-closes?
+                  [:i18n :shell/with-hotkey {:hotkey "Escape" :name [:i18n :dialog/close]}]
+                  [:i18n :dialog/close])
     :on         {:click [[:action/close-page]]}}
    ;; The box is the drawing with its round caps, so the bar places the drawing itself.
    [:svg.app-shell__corner-icon-svg
@@ -128,7 +132,7 @@
   "The whole page: the bar across the top, the dialogs, the screen the state
    is on, and the status line."
   [state]
-  (let [{:keys [build-mark corner page read-error? show-install? stars stars-button?]}
+  (let [{:keys [build-mark corner escape-closes? page read-error? show-install? stars stars-button?]}
         (presenter/shell-props state)
         sync (sync-presenter/props state)]
     (list
@@ -160,8 +164,10 @@
           (stars-row stars)
           (when stars-button?
             [:button.app-shell__stars-button
-             {:aria-label [:i18n :stats/title]
+             {:aria-keyshortcuts "Alt+S"
+              :aria-label [:i18n :stats/title]
               :on         {:click [[:action/open-page :page/stats]]}
+              :title      [:i18n :shell/with-hotkey {:hotkey "Alt+S" :name [:i18n :stats/title]}]
               :type       "button"}])])
        ;; Which bundle the page loaded, and the tap that reloads onto the newest one.
        (when ^boolean goog/DEBUG
@@ -190,7 +196,7 @@
           (install-icon)])
        (case corner
          :collections (collections-icon)
-         :close       (close-icon)
+         :close       (close-icon escape-closes?)
          nil)]]
      (install-guide/render state)
      (sync-view/dialogs sync)

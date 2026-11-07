@@ -45,19 +45,21 @@
   "What the shell shows: `:corner` (themes icon on home, close mark elsewhere, ADR-0015), `:page` (nil until
    memory is loaded), `:read-error?` (the learner's data could not be read), `:build-mark` (the bundle's,
    empty in a release build), `:stars` (today's lessons, `stars`, from the moment memory is loaded, so that a
-   star passed later joins a row already there), and whether they are a button (`:stars-button?`)."
+   star passed later joins a row already there), whether they are a button (`:stars-button?`), and whether
+   `Escape` closes the screen as its close mark does (`:escape-closes?`: not in a lesson)."
   [state]
-  {:build-mark    build-identity/stamp
-   :corner        (case (page state)
-                    :page/home :collections
-                    (:page/collections :page/lesson :page/stats :page/words) :close
-                    nil)
-   :page          (page state)
-   :read-error?   (= :status/unreadable (:learner/status state))
-   :show-install? (boolean (:pwa/install-available? state))
-   :stars         (when (page state)
-                    (stars (:learner/lessons-today state 0)))
-   :stars-button? (stars-button? state)})
+  {:build-mark     build-identity/stamp
+   :corner         (case (page state)
+                     :page/home :collections
+                     (:page/collections :page/lesson :page/stats :page/words) :close
+                     nil)
+   :escape-closes? (contains? #{:page/collections :page/stats :page/words} (page state))
+   :page           (page state)
+   :read-error?    (= :status/unreadable (:learner/status state))
+   :show-install?  (boolean (:pwa/install-available? state))
+   :stars          (when (page state)
+                     (stars (:learner/lessons-today state 0)))
+   :stars-button?  (stars-button? state)})
 
 
 (defn screen-change
