@@ -28,7 +28,7 @@ http_code() {
 # Units under their production sandboxes.
 for unit in nginx.service couchdb.service learning-app-run.service \
             learning-app-restart.path learning-app-certbot.timer \
-            learning-app-backup-db.timer; do
+            learning-app-backup-db.timer learning-app-cdn-ranges.timer; do
     check "unit active: ${unit}" systemctl is-active --quiet "${unit}"
 done
 
@@ -169,6 +169,90 @@ connection_limit_answers_429() {
 check "db proxy: connections over the per-address limit get 429" connection_limit_answers_429
 check "db proxy: a throttled answer is not logged" \
     bash -c "! grep -q '\" 429 ' /var/log/nginx/access.log"
+
+# The client behind the CDN (GH-801). The real lists are the CDN's; here the
+# refresh unit reads a list naming 127.0.0.2, which stands in for an edge:
+# Linux routes all of 127/8 to loopback, so curl can send from it.
+EDGE_LIST=/run/smoke-edge-ranges
+CDN_SNIPPET=/etc/nginx/snippets/learning-app-cdn-ranges.conf
+CDN_DROPIN=/run/systemd/system/learning-app-cdn-ranges.service.d
+
+refresh_cdn_ranges_from() {
+    mkdir -p "${CDN_DROPIN}"
+    printf '[Service]\nEnvironment=LEARNING_APP__CDN_RANGES_URLS=%s\n' "$1" \
+        > "${CDN_DROPIN}/smoke.conf"
+    systemctl daemon-reload
+    # restart, not start: postinst's own --no-block fetch may still be running,
+    # and a start would only wait for it.
+    systemctl restart learning-app-cdn-ranges.service
+}
+
+# Worker pids do not tell: old workers linger after an earlier reload while
+# their connections drain. systemd logs every reload it runs.
+nginx_reloads() { journalctl -u nginx.service --no-pager | grep -c 'Reloaded'; }
+
+# Before the first fetch there is no snippet, and nginx must start without it.
+rm -f "${CDN_SNIPPET}"
+check "cdn ranges: nginx accepts its config before the first fetch" nginx -t
+
+printf '127.0.0.2/32\n' > "${EDGE_LIST}"
+reloads_before="$(nginx_reloads)"
+check "cdn ranges: the refresh writes the published list" \
+    refresh_cdn_ranges_from "file://${EDGE_LIST}"
+check "cdn ranges: the snippet trusts the listed range" \
+    grep -qx 'set_real_ip_from 127.0.0.2/32;' "${CDN_SNIPPET}"
+
+reloads="$(nginx_reloads)"
+check "cdn ranges: a changed list reloads nginx" test "${reloads}" -gt "${reloads_before}"
+check "cdn ranges: an unchanged list refreshes clean" \
+    refresh_cdn_ranges_from "file://${EDGE_LIST}"
+check "cdn ranges: an unchanged list does not reload nginx" \
+    test "$(nginx_reloads)" = "${reloads}"
+
+refresh_fails_from() { ! refresh_cdn_ranges_from "$1"; }
+printf '127.0.0.3/32\nallow all;\n' > /run/smoke-edge-ranges-garbled
+check "cdn ranges: a list with a line that is not a range fails" \
+    refresh_fails_from file:///run/smoke-edge-ranges-garbled
+check "cdn ranges: a list that cannot be fetched fails" \
+    refresh_fails_from file:///run/smoke-edge-ranges-missing
+last_good_list_kept() {
+    grep -qx 'set_real_ip_from 127.0.0.2/32;' "${CDN_SNIPPET}" &&
+    ! grep -q '127\.0\.0\.3' "${CDN_SNIPPET}"
+}
+check "cdn ranges: failures keep the last good list" last_good_list_kept
+check "cdn ranges: failures do not reload nginx" \
+    test "$(nginx_reloads)" = "${reloads}"
+# A good run clears the unit's failed state for what comes after.
+refresh_cdn_ranges_from "file://${EDGE_LIST}" >/dev/null 2>&1
+
+invite() {
+    local path="$1"
+    shift
+    http_code --resolve sprecha.de:443:127.0.0.1 "$@" "https://sprecha.de/api/invite-requests/${path}"
+}
+
+# The invite zone lets 10 requests through at once (burst) before the rate.
+first_client_exhausts_its_budget() {
+    local code
+    for _ in $(seq 1 15); do
+        code="$(invite smoke-edge-a --interface 127.0.0.2 -H 'CF-Connecting-IP: 198.51.100.1')"
+    done
+    test "${code}" = 429
+}
+check "cdn: a client through the edge exhausts its own budget" \
+    first_client_exhausts_its_budget
+check "cdn: a second client through the same edge has a budget of its own" \
+    test "$(invite smoke-edge-b --interface 127.0.0.2 -H 'CF-Connecting-IP: 198.51.100.2')" != 429
+check "cdn: a direct request forging the header is not counted as that client" \
+    test "$(invite smoke-forged -H 'CF-Connecting-IP: 198.51.100.1')" != 429
+# combined logs $remote_addr first: the address every limit and X-Real-IP use.
+check "cdn: the edge's client is the request's address" \
+    grep -q '^198\.51\.100\.2 .*/api/invite-requests/smoke-edge-b' /var/log/nginx/access.log
+check "cdn: a forged header keeps the socket's address" \
+    grep -q '^127\.0\.0\.1 .*/api/invite-requests/smoke-forged' /var/log/nginx/access.log
+
+rm -rf "${CDN_DROPIN}"
+systemctl daemon-reload
 
 # The same boundary read off the installed config, so a new location that
 # forgets the snippet fails here even though the assertion above only exercises

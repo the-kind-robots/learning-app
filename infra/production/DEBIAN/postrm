@@ -14,6 +14,9 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
   systemctl stop learning-app-restart.path || true
   systemctl disable learning-app-restart.path || true
 
+  systemctl stop learning-app-cdn-ranges.timer || true
+  systemctl disable learning-app-cdn-ranges.timer || true
+
   systemctl stop couchdb.service || true
   systemctl disable couchdb.service || true
 
@@ -54,6 +57,9 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
   if [ -f /etc/nginx/sites-available/learning-app.conf ]; then
       rm -f /etc/nginx/sites-available/learning-app.conf
   fi
+
+  # Written by learning-app-cdn-ranges.service, not owned by the deb.
+  rm -f /etc/nginx/snippets/learning-app-cdn-ranges.conf
 
   # 7. Reload Nginx to apply changes
   nginx -t && systemctl reload nginx || true

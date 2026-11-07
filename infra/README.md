@@ -33,7 +33,8 @@ infra/
     │   └── learning-app/
     │       ├── bin/
     │       │   ├── run.sh    # Bridges systemd credentials into env vars, starts the jar
-    │       │   └── check-credentials.sh  # Deploy preflight: are the named credentials present
+    │       │   ├── check-credentials.sh  # Deploy preflight: are the named credentials present
+    │       │   └── refresh-cdn-ranges.sh # CDN ranges for the client address (timer)
     └── usr/share/learning-app/
         ├── admin-setup.sh    # First-run admin initialization
         └── backup.sh         # DB backup script (called by backup timer)
@@ -48,6 +49,8 @@ infra/
 | `learning-app-backup-db.timer`           | Daily backup trigger                              |
 | `learning-app-certbot.service`           | TLS cert renewal                                  |
 | `learning-app-certbot.timer`             | Cert renewal schedule                             |
+| `learning-app-cdn-ranges.service`        | Rewrite the CDN ranges nginx trusts (GH-801)      |
+| `learning-app-cdn-ranges.timer`          | Daily CDN ranges refresh                          |
 | `learning-app-restart.path`              | Watch the app jar → restart service               |
 | `learning-app-restart.service`           | Performs the restart                              |
 | `learning-app-dev-watch.service`         | Dev stand: `shadow-cljs watch app` (user unit)    |

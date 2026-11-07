@@ -58,6 +58,11 @@ encrypted-credential flow — `systemd-creds` in postinst,
 - All units become active under their production sandbox settings.
 - nginx terminates TLS and proxies; `/db/` without a cookie is 401 via
   `auth_request`; the app's `/auth/check` refuses without a cookie.
+- The client behind the CDN (GH-801): the refresh unit writes the trusted
+  ranges from a list naming `127.0.0.2` as an edge, and keeps the last good list
+  when a fetch fails or a line is not a range. Two clients through that edge
+  get separate invite budgets; a direct request with a forged
+  `CF-Connecting-IP` keeps its own address.
 - Migrations run against `LEARNING_APP__DB_PATH`.
 - A legacy `/opt/learning-app/app.db` placed before the first service start is
   adopted into `/var/lib/learning-app/db.sqlite` (#209's scenario against the

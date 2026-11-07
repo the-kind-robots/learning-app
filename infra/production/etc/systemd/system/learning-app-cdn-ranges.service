@@ -1,0 +1,48 @@
+[Unit]
+Description=Refresh the CDN address ranges nginx trusts for the client address
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/learning-app/bin/refresh-cdn-ranges.sh
+
+# Security settings
+#
+# What this service actually needs: root curl fetching the CDN's published
+# lists over HTTPS, writing one snippet under /etc/nginx/snippets, `nginx -t`
+# (which opens nginx's logs and temp paths as root) and reloading nginx over
+# D-Bus.
+#
+# Already root; no setuid transitions involved.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+# "full" makes /usr, /boot and /etc read-only except ReadWritePaths below.
+# "strict" deliberately not used: the paths `nginx -t` opens for writing under
+# /var depend on the installed nginx.conf.
+ProtectSystem=full
+ReadWritePaths=/etc/nginx/snippets
+PrivateDevices=yes
+# Kernel interfaces read-only or unreachable.
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# No setuid/setgid files, namespaces, realtime, or personality changes.
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+# HTTPS to the CDN; AF_UNIX for D-Bus (systemctl reload) and journald.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Native-ABI syscalls only, filtered to the standard service set.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# CapabilityBoundingSet deliberately not narrowed: `nginx -t` as root opens
+# log files owned by www-data and may chown its temp paths; the minimal
+# capability set is unverified.
+# MemoryDenyWriteExecute stays OFF: nginx may compile its regexes with PCRE
+# JIT during `nginx -t`, which needs writable+executable pages.

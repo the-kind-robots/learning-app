@@ -131,6 +131,12 @@ systemctl daemon-reload
 systemctl enable --now learning-app-restart.path
 systemctl enable --now learning-app-certbot.timer
 
+# The CDN's ranges behind the client address (GH-801): a first fetch now, then
+# daily. --no-block: a slow fetch must not hold the install, and a failed one
+# leaves no snippet, which trusts nobody.
+systemctl enable --now learning-app-cdn-ranges.timer
+systemctl start --no-block learning-app-cdn-ranges.service
+
 has_openrouter_key=false
 if grep -qs '^OPENROUTER_API_KEY=' /etc/learning-app/environment /etc/environment.d/learning-app.conf \
    || [ -f "${CRED_DIR}/openrouter_api_key" ]; then
