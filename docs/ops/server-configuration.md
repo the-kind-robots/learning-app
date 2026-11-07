@@ -25,6 +25,11 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 - Deploy hook: `/etc/letsencrypt/renewal-hooks/deploy/learning-app-nginx.sh`.
 - Certbot timer: `learning-app-certbot.service` and `learning-app-certbot.timer`.
 
+**Client address behind the CDN**
+- nginx reads `CF-Connecting-IP` only from the ranges in `/etc/nginx/snippets/learning-app-cdn-ranges.conf`.
+- `learning-app-cdn-ranges.timer` rewrites that snippet daily from the CDN's published lists (`/opt/learning-app/bin/refresh-cdn-ranges.sh`). It reloads nginx only when the snippet changed and `nginx -t` passes.
+- A failed run keeps the last good snippet: `systemctl status learning-app-cdn-ranges.service` says why.
+
 ## Users
 
 **System users (created by sysusers):**
@@ -49,6 +54,9 @@ Static reference only. Procedures live in `docs/ops/runbook.md` and `docs/ops/ve
 
 **Cert renewal**
 - Units: `learning-app-certbot.service` and `learning-app-certbot.timer`.
+
+**CDN ranges**
+- Units: `learning-app-cdn-ranges.service` and `learning-app-cdn-ranges.timer` (see Nginx above).
 
 ## Secrets
 

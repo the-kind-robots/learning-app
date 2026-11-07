@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily refresh of the CDN address ranges nginx trusts
+
+[Timer]
+OnCalendar=daily
+# A run missed while the machine was off runs at next boot.
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target
