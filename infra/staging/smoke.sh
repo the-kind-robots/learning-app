@@ -54,7 +54,7 @@ check "nginx: http:// redirects 301" \
 check "app: /auth/check without cookie is 401" \
     test "$(http_code http://127.0.0.1:8083/auth/check)" = 401
 check "nginx: /db/ without cookie is 401" \
-    test "$(http_code --resolve sprecha.de:443:127.0.0.1 https://sprecha.de/db/anything)" = 401
+    test "$(http_code --resolve sprecha.de:443:127.0.0.1 https://sprecha.de/db/userdb-1/)" = 401
 
 # The proxy-auth boundary (GH-304). CouchDB trusts X-Auth-CouchDB-* by
 # construction, so nginx must drop whatever a client sends. No response reveals
@@ -91,6 +91,84 @@ check "nginx: a client's proxy-auth header does not reach the upstream" \
 # here instead of surfacing as an unrelated failure further down.
 app_answers_again() { test "$(http_code http://127.0.0.1:8083/)" = 200; }
 check "app: answers again after the proxy-auth capture" app_answers_again
+
+# /db/ passes only what a one-shot PouchDB pass asks (GH-796). An account of
+# its own, provisioned through the real endpoint from a planted invite, as the
+# restore drill does.
+invite="$(openssl rand -hex 20)"
+sqlite3 "${DB}" "INSERT INTO grants (sha256, expires_at) VALUES \
+    ('$(printf '%s' "${invite}" | sha256sum | cut -d' ' -f1)', $((($(date +%s) + 3600) * 1000)));"
+provision="$(curl -s -X POST http://127.0.0.1:8083/api/identity/provision \
+    -H 'Content-Type: application/json' -d "{\"invite\":\"${invite}\"}")"
+token="$(grep -oP '"token":"\K[0-9a-f]+' <<< "${provision}")"
+userdb="userdb-$(grep -oP '"id":\K[0-9]+' <<< "${provision}")"
+check "db proxy: an account to replicate with" test -n "${token}"
+
+db() {
+    local method="$1" path="$2"
+    shift 2
+    http_code --resolve sprecha.de:443:127.0.0.1 -X "${method}" \
+        -H "Cookie: auth-token=${token}" -H 'Content-Type: application/json' \
+        "$@" "https://sprecha.de/db/${path}"
+}
+
+check "db proxy: server root"        test "$(db GET '')" = 200
+check "db proxy: database info"      test "$(db GET "${userdb}/")" = 200
+check "db proxy: plain change feed" \
+    test "$(db GET "${userdb}/_changes?style=all_docs&since=0&limit=100&include_docs=true")" = 200
+check "db proxy: _revs_diff"         test "$(db POST "${userdb}/_revs_diff" -d '{}')" = 200
+check "db proxy: _bulk_docs" \
+    test "$(db POST "${userdb}/_bulk_docs" -d '{"docs":[],"new_edits":false}')" = 201
+check "db proxy: _bulk_get"          test "$(db POST "${userdb}/_bulk_get?revs=true" -d '{"docs":[]}')" = 200
+check "db proxy: checkpoint write" \
+    test "$(db PUT "${userdb}/_local/smoke-checkpoint" -d '{"session_id":"smoke","history":[]}')" = 201
+check "db proxy: checkpoint read"    test "$(db GET "${userdb}/_local/smoke-checkpoint")" = 200
+check "db proxy: a document read reaches CouchDB" \
+    test "$(db GET "${userdb}/vocab:smoke")" = 404
+
+for refused in "POST ${userdb}/_find" "POST _replicate" "POST ${userdb}/_purge" \
+               "GET ${userdb}/_design/smoke" "GET ${userdb}/vocab:smoke/attachment" \
+               "GET _all_dbs" "POST _session" "PUT userdb-999999/" "DELETE ${userdb}/" \
+               "GET ${userdb}/_changes?feed=longpoll" "GET ${userdb}/_changes?feed=continuous"; do
+    check "db proxy: refuses ${refused}" \
+        test "$(db ${refused% *} "${refused#* }")" = 403
+done
+check "db proxy: a refusal comes before the auth check" \
+    test "$(http_code --resolve sprecha.de:443:127.0.0.1 https://sprecha.de/db/_all_dbs)" = 403
+check "db proxy: refuses a compressed body" \
+    test "$(db POST "${userdb}/_bulk_docs" -H 'Content-Encoding: gzip' -d '{}')" = 415
+head -c 10000 /dev/zero | tr '\0' ' ' > /tmp/body-10k
+head -c 1100000 /dev/zero | tr '\0' ' ' > /tmp/body-1100k
+check "db proxy: refuses a checkpoint of 10 KB" \
+    test "$(db PUT "${userdb}/_local/smoke-checkpoint" --data-binary @/tmp/body-10k)" = 403
+check "db proxy: refuses a checkpoint without a length" \
+    test "$(db PUT "${userdb}/_local/smoke-checkpoint" -H 'Transfer-Encoding: chunked' -d '{}')" = 403
+check "db proxy: refuses a body over 1 MB" \
+    test "$(db POST "${userdb}/_bulk_docs" --data-binary @/tmp/body-1100k)" = 413
+
+# Twenty slow uploads hold the address's connections while nginx reads their
+# bodies; the next request is over the limit. curl itself is the background
+# job, not the db helper: killing a helper's subshell would leave its curl
+# holding a connection into the restore drill.
+connection_limit_answers_429() {
+    local body=/tmp/slow-body pids=() code
+    head -c 40000 /dev/zero | tr '\0' ' ' > "${body}"
+    for _ in $(seq 1 20); do
+        curl -k -s -o /dev/null --resolve sprecha.de:443:127.0.0.1 -X POST \
+            -H "Cookie: auth-token=${token}" -H 'Content-Type: application/json' \
+            --limit-rate 2k --data-binary "@${body}" \
+            "https://sprecha.de/db/${userdb}/_bulk_docs" &
+        pids+=($!)
+    done
+    sleep 3
+    code="$(db GET "${userdb}/")"
+    kill "${pids[@]}" 2>/dev/null
+    wait "${pids[@]}" 2>/dev/null
+    test "${code}" = 429
+}
+check "db proxy: connections over the per-address limit get 429" connection_limit_answers_429
+check "db proxy: a throttled answer is not logged" \
+    bash -c "! grep -q '\" 429 ' /var/log/nginx/access.log"
 
 # The same boundary read off the installed config, so a new location that
 # forgets the snippet fails here even though the assertion above only exercises
