@@ -411,7 +411,7 @@
 }
 
 .tile__close:hover {
-  color: color-mix(in oklab, rgb(var(--color-cardinal)) 78%, #000);
+  color: color-mix(in oklab, rgb(var(--color-cardinal)) 78%, rgb(var(--color-ink)));
 }
 
 .tile--editing .tile__close,

@@ -242,7 +242,7 @@
 }
 
 .app-shell__star-number {
-  color: rgb(107, 63, 176);
+  color: rgb(var(--color-violet-text));
   font-size: 18px;
   font-weight: 800;
   line-height: 1;

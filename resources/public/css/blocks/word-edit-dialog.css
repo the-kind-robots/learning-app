@@ -3,7 +3,7 @@
  * word's examples, one for each collection, and a footer that stays at the bottom while the rest scrolls.
  */
 .word-edit-dialog.modal {
-  background: rgb(var(--color-snow));
+  background: rgb(var(--color-raised));
   border: none;
   border-radius: 20px;
   box-shadow: 0 12px 40px rgb(0 0 0 / 0.12);
@@ -86,7 +86,7 @@
 }
 
 .word-edit-dialog__error {
-  color: #b42318;
+  color: rgb(var(--color-cardinal));
   font-size: 14px;
   font-weight: 700;
 }
@@ -270,7 +270,7 @@
 }
 
 .word-example__status--failed {
-  color: #b42318;
+  color: rgb(var(--color-cardinal));
 }
 
 /* The card's own action is a text button: the example, not the button, holds the eye. */
@@ -343,7 +343,7 @@
  */
 .word-edit-dialog__footer {
   align-items: center;
-  border-top: 1px solid #ececec;
+  border-top: 1px solid rgb(var(--color-swan));
   display: flex;
   flex-shrink: 0;
   gap: 12px;
@@ -382,7 +382,7 @@
 }
 
 .word-edit-dialog__reset {
-  background: rgb(var(--color-snow));
+  background: rgb(var(--color-raised));
   border: 2px solid rgb(var(--color-swan));
   border-radius: 14px;
   box-shadow: 0 3px 0 rgb(var(--color-swan));
@@ -408,12 +408,12 @@
 .word-edit-dialog__save:disabled {
   background: rgb(var(--color-swan));
   box-shadow: none;
-  color: #8a8a8a;
+  color: rgb(var(--color-hare));
   cursor: default;
 }
 
 .word-edit-dialog__reset:disabled {
-  background: rgb(var(--color-snow));
+  background: rgb(var(--color-raised));
 }
 
 .word-edit-dialog__reset:not(:disabled):active,

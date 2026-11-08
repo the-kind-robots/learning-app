@@ -108,6 +108,16 @@
      read it so they invert with the scheme. Shadows stay black. */
   --color-ink: 0, 0, 0;
 
+  /* What floats over the page: menus, the dictionary's list, dialogs. */
+  --color-raised: 255, 255, 255;
+  /* Secondary text darker than wolf: wolf on white is 4.48:1. */
+  --color-quiet-text: 107, 107, 107;
+  /* The purple of the stars: the fifth lesson's star and its count. */
+  --color-violet: 125, 79, 196;
+  --color-violet-text: 107, 63, 176;
+  /* Pastel bars: a bright fill let half through the ground. */
+  --soft-fill-opacity: .5;
+
   color-scheme: light dark;
 }
 
@@ -136,5 +146,10 @@
     --color-humpback: 168, 209, 230;
     --color-beetle: 218, 145, 243;
     --color-ink: 243, 236, 248;
+    --color-raised: 38, 27, 51;
+    --color-quiet-text: 171, 158, 184;
+    --color-violet: 204, 142, 235;
+    --color-violet-text: 204, 142, 235;
+    --soft-fill-opacity: .8;
   }
 }

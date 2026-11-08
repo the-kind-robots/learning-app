@@ -1,8 +1,8 @@
 /* Settings menu — a popover under the word mark; the learner's language. The screen stays as it is behind it. */
 
 .settings-menu {
-  background: rgb(var(--color-snow));
-  border: 1px solid rgb(0 0 0 / 0.08);
+  background: rgb(var(--color-raised));
+  border: 1px solid rgba(var(--color-ink), 0.08);
   border-radius: 16px;
   box-shadow: 0 10px 28px rgb(0 0 0 / 0.14);
   color: rgb(var(--color-black-text));
@@ -21,9 +21,9 @@
 
 /* The tip points at the word mark. */
 .settings-menu::before {
-  background: rgb(var(--color-snow));
-  border-left: 1px solid rgb(0 0 0 / 0.08);
-  border-top: 1px solid rgb(0 0 0 / 0.08);
+  background: rgb(var(--color-raised));
+  border-left: 1px solid rgba(var(--color-ink), 0.08);
+  border-top: 1px solid rgba(var(--color-ink), 0.08);
   content: "";
   height: 12px;
   left: 28px;
@@ -103,5 +103,5 @@
 }
 
 .settings-menu__flag-white {
-  fill: rgb(var(--color-snow));
+  fill: rgb(var(--color-snow-always-light));
 }

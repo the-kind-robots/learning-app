@@ -31,7 +31,7 @@
 .app-install-guide__card {
   width: calc(100% - 40px);
   max-width: 340px;
-  background: rgb(var(--color-snow));
+  background: rgb(var(--color-raised));
   border-radius: 20px;
   padding: 24px 22px;
   padding-bottom: calc(24px + env(safe-area-inset-bottom));
