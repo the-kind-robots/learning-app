@@ -82,7 +82,9 @@ splits. The animal token stays the fill and its lip; a token named after a lamp 
 on the ground: thallium green, neon red, mercury blue, with `-dark` where the day needs the darker
 shade. By day each is the value the place always read — owl or tree-frog, cardinal or fire-ant,
 macaw — so the light scheme is unchanged; at night it is the light shade. The memory scale mixes
-thallium and neon, so its bars keep their dark counts readable.
+thallium and neon, so its bars keep their dark counts readable. The mix is `retention-colour/at` in the
+client; it used to be `prozent->color` in the shared `utils`, which the server compiles too and has no
+use for.
 
 The stars are tokens too, five colours and a glow per star. The glow is a `filter` list: one shadow by
 day, three at night. The light-up's flare is one shadow, and settles into a glow of three by
