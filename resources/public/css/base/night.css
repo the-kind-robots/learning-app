@@ -60,6 +60,7 @@
       drop-shadow(0 0 5px rgba(40, 255, 130, 0.8))
       drop-shadow(0 0 11px rgba(20, 200, 90, 0.4));
     --soft-fill-opacity: .8;
+    --tile-edge-opacity: .16;
 
     color-scheme: dark;
   }

@@ -436,11 +436,12 @@
 }
 
 /* A tile is never wider than the field: a longer word breaks at a syllable. */
+/* A tile is a sheet, white by day and the menus' sheet at night, ringed in the ink (#812). */
 .lesson__input::part(tile) {
-  background: rgb(var(--color-snow));
+  background: rgb(var(--color-raised));
   border: 0;
   border-radius: 10px;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 14%), 0 0 0 1px rgb(0 0 0 / 4%);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 14%), 0 0 0 1px rgba(var(--color-ink), var(--tile-edge-opacity));
   box-sizing: border-box;
   color: rgb(var(--color-eel));
   font-family: Nunito, sans-serif;
