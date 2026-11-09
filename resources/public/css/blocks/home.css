@@ -226,12 +226,12 @@
 }
 
 .home__add-form-input--error {
-  border-color: rgb(var(--color-fire-ant));
+  border-color: rgb(var(--color-neon-dark));
 }
 
 /* Sits closer to the fields it is about than to the button below. */
 .home__add-error {
-  color: rgb(var(--color-fire-ant));
+  color: rgb(var(--color-neon-dark));
   font-size: 15px;
   font-weight: 600;
   line-height: 1.4;

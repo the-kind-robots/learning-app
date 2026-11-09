@@ -45,6 +45,31 @@ component SHALL keep a colour of the light scheme that is unreadable on the dark
 - **WHEN** the lesson marks an answer correct or wrong in the dark scheme
 - **THEN** the feedback text has a contrast ratio of at least 4.5:1 against its background
 
+### Requirement: Coloured buttons are deep under a light label in the dark scheme
+
+In the dark scheme the blue, green and red buttons SHALL be filled with `#2970a3`, `#23792e` and
+`#ba1c1e` under the label `#f3ecf8`. Where blue, green or red is drawn on the ground rather than under a
+label — text, an icon, the memory scale, a tile's accent — it SHALL take the light shade `#abd1ed`,
+`#6bc774` or `#f76464`. The lesson's progress bar SHALL be the button green `#23792e`. The answer's panel SHALL be `#142416` for a right answer and
+`#290a0a` for a wrong one.
+
+#### Scenario: A wrong answer in the dark scheme
+
+- **WHEN** the lesson marks an answer wrong in the dark scheme
+- **THEN** «ДАЛЕЕ» is `#ba1c1e` under a light label, on the panel `#290a0a` whose text is `#f76464`
+
+### Requirement: Today's stars burn as street lamps in the dark scheme
+
+In the dark scheme the star for a lesson SHALL be the amber of a sodium lamp, `#ffa81e`, and the star for
+five lessons the white-green of a mercury lamp, `#cdffee`. Each SHALL glow in three layers: the hot
+middle, the coloured light and the haze. In the statistics a day's bar SHALL be `#ffa81e`, and a day of
+five lessons `#96f0d7`.
+
+#### Scenario: Six lessons today in the dark scheme
+
+- **WHEN** the system prefers dark and six lessons were passed today
+- **THEN** the bar shows a white-green star and an amber one, each glowing in three layers
+
 ### Requirement: The browser chrome and canvas take the scheme's ground
 
 The page SHALL declare a `theme-color` per scheme — white for light, `#150f1c` for dark — and SHALL

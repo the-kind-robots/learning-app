@@ -34,7 +34,7 @@
 (defn prozent->color
   [prozent]
   (let [prozent (-> prozent (or 0) (max 0) (min 100))]
-    (str "color-mix(in hsl, rgb(var(--color-owl)) " prozent "%, rgb(var(--color-cardinal)))")))
+    (str "color-mix(in hsl, rgb(var(--color-thallium)) " prozent "%, rgb(var(--color-neon)))")))
 
 
 (defn sanitize-text

@@ -20,6 +20,11 @@ view or presenter names a literal colour. A scheme is a redefinition of those sa
 with the scheme — a hairline, a hover tint, a darkening mix — reads `--color-ink`, the pole opposite the
 ground. Shadows are the one exception: they stay black in every scheme.
 
+A colour that is both a fill under a label and a mark on the ground splits when a scheme needs two
+values for it: the token keeps the fill, and a new token, named after a lamp (thallium, neon,
+mercury), is the colour drawn on the ground — text, icons, scales, accents. By day the two are equal.
+A new token is named for its role or its night light, never for a colour a scheme redefines.
+
 The server-rendered splash is outside this rule. It paints before the stylesheet can be relied on, so
 it carries its own inline colours for both schemes.
 

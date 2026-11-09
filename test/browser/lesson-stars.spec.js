@@ -1,5 +1,6 @@
 const { test, expect, docsOfType } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
+const { seedLessons } = require('./seed.shared');
 
 // A lesson passed lights a star in the shell bar, counted for today; the end
 // of a lesson offers one more (#715).
@@ -27,19 +28,6 @@ async function passLesson(page) {
     await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
     if (trial === 0) await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
   }
-}
-
-// Lessons passed, written straight into the user database (README, "Seeding
-// from a spec"): `ages` are how many days before now each was passed.
-async function seedLessons(page, ages) {
-  await page.evaluate(async (ages) => {
-    const docs = ages.map((age, index) => ({
-      _id: 'lesson-seed-' + index,
-      type: 'lesson',
-      passed_at: new Date(Date.now() - age * 86400000).toISOString(),
-    }));
-    await db.bulk_docs(db.use('user-db'), docs);
-  }, ages);
 }
 
 // The stars of the bar as drawn `ms` into the motion of the last change, left to right: each star's colour as

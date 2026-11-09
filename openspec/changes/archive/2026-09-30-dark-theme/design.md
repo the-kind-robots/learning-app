@@ -39,7 +39,7 @@ so those invert with the scheme. Shadows stay black: a shadow darkens in both sc
 
 | Token | Role | Dark value | Contrast on ground |
 |---|---|---|---|
-| snow | ground, surfaces, label on filled buttons | `#150f1c` | — |
+| snow | ground, surfaces | `#150f1c` | — |
 | polar | quiet surface (inputs, chips, hover) | `#211a2b` | 1.12 |
 | swan | borders, disabled fill, track | `#3a3047` | 1.52 |
 | hare | placeholder, disabled label, unknown retention | `#7d7189` | 4.11 |
@@ -47,28 +47,48 @@ so those invert with the scheme. Shadows stay black: a shadow darkens in both sc
 | gray-text | tertiary text | `#9a8da7` | 6.04 |
 | eel | input and card text | `#e4dbeb` | 13.99 |
 | black-text | body text | `#f3ecf8` | 16.26 |
-| owl | primary green: fill, text, progress bar | `hsl(100 45% 60%)` | 9.37 (label on it 9.37; bar on swan 6.18) |
-| tree-frog | button lip, correct text | `hsl(100 40% 50%)` | 7.29; 5.03 on sea-sponge |
-| sea-sponge | correct background | `hsl(100 32% 16%)` | — |
-| walking-fish | wrong background | `hsl(355 35% 18%)` | — |
-| fire-ant | wrong text, error border | `hsl(0 85% 70%)` | 5.27 on walking-fish |
-| cardinal | error text, danger | `hsl(0 90% 72%)` | 7.07 |
-| macaw | accent blue: focus, caret, secondary buttons | `hsl(200 52% 62%)` | 7.77 (label on it 7.77) |
-| whale | blue button lip | `hsl(200 45% 51%)` | 5.64 |
-| iguana | badge, arrow-selected suggestion | `hsl(200 32% 22%)` | 1.67; eel on it 8.36 |
-| humpback | install-guide accent text | `hsl(200 55% 78%)` | 11.57; 6.91 on iguana |
+| raised | menus, the dictionary's list, dialogs | `#261b33` | — |
+| snow-always-light | label on a coloured button, a flag's white | `#f3ecf8` | — |
+| macaw | blue button fill; focus ring, caret, checkbox | `#2970a3` | 3.53; label on it 4.61 |
+| whale | blue button lip | `#1f547a` | — |
+| owl | green button fill, the lesson's progress bar | `#23792e` | label on it 4.72; bar on swan 2.27 |
+| tree-frog | green button lip | `#18511f` | — |
+| cardinal | red button fill | `#ba1c1e` | label on it 5.55 |
+| fire-ant | red button lip | `#8e1517` | — |
+| sea-sponge | right answer's panel | `#142416` | — |
+| walking-fish | wrong answer's panel | `#290a0a` | — |
+| thallium, thallium-dark | green on the ground: text, icons, memory scale, tile accent | `#6bc774` | 8.99; 7.77 on sea-sponge |
+| neon, neon-dark | red on the ground: errors, delete, memory scale, tile accent | `#f76464` | 6.23; 6.10 on walking-fish |
+| mercury | blue as a tile's or an example's accent | `#abd1ed` | — |
+| iguana | badge, arrow-selected suggestion | `#27353f` | — |
+| humpback | link and install-guide accent text | `#abd1ed` | — |
 | beetle | purple tile accent | `hsl(285 80% 76%)` | 8.35 |
+| mystic, mystic-text | a five-lesson day's bar, the count beside the stars | `#96f0d7`, `#a0f5d7` | — |
+| star, star-*, star-glow | the star for a lesson: a sodium lamp | body `#ffa81e` | — |
+| mystic-star, mystic-star-*, mystic-star-glow | the star for five lessons: a mercury lamp | body `#cdffee` | — |
 | ink | hairlines, tints | `#f3ecf8` | — |
 
 Peacock, fox, starfish and bee are bright enough on the dark ground (8.6–12.1) and keep their values.
 Blue keeps its meaning in dark rather than turning purple: the same control reads the same in both
 schemes.
 
-The green and the blue are calm light fills, not the firefly neon of the splash: the owner found
-`hsl(100 88% 72%)` and `hsl(199 85% 65%)` too bright, and dark muted fills read as disabled. A light
-fill with the ground as its label keeps both alive at about 8–9:1. Each lip is 10–11% darker in
-lightness than its fill, so the 3D edge stays soft. The row picked with the arrow keys in the
-suggestion list takes iguana in dark only: polar is 1.12:1 to the list there.
+The coloured buttons are deep fills under a light label, after the light of gas lamps: mercury blue
+as it warms up (from the owner's `#3782b9`), thallium green, darkroom red. The owner set the depth by
+the label: 4.6:1 on blue and green, 5.5:1 on red. A first take with light fills under a dark label
+(about 8–9:1) was dropped: next to the stars the light green outshone them.
+
+A deep fill is too dark to read as text on the ground (2.9–3.5:1), so a kit colour with two roles
+splits. The animal token stays the fill and its lip; a token named after a lamp is the colour drawn
+on the ground: thallium green, neon red, mercury blue, with `-dark` where the day needs the darker
+shade. By day each is the value the place always read — owl or tree-frog, cardinal or fire-ant,
+macaw — so the light scheme is unchanged; at night it is the light shade. The memory scale mixes
+thallium and neon, so its bars keep their dark counts readable.
+
+The stars are tokens too, five colours and a glow per star. The glow is a `filter` list: one shadow by
+day, three at night. The light-up's flare is one shadow, and settles into a glow of three by
+padding — the shorter list grows by transparent shadows — so the end of the light-up is the glow at
+rest without a jump. The statistics' day bars take the stars' colours. The row picked with the arrow
+keys in the suggestion list takes iguana in dark only: polar is 1.12:1 to the list there.
 
 ### Splash: one markup, two stylings
 

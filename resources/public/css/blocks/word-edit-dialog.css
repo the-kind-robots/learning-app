@@ -86,7 +86,7 @@
 }
 
 .word-edit-dialog__error {
-  color: rgb(var(--color-cardinal));
+  color: rgb(var(--color-neon));
   font-size: 14px;
   font-weight: 700;
 }
@@ -156,13 +156,13 @@
   display: none;
 }
 
-.word-example--owl { --accent: rgb(var(--color-owl)); }
-.word-example--macaw { --accent: rgb(var(--color-macaw)); }
+.word-example--owl { --accent: rgb(var(--color-thallium)); }
+.word-example--macaw { --accent: rgb(var(--color-mercury)); }
 .word-example--fox { --accent: rgb(var(--color-fox)); }
 .word-example--starfish { --accent: rgb(var(--color-starfish)); }
 .word-example--beetle { --accent: rgb(var(--color-beetle)); }
 .word-example--bee { --accent: rgb(var(--color-bee)); }
-.word-example--cardinal { --accent: rgb(var(--color-cardinal)); }
+.word-example--cardinal { --accent: rgb(var(--color-neon)); }
 .word-example--peacock { --accent: rgb(var(--color-peacock)); }
 
 .word-example__title {
@@ -270,7 +270,7 @@
 }
 
 .word-example__status--failed {
-  color: rgb(var(--color-cardinal));
+  color: rgb(var(--color-neon));
 }
 
 /* The card's own action is a text button: the example, not the button, holds the eye. */
@@ -308,7 +308,7 @@
 
   .word-edit-dialog__delete:hover {
     background: rgb(var(--color-walking-fish));
-    color: rgb(var(--color-fire-ant));
+    color: rgb(var(--color-neon-dark));
   }
 }
 
@@ -378,7 +378,7 @@
 
 .word-edit-dialog__delete:active {
   background: rgb(var(--color-walking-fish));
-  color: rgb(var(--color-fire-ant));
+  color: rgb(var(--color-neon-dark));
 }
 
 .word-edit-dialog__reset {
@@ -398,7 +398,7 @@
   border: none;
   border-radius: 14px;
   box-shadow: 0 4px 0 rgb(var(--color-whale));
-  color: rgb(var(--color-snow));
+  color: rgb(var(--color-snow-always-light));
   font-size: 16px;
   font-weight: 800;
   padding: 0 22px;

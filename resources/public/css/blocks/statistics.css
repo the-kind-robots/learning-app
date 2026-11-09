@@ -182,14 +182,14 @@
 }
 
 .statistics__day-fill {
-  background: rgb(var(--color-bee));
+  background: rgb(var(--color-star));
   border-radius: 4px 4px 0 0;
   opacity: var(--soft-fill-opacity);
   width: 22px;
 }
 
 .statistics__day-fill--purple {
-  background: rgb(var(--color-violet));
+  background: rgb(var(--color-mystic));
 }
 
 .statistics__day-date {

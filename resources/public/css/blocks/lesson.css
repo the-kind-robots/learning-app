@@ -291,7 +291,7 @@
    verdict's 22px line under the 16px padding. The main button below stands
    where «ДАЛЕЕ» does. In the verdict's green. */
 .lesson__panel-finish {
-  color: rgb(var(--color-tree-frog));
+  color: rgb(var(--color-thallium-dark));
   display: flex;
   inset-inline: max(16px, calc((100% - 600px) / 2));
   justify-content: flex-end;
@@ -417,9 +417,9 @@
 .lesson__input {
   --answer-field-background: rgb(var(--color-polar));
   --answer-field-border: 2px solid rgb(var(--color-swan));
-  --answer-field-caret-color: rgb(var(--color-owl));
+  --answer-field-caret-color: rgb(var(--color-thallium));
   --answer-field-gap: 10px 8px;
-  --answer-field-hint-color: rgb(var(--color-owl));
+  --answer-field-hint-color: rgb(var(--color-thallium));
   --answer-field-min-height: 87px;
   /* The right padding keeps text out from under the light bulb. */
   --answer-field-padding: 0.625rem 3rem 0.625rem 0.875rem;
@@ -528,7 +528,7 @@
 /* The brand's green: soft on the pale ground, by choice (#765). */
 .lesson__footer--success {
   background-color: rgb(var(--color-sea-sponge));
-  color: rgb(var(--color-tree-frog));
+  color: rgb(var(--color-thallium-dark));
 }
 
 /* The main button after an answer takes the panel's colour (#765), and over a
@@ -570,7 +570,7 @@
 /* A miss in red: the labels small, the correct answer large. */
 .lesson__footer--error {
   background-color: rgb(var(--color-walking-fish));
-  color: rgb(var(--color-fire-ant));
+  color: rgb(var(--color-neon-dark));
 }
 
 .lesson__footer--error .lesson__answer {
@@ -622,7 +622,7 @@
   background: rgb(var(--color-macaw));
   border: none;
   border-radius: 12px;
-  color: rgb(var(--color-snow));
+  color: rgb(var(--color-snow-always-light));
   font-family: inherit;
   font-size: 15px;
   font-weight: 700;
