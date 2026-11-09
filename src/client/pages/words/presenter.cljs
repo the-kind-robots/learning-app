@@ -4,7 +4,7 @@
    [collection-accents :as colours]
    [domain.vocabulary :as vocabulary]
    [pages.words.edit :as edit]
-   [utils :as utils]))
+   [retention-colour :as retention-colour]))
 
 
 (defn- retention-band
@@ -26,7 +26,7 @@
                   0)]
     {:id id
      :retention-band (retention-band percent)
-     :retention-color (utils/prozent->color percent)
+     :retention-color (retention-colour/at percent)
      :retention-percent (int percent)
      :translation (str/join " · " (vocabulary/russian-translations row))
      :value value}))

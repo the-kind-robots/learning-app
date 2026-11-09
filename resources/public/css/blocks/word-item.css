@@ -1,5 +1,5 @@
 .word-item {
-  border-bottom: 1px solid rgb(0 0 0 / 0.06);
+  border-bottom: 1px solid rgba(var(--color-ink), 0.06);
   scroll-margin-block: 12px;
 }
 
@@ -37,7 +37,7 @@
 }
 
 .word-item__display:active {
-  background: rgb(0 0 0 / 0.04);
+  background: rgba(var(--color-ink), 0.04);
 }
 
 .word-item__text {
@@ -67,7 +67,7 @@
 
 /* Darker than wolf: wolf on white is 4.48:1, under the 4.5:1 text minimum. */
 .word-item__translation {
-  color: rgb(107 107 107);
+  color: rgb(var(--color-quiet-text));
   font-size: 15px;
   font-weight: 600;
   line-height: 1.35;

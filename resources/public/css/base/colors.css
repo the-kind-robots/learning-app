@@ -1,5 +1,6 @@
 :root {
   --color-snow: 255, 255, 255;
+  /* Light in both schemes: the label on a coloured button, a flag's white. */
   --color-snow-always-light: 255, 255, 255;
   --color-snow-always-dark: 19, 31, 36;
   --color-polar: 247, 247, 247;
@@ -103,4 +104,108 @@
   --color-blueberry: 17, 82, 167;
   --color-ether: 60, 89, 141;
   --color-ultra-violet: 97, 33, 194;
+
+  /* The pole opposite the ground: hairlines, hover tints and darkening mixes
+     read it so they invert with the scheme. Shadows stay black. */
+  --color-ink: 0, 0, 0;
+
+  /* What floats over the page: menus, the dictionary's list, dialogs. */
+  --color-raised: 255, 255, 255;
+  /* Secondary text darker than wolf: wolf on white is 4.48:1. */
+  --color-quiet-text: 107, 107, 107;
+  /* The colour of five lessons: that day's bar in the statistics and the
+     count beside the stars. */
+  --color-mystic: 125, 79, 196;
+  --color-mystic-text: 107, 63, 176;
+  /* Pastel bars: a bright fill let half through the ground. */
+  --soft-fill-opacity: .5;
+
+  /* Green, red and blue drawn on the ground rather than under a label: text,
+     icons, the memory scale, a tile's accent. Named after lamps: thallium
+     green, neon red, mercury blue. By day the shades the app always had —
+     owl, tree-frog, cardinal, fire-ant, macaw; at night the button fills are
+     too deep to read on the ground, and these stay light. */
+  --color-thallium: 88, 204, 2;
+  --color-thallium-dark: 88, 167, 0;
+  --color-neon: 255, 75, 75;
+  --color-neon-dark: 234, 43, 43;
+  --color-mercury: 28, 176, 246;
+
+  /* Today's stars: the star for a lesson and the mystic star for five. Each
+     is the lip under the body, the body, its lighter core, the sparkle, the
+     flare it lights up with and the glow it rests in. */
+  --color-star-lip: 196, 134, 0;
+  --color-star: 255, 200, 0;
+  --color-star-core: 255, 228, 120;
+  --color-star-sparkle: 255, 212, 70;
+  --color-star-flare: 255, 200, 40;
+  --star-glow: drop-shadow(0 0 2px rgba(240, 176, 0, 0.55));
+  --color-mystic-star-lip: 75, 47, 120;
+  --color-mystic-star: 125, 79, 196;
+  --color-mystic-star-core: 180, 140, 240;
+  --color-mystic-star-sparkle: 230, 214, 255;
+  --color-mystic-star-flare: 170, 120, 255;
+  --mystic-star-glow: drop-shadow(0 0 2px rgba(150, 100, 230, 0.55));
+
+  color-scheme: light dark;
+}
+
+/* Night violet (#413). Only the tokens the app reads are redefined. The
+   coloured buttons are the deep light of gas lamps under a light label:
+   mercury blue as it warms up, thallium green, darkroom red. What is drawn
+   on the ground in those colours takes their light shades. The stars burn
+   as street lamps: sodium for a lesson, mercury for five, each in a glow of
+   three layers — the hot middle, the coloured light, the haze. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-snow: 21, 15, 28;
+    --color-snow-always-light: 243, 236, 248;
+    --color-polar: 33, 26, 43;
+    --color-swan: 58, 48, 71;
+    --color-hare: 125, 113, 137;
+    --color-wolf: 171, 158, 184;
+    --color-gray-text: 154, 141, 167;
+    --color-eel: 228, 219, 235;
+    --color-black-text: 243, 236, 248;
+    /* Each label on its fill reads 4.6:1, on red 5.5:1. */
+    --color-owl: 35, 121, 46;
+    --color-tree-frog: 24, 81, 31;
+    --color-sea-sponge: 20, 36, 22;
+    --color-cardinal: 186, 28, 30;
+    --color-fire-ant: 142, 21, 23;
+    --color-walking-fish: 41, 10, 10;
+    --color-macaw: 41, 112, 163;
+    --color-whale: 31, 84, 122;
+    --color-iguana: 39, 53, 63;
+    --color-humpback: 171, 209, 237;
+    --color-thallium: 107, 199, 116;
+    --color-thallium-dark: 107, 199, 116;
+    --color-neon: 247, 100, 100;
+    --color-neon-dark: 247, 100, 100;
+    --color-mercury: 171, 209, 237;
+    --color-beetle: 218, 145, 243;
+    --color-ink: 243, 236, 248;
+    --color-raised: 38, 27, 51;
+    --color-quiet-text: 171, 158, 184;
+    --color-mystic: 150, 240, 215;
+    --color-mystic-text: 160, 245, 215;
+    --color-star-lip: 150, 74, 0;
+    --color-star: 255, 168, 30;
+    --color-star-core: 255, 240, 200;
+    --color-star-sparkle: 255, 210, 120;
+    --star-glow:
+      drop-shadow(0 0 1.2px rgba(255, 236, 190, 0.9))
+      drop-shadow(0 0 4px rgba(255, 150, 20, 0.75))
+      drop-shadow(0 0 9px rgba(230, 105, 0, 0.4));
+    --color-mystic-star-lip: 20, 140, 80;
+    --color-mystic-star: 205, 255, 238;
+    --color-mystic-star-core: 255, 255, 255;
+    --color-mystic-star-sparkle: 120, 255, 170;
+    --color-mystic-star-flare: 40, 255, 130;
+    --mystic-star-glow:
+      drop-shadow(0 0 1.4px rgba(160, 255, 230, 0.9))
+      drop-shadow(0 0 5px rgba(40, 255, 130, 0.8))
+      drop-shadow(0 0 11px rgba(20, 200, 90, 0.4));
+    --soft-fill-opacity: .8;
+  }
 }

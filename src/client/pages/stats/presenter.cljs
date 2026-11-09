@@ -3,7 +3,7 @@
    [application.settings.presenter :as settings]
    [clojure.string :as str]
    [domain.statistics :as statistics]
-   [utils :as utils]))
+   [retention-colour :as retention-colour]))
 
 
 (defn- columns
@@ -12,7 +12,7 @@
   [word-bins]
   (let [tallest (max 1 (apply max word-bins))]
     (map-indexed (fn [index words]
-                   {:color  (utils/prozent->color (+ 5 (* 10 index)))
+                   {:color  (retention-colour/at (+ 5 (* 10 index)))
                     :height (* 100 (/ words tallest))
                     :words  words})
                  word-bins)))
@@ -24,7 +24,7 @@
   [word-bins]
   (let [counts (statistics/word-groups word-bins)]
     (for [[group middle] [[:retention/new 10] [:retention/due 35] [:retention/good 65] [:retention/excellent 90]]]
-      {:color (utils/prozent->color middle)
+      {:color (retention-colour/at middle)
        :name  group
        :words (get counts group)})))
 

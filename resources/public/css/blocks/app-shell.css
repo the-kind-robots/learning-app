@@ -1,7 +1,7 @@
 .app-shell__loader {
   align-items: center;
   background-color: rgb(var(--color-snow));
-  color: rgb(var(--color-owl));
+  color: rgb(var(--color-thallium));
   display: flex;
   font-family: Nunito, sans-serif;
   font-size: 24;
@@ -73,7 +73,7 @@
    not a control — it carries no handler and nothing here makes it a tap
    target; it inherits the word mark's face and size. */
 .app-shell__dev-mark {
-  color: rgb(var(--color-cardinal));
+  color: rgb(var(--color-neon));
 }
 
 /* Which bundle the page loaded, under the info bar's row, and the tap that
@@ -193,17 +193,18 @@
 }
 
 /* Both stars are drawn alike and of one size: a dark lip under the body, a
-   lighter core, a sparkle and a soft glow. A gold star takes shades of
-   yellow, a purple one shades of violet. Eight of them, 24 lessons, still
-   fit beside the word mark and the sync on a 390px phone. */
+   lighter core, a sparkle and the halo it rests in. A gold star takes the
+   star's colours, a purple one the mystic star's; at night they burn as a
+   sodium and a mercury lamp. Eight of them, 24 lessons, still fit beside
+   the word mark and the sync on a 390px phone. */
 .app-shell__star {
-  --star-lip: 196, 134, 0;
-  --star-body: var(--color-bee);
-  --star-core: 255, 228, 120;
-  --star-sparkle: 255, 212, 70;
-  --star-glow: 240, 176, 0;
-  --star-flare: 255, 200, 40;
-  filter: drop-shadow(0 0 2px rgba(var(--star-glow), 0.55));
+  --star-lip: var(--color-star-lip);
+  --star-body: var(--color-star);
+  --star-core: var(--color-star-core);
+  --star-sparkle: var(--color-star-sparkle);
+  --star-flare: var(--color-star-flare);
+  --star-halo: var(--star-glow);
+  filter: var(--star-halo);
   flex: none;
   height: 24px;
   stroke-linejoin: round;
@@ -212,12 +213,12 @@
 }
 
 .app-shell__star--purple {
-  --star-lip: 75, 47, 120;
-  --star-body: 125, 79, 196;
-  --star-core: 180, 140, 240;
-  --star-sparkle: 230, 214, 255;
-  --star-glow: 150, 100, 230;
-  --star-flare: 170, 120, 255;
+  --star-lip: var(--color-mystic-star-lip);
+  --star-body: var(--color-mystic-star);
+  --star-core: var(--color-mystic-star-core);
+  --star-sparkle: var(--color-mystic-star-sparkle);
+  --star-flare: var(--color-mystic-star-flare);
+  --star-halo: var(--mystic-star-glow);
 }
 
 .app-shell__star-lip {
@@ -242,7 +243,7 @@
 }
 
 .app-shell__star-number {
-  color: rgb(107, 63, 176);
+  color: rgb(var(--color-mystic-text));
   font-size: 18px;
   font-weight: 800;
   line-height: 1;
@@ -324,12 +325,12 @@
 @keyframes app-shell-star-gold {
   from,
   to {
-    --star-lip: 196, 134, 0;
-    --star-body: var(--color-bee);
-    --star-core: 255, 228, 120;
-    --star-sparkle: 255, 212, 70;
-    --star-glow: 240, 176, 0;
-    --star-flare: 255, 200, 40;
+    --star-lip: var(--color-star-lip);
+    --star-body: var(--color-star);
+    --star-core: var(--color-star-core);
+    --star-sparkle: var(--color-star-sparkle);
+    --star-flare: var(--color-star-flare);
+    --star-halo: var(--star-glow);
   }
 }
 
@@ -374,10 +375,12 @@
 }
 
 /* The size and the opacity settle by 40%, before a growth ends: a growing
-   star, given back to its light-up then, keeps its size. */
+   star, given back to its light-up then, keeps its size. The flare is one
+   shadow and the glow one or three; the shorter list grows by shadows of
+   nothing, so the flare settles into the glow without a jump. */
 @keyframes app-shell-star-glow {
   0% {
-    filter: drop-shadow(0 0 0 rgba(var(--star-glow), 0));
+    filter: drop-shadow(0 0 0 transparent);
     opacity: 0;
     transform: scale(0.6);
   }
@@ -392,7 +395,7 @@
   }
 
   100% {
-    filter: drop-shadow(0 0 2px rgba(var(--star-glow), 0.55));
+    filter: var(--star-halo);
   }
 }
 
@@ -450,8 +453,8 @@
 }
 
 .app-shell__sync--online {
-  color: rgb(var(--color-owl));
-  filter: drop-shadow(0 0 3px rgba(var(--color-owl), 0.55));
+  color: rgb(var(--color-thallium));
+  filter: drop-shadow(0 0 3px rgba(var(--color-thallium), 0.55));
 }
 
 .app-shell__sync--offline {
@@ -537,11 +540,11 @@
 @media (hover: hover) {
   .app-shell__icon-button:hover {
     background: rgb(var(--color-polar));
-    color: rgb(var(--color-owl));
+    color: rgb(var(--color-thallium));
   }
 }
 
 .app-shell__icon-button:active {
   background: rgb(var(--color-polar));
-  color: rgb(var(--color-owl));
+  color: rgb(var(--color-thallium));
 }

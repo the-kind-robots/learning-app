@@ -11,4 +11,17 @@ async function seedWords(page, values) {
   }, values);
 }
 
-module.exports = { seedWords };
+// Lessons passed, written straight into the user database: `ages` are how
+// many days before now each was passed.
+async function seedLessons(page, ages) {
+  await page.evaluate(async (ages) => {
+    const docs = ages.map((age, index) => ({
+      _id: 'lesson-seed-' + index,
+      type: 'lesson',
+      passed_at: new Date(Date.now() - age * 86400000).toISOString(),
+    }));
+    await db.bulk_docs(db.use('user-db'), docs);
+  }, ages);
+}
+
+module.exports = { seedLessons, seedWords };

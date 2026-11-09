@@ -31,6 +31,7 @@
    [ring.middleware.cookies :as cookies]
    [ring.util.response :as response]
    [sieppari.context :as context]
+   [splash :as splash]
    [taoensso.telemere :as t]
    [userdb :as userdb]
    [utils :as utils])
@@ -906,6 +907,19 @@
             {:name    "viewport"
              :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
            [:title "Sprecha"]
+           ;; Both schemes are supported, so the browser paints its canvas
+           ;; dark before any stylesheet on a phone set to dark (#413).
+           [:meta
+            {:name    "color-scheme"
+             :content "light dark"}]
+           [:meta
+            {:name    "theme-color"
+             :content "#ffffff"
+             :media   "(prefers-color-scheme: light)"}]
+           [:meta
+            {:name    "theme-color"
+             :content "#150f1c"
+             :media   "(prefers-color-scheme: dark)"}]
            [:link
             {:rel  "icon"
              :href "/favicon.ico"}]
@@ -933,44 +947,7 @@
              :defer true}]]
           [:body
            (i18n/interpolate (page-language request) body)]])
-       :html/body
-       [:<>
-        [:style
-         "
-                    .splash{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100dvh;margin:0;font-family:Nunito,system-ui,sans-serif}
-                    .splash-title{font-size:2rem;font-weight:700;color:#222;margin-bottom:1.5rem}
-                    .splash-face circle{transform-box:fill-box;transform-origin:center}
-                    .dot{animation:pulse 1.4s ease-in-out infinite alternate}
-                    .sparkle{opacity:0;animation:flash 5s ease-out infinite}
-                    @keyframes pulse{from{opacity:.3;transform:scale(.78)}to{opacity:1;transform:scale(1.1)}}
-                    @keyframes flash{0%{opacity:0;transform:scale(.5)}5%{opacity:.65;transform:scale(1.3)}30%{opacity:.15;transform:scale(.8)}100%{opacity:0;transform:scale(.5)}}
-                    .splash-sub{font-size:.95rem;color:#666;margin-top:2rem}
-                  "]
-        [:div.splash
-         [:div.splash-title "Sprecha"]
-         ;; zprint: as written
-         [:svg.splash-face {:viewBox "0 0 156 156" :width "156" :height "156"}
-          [:circle.dot {:cx 55 :cy 32 :r 9 :fill "hsl(100 65% 72%)" :style "animation-delay:0s"}]
-          [:circle.dot {:cx 101 :cy 32 :r 9 :fill "hsl(89 69% 71%)" :style "animation-delay:.15s"}]
-          [:circle.dot {:cx 32 :cy 78 :r 9 :fill "hsl(78 73% 70%)" :style "animation-delay:.3s"}]
-          [:circle.dot {:cx 124 :cy 78 :r 9 :fill "hsl(66 76% 69%)" :style "animation-delay:.45s"}]
-          [:circle.dot {:cx 32 :cy 101 :r 9 :fill "hsl(55 80% 68%)" :style "animation-delay:.6s"}]
-          [:circle.dot {:cx 124 :cy 101 :r 9 :fill "hsl(66 76% 69%)" :style "animation-delay:.75s"}]
-          [:circle.dot {:cx 55 :cy 124 :r 9 :fill "hsl(78 73% 70%)" :style "animation-delay:.9s"}]
-          [:circle.dot {:cx 78 :cy 124 :r 9 :fill "hsl(89 69% 71%)" :style "animation-delay:1.05s"}]
-          [:circle.dot {:cx 101 :cy 124 :r 9 :fill "hsl(100 65% 72%)" :style "animation-delay:1.2s"}]
-          [:circle.sparkle
-           {:cx 25 :cy 18 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:2s;animation-duration:4s"}]
-          [:circle.sparkle
-           {:cx 133 :cy 48 :r 2.5 :fill "hsl(280 50% 65%)" :style "animation-delay:3.5s;animation-duration:5.5s"}]
-          [:circle.sparkle
-           {:cx 78 :cy 56 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:5s;animation-duration:6s"}]
-          [:circle.sparkle
-           {:cx 18 :cy 112 :r 2.5 :fill "hsl(280 50% 65%)" :style "animation-delay:1s;animation-duration:4.5s"}]
-          [:circle.sparkle
-           {:cx 142 :cy 128 :r 3 :fill "hsl(280 50% 65%)" :style "animation-delay:4.2s;animation-duration:5s"}]]
-         [:div.splash-sub
-          [:i18n :shell/loading]]]]
+       :html/body (splash/view)
        :status 200}
       request))
 

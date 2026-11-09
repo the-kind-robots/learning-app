@@ -21,6 +21,7 @@ src/client/
 ├── main.cljs                 # Entry point: starts the app
 ├── application.cljs          # Nexus interceptors, app-wide effects, shell view, render!
 ├── collection_accents.cljs   # The order and colour of collection tiles, for the themes screen and the word dialog
+├── retention_colour.cljs     # The colour of how well a word is remembered, for the word list and the statistics
 ├── application/presenter.cljs# Shell props (sync entry, install prompt, build mark), the screen change between renders
 ├── view_transition.cljs      # Screen changes as view transitions, on a phone only (ADR-0024)
 ├── application/pages.cljs    # The page multimethod; each page declares its method in its view

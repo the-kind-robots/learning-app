@@ -89,7 +89,7 @@
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 
-  --accent: rgb(var(--color-owl));
+  --accent: rgb(var(--color-thallium));
 
   background: rgb(var(--color-snow));
   border: 2px solid rgb(var(--color-swan));
@@ -130,13 +130,13 @@
  * The colour the presenter gives a tile; everything inside
  * a tile, a folder's rows included, reads the colour through the inherited custom property.
  */
-.tile--owl { --accent: rgb(var(--color-owl)); }
-.tile--macaw { --accent: rgb(var(--color-macaw)); }
+.tile--owl { --accent: rgb(var(--color-thallium)); }
+.tile--macaw { --accent: rgb(var(--color-mercury)); }
 .tile--fox { --accent: rgb(var(--color-fox)); }
 .tile--starfish { --accent: rgb(var(--color-starfish)); }
 .tile--beetle { --accent: rgb(var(--color-beetle)); }
 .tile--bee { --accent: rgb(var(--color-bee)); }
-.tile--cardinal { --accent: rgb(var(--color-cardinal)); }
+.tile--cardinal { --accent: rgb(var(--color-neon)); }
 .tile--peacock { --accent: rgb(var(--color-peacock)); }
 
 .tile__name {
@@ -336,7 +336,7 @@
   align-items: center;
   background: transparent;
   border: none;
-  color: rgb(var(--color-cardinal));
+  color: rgb(var(--color-neon));
   cursor: pointer;
   display: grid;
   height: 28px;
@@ -411,7 +411,7 @@
 }
 
 .tile__close:hover {
-  color: color-mix(in oklab, rgb(var(--color-cardinal)) 78%, #000);
+  color: color-mix(in oklab, rgb(var(--color-neon)) 78%, rgb(var(--color-ink)));
 }
 
 .tile--editing .tile__close,
@@ -499,13 +499,13 @@
   z-index: 2;
 }
 
-.masonry:has(> .tile--owl[lifted]) { --caret: rgb(var(--color-owl)); }
-.masonry:has(> .tile--macaw[lifted]) { --caret: rgb(var(--color-macaw)); }
+.masonry:has(> .tile--owl[lifted]) { --caret: rgb(var(--color-thallium)); }
+.masonry:has(> .tile--macaw[lifted]) { --caret: rgb(var(--color-mercury)); }
 .masonry:has(> .tile--fox[lifted]) { --caret: rgb(var(--color-fox)); }
 .masonry:has(> .tile--starfish[lifted]) { --caret: rgb(var(--color-starfish)); }
 .masonry:has(> .tile--beetle[lifted]) { --caret: rgb(var(--color-beetle)); }
 .masonry:has(> .tile--bee[lifted]) { --caret: rgb(var(--color-bee)); }
-.masonry:has(> .tile--cardinal[lifted]) { --caret: rgb(var(--color-cardinal)); }
+.masonry:has(> .tile--cardinal[lifted]) { --caret: rgb(var(--color-neon)); }
 .masonry:has(> .tile--peacock[lifted]) { --caret: rgb(var(--color-peacock)); }
 
 .tile[caret]::after {

@@ -5,7 +5,7 @@
 }
 
 .suggestions {
-  background: rgb(var(--color-snow));
+  background: rgb(var(--color-raised));
   border: 1px solid rgb(var(--color-swan));
   border-radius: 10px;
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);

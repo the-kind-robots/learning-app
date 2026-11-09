@@ -31,12 +31,6 @@
 )
 
 
-(defn prozent->color
-  [prozent]
-  (let [prozent (-> prozent (or 0) (max 0) (min 100))]
-    (str "color-mix(in hsl, rgb(88, 204, 2) " prozent "%, rgb(255, 75, 75))")))
-
-
 (defn sanitize-text
   "Remove punctuation and normalize whitespace"
   [text]

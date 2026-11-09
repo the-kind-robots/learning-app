@@ -54,7 +54,7 @@
 .statistics__bin-fill {
   border-radius: 10px;
   inset: 0;
-  opacity: .5;
+  opacity: var(--soft-fill-opacity);
   position: absolute;
 }
 
@@ -106,7 +106,7 @@
 }
 
 .statistics__group-name {
-  color: rgb(107, 107, 107);
+  color: rgb(var(--color-quiet-text));
   font-size: 14px;
   font-weight: 600;
 }
@@ -134,9 +134,9 @@
 }
 
 .statistics__month-name {
-  background: rgb(240, 240, 240);
+  background: rgb(var(--color-polar));
   border-radius: 999px;
-  color: rgb(75, 75, 75);
+  color: rgb(var(--color-eel));
   font-size: 13px;
   font-weight: 800;
   left: 0;
@@ -176,25 +176,25 @@
 }
 
 .statistics__day-lessons {
-  color: rgb(107, 107, 107);
+  color: rgb(var(--color-quiet-text));
   font-size: 11px;
   font-weight: 700;
 }
 
 .statistics__day-fill {
-  background: rgb(var(--color-bee));
+  background: rgb(var(--color-star));
   border-radius: 4px 4px 0 0;
-  opacity: .5;
+  opacity: var(--soft-fill-opacity);
   width: 22px;
 }
 
 .statistics__day-fill--purple {
-  background: rgb(125, 79, 196);
+  background: rgb(var(--color-mystic));
 }
 
 .statistics__day-date {
   border-radius: 9px;
-  color: rgb(107, 107, 107);
+  color: rgb(var(--color-quiet-text));
   font-size: 11px;
   font-weight: 600;
   height: 18px;
@@ -204,19 +204,19 @@
 }
 
 .statistics__day-date--today {
-  background: rgb(60, 60, 60);
+  background: rgb(var(--color-black-text));
   color: rgb(var(--color-snow));
   font-weight: 800;
 }
 
 .statistics__day-weekday {
-  color: rgb(75, 75, 75);
+  color: rgb(var(--color-eel));
   font-size: 10px;
   font-weight: 600;
 }
 
 .statistics__day-weekday--weekend {
-  color: rgb(118, 118, 118);
+  color: rgb(var(--color-wolf));
 }
 
 .statistics__footer {

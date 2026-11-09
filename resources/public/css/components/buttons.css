@@ -8,7 +8,7 @@
   --__internal__background-color-disabled: var(--web-ui_button-background-color-disabled, rgb(var(--color-swan)));
   --__internal__border-color: var(--web-ui_button-border-color, rgb(var(--color-whale)));
   --__internal__border-radius: var(--web-ui_button-border-radius, 12px);
-  --__internal__color: var(--web-ui_button-color, rgb(var(--color-snow)));
+  --__internal__color: var(--web-ui_button-color, rgb(var(--color-snow-always-light)));
   --__internal__color-active: var(--web-ui_button-color-active, var(--__internal__color));
   --__internal__color-disabled: var(--web-ui_button-color-disabled, rgb(var(--color-hare)));
   --__internal__filter-hover: var(--web-ui_button-filter-hover, brightness(1.1));
@@ -16,7 +16,7 @@
   --__internal__lip-width: var(--web-ui_button-lip-width, 4px);
   --__internal__padding: var(--web-ui_button-padding, 0 16px);
   --web-ui_button-border-radius: 1rem;
-  --web-ui_button-color: rgb(var(--color-snow));
+  --web-ui_button-color: rgb(var(--color-snow-always-light));
   --web-ui_button-lip-width: 0.25rem;
   align-items: center;
   background: none;

@@ -3,7 +3,7 @@
  * word's examples, one for each collection, and a footer that stays at the bottom while the rest scrolls.
  */
 .word-edit-dialog.modal {
-  background: rgb(var(--color-snow));
+  background: rgb(var(--color-raised));
   border: none;
   border-radius: 20px;
   box-shadow: 0 12px 40px rgb(0 0 0 / 0.12);
@@ -86,7 +86,7 @@
 }
 
 .word-edit-dialog__error {
-  color: #b42318;
+  color: rgb(var(--color-neon));
   font-size: 14px;
   font-weight: 700;
 }
@@ -156,13 +156,13 @@
   display: none;
 }
 
-.word-example--owl { --accent: rgb(var(--color-owl)); }
-.word-example--macaw { --accent: rgb(var(--color-macaw)); }
+.word-example--owl { --accent: rgb(var(--color-thallium)); }
+.word-example--macaw { --accent: rgb(var(--color-mercury)); }
 .word-example--fox { --accent: rgb(var(--color-fox)); }
 .word-example--starfish { --accent: rgb(var(--color-starfish)); }
 .word-example--beetle { --accent: rgb(var(--color-beetle)); }
 .word-example--bee { --accent: rgb(var(--color-bee)); }
-.word-example--cardinal { --accent: rgb(var(--color-cardinal)); }
+.word-example--cardinal { --accent: rgb(var(--color-neon)); }
 .word-example--peacock { --accent: rgb(var(--color-peacock)); }
 
 .word-example__title {
@@ -270,7 +270,7 @@
 }
 
 .word-example__status--failed {
-  color: #b42318;
+  color: rgb(var(--color-neon));
 }
 
 /* The card's own action is a text button: the example, not the button, holds the eye. */
@@ -308,7 +308,7 @@
 
   .word-edit-dialog__delete:hover {
     background: rgb(var(--color-walking-fish));
-    color: rgb(var(--color-fire-ant));
+    color: rgb(var(--color-neon-dark));
   }
 }
 
@@ -343,7 +343,7 @@
  */
 .word-edit-dialog__footer {
   align-items: center;
-  border-top: 1px solid #ececec;
+  border-top: 1px solid rgb(var(--color-swan));
   display: flex;
   flex-shrink: 0;
   gap: 12px;
@@ -378,11 +378,11 @@
 
 .word-edit-dialog__delete:active {
   background: rgb(var(--color-walking-fish));
-  color: rgb(var(--color-fire-ant));
+  color: rgb(var(--color-neon-dark));
 }
 
 .word-edit-dialog__reset {
-  background: rgb(var(--color-snow));
+  background: rgb(var(--color-raised));
   border: 2px solid rgb(var(--color-swan));
   border-radius: 14px;
   box-shadow: 0 3px 0 rgb(var(--color-swan));
@@ -398,7 +398,7 @@
   border: none;
   border-radius: 14px;
   box-shadow: 0 4px 0 rgb(var(--color-whale));
-  color: rgb(var(--color-snow));
+  color: rgb(var(--color-snow-always-light));
   font-size: 16px;
   font-weight: 800;
   padding: 0 22px;
@@ -408,12 +408,12 @@
 .word-edit-dialog__save:disabled {
   background: rgb(var(--color-swan));
   box-shadow: none;
-  color: #8a8a8a;
+  color: rgb(var(--color-hare));
   cursor: default;
 }
 
 .word-edit-dialog__reset:disabled {
-  background: rgb(var(--color-snow));
+  background: rgb(var(--color-raised));
 }
 
 .word-edit-dialog__reset:not(:disabled):active,
