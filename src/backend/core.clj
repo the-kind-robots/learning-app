@@ -6,6 +6,7 @@
    [clojure.edn :as edn]
    [clojure.java.io :as io]
    [clojure.string :as str]
+   [colour-scheme :as colour-scheme]
    [db :as db]
    [examples :as examples]
    [examples.dictionary :as dictionary]
@@ -894,62 +895,77 @@
                            (keyword-parameters/keyword-parameters-interceptor)]}})
 
    ;; Default handler
+   ;; The page is rendered in the scheme picked on the device, else in the system's (#805, ADR-0027). The
+   ;; routes' cookie interceptor does not run here, so the cookie is parsed here.
    (fn [request]
-     (hiccup/render-response
-      {:html/layout
-       (fn layout
-         [{:html/keys [body]}]
-         [:html
-          {:lang (page-language request)}
-          [:head
-           [:meta {:charset "UTF-8"}]
-           [:meta
-            {:name    "viewport"
-             :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
-           [:title "Sprecha"]
-           ;; Both schemes are supported, so the browser paints its canvas
-           ;; dark before any stylesheet on a phone set to dark (#413).
-           [:meta
-            {:name    "color-scheme"
-             :content "light dark"}]
-           [:meta
-            {:name    "theme-color"
-             :content "#ffffff"
-             :media   "(prefers-color-scheme: light)"}]
-           [:meta
-            {:name    "theme-color"
-             :content "#150f1c"
-             :media   "(prefers-color-scheme: dark)"}]
-           [:link
-            {:rel  "icon"
-             :href "/favicon.ico"}]
-           ;; Dev installs carry a red-D-badged icon set so a device can hold
-           ;; both the dev and the production PWA without confusing them.
-           [:link
-            {:rel  "manifest"
-             :href (if running-from-source?
-                     "/dev-manifest.json"
-                     "/manifest.json")}]
-           ;; The first screen's fonts are fetched with the document, not after
-           ;; styles.css is parsed; the splash waits for them.
-           (for [file ["nunito-v32-cyrillic-variable" "nunito-v32-latin-variable"]]
+     (let [scheme (colour-scheme/picked (get-in (cookies/cookies-request request)
+                                                [:cookies colour-scheme/cookie :value]))
+           night  (colour-scheme/night-media scheme)]
+       (hiccup/render-response
+        {:html/layout
+         (fn layout
+           [{:html/keys [body]}]
+           [:html
+            {:lang (page-language request)}
+            [:head
+             [:meta {:charset "UTF-8"}]
+             [:meta
+              {:name    "viewport"
+               :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
+             [:title "Sprecha"]
+             ;; The schemes the page may show, so the browser paints its canvas
+             ;; in the right one before any stylesheet (#413).
+             [:meta
+              {:content (case scheme
+                          :scheme/dark  "dark"
+                          :scheme/light "light"
+                          "light dark")
+               :name    "color-scheme"}]
+             ;; The browser tints its bar with the first theme-color whose
+             ;; media matches: the night's while the night applies.
+             [:meta
+              {:content    "#150f1c"
+               :data-night true
+               :media      night
+               :name       "theme-color"}]
+             [:meta
+              {:content "#ffffff"
+               :name    "theme-color"}]
              [:link
-              {:rel         "preload"
-               :as          "font"
-               :type        "font/woff2"
-               :crossorigin true
-               :href        (str "/fonts/Nunito/" file ".woff2")}])
-           [:link
-            {:rel  "stylesheet"
-             :href "/css/styles.css"}]
-           [:script
-            {:src   "/js/app/main.js"
-             :defer true}]]
-          [:body
-           (i18n/interpolate (page-language request) body)]])
-       :html/body (splash/view)
-       :status 200}
-      request))
+              {:rel  "icon"
+               :href "/favicon.ico"}]
+             ;; Dev installs carry a red-D-badged icon set so a device can hold
+             ;; both the dev and the production PWA without confusing them.
+             [:link
+              {:rel  "manifest"
+               :href (if running-from-source?
+                       "/dev-manifest.json"
+                       "/manifest.json")}]
+             ;; The first screen's fonts are fetched with the document, not after
+             ;; styles.css is parsed; the splash waits for them.
+             (for [file ["nunito-v32-cyrillic-variable" "nunito-v32-latin-variable"]]
+               [:link
+                {:rel         "preload"
+                 :as          "font"
+                 :type        "font/woff2"
+                 :crossorigin true
+                 :href        (str "/fonts/Nunito/" file ".woff2")}])
+             [:link
+              {:rel  "stylesheet"
+               :href "/css/styles.css"}]
+             [:link
+              {:data-night true
+               :href       "/css/base/night.css"
+               :media      night
+               :rel        "stylesheet"}]
+             [:script
+              {:src   "/js/app/main.js"
+               :defer true}]]
+            [:body
+             (i18n/interpolate (page-language request) body)]])
+         :html/body (splash/view night)
+         :status 200}
+        request)))
 
    ;; interceptor queue executor
    {:executor sieppari/executor}))

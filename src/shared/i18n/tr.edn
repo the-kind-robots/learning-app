@@ -74,6 +74,10 @@
 
  :settings/language           "Dil"
  :settings/open               "Sprecha, ayarlar"
+ :settings/scheme             "Görünüm"
+ :settings/scheme-dark        "Koyu"
+ :settings/scheme-light       "Açık"
+ :settings/scheme-system      "Sistem"
  :settings/title              "Ayarlar"
 
  :shell/export-trace          "İzi dışa aktar"

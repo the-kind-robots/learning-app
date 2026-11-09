@@ -1,9 +1,9 @@
 (ns splash
   "The splash the server renders into the page before any script runs. It
-   follows the system colour scheme with CSS alone (#413): the light one is
-   the ü of nine leaf-coloured dots pulsing along the stroke, the dark one is
-   the same ü as fireflies, with stray fireflies passing behind foliage that
-   is drawn in the ground colour and never shows as a shape."
+   shows the scheme the app will show with CSS alone (#413, #805): the light
+   one is the ü of nine leaf-coloured dots pulsing along the stroke, the dark
+   one is the same ü as fireflies, with stray fireflies passing behind foliage
+   that is drawn in the ground colour and never shows as a shape."
   (:require
    [garden.core :as garden]
    [garden.stylesheet :as stylesheet]))
@@ -13,8 +13,8 @@
 
 
 (def ^:private style
-  "The splash's own stylesheet. It paints before the app's styles load, so it
-   carries the colours of both schemes itself."
+  "The splash's own stylesheet by day. It paints before the app's styles load,
+   so it carries its colours itself; the night's are `night-style`."
   (garden/css
    {:pretty-print? false}
    [:.splash
@@ -88,33 +88,44 @@
                             ["50%" {:transform "translate(var(--dx),var(--dy))"}])
    (stylesheet/at-keyframes "splash-sway"
                             ["0%,100%" {:transform "rotate(-1.2deg)"}]
-                            ["50%" {:transform "rotate(1.2deg)"}])
-   (stylesheet/at-media
-    {:prefers-color-scheme "dark"}
-    [:.splash
-     {:background "#150f1c"
-      :color      "#f3ecf8"}]
-    [:.splash-sub {:color "#ab9eb8"}]
-    [:.splash-night
-     {:display  "block"
-      :height   "100%"
-      :inset    0
-      :position "absolute"
-      :width    "100%"}]
-    [:.splash-halo
-     {:animation "splash-glow var(--flicker-duration) ease-in-out var(--flicker-delay) infinite"
-      :display   "inline"
-      :opacity   0.15}]
-    [:.dot {:fill "var(--firefly)"}]
-    [:.dot
-     :.splash-fly
-     {:animation "splash-flicker var(--flicker-duration) ease-in-out var(--flicker-delay) infinite"}]
-    [:.sparkle {:fill "hsl(285 80% 76%)"}]
-    [:.splash-stray {:animation "splash-stray var(--stray-duration) ease-in-out var(--stray-delay) infinite"}]
-    [:.splash
-     [:.splash-leaf
-      {:animation        "splash-sway var(--sway-duration) ease-in-out var(--sway-delay) infinite"
-       :transform-origin "0 50%"}]])
+                            ["50%" {:transform "rotate(1.2deg)"}])))
+
+
+(def ^:private night-style
+  "The splash at night. The page gives it the media under which the night applies, as it gives the app's night
+   stylesheet (ADR-0027)."
+  (garden/css
+   {:pretty-print? false}
+   [:.splash
+    {:background "#150f1c"
+     :color      "#f3ecf8"}]
+   [:.splash-sub {:color "#ab9eb8"}]
+   [:.splash-night
+    {:display  "block"
+     :height   "100%"
+     :inset    0
+     :position "absolute"
+     :width    "100%"}]
+   [:.splash-halo
+    {:animation "splash-glow var(--flicker-duration) ease-in-out var(--flicker-delay) infinite"
+     :display   "inline"
+     :opacity   0.15}]
+   [:.dot {:fill "var(--firefly)"}]
+   [:.dot
+    :.splash-fly
+    {:animation "splash-flicker var(--flicker-duration) ease-in-out var(--flicker-delay) infinite"}]
+   [:.sparkle {:fill "hsl(285 80% 76%)"}]
+   [:.splash-stray {:animation "splash-stray var(--stray-duration) ease-in-out var(--stray-delay) infinite"}]
+   [:.splash
+    [:.splash-leaf
+     {:animation        "splash-sway var(--sway-duration) ease-in-out var(--sway-delay) infinite"
+      :transform-origin "0 50%"}]]))
+
+
+(def ^:private still-style
+  "The splash under reduced motion, in either scheme: after the night's rules, so its halo wins."
+  (garden/css
+   {:pretty-print? false}
    (stylesheet/at-media {:prefers-reduced-motion "reduce"}
                         [:.splash
                          [:*
@@ -360,11 +371,17 @@
 
 
 (defn view
-  "The splash, its stylesheet included: the page shows it until the app's
-   script renders into the body."
-  []
+  "The splash, its stylesheets included: the page shows it until the app's
+   script renders into the body. Its night applies under `night-media`
+   (`colour-scheme/night-media`)."
+  [night-media]
   [:<>
    [:style style]
+   [:style
+    {:data-night true
+     :media      night-media}
+    night-style]
+   [:style still-style]
    [:div.splash
     (night)
     [:div.splash-title "Sprecha"]

@@ -1,3 +1,11 @@
+/* While the page changes its colour scheme nothing transitions on its own: a control with a transition of its
+   own would catch up after the rest, and the screen would change in steps (#805). */
+:root[data-scheme-change] *,
+:root[data-scheme-change] *::before,
+:root[data-scheme-change] *::after {
+  transition: none !important;
+}
+
 :root {
   /* The shell bar's height; a screen starts its content below it. */
   --app-bar-height: 68px;

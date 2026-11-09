@@ -1,6 +1,7 @@
 (ns view-transition
-  "Screen changes through the browser's View Transition API (ADR-0024). The kind of a change is the
-   transition's type, which `blocks/view-transitions.css` draws by `:active-view-transition-type`.")
+  "Screen changes, and the switch of the colour scheme, through the browser's View Transition API (ADR-0024). The
+   kind of a change is the transition's type, which `blocks/view-transitions.css` draws by
+   `:active-view-transition-type`.")
 
 
 (def ^:private motion-query
