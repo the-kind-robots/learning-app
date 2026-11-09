@@ -119,6 +119,8 @@
   --color-mystic-text: 107, 63, 176;
   /* Pastel bars: a bright fill let half through the ground. */
   --soft-fill-opacity: .5;
+  /* The ring of a word tile in the ink: barely there on white, plain at night (#812). */
+  --tile-edge-opacity: .04;
 
   /* Green, red and blue drawn on the ground rather than under a label: text,
      icons, the memory scale, a tile's accent. Named after lamps: thallium

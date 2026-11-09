@@ -38,7 +38,31 @@ async function place(page, words) {
   }
 }
 
+// How each tile is painted, over the field and in it: its ground and its ring (#812).
+const tilePaint = (page) => page.locator('.lesson__input').evaluate((host) =>
+  [...host.shadowRoot.querySelectorAll('[part="tile"]')].map((tile) => {
+    const style = getComputedStyle(tile);
+    return { ground: style.backgroundColor, ringed: style.boxShadow.includes('rgba(243, 236, 248, 0.16)') };
+  }));
+
 test.describe('Плитки у примера', () => {
+  test('ученик с тёмной темой кладёт два слова в поле → плитки над полем и в поле цвета листа со светлой каймой', async ({ page }) => {
+    await test.step('Дано тёмная тема и пример на экране', async () => {
+      await page.emulateMedia({ colorScheme: 'dark' });
+      await showExample(page);
+    });
+
+    await test.step('Когда он кладёт в поле «Der» и «Hund»', async () => {
+      await place(page, ['Der', 'Hund']);
+    });
+
+    await test.step('Тогда каждая плитка — лист #261b33 со светлой каймой', async () => {
+      const paint = await tilePaint(page);
+      expect(paint.length).toBe(SENTENCE.length);
+      expect(paint).toEqual(paint.map(() => ({ ground: 'rgb(38, 27, 51)', ringed: true })));
+    });
+  });
+
   test('ученик переводит слово → обычное поле, без плиток и лампочки', async ({ page }) => {
     await test.step('Когда на экране слово', async () => {
       await showWord(page);
