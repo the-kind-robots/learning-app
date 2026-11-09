@@ -6,6 +6,10 @@ const { seedLessons } = require('./seed.shared');
 // buttons are deep under a light label, the answer's panel keeps its text readable, and today's stars burn
 // as street lamps. Readability is the WCAG contrast of the colours as painted.
 
+// No service worker: once installed it serves the app's script past the route that keeps the splash on screen
+// for a reopened app. An online reopen fetches the page from the server either way.
+test.use({ serviceWorkers: 'block' });
+
 const ANSWERS = { дом: 'Haus', собака: 'Hund' };
 const NIGHT_GROUND = 'rgb(21, 15, 28)';
 const NIGHT_TEXT = 'rgb(243, 236, 248)';
@@ -119,6 +123,179 @@ test('телефон переключается на тёмную тему пр�
   await test.step('Тогда главная на ночном фоне в том же документе', async () => {
     expect(await ground(page)).toEqual([NIGHT_GROUND, NIGHT_TEXT]);
     expect(await page.evaluate(() => window.__sameDocument)).toBe(true);
+  });
+});
+
+// The learner picks the scheme in the settings under the word mark (#805). The pick is the device's: a cookie
+// the server renders the splash and the browser's bar from, so a reopened app is in it from the first paint.
+const settings = (page) => page.getByRole('dialog', { name: 'Настройки' });
+const scheme = (page, name) => settings(page).getByRole('group', { name: 'Оформление' }).getByRole('radio', { name });
+
+async function pickScheme(page, name) {
+  await page.getByRole('button', { name: /^Шпреха/ }).click();
+  await scheme(page, name).click();
+}
+
+// The colour the browser tints its bar with: the first theme-color whose media matches.
+const barColour = (page) => page.evaluate(() => [...document.querySelectorAll('meta[name="theme-color"]')]
+  .find((meta) => !meta.media || matchMedia(meta.media).matches)?.content);
+
+const splashGround = async (page) => {
+  await page.route('**/js/app/main.js', (route) => route.abort());
+  await page.reload();
+  const colour = await page.locator('.splash').evaluate((splash) => getComputedStyle(splash).backgroundColor);
+  await page.unroute('**/js/app/main.js');
+  return colour;
+};
+
+// What moves over the next frames, at most at once: the CSS transitions — a control that eases into the new
+// colours on its own, still catching up after the rest — and the animations of the whole screen's dissolve.
+const switchMotion = (page) => page.evaluate(() => new Promise((resolve) => {
+  const most = { catchingUp: 0, dissolving: 0 };
+  let frames = 0;
+  const look = () => {
+    const animations = document.getAnimations();
+    most.catchingUp = Math.max(most.catchingUp, animations.filter((animation) => animation instanceof CSSTransition).length);
+    most.dissolving = Math.max(most.dissolving,
+      animations.filter((animation) => (animation.effect.pseudoElement || '').startsWith('::view-transition')).length);
+    frames += 1;
+    if (frames < 20) requestAnimationFrame(look);
+    else resolve(most);
+  };
+  look();
+}));
+
+test('ученик со светлой темой на телефоне выбирает в настройках «Тёмная» → приложение и полоса браузера темнеют сразу, все цвета разом, а открытое заново оно тёмное с заставки', async ({ page }) => {
+  await test.step('Дано светлая тема телефона и открытая главная', async () => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/home');
+    await expect(page.getByRole('heading', { name: 'Главная' })).toBeAttached();
+    await page.evaluate(() => { window.__sameDocument = true; });
+  });
+
+  await test.step('Тогда в настройках отмечена «Система»', async () => {
+    await page.getByRole('button', { name: /^Шпреха/ }).click();
+    await expect(scheme(page, 'Система')).toBeChecked();
+    await page.keyboard.press('Escape');
+  });
+
+  await test.step('Когда он выбирает «Тёмная»', async () => {
+    await pickScheme(page, 'Тёмная');
+  });
+
+  await test.step('Тогда ни один цвет не догоняет остальные', async () => {
+    expect((await switchMotion(page)).catchingUp).toBe(0);
+  });
+
+  await test.step('Тогда главная на ночном фоне в том же документе, полоса браузера ночная, «Тёмная» отмечена', async () => {
+    await expect.poll(() => ground(page)).toEqual([NIGHT_GROUND, NIGHT_TEXT]);
+    expect(await page.evaluate(() => window.__sameDocument)).toBe(true);
+    await expect.poll(() => barColour(page)).toBe('#150f1c');
+    await expect(scheme(page, 'Тёмная')).toBeChecked();
+  });
+
+  await test.step('Когда он открывает приложение заново', async () => {
+    expect(await splashGround(page)).toBe(NIGHT_GROUND);
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Главная' })).toBeAttached();
+  });
+
+  await test.step('Тогда и заставка, и главная на ночном фоне', async () => {
+    expect(await ground(page)).toEqual([NIGHT_GROUND, NIGHT_TEXT]);
+    expect(await barColour(page)).toBe('#150f1c');
+  });
+});
+
+test('ученик с тёмной темой на телефоне выбирает «Светлая» → приложение светлое и после перезапуска', async ({ page }) => {
+  await test.step('Дано тёмная тема телефона', async () => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto('/home');
+    expect(await ground(page)).toEqual([NIGHT_GROUND, NIGHT_TEXT]);
+  });
+
+  await test.step('Когда он выбирает «Светлая»', async () => {
+    await pickScheme(page, 'Светлая');
+  });
+
+  await test.step('Тогда главная белая, и полоса браузера белая', async () => {
+    await expect.poll(async () => (await ground(page))[0]).toBe('rgb(255, 255, 255)');
+    await expect.poll(() => barColour(page)).toBe('#ffffff');
+  });
+
+  await test.step('Тогда открытое заново приложение белое с заставки', async () => {
+    expect(await splashGround(page)).toBe('rgb(255, 255, 255)');
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Главная' })).toBeAttached();
+    expect((await ground(page))[0]).toBe('rgb(255, 255, 255)');
+  });
+});
+
+test('ученик с выбранной тёмной темой выбирает «Система» → приложение снова следует телефону', async ({ page }) => {
+  await test.step('Дано светлая тема телефона и выбранная «Тёмная»', async () => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/home');
+    await pickScheme(page, 'Тёмная');
+    await expect.poll(() => ground(page)).toEqual([NIGHT_GROUND, NIGHT_TEXT]);
+    await page.keyboard.press('Escape');
+  });
+
+  await test.step('Когда он выбирает «Система»', async () => {
+    await pickScheme(page, 'Система');
+  });
+
+  await test.step('Тогда главная белая', async () => {
+    await expect.poll(async () => (await ground(page))[0]).toBe('rgb(255, 255, 255)');
+  });
+
+  await test.step('Когда телефон переключается на тёмную тему', async () => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+  });
+
+  await test.step('Тогда главная на ночном фоне', async () => {
+    expect(await ground(page)).toEqual([NIGHT_GROUND, NIGHT_TEXT]);
+  });
+});
+
+test.describe('на телефоне', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test('ученик выбирает «Тёмная» → весь экран вместе с меню растворяется в ночи, ни один цвет не догоняет остальные', async ({ page }) => {
+    await test.step('Дано светлая тема телефона и открытые настройки', async () => {
+      await page.emulateMedia({ colorScheme: 'light' });
+      await page.goto('/home');
+      await page.getByRole('button', { name: /^Шпреха/ }).click();
+      await expect(scheme(page, 'Система')).toBeChecked();
+    });
+
+    await test.step('Когда он выбирает «Тёмная»', async () => {
+      await scheme(page, 'Тёмная').click();
+    });
+
+    await test.step('Тогда экран растворяется целиком, и ни один цвет не догоняет остальные', async () => {
+      const motion = await switchMotion(page);
+      expect(motion.dissolving).toBeGreaterThan(0);
+      expect(motion.catchingUp).toBe(0);
+    });
+
+    await test.step('Тогда экран на ночном фоне', async () => {
+      await expect.poll(() => ground(page)).toEqual([NIGHT_GROUND, NIGHT_TEXT]);
+    });
+  });
+});
+
+test.describe('на немецкой системе', () => {
+  test.use({ locale: 'de-DE' });
+
+  test('пользователь без выбора открывает приложение → настройки спрашивают только язык, оформления в них нет', async ({ page }) => {
+    await test.step('Когда он открывает приложение', async () => {
+      await page.goto('/');
+    });
+
+    await test.step('Тогда открыты настройки с языками и без оформления', async () => {
+      const asking = page.getByRole('dialog', { name: 'Settings' });
+      await expect(asking.getByRole('radio', { name: 'English' })).toBeChecked();
+      await expect(asking.getByRole('group', { name: 'Appearance' })).toHaveCount(0);
+    });
   });
 });
 

@@ -20,6 +20,21 @@ html:active-view-transition::view-transition-old(app-bar) {
   display: none;
 }
 
+/* A scheme picked in the settings (#805): the whole screen, the bar with it, dissolves into the other scheme by
+   the browser's own cross-fade. Its blend is set below the root's. */
+
+html:active-view-transition-type(scheme) .app-shell__bar {
+  view-transition-name: none;
+}
+
+/* Nothing transitions from the moment the dissolve starts: the pressed tile is checked before the scheme
+   changes, and would ease into its highlight on its own. */
+html:active-view-transition-type(scheme) *,
+html:active-view-transition-type(scheme) *::before,
+html:active-view-transition-type(scheme) *::after {
+  transition: none !important;
+}
+
 /* The main button at the bottom stands still across a screen change, as the bar does: it has one size and one
    place on every screen (#767). Only its label and colour change, the old fading into the new where it stands,
    by the browser's own cross-fade, whose blending keeps a label that does not change from flickering (#776). */
@@ -40,6 +55,13 @@ html:active-view-transition::view-transition-new(main-button) {
 html:active-view-transition::view-transition-old(root),
 html:active-view-transition::view-transition-new(root) {
   mix-blend-mode: normal;
+}
+
+/* The scheme's dissolve keeps the browser's plus-lighter blend, so the screen stays opaque through the middle. */
+
+html:active-view-transition-type(scheme)::view-transition-old(root),
+html:active-view-transition-type(scheme)::view-transition-new(root) {
+  mix-blend-mode: plus-lighter;
 }
 
 /* Deeper: the new screen comes in from the right over the old one, which falls back to the left. */

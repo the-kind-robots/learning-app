@@ -1,8 +1,11 @@
 (ns adapters.page
-  "The page as the browser reports it: shown or hidden, online or offline, and the virtual keyboard over it."
+  "The page as the browser reports it: shown or hidden, online or offline, the virtual keyboard over it, and the
+   colour scheme picked on the device."
   (:require
    [abort]
-   [browser]))
+   [browser]
+   [clojure.string :as str]
+   [colour-scheme :as colour-scheme]))
 
 
 (defn visible?
@@ -21,6 +24,39 @@
   "The language tag of the system, `de-DE` say."
   []
   (.-language js/navigator))
+
+
+(defn scheme
+  "The colour scheme picked on this device: `:scheme/light`, `:scheme/dark` or `:scheme/system`."
+  []
+  (->> (str/split js/document.cookie #";\s*")
+       (some #(let [[cookie value] (str/split % #"=" 2)]
+                (when (= colour-scheme/cookie cookie)
+                  value)))
+       colour-scheme/picked))
+
+
+(defn choose-scheme!
+  "Keeps `scheme` on this device, for 400 days, Chrome's longest, and shows it: the elements marked `data-night`
+   take its night media. `:scheme/system` drops the pick. The new colours are computed while the page is marked
+   `data-scheme-change`, under which nothing transitions, so every colour changes at once. The browser's bar cannot
+   dissolve with the screen: it takes the scheme 125 ms later, halfway through the browser's 250 ms dissolve."
+  [scheme]
+  (set! js/document.cookie
+        (if (= :scheme/system scheme)
+          (str colour-scheme/cookie "=; path=/; max-age=0")
+          (str colour-scheme/cookie "=" (name scheme) "; path=/; max-age=34560000; SameSite=Lax; Secure")))
+  (let [^js root js/document.documentElement
+        night!   (fn [selector]
+                   (let [^js elements (js/document.querySelectorAll selector)]
+                     (.forEach elements
+                               (fn [^js element] (.setAttribute element "media" (colour-scheme/night-media scheme))))))]
+    (.setAttribute root "data-scheme-change" "")
+    (night! "link[data-night], style[data-night]")
+    ;; Asking for a box makes the browser compute the new style now, under the mark.
+    (.getBoundingClientRect js/document.body)
+    (.removeAttribute root "data-scheme-change")
+    (js/setTimeout #(night! "meta[data-night]") 125)))
 
 
 (defn active?

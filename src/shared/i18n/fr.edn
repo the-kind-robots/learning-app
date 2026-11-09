@@ -74,6 +74,10 @@
 
  :settings/language           "Langue"
  :settings/open               "Sprecha, paramètres"
+ :settings/scheme             "Apparence"
+ :settings/scheme-dark        "Sombre"
+ :settings/scheme-light       "Clair"
+ :settings/scheme-system      "Système"
  :settings/title              "Paramètres"
 
  :shell/export-trace          "Exporter la trace"

@@ -74,6 +74,10 @@
 
  :settings/language           "Язык"
  :settings/open               "Шпреха, настройки"
+ :settings/scheme             "Оформление"
+ :settings/scheme-dark        "Тёмная"
+ :settings/scheme-light       "Светлая"
+ :settings/scheme-system      "Система"
  :settings/title              "Настройки"
 
  :shell/export-trace          "Экспортировать трассу"

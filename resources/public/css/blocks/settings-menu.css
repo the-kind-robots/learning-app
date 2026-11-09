@@ -1,4 +1,5 @@
-/* Settings menu — a popover under the word mark; the learner's language. The screen stays as it is behind it. */
+/* Settings menu — a popover under the word mark; the learner's language and the device's colour scheme. The screen
+   stays as it is behind it. */
 
 .settings-menu {
   background: rgb(var(--color-raised));
@@ -14,7 +15,8 @@
   padding: 8px;
   position: fixed;
   top: 52px;
-  width: 196px;
+  /* Wide enough for the schemes' names side by side. */
+  width: 228px;
   /* An open popover sits in the top layer; the asking block, no popover, sits above the bar by this. */
   z-index: 30;
 }
@@ -68,8 +70,9 @@
   position: absolute;
 }
 
+/* The pick is a haze of the text's own colour: no hue, so it does not read as a right answer's green. */
 .settings-menu__language:has(:checked) {
-  background: rgb(var(--color-sea-sponge));
+  background: rgba(var(--color-ink), 0.08);
   font-weight: 800;
 }
 
@@ -94,6 +97,11 @@
   width: 24px;
 }
 
+/* On the pick's grey haze the grey ring melts: there the ring is a label's white, a little greyer at night. */
+.settings-menu__language:has(:checked) .settings-menu__flag {
+  box-shadow: 0 0 0 1px rgba(var(--color-snow-always-light), 0.8);
+}
+
 .settings-menu__flag-blue {
   fill: rgb(var(--color-macaw));
 }
@@ -104,4 +112,64 @@
 
 .settings-menu__flag-white {
   fill: rgb(var(--color-snow-always-light));
+}
+
+.settings-menu__rule {
+  border: none;
+  border-top: 1px solid rgba(var(--color-ink), 0.1);
+  margin: 6px;
+}
+
+/* The schemes: three tiles in a row, an icon over its name. */
+.settings-menu__schemes {
+  border: none;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+/* The tile is the radio's label, as a language's row is. The name keeps its weight when picked, so the row
+   does not shift. */
+.settings-menu__scheme {
+  align-items: center;
+  border-radius: 10px;
+  color: rgb(var(--color-wolf));
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 4px;
+  padding: 10px 0 8px;
+  position: relative;
+  transition: background-color 0.1s;
+}
+
+.settings-menu__scheme:has(:checked) {
+  background: rgba(var(--color-ink), 0.08);
+  color: rgb(var(--color-black-text));
+}
+
+.settings-menu__scheme:has(:focus-visible) {
+  outline: 2px solid rgb(var(--color-macaw));
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .settings-menu__scheme:not(:has(:checked)):hover {
+    background: rgb(var(--color-polar));
+  }
+}
+
+.settings-menu__scheme-icon {
+  fill: none;
+  height: 24px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 24px;
 }
