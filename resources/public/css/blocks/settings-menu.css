@@ -70,8 +70,9 @@
   position: absolute;
 }
 
+/* The pick is a haze of the text's own colour: no hue, so it does not read as a right answer's green. */
 .settings-menu__language:has(:checked) {
-  background: rgb(var(--color-sea-sponge));
+  background: rgba(var(--color-ink), 0.08);
   font-weight: 800;
 }
 
@@ -94,6 +95,11 @@
   height: 16px;
   overflow: hidden;
   width: 24px;
+}
+
+/* On the pick's grey haze the grey ring melts: there the ring is a label's white, a little greyer at night. */
+.settings-menu__language:has(:checked) .settings-menu__flag {
+  box-shadow: 0 0 0 1px rgba(var(--color-snow-always-light), 0.8);
 }
 
 .settings-menu__flag-blue {
@@ -143,7 +149,7 @@
 }
 
 .settings-menu__scheme:has(:checked) {
-  background: rgb(var(--color-sea-sponge));
+  background: rgba(var(--color-ink), 0.08);
   color: rgb(var(--color-black-text));
 }
 
