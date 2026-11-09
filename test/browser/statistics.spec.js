@@ -286,6 +286,37 @@ test.describe('Статистика', () => {
     });
   });
 
+  test('ученик с тёмной темой нажимает «ПОДЕЛИТЬСЯ» → картинка на ночном фоне со светлым текстом', async ({ page }) => {
+    await test.step('Дано тёмная тема телефона, системное меню «Поделиться» и открытая статистика', async () => {
+      await page.emulateMedia({ colorScheme: 'dark' });
+      // The shared picture's ground at its corner and the brightest pixel of its title, «Шпреха» at the top left.
+      await page.addInitScript(() => {
+        navigator.canShare = () => true;
+        navigator.share = async ({ files }) => {
+          const bitmap = await createImageBitmap(files[0]);
+          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+          const context = canvas.getContext('2d');
+          context.drawImage(bitmap, 0, 0);
+          const ground = [...context.getImageData(4, 4, 1, 1).data.slice(0, 3)];
+          const title = context.getImageData(66, 70, 300, 70).data;
+          let brightest = 0;
+          for (let i = 0; i < title.length; i += 4) brightest = Math.max(brightest, title[i] + title[i + 1] + title[i + 2]);
+          window.__shared = { ground, lightText: brightest > 3 * 200 };
+        };
+      });
+      await homeWithLessons(page, [0]);
+      await statsButton(page).click();
+    });
+
+    await test.step('Когда он нажимает «ПОДЕЛИТЬСЯ»', async () => {
+      await page.getByRole('button', { name: 'ПОДЕЛИТЬСЯ' }).click();
+    });
+
+    await test.step('Тогда картинка на ночном фоне #150f1c, и заголовок светлый', async () => {
+      await expect.poll(() => page.evaluate(() => window.__shared)).toEqual({ ground: [21, 15, 28], lightText: true });
+    });
+  });
+
   test('ученик на телефоне листает ленту за два месяца → название месяца стоит у левого края, пока его дни видны', async ({ page }) => {
     await test.step('Дано окно телефона, урок шестьдесят дней назад и сегодня, открытая статистика', async () => {
       await page.setViewportSize({ width: 390, height: 844 });

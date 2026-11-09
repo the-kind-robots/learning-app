@@ -11,7 +11,8 @@
   (await (.-ready js/document.fonts))
   (let [^js canvas  (js/document.createElement "canvas")
         ^js context (.getContext canvas "2d")
-        ;; A colour as the page computes it, `color-mix()` included, which the canvas may not parse itself.
+        ;; A colour and an opacity as the page computes them, `color-mix()` and `var()` included, which the canvas
+        ;; cannot parse itself.
         ^js probe   (js/document.createElement "span")]
     (set! (.-width canvas) width)
     (set! (.-height canvas) height)
@@ -19,10 +20,11 @@
     (doseq [{:keys [align fill opacity radius shape size text weight x y] shape-height :height shape-width :width}
             shapes]
       (set! (.. probe -style -color) fill)
+      (set! (.. probe -style -opacity) opacity)
       (set! (.-fillStyle context) (.-color (js/getComputedStyle probe)))
       (case shape
         :shape/rect (do
-                      (set! (.-globalAlpha context) opacity)
+                      (set! (.-globalAlpha context) (js/parseFloat (.-opacity (js/getComputedStyle probe))))
                       (.beginPath context)
                       (.roundRect context x y shape-width shape-height radius)
                       (.fill context))

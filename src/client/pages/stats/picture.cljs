@@ -1,6 +1,6 @@
 (ns pages.stats.picture
   "The picture «ПОДЕЛИТЬСЯ» shares, laid out as shapes: what is drawn where, in the picture's pixels. Drawing
-   them is the sharing port's."
+   them is the sharing port's. Colours are the tokens', which the page resolves in the scheme it shows (#809)."
   (:require
    [pages.stats.presenter :as presenter]))
 
@@ -14,10 +14,15 @@
 (def ^:private margin 66)
 
 
-(def ^:private text-colour "rgb(60, 60, 60)")
+(def ^:private text-colour "rgb(var(--color-black-text))")
 
 
-(def ^:private grey-colour "rgb(107, 107, 107)")
+(def ^:private grey-colour "rgb(var(--color-quiet-text))")
+
+
+(def ^:private soft-fill
+  "The opacity of the bars, as the statistics screen fades its own: half by day, more at night."
+  "var(--soft-fill-opacity)")
 
 
 (defn- across
@@ -64,13 +69,13 @@
      :height height
      :shapes
      (concat
-      [(rect 0 0 width height 0 "#ffffff" 1)
+      [(rect 0 0 width height 0 "rgb(var(--color-snow))" 1)
        (text margin 130 60 text-colour :align/left [:i18n :shell/word-mark])
        (text (- width margin) 130 36 grey-colour :align/right date)
        (text margin 250 78 text-colour :align/left [:i18n :stats/words {:count words}])]
       (mapcat (fn [{:keys [color] column-words :words column-height :height} {:keys [x] place :width}]
                 (let [h (max 66 (* 3.3 column-height))]
-                  [(rect x (- columns-bottom h) place h 24 color 0.5)
+                  [(rect x (- columns-bottom h) place h 24 color soft-fill)
                    (text (+ x (/ place 2))
                          (+ (- columns-bottom h) 44)
                          30 text-colour
@@ -93,17 +98,24 @@
        shares
        [[margin 740] [540 740] [margin 860] [540 860]])
       [(text margin 980 78 text-colour :align/left [:i18n :stats/lessons {:count lessons}])
-       (rect margin days-bottom (- width (* 2 margin)) 6 3 "rgb(229, 229, 229)" 1)]
+       (rect margin days-bottom (- width (* 2 margin)) 6 3 "rgb(var(--color-swan))" 1)]
       ;; A column per day, its lessons over it on a day with any, its date and weekday under the line.
       (mapcat
        (fn [{:keys [day purple? weekday] day-height :height day-lessons :lessons} {:keys [x] place :width}]
          (let [h      (* 1.4 day-height)
                middle (+ x (/ place 2))]
-           (cond-> [(rect x (- days-bottom h) place h 12 (if purple? "rgb(125, 79, 196)" "rgb(255, 200, 0)") 0.5)
-                    (text middle 1224 30 text-colour :align/center (str day))
-                    (text middle 1258 24 grey-colour :align/center weekday)]
+           (cond->
+             [(rect x
+                    (- days-bottom h)
+                    place
+                    h
+                    12
+                    (if purple? "rgb(var(--color-mystic))" "rgb(var(--color-star))")
+                    soft-fill)
+              (text middle 1224 30 text-colour :align/center (str day))
+              (text middle 1258 24 grey-colour :align/center weekday)]
              day-lessons (conj (text middle (- days-bottom h 12) 28 text-colour :align/center (str day-lessons))))))
        days
        (across 14 12))
-      [(text (/ width 2) 1320 36 "rgb(88, 167, 0)" :align/center "sprecha.de")])
+      [(text (/ width 2) 1320 36 "rgb(var(--color-thallium-dark))" :align/center "sprecha.de")])
      :width width}))
