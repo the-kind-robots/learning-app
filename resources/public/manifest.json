@@ -3,8 +3,6 @@
     "short_name": "Sprecha",
     "description": "Build your German vocabulary and learn words with usage examples, even when offline.",
     "start_url": "/home",
-    "theme_color": "#ffffff",
-    "background_color": "#ffffff",
     "display": "standalone",
     "icons": [
         {
