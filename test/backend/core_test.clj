@@ -83,6 +83,13 @@
           "abc"))))
 
 
+(deftest a-blank-public-url-counts-as-unset
+  (are [env] (= "https://sprecha.de" (#'sut/configured-public-url env))
+   {}
+   {"LEARNING_APP__PUBLIC_URL" ""}
+   {"LEARNING_APP__PUBLIC_URL" "  "}))
+
+
 (deftest stopping-the-server-drains-in-flight-requests
   (let [in-flight (promise)
         handler   (fn [_]

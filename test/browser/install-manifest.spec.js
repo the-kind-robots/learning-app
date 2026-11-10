@@ -1,5 +1,6 @@
 const { test, expect } = require('./fixtures');
 const { addWord } = require('./add-form.shared');
+const { imageSize } = require('./image-size.shared');
 const { openControlled } = require('./service-worker.shared');
 
 // The install offer, the installed icon and its shortcuts are drawn by the browser from the web manifest (#816),
@@ -28,14 +29,6 @@ async function shortcutUrl(page, name) {
   const manifest = await readManifest(page, await page.locator('link[rel="manifest"]').getAttribute('href'));
   return manifest.shortcuts.find((shortcut) => shortcut.name === name).url;
 }
-
-// The size an image really has, loaded the way the browser loads a manifest image.
-const imageSize = (page, src) => page.evaluate((src) => new Promise((resolve, reject) => {
-  const image = new Image();
-  image.onload = () => resolve(`${image.naturalWidth}x${image.naturalHeight}`);
-  image.onerror = () => reject(new Error(`${src} did not load`));
-  image.src = src;
-}), src);
 
 test.describe('Установка приложения', () => {
   test('ученик выбирает ярлык «Урок» на иконке → открывается урок', async ({ page }) => {
