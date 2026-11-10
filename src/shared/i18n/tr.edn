@@ -39,6 +39,15 @@
  :install-guide/share         ("Araç çubuğunda " [:strong "Paylaş"] " düğmesine dokun")
  :install-guide/title         "Sprecha’yı yükle"
 
+ :install/description         "Almanca kelime hazineni geliştir, kelimeleri örneklerle öğren. İnternetsiz de çalışır."
+ :install/name                "Sprecha: örneklerle Almanca kelimeler"
+ :install/screen-collections  "Kelime setleri"
+ :install/screen-lesson       "Ders: Almanca kelimelerden bir cümle"
+ :install/screen-lesson-night "Koyu görünümde bir ders"
+ :install/screen-statistics   "İstatistikler: kaç kelimeyi hatırladığın"
+ :install/screen-word         "Örneği ve çevirisiyle bir kelime"
+ :install/shortcut-words      "Kelimeler"
+
  :lesson/add-to-dictionary    "+ SÖZLÜĞE"
  :lesson/add-translation      "+ ÇEVİRİ EKLE"
  :lesson/add-words            "Kelime ekle"

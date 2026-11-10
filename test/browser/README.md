@@ -70,4 +70,5 @@ await page.evaluate(async () => {
 - CLS/INP accumulate; reset does not rewind them.
 - `web-vitals.cls` ignores shifts near input: assert `layout-shift` or geometry.
 - `dictionary.ready-ms` absent (not 0) if dictionary never opens: wait for it.
-Out of scope: SW offline, sync/CouchDB. SW update: route `sw.js` on `context`, not `page`.
+Out of scope: sync/CouchDB. SW update: route `sw.js` on `context`, not `page`.
+SW offline: cut the network with `context.route('**/*', (route) => route.abort('internetdisconnected'))`; `context.setOffline` leaves the worker's own `fetch` online.

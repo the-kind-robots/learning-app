@@ -699,7 +699,7 @@
 
 (deftest every-precached-path-is-a-file-that-exists
   (testing "a named asset that was deleted would reject the atomic install"
-    (doseq [path (remove #{"/" "/js/app/main.js"} (#'sut/precache-paths))]
+    (doseq [path (remove #{"/" "/dev-manifest.json" "/js/app/main.js" "/manifest.json"} (#'sut/precache-paths))]
       (is (.exists (File. (str "resources/public" path))) path))))
 
 

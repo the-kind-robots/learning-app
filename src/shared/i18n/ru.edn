@@ -39,6 +39,15 @@
  :install-guide/share         ("Tap " [:strong "Share"] " in the toolbar")
  :install-guide/title         "Install Sprecha"
 
+ :install/description         "Пополняйте немецкий словарь и учите слова на примерах. Работает и без интернета."
+ :install/name                "Шпреха: немецкие слова с примерами"
+ :install/screen-collections  "Наборы слов"
+ :install/screen-lesson       "Урок: фраза из немецких слов"
+ :install/screen-lesson-night "Урок в тёмном оформлении"
+ :install/screen-statistics   "Статистика: сколько слов вы помните"
+ :install/screen-word         "Слово с примером и переводом"
+ :install/shortcut-words      "Слова"
+
  :lesson/add-to-dictionary    "+ В СЛОВАРЬ"
  :lesson/add-translation      "+ ДОБАВИТЬ ПЕРЕВОД"
  :lesson/add-words            "Добавить слова"
