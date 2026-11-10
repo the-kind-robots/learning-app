@@ -51,7 +51,12 @@
         page               (page/start!)
         navigation         (navigation/start! {:home pages/home :paths (pages/paths)})
         ;; The service worker registers before render; the registration arrives later, as a promise.
-        install            (install/start!)
+        ;; Listened to before the first await: Chrome offers installing right after the page's load,
+        ;; while the learner's data is still opening, and an offer nobody hears is gone (#814).
+        install            (doto (install/start!)
+                             (install/listen-for-install!
+                              #(swap! app-state assoc :pwa/install-available? true)
+                              #(swap! app-state assoc :pwa/install-available? false)))
         examples-generator (examples-generator/start!)
         ;; The dictionary opens SQLite while the learner opens PouchDB; neither waits for the other.
         ;; The account's sync writes the session cookie. Its `initialized` is a promise: memory loaded,
@@ -77,10 +82,6 @@
     (nxr/register-system->state! application/state)
     (r/set-dispatch! dispatch)
     (application/start-rendering! system dispatch)
-    (install/listen-for-install!
-     install
-     #(swap! app-state assoc :pwa/install-available? true)
-     #(swap! app-state assoc :pwa/install-available? false))
     (account/on-status account #(swap! app-state assoc :sync/status %))
     ;; After render, so the first window has a screen to compute. Following the history reads the address,
     ;; which `ports.account/check-incoming-auth!` has already handled.
