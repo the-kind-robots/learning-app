@@ -45,6 +45,23 @@ test.describe('Примеры в окне слова', () => {
     });
   });
 
+  test('пользователь открывает слово → рамка карточки темы того же цвета, что плитка темы на экране тем', async ({ page }) => {
+    await test.step('Дано слово в темах «Reisen/Bahn» и «Alltag», сделанных в этом порядке', async () => {
+      await seedWord(page, { collections: THEMES, examples: EXAMPLES });
+    });
+
+    await test.step('Когда он открывает слово', async () => {
+      await openWord(page);
+    });
+
+    // The tiles take the palette by the order they were made, «Всё подряд» first: «Reisen» blue, «Alltag» orange,
+    // though «Alltag» comes first by name (collections-tiles.spec.js).
+    await test.step('Тогда рамка «Reisen / Bahn» голубая, как плитка «Reisen», а «Alltag» оранжевая, как её плитка', async () => {
+      await expect(card(page, 'Reisen / Bahn')).toHaveCSS('border-top-color', 'rgb(28, 176, 246)');
+      await expect(card(page, 'Alltag')).toHaveCSS('border-top-color', 'rgb(255, 150, 0)');
+    });
+  });
+
   test('пользователь открывает слово в теме → карточка темы первая, остальные следом', async ({ page }) => {
     await test.step('Дано слово в двух темах, активна «Alltag»', async () => {
       await seedWord(page, { active: 'collection:alltag', collections: THEMES, examples: EXAMPLES });
