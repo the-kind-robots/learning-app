@@ -227,3 +227,71 @@
   position: fixed;
   right: 0;
 }
+
+/* The shared picture: the screen on a phone 360 by 640, under the app's
+   name and today's date, over its address. Its last fourteen days stand
+   across the width, without scrolling and without the months' names (the
+   date names the month), a little lower than the screen's. */
+.statistics--picture {
+  display: flex;
+  flex-direction: column;
+  height: 640px;
+  padding: 0;
+  width: 360px;
+}
+
+.statistics__picture-head {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  padding: 18px 16px 0;
+}
+
+.statistics__word-mark {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.statistics__date {
+  color: rgb(var(--color-quiet-text));
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.statistics__address {
+  color: rgb(var(--color-thallium-dark));
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: auto;
+  padding-bottom: 14px;
+  text-align: center;
+}
+
+.statistics--picture .statistics__content {
+  gap: 28px;
+  margin-inline: 0;
+  padding-block: 14px 0;
+}
+
+.statistics--picture .statistics__days {
+  margin-inline: 0;
+  overflow: visible;
+  padding-inline: 0;
+}
+
+.statistics--picture .statistics__month-name {
+  display: none;
+}
+
+.statistics--picture .statistics__day {
+  width: calc((328px - 13 * 4px) / 14);
+}
+
+/* Room under the days for a group's name on a second line. */
+.statistics--picture .statistics__day-bar {
+  height: 120px;
+}
+
+.statistics--picture .statistics__day-fill {
+  width: calc(100% - 4px);
+}

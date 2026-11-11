@@ -2,7 +2,7 @@
   (:require
    [i18n :as i18n]
    [nexus.registry :as nxr]
-   [pages.stats.picture :as picture]
+   [pages.stats.view :as stats]
    [use-cases.lesson :as lesson]
    [use-cases.vocabulary :as vocabulary]))
 
@@ -20,4 +20,4 @@
 
 (nxr/register-action! :action/share-stats
   (fn share-stats [state {:keys [language]}]
-    [[:effect/share-picture (i18n/interpolate language (picture/picture state))]]))
+    [[:effect/share-picture "sprecha.png" (i18n/interpolate language (stats/picture state))]]))
