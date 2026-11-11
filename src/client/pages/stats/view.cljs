@@ -81,6 +81,30 @@
         [:i18n :stats/share]]]]]))
 
 
+(defn picture
+  "The picture «ПОДЕЛИТЬСЯ» shares: the screen on a phone 360 by 640, with the last fourteen days, under the app's
+   name and today's date, over its address. In a `<body>`, so the page's rules for it reach the picture too."
+  [state]
+  (let [{:keys [date] :as props} (presenter/picture-props state)]
+    [:svg
+     {:height 640
+      :width  360}
+     [:foreignObject
+      {:height 640
+       :width  360}
+      [:body
+       {:xmlns "http://www.w3.org/1999/xhtml"}
+       [:div.statistics.statistics--picture
+        [:header.statistics__picture-head
+         [:span.statistics__word-mark
+          [:i18n :shell/word-mark]]
+         [:span.statistics__date date]]
+        [:div.statistics__content
+         (words-section props)
+         (lessons-section props)]
+        [:footer.statistics__address "sprecha.de"]]]]]))
+
+
 (defmethod pages/page :page/stats
   [_]
   {:hotkeys (constantly {"Escape" [[:action/close-page]]})

@@ -7,12 +7,12 @@
 
 (defprotocol Sharing
   (share-picture!
-    [s picture]
-    "Draws `picture` — `:width`, `:height`, `:file-name` and its `:shapes`, rectangles and texts back to front — as
-     a PNG and offers it to the share sheet, or downloads it where the browser cannot share files."))
+    [s file-name svg]
+    "Paints `svg`, SVG hiccup in the page's CSS (HTML in a `<foreignObject>` included), three times its size, as a
+     PNG named `file-name` and offers it to the share sheet, or downloads it where the browser cannot share files."))
 
 
 (defn start!
   []
   (reify Sharing
-    (share-picture! [_ picture] (sharing/share-picture! picture))))
+    (share-picture! [_ file-name svg] (sharing/share-picture! file-name svg))))

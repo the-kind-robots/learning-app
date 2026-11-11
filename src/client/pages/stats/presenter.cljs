@@ -36,60 +36,55 @@
     (js/Date. year (dec month) date)))
 
 
-(defn page-props
-  "What the statistics screen shows: the number of `:words`, the histogram's `:columns` and the strip's `:shares`;
-   the number of `:lessons` and the days by `:months`, each an `:id`, a `:name` and its `:days`: `:id`, `:lessons`
-   (nil for none), `:height` in percent of the busiest day, `:purple?` from five lessons, the `:day` of the month,
-   `:weekday`, `:weekend?`, `:today?`."
-  [state]
-  (let [word-bins      (:stats/word-bins state)
-        lesson-days    (:stats/lesson-days state)
-        language       (settings/language state)
-        ^js month-name (js/Intl.DateTimeFormat. language #js {:month "long"})
+(defn- months
+  "The `lesson-days` by month, each an `:id`, a `:name` and its `:days`: `:id`, `:lessons` (nil for none), `:height`
+   in percent of the busiest of them, `:purple?` from five lessons, the `:day` of the month, `:weekday`, `:weekend?`,
+   `:today?`."
+  [language lesson-days]
+  (let [^js month-name (js/Intl.DateTimeFormat. language #js {:month "long"})
         ^js weekday    (js/Intl.DateTimeFormat. language #js {:weekday "short"})
         busiest        (max 1 (apply max 0 (map :lessons lesson-days)))]
+    (->> lesson-days
+         (partition-by #(subs (:day %) 0 7))
+         (map (fn [month]
+                {:id   (subs (:day (first month)) 0 7)
+                 :days (for [{:keys [day lessons today?]} month
+                             :let [^js on (date day)]]
+                         {:id       day
+                          :day      (.getDate on)
+                          :height   (* 100 (/ lessons busiest))
+                          :lessons  (when (pos? lessons) lessons)
+                          :purple?  (>= lessons 5)
+                          :today?   today?
+                          :weekday  (.format weekday on)
+                          :weekend? (contains? #{0 6} (.getDay on))})
+                 :name (.format month-name (date (:day (first month))))})))))
+
+
+(defn page-props
+  "What the statistics screen shows: the number of `:words`, the histogram's `:columns` and the strip's `:shares`;
+   the number of `:lessons` and the days by `:months`."
+  [state]
+  (let [word-bins   (:stats/word-bins state)
+        lesson-days (:stats/lesson-days state)]
     {:columns (columns word-bins)
      :lessons (reduce + (map :lessons lesson-days))
-     :months  (->> lesson-days
-                   (partition-by #(subs (:day %) 0 7))
-                   (map (fn [month]
-                          {:id   (subs (:day (first month)) 0 7)
-                           :days (for [{:keys [day lessons today?]} month
-                                       :let [^js on (date day)]]
-                                   {:id       day
-                                    :day      (.getDate on)
-                                    :height   (* 100 (/ lessons busiest))
-                                    :lessons  (when (pos? lessons) lessons)
-                                    :purple?  (>= lessons 5)
-                                    :today?   today?
-                                    :weekday  (.format weekday on)
-                                    :weekend? (contains? #{0 6} (.getDay on))})
-                           :name (.format month-name (date (:day (first month))))})))
+     :months  (months (settings/language state) lesson-days)
      :shares  (shares word-bins)
      :words   (reduce + word-bins)}))
 
 
 (defn picture-props
-  "What the shared picture shows: the number of `:words`, the histogram's `:columns` and the strip's `:shares`, the
-   number of `:lessons` and the last fourteen `:days` (`:height` in percent of the busiest of them, `:lessons`, nil
-   for none, `:purple?`, the `:day` of the month and the `:weekday`), and today's `:date` written out."
+  "What the shared picture shows: what the screen does, with only the last fourteen days, and today's `:date`
+   written out."
   [state]
   (let [word-bins   (:stats/word-bins state)
         lesson-days (:stats/lesson-days state)
-        recent      (take-last 14 lesson-days)
-        busiest     (max 1 (apply max 0 (map :lessons recent)))
         language    (settings/language state)
-        ^js written (js/Intl.DateTimeFormat. language #js {:day "numeric" :month "long" :year "numeric"})
-        ^js weekday (js/Intl.DateTimeFormat. language #js {:weekday "short"})]
+        ^js written (js/Intl.DateTimeFormat. language #js {:day "numeric" :month "long" :year "numeric"})]
     {:columns (columns word-bins)
      :date    (->> lesson-days (filter :today?) first :day date (.format written))
-     :days    (for [{:keys [day lessons]} recent
-                    :let [^js on (date day)]]
-                {:day     (.getDate on)
-                 :height  (* 100 (/ lessons busiest))
-                 :lessons (when (pos? lessons) lessons)
-                 :purple? (>= lessons 5)
-                 :weekday (.format weekday on)})
      :lessons (reduce + (map :lessons lesson-days))
+     :months  (months language (take-last 14 lesson-days))
      :shares  (shares word-bins)
      :words   (reduce + word-bins)}))

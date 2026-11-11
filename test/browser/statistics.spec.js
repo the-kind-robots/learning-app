@@ -264,7 +264,7 @@ test.describe('Статистика', () => {
     });
   });
 
-  test('ученик нажимает «ПОДЕЛИТЬСЯ» → системе отдана картинка PNG 1080 на 1350', async ({ page }) => {
+  test('ученик нажимает «ПОДЕЛИТЬСЯ» → системе отдана картинка PNG 1080 на 1920', async ({ page }) => {
     await test.step('Дано системное меню «Поделиться» и открытая статистика', async () => {
       await page.addInitScript(() => {
         navigator.canShare = () => true;
@@ -281,8 +281,8 @@ test.describe('Статистика', () => {
       await page.getByRole('button', { name: 'ПОДЕЛИТЬСЯ' }).click();
     });
 
-    await test.step('Тогда меню получило один PNG 1080 на 1350', async () => {
-      await expect.poll(() => page.evaluate(() => window.__shared)).toEqual({ type: 'image/png', width: 1080, height: 1350, count: 1 });
+    await test.step('Тогда меню получило один PNG 1080 на 1920', async () => {
+      await expect.poll(() => page.evaluate(() => window.__shared)).toEqual({ type: 'image/png', width: 1080, height: 1920, count: 1 });
     });
   });
 
@@ -390,12 +390,12 @@ test.describe('Статистика', () => {
       await page.getByRole('button', { name: 'ПОДЕЛИТЬСЯ' }).click();
     });
 
-    await test.step('Тогда скачан PNG 1080 на 1350', async () => {
+    await test.step('Тогда скачан PNG 1080 на 1920', async () => {
       const file = await download;
       expect(file.suggestedFilename()).toBe('sprecha.png');
       const png = fs.readFileSync(await file.path());
       expect(png.subarray(1, 4).toString()).toBe('PNG');
-      expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1080, 1350]);
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1080, 1920]);
     });
   });
 });

@@ -12,5 +12,5 @@
 
 
 (nxr/register-effect! :effect/share-picture
-  (fn share-picture [{:keys [capabilities]} _ picture]
-    (sharing/share-picture! (:sharing capabilities) picture)))
+  (fn share-picture [{:keys [capabilities]} _ file-name svg]
+    (sharing/share-picture! (:sharing capabilities) file-name svg)))
