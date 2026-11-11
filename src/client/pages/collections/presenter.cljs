@@ -19,16 +19,17 @@
 
 
 (defn- target
-  "One tappable thing: a tile, a folder header or a row."
+  "One tappable thing: a tile, a folder header or a row, its button and its name and count as the view's
+   `target-attrs` and `name-and-count` read them."
   [state {:keys [id name lang count tap active? deletable?]}]
-  {:id         id
-   :name       name
-   :lang       lang
-   :count      count
-   :active?    active?
-   :editing?   (= id (:collections/editing-id state))
-   :deletable? deletable?
-   :tap        tap})
+  {:target/id         id
+   :target/name       name
+   :target/lang       lang
+   :target/count      count
+   :target/active?    active?
+   :target/editing?   (= id (:collections/editing-id state))
+   :target/deletable? deletable?
+   :target/tap        tap})
 
 
 (defn- collection-target
@@ -51,15 +52,15 @@
                   :active?    (nil? (:collections/active-id state))
                   :deletable? false
                   :tap        [[:action/handle-main-tab-click]]})
-         :folder? false
-         :key     main-target
-         :main?   true))
+         :target/main? true
+         :tile/folder? false
+         :tile/key     main-target))
 
 
 (defn- plain-tile
   [state {:keys [collections name]}]
   (assoc (collection-target state (first collections) name)
-         :folder?
+         :tile/folder?
          false))
 
 
@@ -80,39 +81,39 @@
   [state {:keys [name parent children]}]
   (let [head (if parent
                (assoc (collection-target state parent name)
-                      :count     (union-count (cons parent children))
-                      :tappable? true)
-               {:name      name
-                :lang      name-lang
-                :count     (union-count children)
-                :tappable? false})]
-    {:folder? true
-     :head    head
-     :rows    (->> children
-                   (map #(vector (collections/child-name (:name %)) %))
-                   (sort-by first collections/compare-names)
-                   (mapv (fn [[row-name child]] (collection-target state child row-name))))}))
+                      :target/count (union-count (cons parent children))
+                      :folder-head/tappable? true)
+               {:target/name  name
+                :target/lang  name-lang
+                :target/count (union-count children)
+                :folder-head/tappable? false})]
+    {:tile/folder? true
+     :tile/head    head
+     :tile/rows    (->> children
+                        (map #(vector (collections/child-name (:name %)) %))
+                        (sort-by first collections/compare-names)
+                        (mapv (fn [[row-name child]] (collection-target state child row-name))))}))
 
 
 (defn tiles
   "Every tile in reading order: «Всё подряд», then collections and folders in the learner's order, each with
-   its colour and its key. A tile but «Всё подряд» can be dragged by its `:sort-key`, by a touch once
-   `:armed?`: when a target of it is in its editing state."
+   its colour and its key. A tile but «Всё подряд» can be dragged by its `:tile/sort-key`, by a touch once
+   `:tile/armed?`: when a target of it is in its editing state."
   [state]
   (->> (colours/reading-order (:collections/items state))
        (map (fn [{:keys [accent folder? key] :as entry}]
-              (let [{:keys [head rows] :as tile} (if folder?
-                                                   (folder-tile state entry)
-                                                   (plain-tile state entry))]
+              (let [{:tile/keys [head rows] :as tile} (if folder?
+                                                        (folder-tile state entry)
+                                                        (plain-tile state entry))]
                 (assoc tile
-                       :accent   accent
-                       :armed?   (boolean (some :editing?
-                                                (if folder?
-                                                  (cons head rows)
-                                                  [tile])))
-                       :key      key
-                       :sort-key key))))
-       (cons (assoc (main-tile state) :accent (colours/accent-at 0)))
+                       :tile/accent   accent
+                       :tile/armed?   (boolean (some :target/editing?
+                                                     (if folder?
+                                                       (cons head rows)
+                                                       [tile])))
+                       :tile/key      key
+                       :tile/sort-key key))))
+       (cons (assoc (main-tile state) :tile/accent (colours/accent-at 0)))
        vec))
 
 

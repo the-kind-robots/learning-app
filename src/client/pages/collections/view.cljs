@@ -3,10 +3,11 @@
    [application.pages :as pages]
    [application.presenter :as application]
    [application.shell :as shell]
-   [pages.collections.presenter :as presenter]))
+   [pages.collections.presenter :as presenter]
+   [replicant.alias :as alias]))
 
 
-(defn- close-icon
+(alias/defalias close-icon
   []
   [:svg.tile__close-icon
    {:viewBox     "0 0 12 12"
@@ -19,10 +20,10 @@
      :stroke-linecap "round"}]])
 
 
-(defn- close-button
+(alias/defalias close-button
   "The delete control. It follows its target in the DOM, so the keyboard reaches it right after that target,
    and is always in the Tab order; the CSS shows it while editing or when focus is on the target or itself."
-  [{:keys [id name]}]
+  [{:close-button/keys [id name]}]
   [:button.tile__close
    {:type       "button"
     :aria-label [:i18n :collections/delete {:name name}]
@@ -32,14 +33,14 @@
                                 {:deleted-message [:i18n :collections/deleted {:name name}]
                                  :id id
                                  :status-region shell/status-region-id}]]}}
-   (close-icon)])
+   [close-icon]])
 
 
 (defn- target-attrs
   "What every tappable thing carries: its id for gesture tracking, its tap, a long press where there is
    something to delete, `aria-current` on the active one. Always a `<button>`, so a keyboard reaches every
    target and nothing claims a role it cannot carry."
-  [{:keys [id tap deletable? active?]}]
+  [{:target/keys [id tap deletable? active?]}]
   {:aria-current (when active? "true")
    :data-collection-id id
    :on {:click       tap
@@ -50,7 +51,7 @@
 
 
 (defn- name-and-count
-  [{:keys [name lang count main?]}]
+  [{:target/keys [name lang count main?]}]
   (list
    [:span.tile__name
     {:lang lang}
@@ -74,55 +75,42 @@
     :accent/peacock  "tile--peacock"))
 
 
-(defn- plain-tile
-  "The box carries the colour and the states; the button inside it fills the
-   box and takes the tap. The close button is that button's sibling, because
-   a button holds no button."
-  [{:keys [accent key sort-key armed? active? editing? deletable?] :as tile}]
-  [:div.tile
-   {:replicant/key key
-    :sort-key      sort-key
-    :armed         (when armed? "")
-    :class         [(accent-class accent)
-                    (when active? "tile--active")
-                    (when editing? "tile--editing")]}
-   [:button.tile__target
-    (target-attrs tile)
-    (name-and-count tile)]
-   (when deletable? (close-button tile))])
-
-
-(defn- folder-row
+(alias/defalias folder-row
   "A list item holding the row's own button. The `<ul>` keeps its items and
    the tap target is an element that already is one."
-  [{:keys [id active? editing?] :as row}]
+  [{:target/keys [id active? editing? name lang count] :as row}]
   [:li.tile__row
-   {:replicant/key id
-    :class [(when active? "tile__row--active")
+   {:class [(when active? "tile__row--active")
             (when editing? "tile__row--editing")]}
    [:button.tile__row-target
     (target-attrs row)
     [:span.tile__row-name
-     {:lang (:lang row)}
-     (:name row)]
-    [:span.tile__count
-     (:count row)]]
-   (close-button row)])
+     {:lang lang}
+     name]
+    [:span.tile__count count]]
+   [close-button
+    {:close-button/id   id
+     :close-button/name name}]])
 
 
-(defn- folder-head
+(alias/defalias folder-head
   "The parent collection when it has a document; a plain label with the
    count otherwise. Tappable means a button, so a label stays a heading and
    a target never is one."
-  [{:keys [tappable? name lang count] :as head}]
+  [{:folder-head/keys [tappable?]
+    :target/keys [active? count deletable? editing? id lang name]
+    :as head}]
   (if tappable?
     [:div.tile__head
-     {:class [(when (:active? head) "tile__head--active")
-              (when (:editing? head) "tile__head--editing")]}
+     {:class [(when active? "tile__head--active")
+              (when editing? "tile__head--editing")]}
      [:button.tile__head-target
       (target-attrs head)
       (name-and-count head)]
-     (when (:deletable? head) (close-button head))]
+     (when deletable?
+       [close-button
+        {:close-button/id   id
+         :close-button/name name}])]
     [:h2.tile__label
      [:span.tile__label-text
       {:lang lang}
@@ -130,16 +118,35 @@
      [:span.tile__count count]]))
 
 
-(defn- folder-tile
-  [{:keys [accent key sort-key armed? head rows]}]
-  [:div.tile.tile--folder
-   {:replicant/key key
-    :sort-key      sort-key
-    :armed         (when armed? "")
-    :class         (accent-class accent)}
-   (folder-head head)
-   [:ul.tile__rows
-    (for [row rows] (folder-row row))]])
+(alias/defalias tile
+  "A theme's tile. A plain one: the box carries the colour and the states, the button inside it fills the box and
+   takes the tap, and the close button is that button's sibling, because a button holds no button. A folder: its
+   head over its children's rows. One alias for both, so a tile that becomes a folder stays the same element."
+  [{:tile/keys   [accent armed? folder? head rows sort-key]
+    :target/keys [active? deletable? editing? id name]
+    :as          tile}]
+  (if folder?
+    [:div.tile.tile--folder
+     {:sort-key sort-key
+      :armed    (when armed? "")
+      :class    (accent-class accent)}
+     [folder-head head]
+     [:ul.tile__rows
+      (for [row rows]
+        [folder-row (assoc row :replicant/key (:target/id row))])]]
+    [:div.tile
+     {:sort-key sort-key
+      :armed    (when armed? "")
+      :class    [(accent-class accent)
+                 (when active? "tile--active")
+                 (when editing? "tile--editing")]}
+     [:button.tile__target
+      (target-attrs tile)
+      (name-and-count tile)]
+     (when deletable?
+       [close-button
+        {:close-button/id   id
+         :close-button/name name}])]))
 
 
 (defn page
@@ -157,10 +164,8 @@
      [:arrange-panel.masonry
       {:on {:click   [[:action/exit-editing-on-background [:event/self-click?]]]
             :arrange [[:action/arrange-collections [:event/order]]]}}
-      (for [tile tiles]
-        (if (:folder? tile)
-          (folder-tile tile)
-          (plain-tile tile)))]
+      (for [props tiles]
+        [tile (assoc props :replicant/key (:tile/key props))])]
      ;; The main button stands where «НАЧАТЬ УРОК» does on home (#773).
      [:footer.switcher__footer.page-footer
       [:div.page-footer__action

@@ -1,11 +1,12 @@
 (ns pages.lesson.view
   (:require
    [application.pages :as pages]
-   [pages.lesson.presenter :as presenter]))
+   [pages.lesson.presenter :as presenter]
+   [replicant.alias :as alias]))
 
 
-(defn- answer-body
-  [{:keys [correct-answer correct-answer-segments]}]
+(alias/defalias answer-body
+  [{:answer-body/keys [correct-answer correct-answer-segments]}]
   (if (seq correct-answer-segments)
     (into
      [:p.lesson__answer-body {:lang "de"}]
@@ -26,10 +27,10 @@
      correct-answer]))
 
 
-(defn- next-button
+(alias/defalias next-button
   "The main button once the current trial is answered, and over a trial left behind: «ДАЛЕЕ», or «ЕЩЁ УРОК» once
    the lesson is over."
-  [finished?]
+  [{:next-button/keys [finished?]}]
   ;; A native button already clicks on Enter; a keydown handler clicking it again advanced the lesson twice.
   [:button.big-button
    {:id   "lesson-main-button"
@@ -45,8 +46,8 @@
 ;; the focus on it.
 
 
-(defn- input-footer
-  [{:keys [correct-answer current-shown? max-length]}]
+(alias/defalias input-footer
+  [{:input-footer/keys [correct-answer current-shown? max-length]}]
   [:footer#lesson-footer
    {:replicant/key      :input
     :replicant/on-mount [[:action/focus-lesson-input]
@@ -86,11 +87,11 @@
          :type "submit"}
         [:i18n :lesson/check]]
        ;; A trial waiting for its answer: the lesson is not over.
-       (next-button false))]]])
+       [next-button {:next-button/finished? false}])]]])
 
 
-(defn- success-footer
-  [{:keys [current-shown? finished?] :as props}]
+(alias/defalias success-footer
+  [{:success-footer/keys [current-shown? finished?] :as props}]
   [:footer#lesson-footer
    {:replicant/key      :success
     :replicant/on-mount [[:effect/focus "lesson-main-button"]]}
@@ -99,15 +100,15 @@
      {:inert (not current-shown?)}
      [:h3.lesson__answer-header
       [:i18n :lesson/correct]]
-     (answer-body props)]
+     [answer-body props]]
     [:form
      {:on {:submit [[:effect/prevent-default]]}}
      [:div.lesson__action.page-footer__action
-      (next-button finished?)]]]])
+      [next-button {:next-button/finished? finished?}]]]]])
 
 
-(defn- error-footer
-  [{:keys [current-shown? user-answer] :as props}]
+(alias/defalias error-footer
+  [{:error-footer/keys [current-shown? user-answer] :as props}]
   [:footer#lesson-footer
    {:replicant/key      :error
     :replicant/on-mount [[:effect/focus "lesson-main-button"]]}
@@ -123,13 +124,13 @@
          user-answer]))
      [:h3.lesson__answer-header
       [:i18n :lesson/correct-answer]]
-     (answer-body props)]
+     [answer-body props]]
     [:div.lesson__action.page-footer__action
-     (next-button false)]]])
+     [next-button {:next-button/finished? false}]]]])
 
 
-(defn- hint-card
-  [{:keys [data-dismiss translation word word-index word-state]}]
+(alias/defalias hint-card
+  [{:hint-card/keys [data-dismiss translation word word-index word-state]}]
   [:div.token-card
    (cond-> {}
      data-dismiss (assoc :data-dismiss data-dismiss))
@@ -153,7 +154,7 @@
       action-label])])
 
 
-(defn answer-hint-popover
+(alias/defalias answer-hint-popover
   "Popover shell anchored to the clicked answer word: the Popover API gives light-dismiss and top-layer
    rendering; `pages.lesson.popover` opens and re-positions it."
   [props]
@@ -161,29 +162,27 @@
    {:popover "auto"
     :replicant/on-update [[:action/reposition-token-popover]]}
    [:div#popover-content
-    (hint-card props)]
+    [hint-card props]]
    [:div#popover-arrow.popover__arrow]])
 
 
-(defn progress
-  [state attrs]
-  (let [value (presenter/progress-props state)]
-    [:div#lesson-progress.lesson__progress-shell
-     attrs
-     [:div.lesson__progress
-      {:role           "progressbar"
-       :aria-label     [:i18n :lesson/progress]
-       :aria-valuemin  0
-       :aria-valuemax  100
-       :aria-valuenow  value
-       :aria-valuetext (str value "%")}
-      [:div#lesson-progress-bar.lesson__progress-value {:style {:transform (str "translateX(" (- value 100) "%)")}}]]]))
+(alias/defalias progress
+  [{:progress/keys [value]}]
+  [:div#lesson-progress.lesson__progress-shell
+   [:div.lesson__progress
+    {:role           "progressbar"
+     :aria-label     [:i18n :lesson/progress]
+     :aria-valuemin  0
+     :aria-valuemax  100
+     :aria-valuenow  value
+     :aria-valuetext (str value "%")}
+    [:div#lesson-progress-bar.lesson__progress-value {:style {:transform (str "translateX(" (- value 100) "%)")}}]]])
 
 
-(defn challenge
-  [{:keys [kind prompt]} attrs]
+(alias/defalias challenge
+  [{:keys [id] :challenge/keys [kind prompt]}]
   [:div.lesson__challenge
-   attrs
+   {:id id}
    [:div.lesson__task
     ;; The language picks the hyphenation of a word too long for its line.
     [:h2.lesson__prompt
@@ -196,7 +195,7 @@
        :trial/word    [:i18n :lesson/translate-word])]]])
 
 
-(defn empty-state
+(alias/defalias empty-state
   []
   [:div.lesson
    [:h1.lesson__title.visually-hidden
@@ -218,7 +217,7 @@
   [state]
   (cond
     (:lesson/empty? state)
-    (empty-state)
+    [empty-state]
 
     ;; Opened before memory is loaded: the lesson is drawn once it is, and until then there is no trial.
     (nil? (:lesson/state state))
@@ -231,23 +230,26 @@
           {:keys [current-page current-shown? finished? page pages viewed-answer]}
           (presenter/strip-props state)]
       [:div.lesson
-       (when answer-hint (answer-hint-popover answer-hint))
+       (when answer-hint [answer-hint-popover answer-hint])
        [:h1.lesson__title.visually-hidden
         [:i18n :lesson/title]]
        ;; The lesson is closed by the shell's corner ✕ (`:action/close-page`).
        [:header.lesson__header
-        (progress state {})]
+        [progress {:progress/value (presenter/progress-props state)}]]
        [:main.lesson__body
         ;; The trials answered, then the current one; `pages.lesson.page-strip` scrolls to `page`.
         (into
          [:page-strip.lesson__strip
           {:page page
            :on   {:pagechange [[:action/view-trial [:event/page] current-page]]}}]
-         (for [{:keys [current? shown?] :as props} pages]
+         (for [{:keys [current? kind prompt shown?] :as props} pages]
            [:section.lesson__page
             {:replicant/key [current? (:page props)]
              :aria-hidden   (not shown?)}
-            (challenge props (when current? {:id "lesson-challenge"}))]))]
+            [challenge
+             {:id (when current? "lesson-challenge")
+              :challenge/kind kind
+              :challenge/prompt prompt}]]))]
        ;; Only the challenge moves with the strip: a past trial's answer is a strip along the bottom, over the
        ;; current trial's text, which keeps its place and its typed answer; the main button below is one.
        ;; `pages.lesson.page-panel` gives the CSS the height of the panel shown, for the colour behind them; the
@@ -267,9 +269,9 @@
          (let [footer-props (presenter/footer-props state)]
            (if footer-props
              (case (:variant footer-props)
-               :success (success-footer footer-props)
-               :error   (error-footer footer-props))
-             (input-footer (presenter/input-props state))))]
+               :success [success-footer footer-props]
+               :error   [error-footer footer-props])
+             [input-footer (presenter/input-props state)]))]
         ;; A past trial's answer, one per page: the one leaving fades where it stood while the next appears; leaving
         ;; for the current trial, the strip fades too, inert at once.
         (when-let [{:keys [attempts first-try?]} viewed-answer]
@@ -283,7 +285,7 @@
              (if first-try?
                [:i18n :lesson/correct]
                [:i18n :lesson/attempts {:count attempts}])]
-            (answer-body viewed-answer)]])]])))
+            [answer-body viewed-answer]]])]])))
 
 
 (defn hotkeys

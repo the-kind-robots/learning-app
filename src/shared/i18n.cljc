@@ -1,14 +1,16 @@
 (ns i18n
   "The interface's text. Markup says `[:i18n :key params]` where text goes, and a parameter can be such a text
-   too; `interpolate` puts the text of a language there. A language is one dictionary, `i18n/<language>.edn`:
-   adding the file adds the language, its `:language/name` names it in the settings."
+   too; `text` is the text of a language for one, `interpolate` puts it in throughout. A language is one
+   dictionary, `i18n/<language>.edn`: adding the file adds the language, its `:language/name` names it in the
+   settings."
   #?(:cljs (:require-macros [i18n.files :as files]))
   (:require
    #?(:clj [clojure.edn :as edn])
    #?(:clj [i18n.files :as files])
    #?(:cljs [cljs.reader :as reader])
    [clojure.string :as str]
-   [m1p.core :as m1p]))
+   [m1p.core :as m1p]
+   [markup :as markup]))
 
 
 (def ^:private dictionaries
@@ -64,12 +66,12 @@
    (and (= "de" (primary-subtag tag)) (< 1 (count languages)))))
 
 
-(defn- interpolated
-  [dictionary markup]
-  ;; Not `m1p/interpolate`: its postwalk rebuilds every node, several times this walk on a long word list (ADR-0025).
-  (cond
-    (and (vector? markup) (= :i18n (first markup)))
-    (let [[_ k params] markup]
+(defn text
+  "The text of `language` that `node`, an `[:i18n :key params]`, stands for; nil for any other node."
+  [language node]
+  (when (and (vector? node) (= :i18n (first node)))
+    (let [[_ k params] node
+          dictionary   (dictionaries language)]
       ;; A key the language has not translated yet reads in Russian, so a dictionary can grow key by key.
       ;; A parameter can be a text of its own, read in the same language.
       (m1p/lookup nil
@@ -77,26 +79,12 @@
                     dictionary
                     (dictionaries "ru"))
                   k
-                  (interpolated dictionary params)))
-
-    (or (vector? markup) (map? markup))
-    (reduce-kv (fn [coll k v]
-                 (let [v' (interpolated dictionary v)]
-                   (if (identical? v v')
-                     coll
-                     (assoc coll k v'))))
-               markup
-               markup)
-
-    (seq? markup)
-    (doall (map #(interpolated dictionary %) markup))
-
-    :else
-    markup))
+                  (markup/walk #(text language %) params)))))
 
 
 (defn interpolate
   "`markup` with the text of `language` in place of every `[:i18n :key params]`.
    A vector or map without one is returned as it came, so a render copies only what holds text."
   [language markup]
-  (interpolated (dictionaries language) markup))
+  ;; Not `m1p/interpolate`: its postwalk rebuilds every node, several times this walk on a long word list (ADR-0025).
+  (markup/walk #(text language %) markup))
