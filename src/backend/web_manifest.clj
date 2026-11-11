@@ -1,8 +1,8 @@
 (ns web-manifest
   "The web manifest the browser installs the app from (#816). It speaks the language the page speaks (#820):
    the install offer, the label under the icon and the shortcuts read in it, and the screenshots show the
-   interface in it, or in English for a language added without its own. One `id` for every language keeps an
-   installed app the same app."
+   interface in it, or in English for a language added without its own; `scripts/install-screenshots.mjs` takes
+   them. One `id` for every language keeps an installed app the same app."
   (:require
    [clojure.java.io :as io]
    [i18n :as i18n]))
