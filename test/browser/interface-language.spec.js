@@ -90,10 +90,12 @@ test.describe('Язык интерфейса', () => {
       await language(page, 'English').click();
     });
 
-    await test.step('Тогда English отмечен, главная называется «Home», страница английская', async () => {
+    await test.step('Тогда English отмечен, главная называется «Home», поле слова английское, страница английская', async () => {
       await expect(language(page, 'English')).toBeChecked();
       await expect(language(page, 'Русский')).not.toBeChecked();
       await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
+      // The form is an alias whose attributes the switch leaves as they were (ADR-0028).
+      await expect(page.getByLabel('Word (German)')).toHaveAttribute('placeholder', 'New word');
       await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     });
 

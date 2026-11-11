@@ -1,12 +1,14 @@
-(ns application.settings.view)
+(ns application.settings.view
+  (:require
+   [replicant.alias :as alias]))
 
 
-(defn menu
+(alias/defalias menu
   "The settings, a popover under the word mark: the learner's language and the device's colour scheme, each
    applied the moment it is checked. The browser opens and closes it. While the learner is asked it is no
    popover but a plain block of the languages alone: shown, with the focus on the language checked, and nothing
    closes it; the pick makes it a popover again, a closed one."
-  [{:keys [asking? languages schemes]}]
+  [{:menu/keys [asking? languages schemes]}]
   [:div.settings-menu
    {:id         "settings"
     ;; A new key when asking starts or ends, so the block that asks is mounted, and takes the focus, anew.

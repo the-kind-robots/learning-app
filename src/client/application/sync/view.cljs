@@ -1,7 +1,9 @@
-(ns application.sync.view)
+(ns application.sync.view
+  (:require
+   [replicant.alias :as alias]))
 
 
-(defn- sync-icon
+(alias/defalias sync-icon
   "A laptop beside a phone: connecting devices, not reloading the page."
   []
   ;; zprint: as written
@@ -19,10 +21,10 @@
    [:path {:d "M19 17.2h0"}]])
 
 
-(defn- sync-menu
+(alias/defalias sync-menu
   "A popover under the control, as the settings are under the word mark: the browser opens and closes it,
    and each item closes it too."
-  [{:keys [show-account-actions?]}]
+  [{:sync-menu/keys [show-account-actions?]}]
   [:div.sync-menu
    {:id         "sync-menu"
     :aria-label [:i18n :sync/title]
@@ -52,8 +54,8 @@
       [:i18n :sync/enable]])])
 
 
-(defn- sync-qr-dialog
-  [{:keys [qr-url]}]
+(alias/defalias sync-qr-dialog
+  [{:sync-qr-dialog/keys [qr-url]}]
   [:dialog.pairing-dialog.modal
    {:replicant/on-mount [[:action/open-dialog]]
     :on {:click [[:action/dismiss-on-backdrop [:event/self-click?]]]
@@ -72,9 +74,9 @@
      [:i18n :dialog/close]]]])
 
 
-(defn- sync-dialog
+(alias/defalias sync-dialog
   "A note on paper: a warm ask and an empty field, sent once something is written in it."
-  [{:keys [note send-disabled?]}]
+  [{:sync-dialog/keys [note send-disabled?]}]
   [:dialog.sync-dialog.modal
    {:aria-labelledby "sync-dialog-title"
     :replicant/on-mount [[:action/open-dialog]]
@@ -108,36 +110,35 @@
      [:i18n :sync/cancel]]]])
 
 
-(defn sync-button
+(alias/defalias sync-button
   "The bar's button that opens the sync menu: grey without an account, lit green while online, orange offline."
-  [{:keys [show-sync? status]}]
-  (when show-sync?
-    [:button.app-shell__sync
-     {:type          "button"
-      :class         (case status
-                       :sync/online  "app-shell__sync--online"
-                       :sync/offline "app-shell__sync--offline"
-                       nil)
-      :title         [:i18n :sync/title]
-      ;; The colour says it to the eye; the name says it to a screen reader.
-      :aria-label    [:i18n
-                      (case status
-                        :sync/online  :sync/title-online
-                        :sync/offline :sync/title-offline
-                        :sync/title-off)]
-      ;; The browser opens and closes the menu, and marks this button expanded while it is open.
-      :popovertarget "sync-menu"}
-     (sync-icon)]))
+  [{:sync-button/keys [status]}]
+  [:button.app-shell__sync
+   {:type          "button"
+    :class         (case status
+                     :sync/online  "app-shell__sync--online"
+                     :sync/offline "app-shell__sync--offline"
+                     nil)
+    :title         [:i18n :sync/title]
+    ;; The colour says it to the eye; the name says it to a screen reader.
+    :aria-label    [:i18n
+                    (case status
+                      :sync/online  :sync/title-online
+                      :sync/offline :sync/title-offline
+                      :sync/title-off)]
+    ;; The browser opens and closes the menu, and marks this button expanded while it is open.
+    :popovertarget "sync-menu"}
+   [sync-icon]])
 
 
 (defn dialogs
   "The sync menu beside its control, and the QR dialog or the form that asks to turn the sync on, whichever is
    open."
-  [{:keys [open-dialog show-sync? sync-qr] :as props}]
+  [{:keys [open-dialog show-sync?] :as props}]
   (list
    (when show-sync?
-     (sync-menu props))
+     [sync-menu props])
    (case open-dialog
-     :dialog/qr      (sync-qr-dialog sync-qr)
-     :dialog/request (sync-dialog props)
+     :dialog/qr      [sync-qr-dialog props]
+     :dialog/request [sync-dialog props]
      nil)))

@@ -44,10 +44,10 @@
    whether the current trial is shown."
   [state]
   (let [lesson-state (:lesson/state state)]
-    {:correct-answer (when (lesson/example-trial? (lesson/current-trial lesson-state))
-                       (lesson/expected-answer lesson-state))
-     :current-shown? (nil? (:lesson/viewed-trial state))
-     :max-length     lesson/max-answer-length}))
+    {:input-footer/correct-answer (when (lesson/example-trial? (lesson/current-trial lesson-state))
+                                    (lesson/expected-answer lesson-state))
+     :input-footer/current-shown? (nil? (:lesson/viewed-trial state))
+     :input-footer/max-length     lesson/max-answer-length}))
 
 
 (defn progress-props
@@ -60,8 +60,8 @@
 
 (defn answer-hint-props
   "Props for the hint card over the opened answer word, or nil when closed: the word, its translation and its
-   `:word-state` (`domain.vocabulary/translation-state`), known for the current trial only. A word already
-   stored with this translation auto-dismisses the card."
+   `:hint-card/word-state` (`domain.vocabulary/translation-state`), known for the current trial only. A word
+   already stored with this translation auto-dismisses the card."
   [state]
   (when-let [{:keys [dictionary-form translation word-index]}
              (when-let [open-index (:lesson/open-hint-index state)]
@@ -73,33 +73,39 @@
                     first))]
     (let [word-state (when-not (:lesson/viewed-trial state)
                        (get (:lesson/answer-hints state) word-index))]
-      {:word         dictionary-form
-       :translation  translation
-       :word-index   word-index
-       :data-dismiss (when (= :word-state/known-with-translation word-state) "900")
-       :word-state   word-state})))
+      {:hint-card/word         dictionary-form
+       :hint-card/translation  translation
+       :hint-card/word-index   word-index
+       :hint-card/data-dismiss (when (= :word-state/known-with-translation word-state) "900")
+       :hint-card/word-state   word-state})))
 
 
 (defn- answer-props
   "The correct answer of `trial`, and for an example its words, the hinted ones tappable."
   [state trial]
-  {:correct-answer (:answer trial)
-   :correct-answer-segments (when (lesson/example-trial? trial)
-                              (for [{:keys [type word-index] :as segment} (lesson/answer-segments trial)]
-                                (assoc segment
-                                       :annotated? (= :annotated-word type)
-                                       :expanded?  (= word-index (:lesson/open-hint-index state)))))})
+  {:answer-body/correct-answer (:answer trial)
+   :answer-body/correct-answer-segments (when (lesson/example-trial? trial)
+                                          (for [{:keys [type word-index] :as segment} (lesson/answer-segments trial)]
+                                            (assoc segment
+                                                   :annotated? (= :annotated-word type)
+                                                   :expanded?  (= word-index (:lesson/open-hint-index state)))))})
 
 
 (defn footer-props
+  "The footer of an answered trial: its `:variant`, and what the success or the error footer shows, the answer
+   among it."
   [state]
-  (let [lesson-state (:lesson/state state)]
+  (let [lesson-state   (:lesson/state state)
+        current-shown? (nil? (:lesson/viewed-trial state))]
     (when-let [{:keys [answer correct?]} (lesson/last-result lesson-state)]
       (merge (answer-props state (lesson/current-trial lesson-state))
-             {:variant        (if correct? :success :error)
-              :user-answer    (when-not (str/blank? answer) answer)
-              :current-shown? (nil? (:lesson/viewed-trial state))
-              :finished?      (lesson/finished? lesson-state)}))))
+             (if correct?
+               {:variant :success
+                :success-footer/current-shown? current-shown?
+                :success-footer/finished? (lesson/finished? lesson-state)}
+               {:variant :error
+                :error-footer/current-shown? current-shown?
+                :error-footer/user-answer (when-not (str/blank? answer) answer)})))))
 
 
 (defn strip-props

@@ -1,5 +1,6 @@
 (ns application
   (:require
+   [application.markup :as markup]
    [application.pages :as pages]
    [application.presenter :as presenter]
    [application.settings.actions]
@@ -8,7 +9,6 @@
    [application.sync.actions]
    [application.sync.effects]
    [application.view :as view]
-   [i18n :as i18n]
    [install-guide.core]
    [instrumentation :as instrumentation]
    [lambdaisland.glogi :as log]
@@ -346,7 +346,7 @@
   (let [language (settings-presenter/language after)]
     (set! (.-lang js/document.documentElement) language)
     (view-transition/change! (presenter/screen-change before after)
-                             #(r/render js/document.body (i18n/interpolate language (view/shell after))))))
+                             #(r/render js/document.body (markup/renderable language (view/shell after))))))
 
 
 (defn state

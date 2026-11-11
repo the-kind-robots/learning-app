@@ -170,4 +170,6 @@
            "nxr/register-placeholder!" :arg1-body
            "nxr/register-interceptor!" :arg1-body
            ;; shadow.cljs.modern — the class name stays on the first line
-           "modern/defclass"           :arg1-body}}
+           "modern/defclass"           :arg1-body
+           ;; replicant.alias — an alias is laid out as a defn
+           "alias/defalias"            :arg1-body}}

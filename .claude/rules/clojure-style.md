@@ -26,6 +26,8 @@ Follow https://guide.clojure.style/ plus these project rules:
 
 **Hiccup:** attributes and children, a lone child that is a vector or a form, or more than one line → the tag, the attribute map and each child on a line of their own; attributes alone or plain values stay on one line while they fit; an attribute map of several keys has a key per line. zprint enforces it; a `;; zprint: as written` comment before a form exempts it. [docs/process/code-style.md](../../docs/process/code-style.md), "Hiccup Layout".
 
+**Aliases:** a view writes a block as a Replicant alias, `alias/defalias`, and the markup names it by its var, which holds the alias's keyword: `[tile props]`, `[sync-view/sync-button props]` from another namespace, so the editor goes to its definition. The keys of the map an alias gets are qualified by its name — `:tile/accent`, `:next-button/finished?` — whether the presenter or the view prepares it; plain keys are DOM attributes (`:id`). A key in a list goes on the alias: `[tile (assoc props :replicant/key (:tile/key props))]` (ADR-0028).
+
 **If:** the test on the `if` line; a branch that is no plain value — a vector, a map, hiccup, an `[:i18n …]`, a call — puts each branch on a line of its own; plain values (a string, a number, a keyword, a symbol, `nil`, a boolean, `@atom`, an empty collection) stay on one line while they fit. zprint enforces it for `if`/`if-not`; `if-let`/`if-some` always split; `;; zprint: as written` exempts a form. [docs/process/code-style.md](../../docs/process/code-style.md), "If Layout".
 
 **Maps:** keys sorted alphabetically with `:id`/`:_id` first; align values when key length variance ≤ 15 chars; no commas.

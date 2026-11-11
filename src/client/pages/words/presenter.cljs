@@ -24,12 +24,12 @@
   (let [percent (if recall
                   (* 100 recall)
                   0)]
-    {:id id
-     :retention-band (retention-band percent)
-     :retention-color (retention-colour/at percent)
-     :retention-percent (int percent)
-     :translation (str/join " · " (vocabulary/russian-translations row))
-     :value value}))
+    {:word-list-item/id id
+     :word-list-item/retention-band (retention-band percent)
+     :word-list-item/retention-color (retention-colour/at percent)
+     :word-list-item/retention-percent (int percent)
+     :word-list-item/translation (str/join " · " (vocabulary/russian-translations row))
+     :word-list-item/value value}))
 
 
 (defn word-list-props
@@ -103,30 +103,32 @@
         pending? (= :request/pending (:status example-request))
         status?  (fn [id status]
                    (and (= id (:collection-id example-request)) (= status (:status example-request))))]
-    {:examples       (mapv (fn [id]
-                             (let [example       (get examples id)
-                                   regenerating? (status? id :request/pending)
-                                   failed?       (status? id :request/failed)]
-                               {:accent        (get accents id)
-                                :collection-id id
-                                :failed?       failed?
-                                :regenerate-disabled? pending?
-                                :regenerating? regenerating?
-                                :sentence      (highlighted-sentence (:value example) stored-word (:structure example))
-                                :status-shown? (or regenerating? failed?)
-                                :title         (some-> (get names id) path-title)
-                                :translation   (:translation example)}))
-                           collection-ids)
-     :id             (:id editing)
-     :replaces       (when (and (edit/renamed? editing) (not word-taken?)) stored-word)
-     :reset-disabled? (not (changed? editing))
-     :save-disabled? (not (and (changed? editing) (edit/valid? editing)))
-     :stored-word    stored-word
-     :translation-rows (max 1 (count translation-lines))
-     :translations   translation-lines
-     :word           word
-     :word-multiline? (:phrase? editing)
-     :word-taken?    word-taken?}))
+    {:edit-dialog/examples       (mapv (fn [id]
+                                         (let [example       (get examples id)
+                                               regenerating? (status? id :request/pending)
+                                               failed?       (status? id :request/failed)]
+                                           {:example-card/accent        (get accents id)
+                                            :example-card/collection-id id
+                                            :example-card/failed?       failed?
+                                            :example-card/regenerate-disabled? pending?
+                                            :example-card/regenerating? regenerating?
+                                            :example-card/sentence      (highlighted-sentence (:value example)
+                                                                                              stored-word
+                                                                                              (:structure example))
+                                            :example-card/status-shown? (or regenerating? failed?)
+                                            :example-card/title         (some-> (get names id) path-title)
+                                            :example-card/translation   (:translation example)}))
+                                       collection-ids)
+     :edit-dialog/id             (:id editing)
+     :edit-dialog/replaces       (when (and (edit/renamed? editing) (not word-taken?)) stored-word)
+     :edit-dialog/reset-disabled? (not (changed? editing))
+     :edit-dialog/save-disabled? (not (and (changed? editing) (edit/valid? editing)))
+     :edit-dialog/stored-word    stored-word
+     :edit-dialog/translation-rows (max 1 (count translation-lines))
+     :edit-dialog/translations   translation-lines
+     :edit-dialog/word           word
+     :edit-dialog/word-multiline? (:phrase? editing)
+     :edit-dialog/word-taken?    word-taken?}))
 
 
 (defn vocabulary?
@@ -140,11 +142,12 @@
   "What the word list renders: the rows, the placeholder that replaces them, and whether the page chrome
    applies; while `total` is nil the list shows nothing."
   [{:words/keys [editing in-collection? more? rows search total] :as state}]
-  {:editing        (some-> editing editing-props)
-   :in-collection? (boolean in-collection?)
-   :empty-state    (empty-state rows total)
-   :items          (word-list-props rows)
-   :known?         (some? total)
-   :more?          more?
-   :search         search
-   :vocabulary?    (vocabulary? state)})
+  {:editing     (some-> editing
+                        editing-props
+                        (assoc :edit-dialog/in-collection? (boolean in-collection?)))
+   :empty-state (empty-state rows total)
+   :items       (word-list-props rows)
+   :known?      (some? total)
+   :more?       more?
+   :search      search
+   :vocabulary? (vocabulary? state)})

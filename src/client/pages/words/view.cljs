@@ -3,11 +3,12 @@
    [application.pages :as pages]
    [application.presenter :as application]
    [clojure.string :as str]
-   [pages.words.presenter :as presenter]))
+   [pages.words.presenter :as presenter]
+   [replicant.alias :as alias]))
 
 
-(defn- word-list-item
-  [{:keys [id retention-band retention-color retention-percent translation value]}]
+(alias/defalias word-list-item
+  [{:word-list-item/keys [id retention-band retention-color retention-percent translation value]}]
   [:li.word-item
    {:id (str "word-" id)}
    [:button.word-item__display
@@ -31,24 +32,22 @@
               {:percent retention-percent}]}]]])
 
 
-(defn- sentinel
-  "The end of the loaded rows. It is keyed so appending rows in front of it
-   reuses the node, and the observer watching it survives the render."
+(alias/defalias sentinel
+  "The end of the loaded rows: an observer watches it to load more."
   []
   [:li.word-list__sentinel
-   {:replicant/key        :word-list-sentinel
-    :replicant/on-mount   [[:effect/observe-words-sentinel]]
+   {:replicant/on-mount   [[:effect/observe-words-sentinel]]
     :replicant/on-unmount [[:effect/unobserve-words-sentinel]]}])
 
 
-(defn- example-card
+(alias/defalias example-card
   "The card of one collection's example. Each text area lies over the same text set as a paragraph, so the
    bold word shows and writing moves nothing; a status takes the translation's place."
-  [{:keys [accent collection-id regenerate-disabled? regenerating? sentence status-shown? title translation failed?]}]
+  [{:example-card/keys [accent collection-id failed? regenerate-disabled? regenerating? sentence status-shown? title
+                        translation]}]
   (let [text (str (:before sentence) (:hit sentence) (:after sentence))]
     [:section.word-example
      {:aria-labelledby (str "word-example-" collection-id)
-      :replicant/key collection-id
       :class (case accent
                :accent/owl      "word-example--owl"
                :accent/macaw    "word-example--macaw"
@@ -121,10 +120,9 @@
       [:i18n :example/regenerate]]]))
 
 
-(defn- edit-dialog
-  [{:keys [examples id replaces reset-disabled? save-disabled? stored-word translation-rows translations word
-           word-multiline? word-taken?]}
-   in-collection?]
+(alias/defalias edit-dialog
+  [{:edit-dialog/keys [examples id in-collection? replaces reset-disabled? save-disabled? stored-word translation-rows
+                       translations word word-multiline? word-taken?]}]
   [:dialog.word-edit-dialog.modal
    {:replicant/key id
     :replicant/on-mount [[:action/open-dialog]]
@@ -184,7 +182,9 @@
          {:role "status"}
          [:i18n :word-edit/replaces {:word replaces}]])]
      [:div.word-examples
-      (map example-card examples)
+      ;; Keyed by collection, so a card stays itself while the cards before it come and go.
+      (for [example examples]
+        [example-card (assoc example :replicant/key (:example-card/collection-id example))])
       [:div.word-examples__end {:aria-hidden "true"}]]]
     [:div.word-edit-dialog__footer
      [:button.word-edit-dialog__delete
@@ -223,8 +223,8 @@
       [:i18n :word-edit/save]]]]])
 
 
-(defn- empty-state
-  [kind]
+(alias/defalias empty-state
+  [{:empty-state/keys [kind]}]
   [:div.vocabulary__empty-state
    [:p.vocabulary__empty-state-text
     (case kind
@@ -243,10 +243,10 @@
 
 (defn page
   [state]
-  (let [{:keys [editing in-collection? items known? more? search vocabulary?] placeholder :empty-state}
+  (let [{:keys [editing items known? more? search vocabulary?] placeholder :empty-state}
         (presenter/page-props state)]
     [:div.vocabulary
-     (when editing (edit-dialog editing in-collection?))
+     (when editing [edit-dialog editing])
      (cond
        (not known?)
        nil
@@ -256,7 +256,7 @@
         [:ul.word-list
          {:id "word-list"}
          [:li.word-list__empty
-          (empty-state placeholder)]]]
+          [empty-state {:empty-state/kind placeholder}]]]]
 
        :else
        (list
@@ -268,9 +268,13 @@
           {:id "word-list"}
           (if placeholder
             [:li.word-list__empty
-             (empty-state placeholder)]
-            (concat (map word-list-item items)
-                    (when more? [(sentinel)])))]]
+             [empty-state {:empty-state/kind placeholder}]]
+            (concat (for [item items]
+                      [word-list-item item])
+                    ;; Keyed, so appending rows in front of it reuses the node, and the observer watching it
+                    ;; survives the render.
+                    (when more?
+                      [[sentinel {:replicant/key :word-list-sentinel}]])))]]
         ;; The search field sits under the thumb. It closes the column rather than joining the footer: the
         ;; footer is fixed and stays behind an open keyboard, the field rides on top of it.
         [:form.vocabulary__search-bar

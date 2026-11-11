@@ -6,7 +6,7 @@
 
 (defn- tile-names
   [collection-names]
-  (mapv #(if (:main? %) "Всё подряд" (:name %))
+  (mapv #(if (:target/main? %) "Всё подряд" (:target/name %))
         (sut/tiles {:collections/items (map-indexed (fn [i n] {:id (str i) :name n :word-ids []})
                                                     collection-names)})))
 

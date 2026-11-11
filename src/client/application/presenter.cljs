@@ -11,26 +11,27 @@
 
 
 (defn stars
-  "Today's lessons as stars: `:lessons` passed, nil for none; `:purple-number` from five purple stars on; and
-   `:stars`, newest first, gold then purple, each with its `:color` and an `:id` that stays while the star stays.
-   Five gold stars make one purple, the purple of their five; from five purple on, the number and the newest
-   purple stand for them. Only the count is drawn: a star that comes and the stars that go move by the view's
-   CSS, which lays the row from the right, so a star that comes stands after those that go."
+  "Today's lessons as the row of stars shows them: `:stars-row/lessons` passed, nil for none;
+   `:stars-row/purple-number` from five purple stars on; and `:stars-row/stars`, newest first, gold then purple,
+   each with its `:color` and an `:id` that stays while the star stays. Five gold stars make one purple, the purple
+   of their five; from five purple on, the number and the newest purple stand for them. Only the count is drawn: a
+   star that comes and the stars that go move by the view's CSS, which lays the row from the right, so a star that
+   comes stands after those that go."
   [lessons]
   (let [purple (quot lessons 5)
         number (when (>= purple 5) purple)]
-    {:lessons       (when (pos? lessons) lessons)
-     :purple-number number
-     :stars         (reverse
-                     (concat
-                      (for [five (if number
-                                   [(dec purple)]
-                                   (range purple))]
-                        {:color :star/purple
-                         :id    [:purple five]})
-                      (for [index (range (rem lessons 5))]
-                        {:color :star/gold
-                         :id    [:gold purple index]})))}))
+    {:stars-row/lessons       (when (pos? lessons) lessons)
+     :stars-row/purple-number number
+     :stars-row/stars         (reverse
+                               (concat
+                                (for [five (if number
+                                             [(dec purple)]
+                                             (range purple))]
+                                  {:color :star/purple
+                                   :id    [:purple five]})
+                                (for [index (range (rem lessons 5))]
+                                  {:color :star/gold
+                                   :id    [:gold purple index]})))}))
 
 
 (defn stars-button?

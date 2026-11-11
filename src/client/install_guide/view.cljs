@@ -1,7 +1,9 @@
-(ns install-guide.view)
+(ns install-guide.view
+  (:require
+   [replicant.alias :as alias]))
 
 
-(defn- share-svg
+(alias/defalias share-svg
   []
   ;; zprint: as written
   [:svg
@@ -18,7 +20,7 @@
    [:line {:x1 "12" :y1 "2" :x2 "12" :y2 "15"}]])
 
 
-(defn- add-square-svg
+(alias/defalias add-square-svg
   []
   ;; zprint: as written
   [:svg
@@ -35,7 +37,7 @@
    [:line {:x1 "8" :y1 "12" :x2 "16" :y2 "12"}]])
 
 
-(defn- checkmark-svg
+(alias/defalias checkmark-svg
   []
   [:svg
    {:width          "22"
@@ -47,6 +49,15 @@
     :stroke-linecap "round"
     :stroke-linejoin "round"}
    [:polyline {:points "20 6 9 17 4 12"}]])
+
+
+(alias/defalias step
+  "A step of the guide: its number, then its icon and what to do, the children."
+  [{:step/keys [number]} [icon text]]
+  [:div.app-install-guide__step
+   [:span.app-install-guide__step-number number]
+   [:span.app-install-guide__step-icon icon]
+   [:span.app-install-guide__step-text text]])
 
 
 (defn render
@@ -63,21 +74,12 @@
        :on {:click [[:action/dismiss-install-guide]]}}
       "×"]]
     [:div.app-install-guide__steps
-     [:div.app-install-guide__step
-      [:span.app-install-guide__step-number "1"]
-      [:span.app-install-guide__step-icon
-       (share-svg)]
-      [:span.app-install-guide__step-text
-       [:i18n :install-guide/share]]]
-     [:div.app-install-guide__step
-      [:span.app-install-guide__step-number "2"]
-      [:span.app-install-guide__step-icon
-       (add-square-svg)]
-      [:span.app-install-guide__step-text
-       [:i18n :install-guide/add-to-home]]]
-     [:div.app-install-guide__step
-      [:span.app-install-guide__step-number "3"]
-      [:span.app-install-guide__step-icon
-       (checkmark-svg)]
-      [:span.app-install-guide__step-text
-       [:i18n :install-guide/add]]]]]])
+     [step {:step/number "1"}
+      [share-svg]
+      [:i18n :install-guide/share]]
+     [step {:step/number "2"}
+      [add-square-svg]
+      [:i18n :install-guide/add-to-home]]
+     [step {:step/number "3"}
+      [checkmark-svg]
+      [:i18n :install-guide/add]]]]])

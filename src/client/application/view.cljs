@@ -9,51 +9,54 @@
    [application.shell :as shell]
    [application.sync.presenter :as sync-presenter]
    [application.sync.view :as sync-view]
-   [install-guide.view :as install-guide]))
+   [install-guide.view :as install-guide]
+   [replicant.alias :as alias]))
 
 
-(defn- collections-icon
-  []
-  [:button.app-shell__corner-icon
-   {:type       "button"
-    :aria-keyshortcuts "Alt+T"
-    :aria-label [:i18n :shell/open-collections]
-    :title      [:i18n :shell/with-hotkey {:hotkey "Alt+T" :name [:i18n :collections/title]}]
-    :on         {:click [[:action/open-page :page/collections]]}}
-   ;; The box is the drawing, so the bar places the drawing itself.
-   ;; zprint: as written
-   [:svg.app-shell__corner-icon-svg
-    {:aria-hidden "true" :height "16.5" :viewBox "2 2 12 12" :width "16.5"}
-    [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
-    [:rect {:x 10 :y 2 :width 4 :height 4 :rx 1}]
-    [:rect {:x 2 :y 10 :width 4 :height 4 :rx 1}]
-    [:rect {:x 10 :y 10 :width 4 :height 4 :rx 1}]]])
+(alias/defalias corner-icon
+  "The bar's corner: the themes, or the ✕ that leaves the screen. One alias for both, so the button stays the same
+   element, the focus on it, when the one turns into the other."
+  [{:corner-icon/keys [corner escape-closes?]}]
+  (case corner
+    :collections
+    [:button.app-shell__corner-icon
+     {:type       "button"
+      :aria-keyshortcuts "Alt+T"
+      :aria-label [:i18n :shell/open-collections]
+      :title      [:i18n :shell/with-hotkey {:hotkey "Alt+T" :name [:i18n :collections/title]}]
+      :on         {:click [[:action/open-page :page/collections]]}}
+     ;; The box is the drawing, so the bar places the drawing itself.
+     ;; zprint: as written
+     [:svg.app-shell__corner-icon-svg
+      {:aria-hidden "true" :height "16.5" :viewBox "2 2 12 12" :width "16.5"}
+      [:rect {:x 2 :y 2 :width 4 :height 4 :rx 1}]
+      [:rect {:x 10 :y 2 :width 4 :height 4 :rx 1}]
+      [:rect {:x 2 :y 10 :width 4 :height 4 :rx 1}]
+      [:rect {:x 10 :y 10 :width 4 :height 4 :rx 1}]]]
+
+    :close
+    [:button.app-shell__corner-icon
+     {:type       "button"
+      :aria-keyshortcuts (when escape-closes? "Escape")
+      :aria-label [:i18n :dialog/close]
+      :title      (if escape-closes?
+                    [:i18n :shell/with-hotkey {:hotkey "Escape" :name [:i18n :dialog/close]}]
+                    [:i18n :dialog/close])
+      :on         {:click [[:action/close-page]]}}
+     ;; The box is the drawing with its round caps, so the bar places the drawing itself.
+     [:svg.app-shell__corner-icon-svg
+      {:aria-hidden "true"
+       :height      "13.75"
+       :viewBox     "3 3 10 10"
+       :width       "13.75"}
+      [:path
+       {:d "M4 4 L12 12 M12 4 L4 12"
+        :stroke "currentColor"
+        :stroke-width 2
+        :stroke-linecap "round"}]]]))
 
 
-(defn- close-icon
-  [escape-closes?]
-  [:button.app-shell__corner-icon
-   {:type       "button"
-    :aria-keyshortcuts (when escape-closes? "Escape")
-    :aria-label [:i18n :dialog/close]
-    :title      (if escape-closes?
-                  [:i18n :shell/with-hotkey {:hotkey "Escape" :name [:i18n :dialog/close]}]
-                  [:i18n :dialog/close])
-    :on         {:click [[:action/close-page]]}}
-   ;; The box is the drawing with its round caps, so the bar places the drawing itself.
-   [:svg.app-shell__corner-icon-svg
-    {:aria-hidden "true"
-     :height      "13.75"
-     :viewBox     "3 3 10 10"
-     :width       "13.75"}
-    [:path
-     {:d "M4 4 L12 12 M12 4 L4 12"
-      :stroke "currentColor"
-      :stroke-width 2
-      :stroke-linecap "round"}]]])
-
-
-(defn- install-icon
+(alias/defalias install-icon
   []
   ;; zprint: as written
   [:svg.app-shell__icon
@@ -69,7 +72,7 @@
    [:line {:x1 "12" :y1 "15" :x2 "12" :y2 "3"}]])
 
 
-(defn- trace-export-icon
+(alias/defalias trace-export-icon
   []
   ;; zprint: as written
   [:svg.app-shell__icon
@@ -90,20 +93,19 @@
   "M12 2.5l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.3l-5.8 3.1 1.1-6.5L2.6 9.3l6.5-.9z")
 
 
-(defn- star
+(alias/defalias star
   "A star of today's lessons: gold for a lesson, purple for five, drawn alike and of one size. A star that comes
    grows in, one that goes gathers away before it is removed (`app-shell.css`)."
-  [{:keys [color id]}]
+  [{:star/keys [color]}]
   (let [classes ["app-shell__star"
                  (case color
                    :star/purple "app-shell__star--purple"
                    :star/gold   nil)]]
     [:svg
-     {:aria-hidden   "true"
-      :class         classes
-      :replicant/key id
+     {:aria-hidden "true"
+      :class       classes
       :replicant/unmounting {:class (conj classes "app-shell__star--leaving")}
-      :viewBox       "-2 -2 28 29"}
+      :viewBox     "-2 -2 28 29"}
      [:path.app-shell__star-lip
       {:d star-path
        :transform "translate(0 1.8)"}]
@@ -112,16 +114,19 @@
      [:path.app-shell__star-sparkle {:d "M21.5 0.5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"}]]))
 
 
-(defn- stars-row
+(alias/defalias stars-row
   "Today's lessons as stars, from `application.presenter/stars`: the row stands from the moment memory is loaded,
    empty with no lesson, so a star passed later joins it and grows in."
-  [{:keys [lessons purple-number stars]}]
+  [{:stars-row/keys [lessons purple-number stars]}]
   [:div.app-shell__stars
    {:aria-label (when lessons
                   [:i18n :shell/lessons-today {:count lessons}])
     :role       (when lessons
                   "img")}
-   (map star stars)
+   (for [{:keys [color id]} stars]
+     [star
+      {:star/color    color
+       :replicant/key id}])
    (when purple-number
      [:span.app-shell__star-number
       {:replicant/key :purple-number}
@@ -134,7 +139,7 @@
   [state]
   (let [{:keys [build-mark corner escape-closes? page read-error? show-install? stars stars-button?]}
         (presenter/shell-props state)
-        sync (sync-presenter/props state)]
+        {:keys [show-sync?] :as sync} (sync-presenter/props state)]
     (list
      ;; One fixed bar holds the three slots: word mark with the sync beside it, info bar, actions. The side
      ;; slots share the free space equally, which centres the info bar in the bar rather than between its
@@ -154,14 +159,15 @@
         ;; and the build mark below, from a release.
         (when ^boolean goog/DEBUG
           [:span.app-shell__dev-mark "D"])]
-       (sync-view/sync-button sync)]
+       (when show-sync?
+         [sync-view/sync-button sync])]
       ;; The middle of the bar, kept for what the learner should see at a glance: stars, progress, a notice.
       [:div.app-shell__info-bar
        ;; Outside a lesson a button lies over the stars and opens the statistics. It is their sibling, so the
        ;; stars stay mounted when it comes and goes, and do not light up again.
        (when stars
          [:div.app-shell__stars-slot
-          (stars-row stars)
+          [stars-row stars]
           (when stars-button?
             [:button.app-shell__stars-button
              {:aria-keyshortcuts "Alt+S"
@@ -185,7 +191,7 @@
            :title      [:i18n :shell/export-trace]
            :aria-label [:i18n :shell/export-trace]
            :on         {:click [[:effect/export-trace]]}}
-          (trace-export-icon)])
+          [trace-export-icon]])
        ;; Install is not a sync action, and it is offered before any account exists.
        (when show-install?
          [:button.app-shell__icon-button
@@ -193,11 +199,11 @@
            :title      [:i18n :shell/install]
            :aria-label [:i18n :shell/install]
            :on         {:click [[:action/pwa-install-requested]]}}
-          (install-icon)])
-       (case corner
-         :collections (collections-icon)
-         :close       (close-icon escape-closes?)
-         nil)]]
+          [install-icon]])
+       (when corner
+         [corner-icon
+          {:corner-icon/corner corner
+           :corner-icon/escape-closes? escape-closes?}])]]
      (install-guide/render state)
      (sync-view/dialogs sync)
      (if-let [view (:view (pages/page page))]
@@ -206,5 +212,5 @@
          [:div.app-shell__read-error
           [:i18n :shell/read-error]]))
      ;; After the screen: its mount hook runs after the screen's, so the asking settings keep the focus.
-     (settings-view/menu (settings-presenter/props state))
+     [settings-view/menu (settings-presenter/props state)]
      shell/status-region)))

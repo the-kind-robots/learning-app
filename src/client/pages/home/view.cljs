@@ -2,11 +2,12 @@
   (:require
    [application.pages :as pages]
    [application.presenter :as application]
-   [pages.home.presenter :as presenter]))
+   [pages.home.presenter :as presenter]
+   [replicant.alias :as alias]))
 
 
-(defn- suggestion-item
-  [{:keys [active? completes? lemma phrase? pos translations exact?]}]
+(alias/defalias suggestion-item
+  [{:suggestion-item/keys [active? completes? exact? lemma phrase? selection]}]
   [:li.suggestions__item
    {:role        "option"
     :data-active (when active? "")
@@ -14,10 +15,7 @@
     :aria-disabled (when-not completes? "true")
     :on          (if completes?
                    {:click       [[:action/select-suggestion
-                                   {:lemma        lemma
-                                    :pos          pos
-                                    :translations translations
-                                    :focus-id     "new-word-translation"}]]
+                                   (assoc selection :focus-id "new-word-translation")]]
                     ;; Keep input focus during the click, or :blur clears the suggestions before :click runs.
                     :pointerdown [[:effect/prevent-default]]}
                    ;; An inert row still swallows the press, or focus would leave the field and :blur clear the list.
@@ -30,8 +28,8 @@
       [:i18n :home/phrase-badge]])])
 
 
-(defn- add-form
-  [{:keys [error phrase? pos suggestions translation translation-invalid? word]}]
+(alias/defalias add-form
+  [{:add-form/keys [error phrase? pos suggestions translation translation-invalid? word]}]
   (let [{:keys [items]} suggestions]
     [:form.home__add-form
      {:id "home-add-form"
@@ -85,7 +83,7 @@
                                            (select-keys suggestions [:marked :next-idx :previous-idx]))]]}}]
         [:ul.suggestions
          (for [item items]
-           (suggestion-item item))]]
+           [suggestion-item item])]]
        [:div.home__add-translation
         [:label.home__add-form-label.visually-hidden
          {:for "new-word-translation"}
@@ -130,8 +128,8 @@
        [:i18n :home/add]]]]))
 
 
-(defn- collection-heading
-  [collection-name]
+(alias/defalias collection-heading
+  [{:collection-heading/keys [name]}]
   [:h2.home__collection-heading
    {:contenteditable "plaintext-only"
     :spellcheck "false"
@@ -140,7 +138,7 @@
                     [:event.target/text-content]]]
          :keydown [[:action/handle-collection-rename-keydown
                     [:event.keyboard/key]]]}}
-   collection-name])
+   name])
 
 
 (defn page
@@ -156,14 +154,14 @@
 
      [:div.home__heading-slot
       (when active-collection
-        (collection-heading (:name active-collection)))]
+        [collection-heading active-collection])]
 
      [:main.home__content
       [:section#home-add-panel.home__add
        {:replicant/on-mount [[:action/focus-word-input "new-word-value"]]}
        [:header.home__add-header
         [:h2.home__panel-title
-         (if (:phrase? form)
+         (if (:add-form/phrase? form)
            [:i18n :phrase/add]
            [:i18n :word/add])]
         [:button#home-words-button.home__words-button
@@ -176,7 +174,7 @@
           :on          {:click [[:action/open-page :page/words]]}}
          [:i18n :home/words]]]
 
-       (add-form form)]]
+       [add-form form]]]
 
      [:footer#home-lesson-footer.home__footer.page-footer
       {:hidden empty-vocab?}
