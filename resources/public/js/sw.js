@@ -25,11 +25,14 @@ const PRECACHE_SET = new Set(PRECACHE_URLS);
 // static HTML only; main.cljs still owns routing and UI rendering.
 const APP_SHELL_URL = "/";
 
-// Dynamic dictionary boot metadata. This is deliberately not in PRECACHE_URLS:
-// the dictionary version can change independently from resources/public, and
-// online boots must see the freshest manifest while offline boots may use the
-// last cached manifest for an already-imported OPFS dictionary.
-const DICTIONARY_MANIFEST_URL = "/dictionary/manifest";
+// The manifests change apart from resources/public, so online reads see the
+// freshest one and offline the last copy answers. The dictionary's: an offline
+// boot may use it for an already-imported OPFS dictionary. The web manifests
+// answer in the browser's language (#820). They are in PRECACHE_URLS too, so
+// a first visit and the first open after a deploy have a copy offline, to
+// offer installing; this branch comes before the cache-first one, so the
+// install's copy never answers while the network does.
+const MANIFEST_URLS = new Set(["/dictionary/manifest", "/manifest.json", "/dev-manifest.json"]);
 
 function sameOrigin(url) {
   return url.origin === self.location.origin;
@@ -46,12 +49,6 @@ function appNavigation(request, url) {
   if (url.pathname.startsWith("/dictionary/")) return false;
   if (url.pathname.startsWith("/db/")) return false;
   return true;
-}
-
-function dictionaryManifestRequest(request, url) {
-  return request.method === "GET"
-    && sameOrigin(url)
-    && url.pathname === DICTIONARY_MANIFEST_URL;
 }
 
 // Every bucket this worker creates carries BUCKET_PREFIX. Builds before the
@@ -161,8 +158,8 @@ self.addEventListener("fetch", event => {
 
   if (appNavigation(request, url)) {
     event.respondWith(navigationNetworkFirst(request));
-  } else if (dictionaryManifestRequest(request, url)) {
-    event.respondWith(networkFirstCached(request, DICTIONARY_MANIFEST_URL));
+  } else if (request.method === "GET" && sameOrigin(url) && MANIFEST_URLS.has(path)) {
+    event.respondWith(networkFirstCached(request, path));
   } else if (request.method === "GET" && sameOrigin(url) && PRECACHE_SET.has(path)) {
     event.respondWith(cacheFirst(request, path));
   }

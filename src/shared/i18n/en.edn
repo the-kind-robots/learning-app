@@ -39,6 +39,15 @@
  :install-guide/share         ("Tap " [:strong "Share"] " in the toolbar")
  :install-guide/title         "Install Sprecha"
 
+ :install/description         "Build your German vocabulary and learn words from examples, even offline."
+ :install/name                "Sprecha: German words with examples"
+ :install/screen-collections  "Collections of words"
+ :install/screen-lesson       "Lesson: a sentence of German words"
+ :install/screen-lesson-night "A lesson in the dark appearance"
+ :install/screen-statistics   "Statistics: how many words you remember"
+ :install/screen-word         "A word with its example and translation"
+ :install/shortcut-words      "Words"
+
  :lesson/add-to-dictionary    "+ ADD TO DICTIONARY"
  :lesson/add-translation      "+ ADD TRANSLATION"
  :lesson/add-words            "Add words"

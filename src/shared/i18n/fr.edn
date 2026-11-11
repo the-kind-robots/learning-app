@@ -39,6 +39,15 @@
  :install-guide/share         ("Touchez " [:strong "Partager"] " dans la barre d’outils")
  :install-guide/title         "Installer Sprecha"
 
+ :install/description         "Enrichissez votre vocabulaire allemand et apprenez les mots par des exemples, même hors ligne."
+ :install/name                "Sprecha — mots allemands avec exemples"
+ :install/screen-collections  "Collections de mots"
+ :install/screen-lesson       "Une leçon, une phrase en mots allemands"
+ :install/screen-lesson-night "Une leçon en apparence sombre"
+ :install/screen-statistics   "Combien de mots vous retenez"
+ :install/screen-word         "Un mot avec son exemple et sa traduction"
+ :install/shortcut-words      "Mots"
+
  :lesson/add-to-dictionary    "+ AU DICTIONNAIRE"
  :lesson/add-translation      "+ AJOUTER UNE TRADUCTION"
  :lesson/add-words            "Ajouter des mots"

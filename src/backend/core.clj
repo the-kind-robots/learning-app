@@ -35,7 +35,8 @@
    [splash :as splash]
    [taoensso.telemere :as t]
    [userdb :as userdb]
-   [utils :as utils])
+   [utils :as utils]
+   [web-manifest :as web-manifest])
   (:import
    [java.net URLDecoder]
    [java.security MessageDigest]
@@ -485,9 +486,11 @@
 (def ^:private shell-asset-files
   "Shell assets named one by one, because the directory they sit in is not
    theirs alone. `/js` also holds the worker's own source and a metrics library
-   only a development build loads; the root holds the manifests and the icon.
-   `/` is a route and `/js/app/main.js` is compiler output — no walk can see
-   either."
+   only a development build loads; the root holds the icon.
+   `/` and the web manifests are routes and `/js/app/main.js` is compiler
+   output — no walk can see them. The manifests answer in the browser's
+   language (#820): the install takes a first copy, and the worker reads them
+   from the network first afterwards."
   ["/"
    "/dev-manifest.json"
    "/favicon.ico"
@@ -690,11 +693,29 @@
                                 str/trim)))
 
 
+(defn- manifest-response
+  "The web manifest in the language the page speaks to `request`, with the launcher icons `icon`."
+  [request icon]
+  {:status  200
+   ;; The answer follows the browser's language, so no cache may hand one learner's to another.
+   :headers {"Cache-Control" "no-cache"
+             "Vary" "Accept-Language"}
+   :body    (web-manifest/manifest (page-language request) icon)})
+
+
 (def app-handler
   (http/ring-handler
    ;; Main handler
    (http/router
-    [;; The manifest is a map and leaves as JSON; the file is no collection,
+    [;; The development build installs with icons that carry a red D, so a device can hold both apps.
+     ["/manifest.json"
+      {:get #(manifest-response % "ue")
+       :interceptors json-responses}]
+     ["/dev-manifest.json"
+      {:get #(manifest-response % "ue-dev")
+       :interceptors json-responses}]
+
+     ;; The manifest is a map and leaves as JSON; the file is no collection,
      ;; so muuntaja leaves it as it is.
      ["/dictionary/:filename"
       {:get (fn [{:keys [path-params] :as request}]
