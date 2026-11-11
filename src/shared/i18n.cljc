@@ -29,7 +29,7 @@
   (m1p/lookup nil (dictionaries language) :language/name nil))
 
 
-(defn- primary-subtag
+(defn primary-subtag
   "The language of the tag `tag`, `de-DE` or `de`, without its region: `de`. Nil for no tag."
   [tag]
   (some-> tag str/lower-case (str/split #"-") first))

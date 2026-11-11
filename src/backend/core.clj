@@ -305,11 +305,11 @@
 
 
 (defn- configured-public-url
-  "The address users reach the app at — where invite links must point. The
-   server cannot infer it: behind the reverse proxy its own port says nothing
-   about the public origin."
+  "The address users reach the app at — where invite links and the link preview
+   point; a blank variable counts as unset. The server cannot infer it: behind the
+   reverse proxy its own port says nothing about the public origin."
   [env]
-  (str/replace (or (get env "LEARNING_APP__PUBLIC_URL") "https://sprecha.de")
+  (str/replace (or (utils/non-blank (get env "LEARNING_APP__PUBLIC_URL")) "https://sprecha.de")
                #"/+$"
                ""))
 
@@ -683,14 +683,32 @@
      :body    {:error "Examples are temporarily unavailable"}}))
 
 
-(defn- page-language
-  "The language the page speaks to `request`: that of its first `Accept-Language` tag. The learner's pick is
-   in their user-db, which the server does not read; the client switches to it once it renders."
+(defn- language-tag
+  "The first tag of the request's `Accept-Language`, as `de-DE`; nil when it has none."
   [request]
-  (i18n/system-language (some-> (get-in request [:headers "accept-language"])
-                                (str/split #"[,;]")
-                                first
-                                str/trim)))
+  (some-> (get-in request [:headers "accept-language"])
+          (str/split #"[,;]")
+          first
+          str/trim
+          utils/non-blank))
+
+
+(def ^:private link-preview-pictures
+  "The address of each drawn link preview picture, by its language. It carries the start of the picture's
+   sha256, so a messenger or cache that keys on the address fetches a redrawn picture anew."
+  (into {}
+        (for [language i18n/languages
+              :let     [picture (io/resource (str "public/link-preview/" language ".png"))]
+              :when    picture]
+          [language
+           (str "/link-preview/"
+                language
+                ".png?v="
+                (with-open [^java.io.InputStream stream (io/input-stream picture)]
+                  (subs (.formatHex (HexFormat/of)
+                                    (.digest (MessageDigest/getInstance "SHA-256") (.readAllBytes stream)))
+                        0
+                        8)))])))
 
 
 (defn- manifest-response
@@ -700,7 +718,7 @@
    ;; The answer follows the browser's language, so no cache may hand one learner's to another.
    :headers {"Cache-Control" "no-cache"
              "Vary" "Accept-Language"}
-   :body    (web-manifest/manifest (page-language request) icon)})
+   :body    (web-manifest/manifest (i18n/system-language (language-tag request)) icon)})
 
 
 (def app-handler
@@ -919,21 +937,46 @@
    ;; The page is rendered in the scheme picked on the device, else in the system's (#805, ADR-0027). The
    ;; routes' cookie interceptor does not run here, so the cookie is parsed here.
    (fn [request]
-     (let [scheme (colour-scheme/picked (get-in (cookies/cookies-request request)
-                                                [:cookies colour-scheme/cookie :value]))
-           night  (colour-scheme/night-media scheme)]
+     (let [scheme     (colour-scheme/picked (get-in (cookies/cookies-request request)
+                                                    [:cookies colour-scheme/cookie :value]))
+           night      (colour-scheme/night-media scheme)
+           ;; The page speaks the language of the first Accept-Language tag. The learner's pick is in their
+           ;; user-db, which the server does not read; the client switches to it once it renders.
+           tag        (language-tag request)
+           language   (i18n/system-language tag)
+           public-url (configured-public-url (System/getenv))]
        (hiccup/render-response
         {:html/layout
          (fn layout
            [{:html/keys [body]}]
            [:html
-            {:lang (page-language request)}
+            {:lang language}
             [:head
              [:meta {:charset "UTF-8"}]
              [:meta
               {:name    "viewport"
                :content "width=device-width, initial-scale=1, interactive-widget=resizes-content"}]
              [:title "Sprecha"]
+             ;; What a messenger shows for a link to the app (#818): the name and a picture of the app, no
+             ;; description. It reads the page as the server sends it and wants the picture's address whole.
+             ;; The picture speaks the language of the first Accept-Language tag while a picture of it is
+             ;; drawn; a messenger that names none, or another, gets Russian, which most learners read.
+             (for [[property content] [["og:type" "website"]
+                                       ["og:title" "Sprecha"]
+                                       ["og:url" (str public-url "/")]
+                                       ["og:image"
+                                        (str public-url
+                                             (get link-preview-pictures
+                                                  (i18n/primary-subtag tag)
+                                                  (link-preview-pictures "ru")))]
+                                       ["og:image:width" "1200"]
+                                       ["og:image:height" "630"]]]
+               [:meta
+                {:content  content
+                 :property property}])
+             [:meta
+              {:content "summary_large_image"
+               :name    "twitter:card"}]
              ;; The schemes the page may show, so the browser paints its canvas
              ;; in the right one before any stylesheet (#413).
              [:meta
@@ -983,7 +1026,7 @@
               {:src   "/js/app/main.js"
                :defer true}]]
             [:body
-             (i18n/interpolate (page-language request) body)]])
+             (i18n/interpolate language body)]])
          :html/body (splash/view night)
          :status 200}
         request)))
