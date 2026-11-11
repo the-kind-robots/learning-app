@@ -53,9 +53,11 @@
   [:section.statistics__section
    [:h2.statistics__heading
     [:i18n :stats/lessons {:count lessons}]]
-   ;; Opened on today, at the right end.
+   ;; Opened on today, at the right end. Keyed by its first day: opened by address, the screen is first drawn from
+   ;; memory not yet read, today alone, and the days that come with memory mount it anew, so it opens on today.
    [:div.statistics__days
-    {:replicant/on-mount [[:effect/scroll-to-end]]}
+    {:replicant/key      (-> months first :days first :id)
+     :replicant/on-mount [[:effect/scroll-to-end]]}
     (for [{:keys [days id name]} months]
       [:div.statistics__month
        {:replicant/key id}

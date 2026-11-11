@@ -264,6 +264,23 @@ test.describe('Статистика', () => {
     });
   });
 
+  test('ученик на телефоне с уроками за два месяца открывает статистику адресом → лента стоит на сегодня', async ({ page }) => {
+    await test.step('Дано окно телефона, урок шестьдесят дней назад и сегодня', async () => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await homeWithLessons(page, [60, 0]);
+    });
+
+    await test.step('Когда он открывает /stats адресом', async () => {
+      await page.goto('/stats');
+    });
+
+    await test.step('Тогда сегодняшний столбик виден у правого края', async () => {
+      await expect(days(page)).toHaveCount(61);
+      await expect(days(page).last()).toBeInViewport();
+      await expect(days(page).first()).not.toBeInViewport();
+    });
+  });
+
   test('ученик нажимает «ПОДЕЛИТЬСЯ» → системе отдана картинка PNG 1080 на 1920', async ({ page }) => {
     await test.step('Дано системное меню «Поделиться» и открытая статистика', async () => {
       await page.addInitScript(() => {
