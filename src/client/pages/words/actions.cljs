@@ -78,7 +78,7 @@
             opened   (edit/opened-examples ids examples)]
         [[:effect/save
           {:words/editing {:collection-ids ids
-                           :collections (mapv #(select-keys % [:id :name]) listing)
+                           :collections (mapv #(select-keys % [:created-at :id :name :position]) listing)
                            :examples opened
                            :id word-id
                            :language language
