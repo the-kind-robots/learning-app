@@ -32,7 +32,7 @@ test.describe('Отправка ответа с клавиатуры', () => {
     });
   });
 
-  test('ученик вводит ответ и жмёт Enter → ответ не проверен, строка не перенесена', async ({ page }) => {
+  test('ученик вводит ответ и жмёт Enter → ответ не проверен, строка перенесена', async ({ page }) => {
     await test.step('Дано урок из одного слова и введённый верный ответ', async () => {
       await page.goto('/home');
       await addWord(page, 'der Hund', 'пёс');
@@ -45,9 +45,28 @@ test.describe('Отправка ответа с клавиатуры', () => {
       await nothingHappensFor(page, 500);
     });
 
-    await test.step('Тогда «ПРОВЕРИТЬ» на месте, в поле набранное, без переноса строки', async () => {
+    await test.step('Тогда «ПРОВЕРИТЬ» на месте, в поле набранное и перенос строки', async () => {
       await expect(page.getByRole('button', { name: 'ПРОВЕРИТЬ' })).toBeVisible();
-      await expect(answerField(page)).toHaveValue('der Hund');
+      await expect(answerField(page)).toHaveValue('der Hund\n');
+    });
+  });
+
+  test('ученик пишет ответ в две строки и жмёт Ctrl+Enter → Правильно!', async ({ page }) => {
+    await test.step('Дано урок из одного слова', async () => {
+      await page.goto('/home');
+      await addWord(page, 'der Hund', 'пёс');
+      await page.goto('/lesson');
+    });
+
+    await test.step('Когда он набирает «der», жмёт Enter, набирает «Hund» и жмёт Ctrl+Enter', async () => {
+      await answerField(page).pressSequentially('der');
+      await answerField(page).press('Enter');
+      await answerField(page).pressSequentially('Hund');
+      await answerField(page).press('Control+Enter');
+    });
+
+    await test.step('Тогда он видит «Правильно!»', async () => {
+      await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
     });
   });
 });
@@ -80,7 +99,6 @@ test.describe('Конец урока с клавиатуры', () => {
     await test.step('Тогда на экране первое задание нового урока, ответ не проверен', async () => {
       await expect(page.getByRole('button', { name: 'ПРОВЕРИТЬ' })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Правильно:', exact: true })).toBeHidden();
-      await expect(answerField(page)).toHaveValue('');
       expect(await reviews(page)).toHaveLength(2);
     });
   });

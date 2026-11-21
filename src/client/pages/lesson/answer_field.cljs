@@ -97,8 +97,8 @@
 
 (def ^:private forwarded
   "The attributes the field hands to its textarea."
-  ["aria-label" "autocapitalize" "autocomplete" "autocorrect" "enterkeyhint"
-   "maxlength" "placeholder" "spellcheck"])
+  ["aria-label" "autocapitalize" "autocomplete" "autocorrect" "maxlength"
+   "placeholder" "spellcheck"])
 
 
 (def ^:private labelled
@@ -447,12 +447,6 @@
                                   (= "Enter" (.-key event)))
                              (do (.preventDefault event)
                                  (hint))
-
-                             ;; An answer holds no line break, and Enter, the Done key of a phone's keyboard
-                             ;; too, does not submit it: a second Enter would check an empty answer. Ctrl+Enter
-                             ;; is the page's.
-                             (and plain? (not (tiles? el)) (= "Enter" (.-key event)))
-                             (.preventDefault event)
 
                              (and plain? (tiles? el))
                              (when (typed-key! el (.-key event))
