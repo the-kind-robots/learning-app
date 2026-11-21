@@ -57,8 +57,10 @@
      :autocorrect "off"
      :on {:submit [[:effect/prevent-default]
                    [:action/check-answer [:event.form.field/value "answer"]]]}}
+    ;; Back from a trial left behind, the main button that had the focus is gone: the field takes it.
     [:answer-field.lesson__input
-     {:id             "lesson-answer"
+     {:replicant/on-update [[:action/focus-lesson-input]]
+      :id             "lesson-answer"
       :inert          (not current-shown?)
       :name           "answer"
       :autocapitalize "none"
@@ -79,7 +81,7 @@
                                    :ctrl? [:event.keyboard/ctrl?]}]]}}]
     [:div.lesson__action.page-footer__action
      ;; Keyed apart from the button over a trial left behind: back on this trial, the focus goes with that one, so
-     ;; a second `Enter` does not check an empty answer.
+     ;; a second `Enter` does not check an empty answer, and lands in the field.
      (if current-shown?
        [:button.big-button
         {:replicant/key :check

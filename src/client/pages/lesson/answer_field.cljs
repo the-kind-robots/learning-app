@@ -448,11 +448,11 @@
                              (do (.preventDefault event)
                                  (hint))
 
-                             ;; An answer holds no line break: Enter, and the Done key of a phone's
-                             ;; keyboard, submit the form as in a single-line input. Ctrl+Enter is the page's.
+                             ;; An answer holds no line break, and Enter, the Done key of a phone's keyboard
+                             ;; too, does not submit it: a second Enter would check an empty answer. Ctrl+Enter
+                             ;; is the page's.
                              (and plain? (not (tiles? el)) (= "Enter" (.-key event)))
-                             (do (.preventDefault event)
-                                 (.requestSubmit (.. el -internals -form)))
+                             (.preventDefault event)
 
                              (and plain? (tiles? el))
                              (when (typed-key! el (.-key event))
