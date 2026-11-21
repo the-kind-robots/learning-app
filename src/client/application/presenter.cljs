@@ -4,10 +4,11 @@
    [build-identity]))
 
 
-(defn- page
+(defn page
+  "The page on display, the top of the stack of open windows, once memory is loaded."
   [state]
   (when (= :status/loaded (:learner/status state))
-    (:page/current state)))
+    (pages/shown state)))
 
 
 (defn stars
@@ -35,19 +36,19 @@
 
 
 (defn stars-button?
-  "Whether today's stars are a button that opens the statistics: with a lesson today, outside a lesson and the
-   statistics."
+  "Whether today's stars are a button that opens the statistics: with a lesson today, outside the statistics."
   [state]
   (and (pos? (:learner/lessons-today state 0))
-       (contains? #{:page/collections :page/home :page/words} (page state))))
+       (contains? #{:page/collections :page/home :page/lesson :page/words} (page state))))
 
 
 (defn shell-props
-  "What the shell shows: `:corner` (themes icon on home, close mark elsewhere, ADR-0015), `:page` (nil until
-   memory is loaded), `:read-error?` (the learner's data could not be read), `:build-mark` (the bundle's,
-   empty in a release build), `:stars` (today's lessons, `stars`, from the moment memory is loaded, so that a
-   star passed later joins a row already there), whether they are a button (`:stars-button?`), and whether
-   `Escape` closes the screen as its close mark does (`:escape-closes?`: not in a lesson)."
+  "What the shell shows: `:corner` (themes icon on home, close mark elsewhere, ADR-0015), `:windows` (the open
+   windows, home first, each `{:page .. :hidden? ..}`, all hidden but the top: ADR-0029; nil until memory is
+   loaded), `:read-error?` (the learner's data could not be read), `:build-mark` (the bundle's, empty in a release
+   build), `:stars` (today's lessons, `stars`, from the moment memory is loaded, so that a star passed later joins
+   a row already there), whether they are a button (`:stars-button?`), and whether `Escape` closes the screen as
+   its close mark does (`:escape-closes?`: not in a lesson)."
   [state]
   {:build-mark     build-identity/stamp
    :corner         (case (page state)
@@ -55,18 +56,21 @@
                      (:page/collections :page/lesson :page/stats :page/words) :close
                      nil)
    :escape-closes? (contains? #{:page/collections :page/stats :page/words} (page state))
-   :page           (page state)
    :read-error?    (= :status/unreadable (:learner/status state))
    :show-install?  (boolean (:pwa/install-available? state))
    :stars          (when (page state)
                      (stars (:learner/lessons-today state 0)))
-   :stars-button?  (stars-button? state)})
+   :stars-button?  (stars-button? state)
+   :windows        (when-let [shown (page state)]
+                     (for [window (:page/windows state)]
+                       {:hidden? (not= shown window)
+                        :page    window}))})
 
 
 (defn screen-change
   "The transition from the screen of `before` to that of `after`, by the pages' `:transitions`: the screen's
-   `:within` when it stays, else the `:in` of the one coming on, the `:out` of the one going off, or deeper when
-   the window left stays open beneath, back when it was taken off. Nil when either is not drawn yet."
+   `:within` when it stays; when the window left stays open beneath, the `:in` of the one opened over it, else
+   deeper; when it was taken off, its `:out`, else back. Nil when either is not drawn yet."
   [before after]
   (let [from (page before)
         to   (page after)]
@@ -74,8 +78,5 @@
       (or (nil? from) (nil? to)) nil
       (= from to) (when-let [within (get-in (pages/page to) [:transitions :within])]
                     (within before after))
-      :else (or (get-in (pages/page to) [:transitions :in])
-                (get-in (pages/page from) [:transitions :out])
-                (if (some #{from} (:page/windows after))
-                  :transition/deeper
-                  :transition/back)))))
+      (some #{from} (:page/windows after)) (get-in (pages/page to) [:transitions :in] :transition/deeper)
+      :else (get-in (pages/page from) [:transitions :out] :transition/back))))

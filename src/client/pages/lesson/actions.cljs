@@ -12,13 +12,12 @@
   "The lesson screen with `lesson-state` on it, fresh: no answer revealed, no
    hint open, no answer started yet."
   [{:keys [lesson-state error]}]
-  {:lesson/answer-hints   nil
-   :lesson/answer-started nil
-   :lesson/empty?         (boolean error)
+  {:lesson/answer-hints    nil
+   :lesson/answer-started  nil
+   :lesson/empty?          (boolean error)
    :lesson/open-hint-index nil
-   :lesson/state          lesson-state
-   :lesson/viewed-trial   nil
-   :page/current          :page/lesson})
+   :lesson/state           lesson-state
+   :lesson/viewed-trial    nil})
 
 
 (nxr/register-action! :action/view-trial

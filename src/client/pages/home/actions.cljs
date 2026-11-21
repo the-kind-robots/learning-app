@@ -28,10 +28,7 @@
 (nxr/register-action! :action/open-home
   ;; Home is computed from memory in the task of the tap, with an empty form.
   (fn open-home [state context]
-    [[:effect/save
-      (merge fresh-form
-             {:page/current :page/home}
-             (content state context))]
+    [[:effect/save (merge fresh-form (content state context))]
      ;; Only Safari measures a height here; where `field-sizing` works the browser has forgotten the old height.
      [:effect/clear-autogrow "new-word-value"]
      [:effect/clear-autogrow "new-word-translation"]]))

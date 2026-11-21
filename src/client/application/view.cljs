@@ -2,10 +2,7 @@
   "The shell's markup: the bar with its icons and the sync icon, the sync
    dialogs, the screen on display, and the status line."
   (:require
-   [application.pages :as pages]
    [application.presenter :as presenter]
-   [application.settings.presenter :as settings-presenter]
-   [application.settings.view :as settings-view]
    [application.shell :as shell]
    [application.sync.presenter :as sync-presenter]
    [application.sync.view :as sync-view]
@@ -134,10 +131,11 @@
 
 
 (defn shell
-  "The whole page: the bar across the top, the dialogs, the screen the state
-   is on, and the status line."
+  "The page around the screens: the bar across the top, the dialogs, an element
+   for each open window with the top one shown, one for the settings, and the
+   status line."
   [state]
-  (let [{:keys [build-mark corner escape-closes? page read-error? show-install? stars stars-button?]}
+  (let [{:keys [build-mark corner escape-closes? read-error? show-install? stars stars-button? windows]}
         (presenter/shell-props state)
         {:keys [show-sync?] :as sync} (sync-presenter/props state)]
     (list
@@ -163,8 +161,8 @@
          [sync-view/sync-button sync])]
       ;; The middle of the bar, kept for what the learner should see at a glance: stars, progress, a notice.
       [:div.app-shell__info-bar
-       ;; Outside a lesson a button lies over the stars and opens the statistics. It is their sibling, so the
-       ;; stars stay mounted when it comes and goes, and do not light up again.
+       ;; Outside the statistics a button lies over the stars and opens them. It is their sibling, so the stars
+       ;; stay mounted when it comes and goes, and do not light up again.
        (when stars
          [:div.app-shell__stars-slot
           [stars-row stars]
@@ -206,11 +204,19 @@
            :corner-icon/escape-closes? escape-closes?}])]]
      (install-guide/render state)
      (sync-view/dialogs sync)
-     (if-let [view (:view (pages/page page))]
-       (view state)
+     ;; Every open window has an element on the page, the top one shown (ADR-0029). Drawn empty here: `render!`
+     ;; draws the top window's screen into its own, so a window beneath keeps its elements, and what the learner
+     ;; did in them, undrawn until it is shown again.
+     (if windows
+       (for [{:keys [hidden? page]} windows]
+         [:div.app-shell__window
+          {:replicant/key page
+           :data-window   (name page)
+           :hidden        hidden?}])
        (when read-error?
          [:div.app-shell__read-error
           [:i18n :shell/read-error]]))
-     ;; After the screen: its mount hook runs after the screen's, so the asking settings keep the focus.
-     [settings-view/menu (settings-presenter/props state)]
+     ;; The settings' element, drawn by `render!` after the screen: their mount hook runs after the screen's, so
+     ;; the asking settings keep the focus.
+     [:div.app-shell__settings]
      shell/status-region)))

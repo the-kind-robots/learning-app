@@ -1,13 +1,14 @@
-html:has(.vocabulary) {
+/* While the word list is the window shown, not one beneath it. */
+html:has(.app-shell__window:not([hidden]) > .vocabulary) {
   overflow: hidden;
 }
 
-body:has(.vocabulary) {
+body:has(.app-shell__window:not([hidden]) > .vocabulary) {
   height: 100%;
   overflow: hidden;
 }
 
-body:has(.vocabulary) #app {
+body:has(.app-shell__window:not([hidden]) > .vocabulary) #app {
   height: 100%;
 }
 

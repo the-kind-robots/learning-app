@@ -4,15 +4,9 @@
 
 
 (defmulti page
-  "The page of a name: `:path`; `:open` the action that computes the screen on entry; `:refresh` the action
-   that computes it again from memory, given the context (or nil); `:hotkeys` a function of state giving the
-   actions of each keystroke (`Alt+KeyW`: the modifiers, then the key's place, so any layout works); `:view` a
-   function of state; and `:keyboard-overlays?` whether the virtual keyboard overlays the screen (absent: it
-   resizes it).
-   `:transitions` is how the screen moves on a phone (ADR-0024): `:in` coming on, `:out` going off, `:within` a
-   function of the states before and after a render that stays on it, giving the transition or nil. Absent, the
-   screen slides deeper as it opens over another and back as it is taken off (ADR-0026). Nil before a page is
-   entered."
+  "The page of a name: `:path`, `:view`, `:hotkeys`, `:keyboard-overlays?`, `:transitions` (ADR-0024), and the
+   actions that compute its screen: `:open` as its window opens, `:refresh` after the load and the reader's own
+   change."
   identity)
 
 
@@ -24,6 +18,12 @@
 (def home
   "The page at the bottom of the stack of windows (ADR-0026): every other opens over it."
   :page/home)
+
+
+(defn shown
+  "The page on display: the top of the stack of open windows (ADR-0029)."
+  [state]
+  (peek (:page/windows state)))
 
 
 (defn paths

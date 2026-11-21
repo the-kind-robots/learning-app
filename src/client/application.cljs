@@ -6,6 +6,7 @@
    [application.settings.actions]
    [application.settings.effects]
    [application.settings.presenter :as settings-presenter]
+   [application.settings.view :as settings-view]
    [application.sync.actions]
    [application.sync.effects]
    [application.view :as view]
@@ -83,6 +84,21 @@
                      args)])))
 
 
+(defn- window-element
+  "The element the shell draws for the open window of `page`, nil while it draws none."
+  [page]
+  (js/document.querySelector (str "[data-window=\"" (name page) "\"]")))
+
+
+(nxr/register-effect! :effect/show-window
+  ;; A window shown again keeps its drawing (ADR-0029); one with none, come with the stack the app was opened on
+  ;; or new on top, opens.
+  (fn show-window [{:keys [dispatch]} _ page]
+    (let [^js element (window-element page)]
+      (when-not (and element (.hasChildNodes element))
+        (dispatch [[:effect/enter (:open (pages/page page))]])))))
+
+
 (nxr/register-effect! :effect/after-paint
   ;; Work the screen does not show goes after its paint.
   (fn after-paint [{:keys [dispatch]} _ actions]
@@ -100,7 +116,7 @@
 (nxr/register-action! :action/refresh-page
   ;; The screen on display computed again from memory, after the load and after the reader's own change.
   (fn refresh-page [state context]
-    (when-let [refresh (:refresh (pages/page (:page/current state)))]
+    (when-let [refresh (:refresh (pages/page (pages/shown state)))]
       [[refresh context]])))
 
 
@@ -231,41 +247,48 @@
 
 
 (defn- enter-windows
-  "The effects that put the stack `windows` on display and enter its top window; none when it is on display
-   already, as it is when the `popstate` of the app's own step back brings it."
-  [state windows]
+  "The effects that put the stack `windows` on display, its top window entered by `entry`; none when it is on
+   display already, as it is when the `popstate` of the app's own step back brings it."
+  [state windows entry]
   (when (not= windows (:page/windows state))
-    (let [entered (pages/page (peek windows))]
-      ;; The keyboard's mode belongs to the screen, so it is set as the screen is entered. The windows go before
-      ;; the entry: the screen's change, deeper or back, is read from them.
-      [[:effect/overlay-keyboard (:keyboard-overlays? entered)]
-       [:effect/save {:page/windows windows}]
-       [:effect/enter (:open entered)]
-       [:effect/after-paint [[:effect/sync]]]])))
+    ;; The keyboard's mode belongs to the screen, so it is set as the screen is entered. The screen is computed
+    ;; before the stack is saved, so the top window shows with it.
+    [[:effect/overlay-keyboard (:keyboard-overlays? (pages/page (peek windows)))]
+     entry
+     [:effect/save {:page/windows windows}]
+     [:effect/after-paint [[:effect/sync]]]]))
 
 
 (defn- open-page
-  "The effects that open `page` over the window on display, or take the windows above it off when it is open
-   beneath."
+  "The effects that open `page` anew over the window on display, or, open beneath, take the windows above it off
+   and open it anew."
   [state page]
   (let [windows (:page/windows state)
         opened  (conj (vec (take-while #(not= page %) windows)) page)]
-    (into [[:effect/record-windows windows opened]] (enter-windows state opened))))
+    (into [[:effect/record-windows windows opened]]
+          (enter-windows state opened [:effect/enter (:open (pages/page page))]))))
 
 
 ;; The open windows are a stack, home at its bottom (ADR-0026): `:page/windows`, from which the history is
-;; written. A tap opens a page; the start and every entry the browser steps to bring a whole stack.
+;; written, the page drawn and the screen on display named, its top (ADR-0029). A tap opens a page anew; closing
+;; shows the window beneath as it was left. The start and every entry the browser steps to bring a whole stack,
+;; whose top window is shown as it was left, or opened when it has no drawing.
 (nxr/register-action! :action/open-page open-page)
 
 
-(nxr/register-action! :action/enter-windows enter-windows)
+(nxr/register-action! :action/enter-windows
+  (fn enter-stack [state windows]
+    (enter-windows state windows [:effect/show-window (peek windows)])))
 
 
-;; The window on display comes off and the one beneath shows; on home, nothing.
+;; The window on display comes off and the one beneath shows as it was left; on home, nothing.
 (nxr/register-action! :action/close-page
   (fn close-page [state]
-    (when-let [beneath (peek (pop (:page/windows state)))]
-      (open-page state beneath))))
+    (let [windows (:page/windows state)
+          beneath (pop windows)]
+      (when (seq beneath)
+        (into [[:effect/record-windows windows beneath]]
+              (enter-windows state beneath [:effect/show-window (peek beneath)]))))))
 
 
 ;;
@@ -341,12 +364,25 @@
 
 
 (defn render!
-  "Renders the shell of `after`, moving the way the screen change from `before` (nil: none) calls for."
+  "Renders `after`, the new state: the shell, the screen of its top window, then the settings, moving the way the
+   change from `before`, the state rendered last (nil: none), calls for. Each window is drawn into its own element,
+   so the windows beneath are not drawn again (ADR-0029); a window taken off has its drawing ended. The shell draws
+   the windows' elements once memory is loaded."
   [before after]
-  (let [language (settings-presenter/language after)]
+  (let [language (settings-presenter/language after)
+        draw!    #(r/render %1 (markup/renderable language %2))]
     (set! (.-lang js/document.documentElement) language)
-    (view-transition/change! (presenter/screen-change before after)
-                             #(r/render js/document.body (markup/renderable language (view/shell after))))))
+    (view-transition/change!
+     (presenter/screen-change before after)
+     (fn []
+       (when (presenter/page before)
+         (doseq [page (remove (set (:page/windows after)) (:page/windows before))]
+           (r/unmount (window-element page))))
+       (draw! js/document.body (view/shell after))
+       (when-let [page (presenter/page after)]
+         (draw! (window-element page) ((:view (pages/page page)) after)))
+       (draw! (js/document.querySelector ".app-shell__settings")
+              [settings-view/menu (settings-presenter/props after)])))))
 
 
 (defn state
@@ -434,7 +470,7 @@
                             (when (.-shiftKey event) "Shift+")
                             (when (.-metaKey event) "Meta+")
                             (.-code event))]
-         (when-let [actions (some-> (pages/page (:page/current state)) :hotkeys (apply [state]) (get keystroke))]
+         (when-let [actions (some-> (pages/page (pages/shown state)) :hotkeys (apply [state]) (get keystroke))]
            (.preventDefault event)
            (dispatch {:replicant/dom-event event} actions)))))))
 

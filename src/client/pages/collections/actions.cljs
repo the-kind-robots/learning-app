@@ -20,8 +20,7 @@
   ;; The screen and its tiles in one write, in the task of the tap.
   (fn open-collections [state context]
     [[:effect/save
-      (merge {:page/current :page/collections
-              :collections/editing-id nil}
+      (merge {:collections/editing-id nil}
              (content state context))]]))
 
 
