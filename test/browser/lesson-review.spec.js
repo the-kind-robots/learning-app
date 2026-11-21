@@ -183,6 +183,34 @@ test.describe('Пройденные задания урока', () => {
     });
   });
 
+  test('ученик колесом уходит назад от неотвеченного слова и жмёт Enter → снова слово, фокус в поле ответа', async ({ page }) => {
+    const answers = { 'пёс': 'der Hund', 'кошка': 'die Katze' };
+    let second;
+    await test.step('Дано одно слово отвечено, второе ждёт ответа', async () => {
+      await page.goto('/home');
+      await addWord(page, 'der Hund', 'пёс');
+      await addWord(page, 'die Katze', 'кошка');
+      await page.goto('/lesson');
+      const first = await page.getByRole('heading', { level: 2 }).textContent();
+      await field(page).fill(answers[first]);
+      await check(page).click();
+      await next(page).click();
+      second = first === 'пёс' ? 'кошка' : 'пёс';
+      await expect(prompt(page, second)).toBeVisible();
+    });
+
+    await test.step('Когда он листает колесом назад и жмёт Enter', async () => {
+      await wheelBack(page);
+      await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
+      await page.keyboard.press('Enter');
+    });
+
+    await test.step('Тогда снова второе слово, и фокус в поле ответа', async () => {
+      await expect(prompt(page, second)).toBeVisible();
+      await expect(field(page)).toBeFocused();
+    });
+  });
+
   test('ученик после конца урока листает на два задания назад и жмёт Enter → новый урок', async ({ page }) => {
     await test.step('Дано урок из трёх слов окончен', async () => {
       await finishThreeWords(page);

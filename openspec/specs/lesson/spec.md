@@ -351,13 +351,20 @@ Every showing of an example SHALL show, in place of the plain field, a tray and 
 - **WHEN** a word or a phrase is to be translated
 - **THEN** the plain field is shown, with no tiles and no light bulb
 
-### Requirement: Enter in the answer field checks the answer
-While the answer field shows the textarea, Enter without Alt — including the Done key of a phone's on-screen keyboard — SHALL check the answer, as the ПРОВЕРИТЬ button does, and SHALL NOT insert a line break. Enter during text composition SHALL only end the composition.
+### Requirement: Only Ctrl+Enter in the answer field checks the answer
+`Ctrl`+`Enter` in the answer field — `Cmd`+`Enter` on a Mac — SHALL check the answer, as the ПРОВЕРИТЬ button does. A plain Enter in the field, with or without Shift, SHALL NOT check it, and while the field shows the textarea SHALL NOT insert a line break; the Done key of a phone's on-screen keyboard SHALL do the same as a plain Enter. Enter during text composition SHALL only end the composition.
+
+#### Scenario: Ctrl+Enter after typing
+- **WHEN** the learner types an answer and presses `Ctrl`+`Enter`
+- **THEN** the answer is checked
 
 #### Scenario: Enter after typing
 - **WHEN** the learner types an answer and presses Enter
-- **THEN** the answer is checked
-- **AND** no line break was added to it
+- **THEN** the answer is not checked, and the field holds what was typed, with no line break added
+
+#### Scenario: Two Enters at the end of a lesson
+- **WHEN** the learner has answered the last trial right and presses Enter twice
+- **THEN** a new lesson is on display, its first trial not checked
 
 ### Requirement: A graded answer records its time
 A review written for a graded word or phrase trial SHALL carry `answer-ms`: the time from the trial appearing on screen with its answer field to the answer being sent, on a monotonic clock, rounded to whole milliseconds. Wrong and blank answers SHALL record it too. When the page was hidden at any moment between the two, the review SHALL carry no `answer-ms`. No review SHALL be written outside a lesson: a review records an answer.
@@ -541,3 +548,10 @@ On desktop the lesson screen SHALL lay out its progress bar, its answer field, t
 #### Scenario: The main button in the panel's colour
 - **WHEN** a learner answers a trial right, then the next one wrong
 - **THEN** «ДАЛЕЕ» is green on the green panel, then red on the red one
+
+### Requirement: The answer field takes the focus no button holds
+On a device with a fine pointer, whenever the current trial waiting for its answer comes on display and no button has the focus, the answer field SHALL receive it: when the lesson opens, when the next trial comes, when «ЕЩЁ УРОК» starts a new lesson, and when the learner returns to the current trial from a trial left behind.
+
+#### Scenario: Back from a trial left behind
+- **WHEN** the learner goes back from a word waiting for its answer to a trial left behind, and presses Enter there
+- **THEN** the word is shown again, and the answer field has the focus
