@@ -66,7 +66,6 @@
       :autocapitalize "none"
       :autocomplete   "off"
       :autocorrect    "off"
-      :enterkeyhint   "done"
       :aria-label     [:i18n :lesson/answer]
       :bank-label     [:i18n :lesson/tiles]
       :correct-answer correct-answer
