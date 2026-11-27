@@ -160,6 +160,38 @@ test.describe('Переходы между экранами на телефон�
     });
   });
 
+  test('ученик открывает статистику из урока и закрывает её → статистика въезжает справа и уезжает вправо, урок не гаснет', async ({ page }) => {
+    await test.step('Дано урок сегодня и начатый урок', async () => {
+      await openHome(page);
+      await page.evaluate(async () => {
+        await db.bulk_docs(db.use('user-db'), [{ _id: 'lesson-seed-0', type: 'lesson', passed_at: new Date().toISOString() }]);
+      });
+      await page.goto('/home');
+      await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
+      await expect(page.getByRole('progressbar', { name: 'Прогресс урока' })).toBeVisible();
+      await forgetTransitions(page);
+    });
+
+    await test.step('Когда он нажимает на звёзды', async () => {
+      await page.getByRole('button', { name: 'Статистика' }).click();
+    });
+
+    await test.step('Тогда статистика въезжает справа, урок уходит влево', async () => {
+      await expect(page).toHaveURL(/\/stats$/);
+      await expect.poll(() => transitions(page)).toEqual(DEEPER);
+      await forgetTransitions(page);
+    });
+
+    await test.step('Когда он нажимает «Закрыть»', async () => {
+      await page.getByRole('button', { name: 'Закрыть' }).click();
+    });
+
+    await test.step('Тогда статистика уезжает вправо, и он в уроке', async () => {
+      await expect(page.getByRole('progressbar', { name: 'Прогресс урока' })).toBeVisible();
+      await expect.poll(() => transitions(page)).toEqual(BACK);
+    });
+  });
+
   const WAYS_BACK = [
     ['закрывает список слов крестиком', (page) => page.getByRole('button', { name: 'Закрыть' }).click()],
     ['возвращается из списка слов кнопкой «Назад» браузера', (page) => page.goBack()],

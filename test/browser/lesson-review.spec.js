@@ -7,8 +7,9 @@ const { answerWordThenShowExample, field, check, prompt, next, tray, bank, wheel
 
 const progress = (page) => page.getByRole('progressbar', { name: 'Прогресс урока' });
 const oneMore = (page) => page.getByRole('button', { name: 'ЕЩЁ УРОК' });
-// Every trial on the strip, the ones hidden too: a prompt is its trial's heading.
-const prompts = (page) => page.getByRole('heading', { level: 2, includeHidden: true });
+// Every trial on the strip, the ones hidden too: a prompt is its trial's heading. Only the lesson's: home lies
+// beneath it, hidden (ADR-0029).
+const prompts = (page) => page.getByRole('main').getByRole('heading', { level: 2, includeHidden: true });
 
 async function finishLesson(page) {
   await answerWordThenShowExample(page, { missFirst: false });

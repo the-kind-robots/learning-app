@@ -1,5 +1,6 @@
 (ns pages.words.actions
   (:require
+   [application.pages :as pages]
    [clojure.string :as str]
    [nexus.registry :as nxr]
    [pages.words.edit :as edit]
@@ -54,8 +55,7 @@
     [[:effect/save
       (shown state
              context
-             {:page/current  :page/words
-              :words/editing nil
+             {:words/editing nil
               :words/limit   first-rows
               :words/search  ""})]
      [:effect/after-paint [[:action/fill-page]]]]))
@@ -192,7 +192,7 @@
 (nxr/register-action! :action/fill-page
   ;; The rest of the first page, once the rows shown with the tap are painted, unless the reader left or it holds more.
   (fn fill-page [state]
-    (when (and (= :page/words (:page/current state))
+    (when (and (= :page/words (pages/shown state))
                (< (or (:words/limit state) 0) page-size))
       [[:effect/enter :action/show-page page-size]])))
 

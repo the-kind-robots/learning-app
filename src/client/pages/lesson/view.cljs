@@ -1,6 +1,7 @@
 (ns pages.lesson.view
   (:require
    [application.pages :as pages]
+   [application.presenter :as application]
    [pages.lesson.presenter :as presenter]
    [replicant.alias :as alias]))
 
@@ -292,22 +293,26 @@
 (defn hotkeys
   "The lesson's keys: `Escape` ends a lesson that is over; the arrows page the trials, but not while the current
    one waits for its answer, the caret of its field theirs; on a past trial `Ctrl`+`Enter` presses the main button,
-   as a plain `Enter` does on it, focused."
+   as a plain `Enter` does on it, focused; `Alt+KeyS` opens the statistics the stars show."
   [state]
-  (when (:lesson/state state)
-    (let [{:keys [answered? current-page current-shown? finished? first-shown? next-page previous-page]}
-          (presenter/paging-props state)]
-      (merge
-       (when finished?
-         {"Escape" [[:action/close-page]]})
-       (when (and (not first-shown?) (or answered? (not current-shown?)))
-         {"ArrowLeft" [[:action/view-trial previous-page current-page]]})
-       (when-not current-shown?
-         {"ArrowRight" [[:action/view-trial next-page current-page]]
-          "Ctrl+Enter" [[:action/press-next]]})))))
+  (merge
+   (when (:lesson/state state)
+     (let [{:keys [answered? current-page current-shown? finished? first-shown? next-page previous-page]}
+           (presenter/paging-props state)]
+       (merge
+        (when finished?
+          {"Escape" [[:action/close-page]]})
+        (when (and (not first-shown?) (or answered? (not current-shown?)))
+          {"ArrowLeft" [[:action/view-trial previous-page current-page]]})
+        (when-not current-shown?
+          {"ArrowRight" [[:action/view-trial next-page current-page]]
+           "Ctrl+Enter" [[:action/press-next]]}))))
+   (when (application/stars-button? state)
+     {"Alt+KeyS" [[:action/open-page :page/stats]]})))
 
 
-;; A lesson is a mode, not a step deeper: it fades in and out. Within it, «ДАЛЕЕ» moves the trial.
+;; A lesson is a mode, not a step deeper: it fades in as it opens and out as it closes; a window over it slides
+;; deeper and back. Within it, «ДАЛЕЕ» moves the trial.
 (defmethod pages/page :page/lesson
   [_]
   {:hotkeys     hotkeys

@@ -29,6 +29,31 @@ async function seedLessons(page, ages) {
   }, ages);
 }
 
+const LESSON_ANSWERS = { дом: 'Haus', собака: 'Hund' };
+const answerField = (page) => page.getByRole('textbox', { name: 'Ответ на немецком' });
+const lessonProgress = (page) => page.getByRole('progressbar', { name: 'Прогресс урока' });
+
+// The prompt of the trial waiting for its answer: the field is on screen only then.
+async function currentPrompt(page) {
+  await expect(page.locator('#lesson-answer')).toBeVisible();
+  return (await page.locator('#lesson-challenge .lesson__prompt').textContent()).trim();
+}
+
+// A lesson today, then a new lesson of two words with its first trial answered and the second waiting.
+async function lessonUnderWay(page) {
+  await page.goto('/home');
+  await addWord(page, 'Haus', 'дом');
+  await addWord(page, 'Hund', 'собака');
+  await seedLessons(page, [0]);
+  await page.reload();
+  await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
+  await expect(page).toHaveURL(/\/lesson$/);
+  await answerField(page).fill(LESSON_ANSWERS[await currentPrompt(page)]);
+  await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
+  await page.getByRole('button', { name: 'ДАЛЕЕ' }).click();
+  await expect(lessonProgress(page)).not.toHaveAttribute('aria-valuenow', '0');
+}
+
 // Home with `ages` of lessons, opened again so it reads them.
 async function homeWithLessons(page, ages) {
   await page.goto('/home');
@@ -169,6 +194,32 @@ test.describe('Статистика', () => {
     });
   });
 
+  test('ученик ищет в списке слов, открывает статистику и закрывает её → поиск и найденное слово на месте', async ({ page }) => {
+    await test.step('Дано два слова, урок сегодня и список слов с поиском «Hu»', async () => {
+      await page.goto('/home');
+      await addWord(page, 'Haus', 'дом');
+      await addWord(page, 'Hund', 'собака');
+      await seedLessons(page, [0]);
+      await page.reload();
+      await page.getByRole('button', { name: 'Список слов' }).click();
+      await page.getByPlaceholder('Поиск').fill('Hu');
+      await expect(page.getByText('Haus')).toBeHidden();
+    });
+
+    await test.step('Когда он открывает статистику и закрывает её крестиком', async () => {
+      await statsButton(page).click();
+      await expect(page).toHaveURL(/\/stats$/);
+      await page.getByRole('button', { name: 'Закрыть' }).click();
+    });
+
+    await test.step('Тогда в поиске «Hu», в списке Hund, а Haus нет', async () => {
+      await expect(page).toHaveURL(/\/words$/);
+      await expect(page.getByPlaceholder('Поиск')).toHaveValue('Hu');
+      await expect(page.getByText('Hund')).toBeVisible();
+      await expect(page.getByText('Haus')).toBeHidden();
+    });
+  });
+
   test('ученик закрывает крестиком статистику, открытую из наборов → наборы', async ({ page }) => {
     await test.step('Дано урок сегодня и открытые наборы', async () => {
       await homeWithLessons(page, [0]);
@@ -187,24 +238,64 @@ test.describe('Статистика', () => {
     });
   });
 
-  test('ученик в уроке → звёзды не открывают статистику', async ({ page }) => {
-    await test.step('Дано два слова и урок сегодня', async () => {
-      await page.goto('/home');
-      await addWord(page, 'Haus', 'дом');
-      await addWord(page, 'Hund', 'собака');
-      await seedLessons(page, [0]);
-      await page.reload();
-      await expect(statsButton(page)).toBeVisible();
+  // Also pins what ADR-0029 takes from Replicant beyond its contract: the shell, rendered while the lesson lies
+  // beneath, leaves alone what is drawn into the lesson's window element.
+  test('ученик в уроке открывает статистику звёздами и закрывает её → то же задание, набранное в поле', async ({ page }) => {
+    let prompt;
+    let progressBefore;
+
+    await test.step('Дано урок сегодня и новый урок: первое задание решено, во втором набрано «Ha»', async () => {
+      await lessonUnderWay(page);
+      prompt = await currentPrompt(page);
+      progressBefore = await lessonProgress(page).getAttribute('aria-valuenow');
+      await answerField(page).fill('Ha');
     });
 
-    await test.step('Когда он начинает урок', async () => {
-      await page.getByRole('button', { name: 'НАЧАТЬ УРОК' }).click();
+    await test.step('Когда он нажимает на звёзды и закрывает статистику крестиком', async () => {
+      await statsButton(page).click();
+      await expect(page.getByRole('heading', { name: 'Уроков пройдено: 1' })).toBeVisible();
+      await page.getByRole('button', { name: 'Закрыть' }).click();
+    });
+
+    await test.step('Тогда он в том же уроке на том же задании, в поле «Ha»', async () => {
       await expect(page).toHaveURL(/\/lesson$/);
+      await expect(lessonProgress(page)).toHaveAttribute('aria-valuenow', progressBefore);
+      await expect(page.locator('#lesson-challenge .lesson__prompt')).toHaveText(prompt);
+      await expect(answerField(page)).toHaveValue('Ha');
     });
 
-    await test.step('Тогда звёзды на месте, а кнопки статистики нет', async () => {
-      await expect(page.getByRole('img', { name: 'Уроков за сегодня: 1' })).toBeVisible();
-      await expect(statsButton(page)).toHaveCount(0);
+    await test.step('Когда он дописывает ответ и проверяет', async () => {
+      await answerField(page).fill(LESSON_ANSWERS[prompt]);
+      await page.getByRole('button', { name: 'ПРОВЕРИТЬ' }).click();
+    });
+
+    await test.step('Тогда урок идёт дальше: ответ верен', async () => {
+      await expect(page.getByRole('heading', { name: 'Правильно!' })).toBeVisible();
+    });
+  });
+
+  test('ученик жмёт Alt+S в поле ответа урока → статистика, «Назад» возвращает в урок, в поле ничего не допечатано', async ({ page }) => {
+    await test.step('Дано урок сегодня и новый урок, во втором задании набрано «Ha»', async () => {
+      await lessonUnderWay(page);
+      await answerField(page).fill('Ha');
+    });
+
+    await test.step('Когда он жмёт Alt+S', async () => {
+      await answerField(page).press('Alt+KeyS');
+    });
+
+    await test.step('Тогда на экране статистика', async () => {
+      await expect(page).toHaveURL(/\/stats$/);
+      await expect(page.getByRole('heading', { name: 'Уроков пройдено: 1' })).toBeVisible();
+    });
+
+    await test.step('Когда он нажимает «Назад»', async () => {
+      await page.goBack();
+    });
+
+    await test.step('Тогда он в уроке, в поле «Ha»', async () => {
+      await expect(page).toHaveURL(/\/lesson$/);
+      await expect(answerField(page)).toHaveValue('Ha');
     });
   });
 

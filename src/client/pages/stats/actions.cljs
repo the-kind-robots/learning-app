@@ -13,8 +13,7 @@
   ;; all the words in ten bins by the percent the word list shows, and the lessons by day from the first.
   (fn show-stats [_ {:keys [learner now-ms]}]
     [[:effect/save
-      {:page/current      :page/stats
-       :stats/lesson-days (lesson/lesson-days learner now-ms)
+      {:stats/lesson-days (lesson/lesson-days learner now-ms)
        :stats/word-bins   (vocabulary/word-bins learner now-ms)}]]))
 
 

@@ -13,6 +13,19 @@
   z-index: -1;
 }
 
+/* An open window (ADR-0029), and the settings: elements drawn into apart from
+   the shell, with no box of their own, so what is in them lays out as if it
+   stood in the body; a window beneath the top one is not drawn, and keeps its
+   elements. */
+.app-shell__window,
+.app-shell__settings {
+  display: contents;
+}
+
+.app-shell__window[hidden] {
+  display: none;
+}
+
 /* The message shown in place of a screen when the learner's data could not
    be read at start: one sentence, centered where a screen would be, in the
    shell's face and the body text color. The width cap and balanced wrapping
